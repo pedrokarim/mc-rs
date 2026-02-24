@@ -1,0 +1,31 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/mc-rs-raknet",
+    "crates/mc-rs-proto",
+    "crates/mc-rs-nbt",
+    "crates/mc-rs-crypto",
+    "crates/mc-rs-world",
+    "crates/mc-rs-game",
+    "crates/mc-rs-command",
+    "crates/mc-rs-plugin-api",
+    "crates/mc-rs-plugin-wasm",
+    "crates/mc-rs-plugin-lua",
+    "crates/mc-rs-server",
+]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "macros", "signal"] }
+bytes = "1"
+tracing = "0.1"
+rand = "0.8"
+flate2 = "1"
+snap = "1"
+serde_json = "1"
+base64 = "0.22"
+p384 = { version = "0.13", features = ["ecdh", "ecdsa", "pkcs8"] }
+sha2 = "0.10"
+aes = "0.8"
+cfb8 = "0.8"

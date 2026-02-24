@@ -1,0 +1,22 @@
+[package]
+name = "mc-rs-server"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "mc-rs-server"
+path = "src/main.rs"
+
+[dependencies]
+mc-rs-proto = { path = "../mc-rs-proto" }
+mc-rs-raknet = { path = "../mc-rs-raknet" }
+mc-rs-crypto = { path = "../mc-rs-crypto" }
+mc-rs-world = { path = "../mc-rs-world" }
+mc-rs-command = { path = "../mc-rs-command" }
+serde = { workspace = true }
+tokio = { workspace = true }
+toml = "0.8"
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+rand = { workspace = true }
+bytes = { workspace = true }

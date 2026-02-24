@@ -1,0 +1,16 @@
+[server]
+address = "0.0.0.0"
+port = 19132
+motd = "MC-RS Server"
+max_players = 20
+gamemode = "survival"
+difficulty = "normal"
+online_mode = true
+
+[world]
+name = "world"
+generator = "flat"
+seed = 0
+
+[logging]
+level = "info"
