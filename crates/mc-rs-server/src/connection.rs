@@ -9,33 +9,42 @@ use std::time::Instant;
 use bytes::{BufMut, Bytes, BytesMut};
 use tracing::{debug, info, warn};
 
-use mc_rs_command::CommandRegistry;
+use mc_rs_command::selector::PlayerInfo;
+use mc_rs_command::{CommandRegistry, CommandResult};
 use mc_rs_crypto::{
     create_handshake_jwt, derive_key, parse_client_public_key, PacketEncryption, ServerKeyPair,
 };
+use mc_rs_game::inventory::PlayerInventory;
 use mc_rs_proto::batch::{decode_batch, encode_single, BatchConfig};
 use mc_rs_proto::codec::{ProtoDecode, ProtoEncode};
 use mc_rs_proto::compression::CompressionAlgorithm;
 use mc_rs_proto::jwt;
+use mc_rs_proto::packets::add_player::default_player_metadata;
 use mc_rs_proto::packets::{
-    self, AvailableCommands, AvailableEntityIdentifiers, BiomeDefinitionList, ChunkRadiusUpdated,
-    ClientToServerHandshake, CommandOutput, CommandRequest, CreativeContent, Disconnect,
-    InventoryTransaction, LevelChunk, LevelEvent, MovePlayer, NetworkChunkPublisherUpdate,
-    NetworkSettings, PlayStatus, PlayStatusType, PlayerAction, PlayerActionType, PlayerAuthInput,
-    RequestChunkRadius, ResourcePackClientResponse, ResourcePackResponseStatus, ResourcePackStack,
-    ResourcePacksInfo, ServerToClientHandshake, SetLocalPlayerAsInitialized, StartGame, Text,
-    UpdateBlock, UseItemAction,
+    self, AddPlayer, Animate, AvailableCommands, AvailableEntityIdentifiers, BiomeDefinitionList,
+    ChunkRadiusUpdated, ClientToServerHandshake, CommandOutput, CommandRequest, Disconnect,
+    EntityEvent, InventoryContent, InventorySlot, InventoryTransaction, ItemStackRequest,
+    ItemStackResponse, LevelChunk, LevelEvent, MobEquipment, MoveMode, MovePlayer,
+    NetworkChunkPublisherUpdate, NetworkSettings, PlayStatus, PlayStatusType, PlayerAction,
+    PlayerActionType, PlayerAuthInput, PlayerListAdd, PlayerListAddPacket, PlayerListRemove,
+    RemoveEntity, RequestChunkRadius, ResourcePackClientResponse, ResourcePackResponseStatus,
+    ResourcePackStack, ResourcePacksInfo, Respawn, ServerToClientHandshake, SetEntityMotion,
+    SetLocalPlayerAsInitialized, SetPlayerGameType, StartGame, Text, UpdateAbilities,
+    UpdateAttributes, UpdateBlock, UseItemAction, UseItemOnEntityAction,
 };
-use mc_rs_proto::types::{BlockPos, VarUInt32, Vec2, Vec3};
+use mc_rs_proto::types::{BlockPos, Uuid, VarUInt32, Vec2, Vec3};
 use mc_rs_raknet::{RakNetEvent, Reliability, ServerHandle};
 use mc_rs_world::block_hash::FlatWorldBlocks;
 use mc_rs_world::block_registry::BlockRegistry;
 use mc_rs_world::chunk::{ChunkColumn, OVERWORLD_MIN_Y, OVERWORLD_SUB_CHUNK_COUNT};
 use mc_rs_world::flat_generator::generate_flat_chunk;
+use mc_rs_world::item_registry::ItemRegistry;
+use mc_rs_world::physics::{PlayerAabb, MAX_AIRBORNE_TICKS, MAX_FALL_PER_TICK};
 use mc_rs_world::serializer::serialize_chunk_column;
 use tokio::sync::watch;
 
 use crate::config::ServerConfig;
+use crate::permissions::{BanEntry, PermissionManager};
 
 /// Login state machine states.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,6 +79,8 @@ pub struct PlayerConnection {
     pub state: LoginState,
     pub batch_config: BatchConfig,
     pub login_data: Option<jwt::LoginData>,
+    /// Client data (skin, device info) extracted from the client_data JWT.
+    pub client_data: Option<jwt::ClientData>,
     /// Active packet encryption (set after handshake completes).
     pub encryption: Option<PacketEncryption>,
     /// Key material waiting for ClientToServerHandshake confirmation.
@@ -96,6 +107,18 @@ pub struct PlayerConnection {
     pub gamemode: i32,
     /// Active block-breaking state: (position, start_time).
     pub breaking_block: Option<(BlockPos, Instant)>,
+    /// Consecutive ticks spent airborne (for anti-fly detection).
+    pub airborne_ticks: u32,
+    /// Player inventory.
+    pub inventory: PlayerInventory,
+    /// Player health (0.0 - 20.0).
+    pub health: f32,
+    /// Tick when player last took damage (invulnerability frames).
+    pub last_damage_tick: Option<u64>,
+    /// Whether the player is dead (waiting for respawn).
+    pub is_dead: bool,
+    /// Whether the player is sprinting (from PlayerAuthInput flags).
+    pub is_sprinting: bool,
 }
 
 /// Manages all player connections and their login state machines.
@@ -112,6 +135,10 @@ pub struct ConnectionHandler {
     world_chunks: HashMap<(i32, i32), ChunkColumn>,
     /// Block property registry for all vanilla blocks.
     block_registry: BlockRegistry,
+    /// Item registry for all vanilla items.
+    item_registry: ItemRegistry,
+    /// Permission manager: ops, whitelist, bans.
+    permissions: PermissionManager,
 }
 
 impl ConnectionHandler {
@@ -121,6 +148,22 @@ impl ConnectionHandler {
         server_config: Arc<ServerConfig>,
         shutdown_tx: Arc<watch::Sender<bool>>,
     ) -> Self {
+        let mut command_registry = CommandRegistry::new();
+        command_registry.register_stub("gamemode", "Set a player's game mode");
+        command_registry.register_stub("tp", "Teleport a player");
+        command_registry.register_stub("give", "Give items to a player");
+        command_registry.register_stub("kill", "Kill a player");
+        command_registry.register_stub("kick", "Kick a player from the server");
+        command_registry.register_stub("op", "Grant operator status");
+        command_registry.register_stub("deop", "Revoke operator status");
+        command_registry.register_stub("ban", "Ban a player");
+        command_registry.register_stub("ban-ip", "Ban an IP address");
+        command_registry.register_stub("unban", "Unban a player");
+        command_registry.register_stub("unban-ip", "Unban an IP address");
+        command_registry.register_stub("whitelist", "Manage the whitelist");
+
+        let permissions = PermissionManager::load(server_config.permissions.whitelist_enabled);
+
         Self {
             connections: HashMap::new(),
             server_handle,
@@ -128,10 +171,12 @@ impl ConnectionHandler {
             next_entity_id: 1,
             server_config,
             flat_world_blocks: FlatWorldBlocks::compute(),
-            command_registry: CommandRegistry::new(),
+            command_registry,
             shutdown_tx,
             world_chunks: HashMap::new(),
             block_registry: BlockRegistry::new(),
+            item_registry: ItemRegistry::new(),
+            permissions,
         }
     }
 
@@ -148,7 +193,7 @@ impl ConnectionHandler {
                 self.handle_session_connected(addr, guid);
             }
             RakNetEvent::SessionDisconnected { addr } => {
-                self.handle_session_disconnected(addr);
+                self.handle_session_disconnected(addr).await;
             }
             RakNetEvent::Packet { addr, payload } => {
                 self.handle_packet(addr, payload).await;
@@ -165,6 +210,7 @@ impl ConnectionHandler {
                 state: LoginState::AwaitingNetworkSettings,
                 batch_config: BatchConfig::default(),
                 login_data: None,
+                client_data: None,
                 encryption: None,
                 pending_encryption: None,
                 entity_unique_id: entity_id,
@@ -179,17 +225,60 @@ impl ConnectionHandler {
                 chunk_radius: 0,
                 gamemode: gamemode_from_str(&self.server_config.server.gamemode),
                 breaking_block: None,
+                airborne_ticks: 0,
+                inventory: PlayerInventory::new(),
+                health: 20.0,
+                last_damage_tick: None,
+                is_dead: false,
+                is_sprinting: false,
             },
         );
     }
 
-    fn handle_session_disconnected(&mut self, addr: SocketAddr) {
-        if let Some(conn) = self.connections.remove(&addr) {
-            if let Some(data) = &conn.login_data {
-                info!("Player {} disconnected ({addr})", data.display_name);
-            } else {
-                info!("Session disconnected: {addr}");
+    async fn handle_session_disconnected(&mut self, addr: SocketAddr) {
+        // Collect data before removing from connections
+        let (was_in_game, entity_unique_id, uuid, display_name) = match self.connections.get(&addr)
+        {
+            Some(conn) => {
+                let in_game = conn.state == LoginState::InGame;
+                let uid = conn.entity_unique_id;
+                let (uuid, name) = match &conn.login_data {
+                    Some(d) => (
+                        Uuid::parse(&d.identity).unwrap_or(Uuid::ZERO),
+                        d.display_name.clone(),
+                    ),
+                    None => (Uuid::ZERO, String::new()),
+                };
+                (in_game, uid, uuid, name)
             }
+            None => return,
+        };
+
+        // Remove the connection
+        self.connections.remove(&addr);
+
+        if was_in_game {
+            // Broadcast RemoveEntity to all remaining players
+            self.broadcast_packet(
+                packets::id::REMOVE_ENTITY,
+                &RemoveEntity { entity_unique_id },
+            )
+            .await;
+
+            // Broadcast PlayerList(Remove) to all remaining players
+            self.broadcast_packet(
+                packets::id::PLAYER_LIST,
+                &PlayerListRemove { uuids: vec![uuid] },
+            )
+            .await;
+
+            // Broadcast leave message
+            let leave_msg = Text::system(format!("{display_name} left the game"));
+            self.broadcast_packet(packets::id::TEXT, &leave_msg).await;
+
+            info!("Player {display_name} disconnected ({addr})");
+        } else {
+            info!("Session disconnected: {addr}");
         }
     }
 
@@ -269,14 +358,26 @@ impl ConnectionHandler {
                 packets::id::COMMAND_REQUEST => {
                     self.handle_command_request(addr, &mut cursor).await;
                 }
+                packets::id::MOB_EQUIPMENT => {
+                    self.handle_mob_equipment(addr, &mut cursor).await;
+                }
                 packets::id::INVENTORY_TRANSACTION => {
                     self.handle_inventory_transaction(addr, &mut cursor).await;
                 }
                 packets::id::PLAYER_ACTION => {
                     self.handle_player_action(addr, &mut cursor).await;
                 }
+                packets::id::ITEM_STACK_REQUEST => {
+                    self.handle_item_stack_request(addr, &mut cursor).await;
+                }
                 packets::id::PLAYER_AUTH_INPUT => {
                     self.handle_player_auth_input(addr, &mut cursor).await;
+                }
+                packets::id::ANIMATE => {
+                    self.handle_animate(addr, &mut cursor).await;
+                }
+                packets::id::RESPAWN => {
+                    self.handle_respawn(addr, &mut cursor).await;
                 }
                 other => {
                     debug!(
@@ -391,16 +492,79 @@ impl ConnectionHandler {
             }
         };
 
+        // Parse client data (skin, device info) from the client_data JWT
+        let client_data = jwt::extract_client_data(&login.client_data_jwt).unwrap_or_else(|e| {
+            warn!("Failed to parse client_data from {addr}: {e}, using defaults");
+            jwt::ClientData::default()
+        });
+
         info!(
             "Login from {addr}: {} (XUID: {}, UUID: {})",
             login_data.display_name, login_data.xuid, login_data.identity
         );
 
+        // Check IP ban
+        let ip_str = addr.ip().to_string();
+        if let Some(ban) = self.permissions.banned_ips.get(&ip_str) {
+            info!("Rejected banned IP {ip_str}: {}", ban.reason);
+            self.send_packet(
+                addr,
+                packets::id::DISCONNECT,
+                &Disconnect::with_message(format!("You are banned: {}", ban.reason)),
+            )
+            .await;
+            return;
+        }
+
+        // Check player ban
+        if let Some(ban) = self
+            .permissions
+            .banned_players
+            .get(&login_data.display_name)
+        {
+            info!(
+                "Rejected banned player {}: {}",
+                login_data.display_name, ban.reason
+            );
+            self.send_packet(
+                addr,
+                packets::id::DISCONNECT,
+                &Disconnect::with_message(format!("You are banned: {}", ban.reason)),
+            )
+            .await;
+            return;
+        }
+
+        // Check whitelist
+        if self.permissions.whitelist_enabled
+            && !self
+                .permissions
+                .whitelist
+                .contains(&login_data.display_name)
+        {
+            info!(
+                "Rejected non-whitelisted player: {}",
+                login_data.display_name
+            );
+            self.send_packet(
+                addr,
+                packets::id::DISCONNECT,
+                &Disconnect::with_message("You are not whitelisted on this server."),
+            )
+            .await;
+            return;
+        }
+
         if self.online_mode {
+            // Store client_data before encryption handshake
+            if let Some(conn) = self.connections.get_mut(&addr) {
+                conn.client_data = Some(client_data);
+            }
             self.start_encryption_handshake(addr, login_data).await;
         } else {
             if let Some(conn) = self.connections.get_mut(&addr) {
                 conn.login_data = Some(login_data);
+                conn.client_data = Some(client_data);
                 conn.state = LoginState::LoggedIn;
             }
 
@@ -628,6 +792,16 @@ impl ConnectionHandler {
             level_id: "level".into(),
             world_name: config.world.name.clone(),
             game_version: "1.21.50".into(),
+            item_table: self
+                .item_registry
+                .item_table_entries()
+                .into_iter()
+                .map(|e| mc_rs_proto::packets::start_game::ItemTableEntry {
+                    string_id: e.string_id,
+                    numeric_id: e.numeric_id,
+                    is_component_based: e.is_component_based,
+                })
+                .collect(),
             ..StartGame::default()
         };
 
@@ -635,13 +809,12 @@ impl ConnectionHandler {
             .await;
         info!("Sent StartGame to {addr}");
 
-        // Send metadata packets
-        self.send_packet(
-            addr,
-            packets::id::CREATIVE_CONTENT,
-            &CreativeContent::default(),
-        )
-        .await;
+        // Send creative content (items available in creative menu)
+        let creative_items = mc_rs_proto::packets::creative_content::default_creative_items();
+        let creative_content =
+            mc_rs_proto::packets::creative_content::build_creative_content(&creative_items);
+        self.send_packet(addr, packets::id::CREATIVE_CONTENT, &creative_content)
+            .await;
 
         self.send_packet(
             addr,
@@ -724,8 +897,11 @@ impl ConnectionHandler {
             )
             .await;
 
+            // Send initial inventory contents
+            self.send_inventory(addr).await;
+
             info!(
-                "Sent ChunkRadiusUpdated({accepted_radius}) + {} chunks + PlayStatus(PlayerSpawn) to {addr}",
+                "Sent ChunkRadiusUpdated({accepted_radius}) + {} chunks + PlayStatus(PlayerSpawn) + inventory to {addr}",
                 (accepted_radius * 2 + 1) * (accepted_radius * 2 + 1)
             );
         } else {
@@ -888,12 +1064,39 @@ impl ConnectionHandler {
             conn.state = LoginState::InGame;
         }
 
+        // --- Multi-player: send PlayerList + AddPlayer ---
+        // 1. Send PlayerList(Add) with all existing InGame players to the new player
+        self.send_existing_players_to(addr).await;
+        // 2. Broadcast PlayerList(Add) for the new player to everyone (including self for tab list)
+        self.broadcast_new_player_list(addr).await;
+        // 3. Send AddPlayer for each existing InGame player to the new player
+        self.send_existing_add_players_to(addr).await;
+        // 4. Broadcast AddPlayer for the new player to all existing InGame players
+        self.broadcast_add_player(addr).await;
+
+        // 5. Send initial health attribute so the client HUD shows correctly
+        let rid = self
+            .connections
+            .get(&addr)
+            .map(|c| c.entity_runtime_id)
+            .unwrap_or(0);
+        self.send_packet(
+            addr,
+            packets::id::UPDATE_ATTRIBUTES,
+            &UpdateAttributes::health(rid, 20.0, 0),
+        )
+        .await;
+
         let name = self
             .connections
             .get(&addr)
             .and_then(|c| c.login_data.as_ref())
-            .map(|d| d.display_name.as_str())
-            .unwrap_or("unknown");
+            .map(|d| d.display_name.clone())
+            .unwrap_or_default();
+
+        // 6. Broadcast join message
+        let join_msg = Text::system(format!("{name} joined the game"));
+        self.broadcast_packet(packets::id::TEXT, &join_msg).await;
 
         info!(
             "Player {name} is now in-game ({addr}, runtime_id={})",
@@ -914,7 +1117,7 @@ impl ConnectionHandler {
 
     async fn handle_player_auth_input(&mut self, addr: SocketAddr, buf: &mut Cursor<&[u8]>) {
         match self.connections.get(&addr) {
-            Some(c) if c.state == LoginState::InGame => {}
+            Some(c) if c.state == LoginState::InGame && !c.is_dead => {}
             _ => return,
         }
 
@@ -926,8 +1129,8 @@ impl ConnectionHandler {
             }
         };
 
-        let (prev_position, entity_runtime_id) = match self.connections.get(&addr) {
-            Some(c) => (c.position, c.entity_runtime_id),
+        let (prev_position, entity_runtime_id, gamemode) = match self.connections.get(&addr) {
+            Some(c) => (c.position, c.entity_runtime_id, c.gamemode),
             None => return,
         };
 
@@ -965,6 +1168,31 @@ impl ConnectionHandler {
             needs_correction = true;
         }
 
+        // 4. Vertical speed check (terminal velocity)
+        if !needs_correction {
+            let dy = (input.position.y - prev_position.y).abs();
+            if dy > MAX_FALL_PER_TICK {
+                debug!("Vertical speed too fast from {addr}: {dy:.2} blocks/tick");
+                needs_correction = true;
+            }
+        }
+
+        // 5. No-clip detection (survival/adventure only)
+        // Check that the player's AABB does not overlap any solid block.
+        if !needs_correction && gamemode != 1 && gamemode != 3 {
+            let aabb =
+                PlayerAabb::from_eye_position(input.position.x, input.position.y, input.position.z);
+            for (bx, by, bz) in aabb.intersecting_blocks() {
+                if let Some(hash) = self.get_block(bx, by, bz) {
+                    if self.block_registry.is_solid(hash) {
+                        debug!("No-clip detected at ({bx},{by},{bz}) from {addr}");
+                        needs_correction = true;
+                        break;
+                    }
+                }
+            }
+        }
+
         if needs_correction {
             let conn = match self.connections.get(&addr) {
                 Some(c) => c,
@@ -998,6 +1226,20 @@ impl ConnectionHandler {
             .map(|hash| self.block_registry.is_solid(hash))
             .unwrap_or(true); // Default true for unloaded chunks
 
+        // Anti-fly: track consecutive airborne ticks (survival only)
+        let anti_fly_correction = if gamemode == 0 && !on_ground {
+            let ticks = self
+                .connections
+                .get(&addr)
+                .map(|c| c.airborne_ticks)
+                .unwrap_or(0);
+            let dy = input.position.y - prev_position.y;
+            // If airborne too long AND not falling → fly hack
+            ticks + 1 > MAX_AIRBORNE_TICKS && dy >= 0.0
+        } else {
+            false
+        };
+
         if let Some(conn) = self.connections.get_mut(&addr) {
             conn.position = input.position;
             conn.pitch = input.pitch;
@@ -1005,7 +1247,47 @@ impl ConnectionHandler {
             conn.head_yaw = input.head_yaw;
             conn.client_tick = input.tick;
             conn.on_ground = on_ground;
+            conn.is_sprinting =
+                input.has_flag(mc_rs_proto::packets::player_auth_input::input_flags::SPRINTING);
+            if on_ground {
+                conn.airborne_ticks = 0;
+            } else {
+                conn.airborne_ticks = conn.airborne_ticks.saturating_add(1);
+            }
         }
+
+        if anti_fly_correction {
+            debug!("Anti-fly: {addr} airborne too long without falling (gamemode=survival)");
+            let conn = match self.connections.get(&addr) {
+                Some(c) => c,
+                None => return,
+            };
+            let correction = MovePlayer::reset(
+                entity_runtime_id,
+                conn.position,
+                conn.pitch,
+                conn.yaw,
+                conn.head_yaw,
+                conn.on_ground,
+                input.tick,
+            );
+            self.send_packet(addr, packets::id::MOVE_PLAYER, &correction)
+                .await;
+            return;
+        }
+
+        // --- Broadcast position to other players ---
+        let move_pkt = MovePlayer::normal(
+            entity_runtime_id,
+            input.position,
+            input.pitch,
+            input.yaw,
+            input.head_yaw,
+            on_ground,
+            input.tick,
+        );
+        self.broadcast_packet_except(addr, packets::id::MOVE_PLAYER, &move_pkt)
+            .await;
 
         // --- Dynamic chunk loading ---
         let prev_chunk = (
@@ -1019,6 +1301,29 @@ impl ConnectionHandler {
 
         if prev_chunk != curr_chunk {
             self.send_new_chunks(addr).await;
+            self.cleanup_sent_chunks(addr);
+        }
+    }
+
+    /// Remove chunks from `sent_chunks` that are outside the player's view radius.
+    /// The client handles visual unloading via `NetworkChunkPublisherUpdate.radius`,
+    /// this just prevents the tracking `HashSet` from growing indefinitely.
+    fn cleanup_sent_chunks(&mut self, addr: SocketAddr) {
+        let (center_x, center_z, radius) = match self.connections.get(&addr) {
+            Some(c) => (
+                Self::chunk_coord(c.position.x),
+                Self::chunk_coord(c.position.z),
+                c.chunk_radius,
+            ),
+            None => return,
+        };
+
+        // Keep a margin of 2 chunks beyond the render radius
+        let unload_radius = radius + 2;
+        if let Some(conn) = self.connections.get_mut(&addr) {
+            conn.sent_chunks.retain(|&(cx, cz)| {
+                (cx - center_x).abs() <= unload_radius && (cz - center_z).abs() <= unload_radius
+            });
         }
     }
 
@@ -1085,34 +1390,78 @@ impl ConnectionHandler {
         let cmd_name = parts.next().unwrap_or("");
         let raw_args: Vec<String> = parts.map(String::from).collect();
 
-        // Prepare context — inject special args for certain commands
-        let args = match cmd_name {
-            "help" => {
-                // Inject command list as "name:description" pairs
-                self.command_registry
+        // Permission check for operator-only commands
+        let needs_op = matches!(
+            cmd_name,
+            "gamemode"
+                | "tp"
+                | "give"
+                | "kill"
+                | "kick"
+                | "op"
+                | "deop"
+                | "ban"
+                | "ban-ip"
+                | "unban"
+                | "unban-ip"
+                | "whitelist"
+                | "stop"
+        );
+        if needs_op && !self.permissions.ops.contains(&sender_name) {
+            let result = CommandResult::err("You do not have permission to use this command");
+            let output = CommandOutput::failure(request.origin, result.messages.join("\n"));
+            self.send_packet(addr, packets::id::COMMAND_OUTPUT, &output)
+                .await;
+            for msg in &result.messages {
+                self.send_packet(addr, packets::id::TEXT, &Text::raw(msg))
+                    .await;
+            }
+            return;
+        }
+
+        // Try server commands first (need &mut self access)
+        let server_result = match cmd_name {
+            "gamemode" => Some(self.cmd_gamemode(addr, &sender_name, &raw_args).await),
+            "tp" => Some(self.cmd_tp(addr, &sender_name, &raw_args).await),
+            "give" => Some(self.cmd_give(addr, &raw_args).await),
+            "kill" => Some(self.cmd_kill(addr, &sender_name, &raw_args).await),
+            "kick" => Some(self.cmd_kick(addr, &raw_args).await),
+            "op" => Some(self.cmd_op(addr, &raw_args).await),
+            "deop" => Some(self.cmd_deop(addr, &raw_args).await),
+            "ban" => Some(self.cmd_ban(addr, &raw_args).await),
+            "ban-ip" => Some(self.cmd_ban_ip(addr, &raw_args).await),
+            "unban" => Some(self.cmd_unban(&raw_args)),
+            "unban-ip" => Some(self.cmd_unban_ip(&raw_args)),
+            "whitelist" => Some(self.cmd_whitelist(&raw_args)),
+            _ => None,
+        };
+
+        let result = if let Some(r) = server_result {
+            r
+        } else {
+            // Fall through to registry (help, list, say, stop)
+            let args = match cmd_name {
+                "help" => self
+                    .command_registry
                     .get_commands()
                     .values()
                     .map(|e| format!("{}:{}", e.name, e.description))
-                    .collect()
-            }
-            "list" => {
-                // Inject online player names
-                self.connections
+                    .collect(),
+                "list" => self
+                    .connections
                     .values()
                     .filter(|c| c.state == LoginState::InGame)
                     .filter_map(|c| c.login_data.as_ref())
                     .map(|d| d.display_name.clone())
-                    .collect()
-            }
-            _ => raw_args,
+                    .collect(),
+                _ => raw_args,
+            };
+            let ctx = mc_rs_command::CommandContext {
+                sender_name: sender_name.clone(),
+                args,
+            };
+            self.command_registry.execute(cmd_name, &ctx)
         };
-
-        let ctx = mc_rs_command::CommandContext {
-            sender_name: sender_name.clone(),
-            args,
-        };
-
-        let result = self.command_registry.execute(cmd_name, &ctx);
 
         // Send CommandOutput
         let output = if result.success {
@@ -1142,8 +1491,1216 @@ impl ConnectionHandler {
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Server commands (need &mut self for connections/state access)
+    // -----------------------------------------------------------------------
+
+    /// Find a player's SocketAddr by display name.
+    fn find_player_addr(&self, name: &str) -> Option<SocketAddr> {
+        self.connections.iter().find_map(|(&addr, conn)| {
+            if conn.state == LoginState::InGame {
+                if let Some(ref data) = conn.login_data {
+                    if data.display_name == name {
+                        return Some(addr);
+                    }
+                }
+            }
+            None
+        })
+    }
+
+    /// Collect PlayerInfo for all online (InGame) players.
+    fn online_player_infos(&self) -> Vec<PlayerInfo> {
+        self.connections
+            .values()
+            .filter(|c| c.state == LoginState::InGame)
+            .filter_map(|c| {
+                let name = c.login_data.as_ref()?.display_name.clone();
+                Some(PlayerInfo {
+                    name,
+                    x: c.position.x,
+                    y: c.position.y,
+                    z: c.position.z,
+                })
+            })
+            .collect()
+    }
+
+    /// Resolve a target argument (selector or player name).
+    fn resolve_target(&self, target: &str, addr: SocketAddr) -> Result<Vec<String>, String> {
+        let conn = self
+            .connections
+            .get(&addr)
+            .ok_or_else(|| "Sender not found".to_string())?;
+        let sender_name = conn
+            .login_data
+            .as_ref()
+            .map(|d| d.display_name.as_str())
+            .unwrap_or("unknown");
+        let sender_pos = (conn.position.x, conn.position.y, conn.position.z);
+        let players = self.online_player_infos();
+        mc_rs_command::selector::resolve_target(target, sender_name, sender_pos, &players)
+    }
+
+    /// /gamemode <mode> [player]
+    async fn cmd_gamemode(
+        &mut self,
+        sender_addr: SocketAddr,
+        sender_name: &str,
+        args: &[String],
+    ) -> CommandResult {
+        if args.is_empty() {
+            return CommandResult::err("Usage: /gamemode <mode> [player]");
+        }
+
+        let gamemode = match parse_gamemode(&args[0]) {
+            Some(gm) => gm,
+            None => return CommandResult::err(format!("Unknown gamemode: {}", args[0])),
+        };
+
+        let targets = if args.len() >= 2 {
+            match self.resolve_target(&args[1], sender_addr) {
+                Ok(t) => t,
+                Err(e) => return CommandResult::err(e),
+            }
+        } else {
+            vec![sender_name.to_string()]
+        };
+
+        let mode_name = gamemode_name(gamemode);
+        let mut messages = Vec::new();
+
+        for target_name in &targets {
+            let target_addr = match self.find_player_addr(target_name) {
+                Some(a) => a,
+                None => {
+                    messages.push(format!("Player not found: {target_name}"));
+                    continue;
+                }
+            };
+
+            // Update server state
+            if let Some(conn) = self.connections.get_mut(&target_addr) {
+                conn.gamemode = gamemode;
+            }
+
+            // Send SetPlayerGameType to the target
+            self.send_packet(
+                target_addr,
+                packets::id::SET_PLAYER_GAME_TYPE,
+                &SetPlayerGameType { gamemode },
+            )
+            .await;
+
+            // Send UpdateAbilities to the target
+            let (entity_unique_id, perm, cmd_perm) = {
+                let conn = &self.connections[&target_addr];
+                let is_op = self.permissions.ops.contains(target_name.as_str());
+                (
+                    conn.entity_unique_id,
+                    if is_op { 2u8 } else { 1u8 },
+                    if is_op { 1u8 } else { 0u8 },
+                )
+            };
+            self.send_packet(
+                target_addr,
+                packets::id::UPDATE_ABILITIES,
+                &UpdateAbilities {
+                    command_permission_level: cmd_perm,
+                    permission_level: perm,
+                    entity_unique_id,
+                    gamemode,
+                },
+            )
+            .await;
+
+            messages.push(format!("Set {target_name}'s game mode to {mode_name}"));
+        }
+
+        CommandResult {
+            success: true,
+            messages,
+            broadcast: None,
+            should_stop: false,
+        }
+    }
+
+    /// /tp — three forms:
+    /// /tp <x> <y> <z>
+    /// /tp <target> <x> <y> <z>
+    /// /tp <target> <destination>
+    async fn cmd_tp(
+        &mut self,
+        sender_addr: SocketAddr,
+        sender_name: &str,
+        args: &[String],
+    ) -> CommandResult {
+        match args.len() {
+            3 => {
+                // /tp <x> <y> <z> (self)
+                let (x, y, z) = match parse_coords(&args[0], &args[1], &args[2]) {
+                    Some(c) => c,
+                    None => return CommandResult::err("Invalid coordinates"),
+                };
+                self.teleport_player(sender_addr, sender_name, x, y, z)
+                    .await
+            }
+            2 => {
+                // /tp <target> <destination_player>
+                let targets = match self.resolve_target(&args[0], sender_addr) {
+                    Ok(t) => t,
+                    Err(e) => return CommandResult::err(e),
+                };
+                let dest_names = match self.resolve_target(&args[1], sender_addr) {
+                    Ok(t) => t,
+                    Err(e) => return CommandResult::err(e),
+                };
+                if dest_names.len() != 1 {
+                    return CommandResult::err("Destination must be a single player");
+                }
+                let dest_pos = match self.find_player_addr(&dest_names[0]) {
+                    Some(a) => self
+                        .connections
+                        .get(&a)
+                        .map(|c| c.position)
+                        .unwrap_or(Vec3::ZERO),
+                    None => {
+                        return CommandResult::err(format!("Player not found: {}", dest_names[0]))
+                    }
+                };
+
+                let mut messages = Vec::new();
+                for target_name in &targets {
+                    let target_addr = match self.find_player_addr(target_name) {
+                        Some(a) => a,
+                        None => {
+                            messages.push(format!("Player not found: {target_name}"));
+                            continue;
+                        }
+                    };
+                    self.teleport_player(
+                        target_addr,
+                        target_name,
+                        dest_pos.x,
+                        dest_pos.y,
+                        dest_pos.z,
+                    )
+                    .await;
+                    messages.push(format!("Teleported {target_name} to {}", dest_names[0]));
+                }
+                CommandResult {
+                    success: true,
+                    messages,
+                    broadcast: None,
+                    should_stop: false,
+                }
+            }
+            4 => {
+                // /tp <target> <x> <y> <z>
+                let targets = match self.resolve_target(&args[0], sender_addr) {
+                    Ok(t) => t,
+                    Err(e) => return CommandResult::err(e),
+                };
+                let (x, y, z) = match parse_coords(&args[1], &args[2], &args[3]) {
+                    Some(c) => c,
+                    None => return CommandResult::err("Invalid coordinates"),
+                };
+                let mut messages = Vec::new();
+                for target_name in &targets {
+                    let target_addr = match self.find_player_addr(target_name) {
+                        Some(a) => a,
+                        None => {
+                            messages.push(format!("Player not found: {target_name}"));
+                            continue;
+                        }
+                    };
+                    self.teleport_player(target_addr, target_name, x, y, z)
+                        .await;
+                    messages.push(format!(
+                        "Teleported {target_name} to {x:.1}, {y:.1}, {z:.1}"
+                    ));
+                }
+                CommandResult {
+                    success: true,
+                    messages,
+                    broadcast: None,
+                    should_stop: false,
+                }
+            }
+            _ => CommandResult::err(
+                "Usage: /tp <x> <y> <z> OR /tp <target> <x> <y> <z> OR /tp <target> <destination>",
+            ),
+        }
+    }
+
+    /// Perform the actual teleport for a single player.
+    async fn teleport_player(
+        &mut self,
+        target_addr: SocketAddr,
+        target_name: &str,
+        x: f32,
+        y: f32,
+        z: f32,
+    ) -> CommandResult {
+        let (runtime_id, tick) = match self.connections.get_mut(&target_addr) {
+            Some(conn) => {
+                conn.position = Vec3::new(x, y, z);
+                conn.on_ground = false;
+                (conn.entity_runtime_id, conn.client_tick)
+            }
+            None => return CommandResult::err(format!("Player not found: {target_name}")),
+        };
+
+        let pkt = MovePlayer {
+            runtime_entity_id: runtime_id,
+            position: Vec3::new(x, y, z),
+            pitch: 0.0,
+            yaw: 0.0,
+            head_yaw: 0.0,
+            mode: MoveMode::Teleport,
+            on_ground: false,
+            ridden_entity_runtime_id: 0,
+            teleport_cause: Some(0),
+            teleport_entity_type: Some(0),
+            tick,
+        };
+        self.send_packet(target_addr, packets::id::MOVE_PLAYER, &pkt)
+            .await;
+
+        // Broadcast to other players so they see the teleport
+        self.broadcast_packet_except(target_addr, packets::id::MOVE_PLAYER, &pkt)
+            .await;
+
+        CommandResult::ok(format!(
+            "Teleported {target_name} to {x:.1}, {y:.1}, {z:.1}"
+        ))
+    }
+
+    /// /give <player> <item> [amount] [metadata]
+    async fn cmd_give(&mut self, sender_addr: SocketAddr, args: &[String]) -> CommandResult {
+        if args.len() < 2 {
+            return CommandResult::err("Usage: /give <player> <item> [amount] [metadata]");
+        }
+
+        let targets = match self.resolve_target(&args[0], sender_addr) {
+            Ok(t) => t,
+            Err(e) => return CommandResult::err(e),
+        };
+
+        // Normalize item name: add "minecraft:" prefix if missing
+        let item_name = if args[1].contains(':') {
+            args[1].clone()
+        } else {
+            format!("minecraft:{}", args[1])
+        };
+
+        let item_info = match self.item_registry.get_by_name(&item_name) {
+            Some(info) => info.clone(),
+            None => return CommandResult::err(format!("Unknown item: {}", args[1])),
+        };
+
+        let amount = if args.len() >= 3 {
+            match args[2].parse::<u16>() {
+                Ok(a) if (1..=255).contains(&a) => a,
+                _ => return CommandResult::err("Amount must be 1-255"),
+            }
+        } else {
+            1
+        };
+
+        let metadata = if args.len() >= 4 {
+            match args[3].parse::<u16>() {
+                Ok(m) => m,
+                _ => return CommandResult::err("Invalid metadata value"),
+            }
+        } else {
+            0
+        };
+
+        let mut messages = Vec::new();
+
+        for target_name in &targets {
+            let target_addr = match self.find_player_addr(target_name) {
+                Some(a) => a,
+                None => {
+                    messages.push(format!("Player not found: {target_name}"));
+                    continue;
+                }
+            };
+
+            // Find first empty slot in main inventory
+            let slot = match self.connections.get(&target_addr) {
+                Some(c) => c.inventory.main.iter().position(|s| s.is_empty()),
+                None => continue,
+            };
+
+            let slot = match slot {
+                Some(s) => s as u8,
+                None => {
+                    messages.push(format!("{target_name}'s inventory is full"));
+                    continue;
+                }
+            };
+
+            // Create the item
+            let stack_id = match self.connections.get(&target_addr) {
+                Some(c) => c.inventory.next_stack_network_id(),
+                None => continue,
+            };
+
+            let item = mc_rs_proto::item_stack::ItemStack::new_with_meta(
+                item_info.numeric_id as i32,
+                amount,
+                metadata,
+                stack_id,
+            );
+
+            // Set in server inventory
+            if let Some(conn) = self.connections.get_mut(&target_addr) {
+                conn.inventory.set_slot(0, slot, item.clone());
+            }
+
+            // Send InventorySlot to client
+            self.send_packet(
+                target_addr,
+                packets::id::INVENTORY_SLOT,
+                &InventorySlot {
+                    window_id: 0,
+                    slot: slot as u32,
+                    item,
+                },
+            )
+            .await;
+
+            messages.push(format!("Gave {amount} {} to {target_name}", item_info.name));
+        }
+
+        CommandResult {
+            success: !messages.is_empty(),
+            messages,
+            broadcast: None,
+            should_stop: false,
+        }
+    }
+
+    /// /kill [player] (default = self)
+    async fn cmd_kill(
+        &mut self,
+        sender_addr: SocketAddr,
+        sender_name: &str,
+        args: &[String],
+    ) -> CommandResult {
+        let targets = if args.is_empty() {
+            vec![sender_name.to_string()]
+        } else {
+            match self.resolve_target(&args[0], sender_addr) {
+                Ok(t) => t,
+                Err(e) => return CommandResult::err(e),
+            }
+        };
+
+        let mut messages = Vec::new();
+
+        for target_name in &targets {
+            let target_addr = match self.find_player_addr(target_name) {
+                Some(a) => a,
+                None => {
+                    messages.push(format!("Player not found: {target_name}"));
+                    continue;
+                }
+            };
+
+            let runtime_id = match self.connections.get(&target_addr) {
+                Some(conn) => conn.entity_runtime_id,
+                None => continue,
+            };
+
+            // Set health to 0 and mark as dead
+            if let Some(conn) = self.connections.get_mut(&target_addr) {
+                conn.health = 0.0;
+                conn.is_dead = true;
+            }
+
+            // Send health=0 to the victim
+            let tick = self
+                .connections
+                .get(&target_addr)
+                .map(|c| c.client_tick)
+                .unwrap_or(0);
+            self.send_packet(
+                target_addr,
+                packets::id::UPDATE_ATTRIBUTES,
+                &UpdateAttributes::health(runtime_id, 0.0, tick),
+            )
+            .await;
+
+            // Broadcast death event
+            self.broadcast_packet(packets::id::ENTITY_EVENT, &EntityEvent::death(runtime_id))
+                .await;
+
+            // Send Respawn(searching) to trigger death screen
+            let spawn_pos = Vec3::new(0.5, 5.62, 0.5);
+            self.send_packet(
+                target_addr,
+                packets::id::RESPAWN,
+                &Respawn {
+                    position: spawn_pos,
+                    state: 0, // searching — shows death screen
+                    runtime_entity_id: runtime_id,
+                },
+            )
+            .await;
+
+            messages.push(format!("Killed {target_name}"));
+        }
+
+        CommandResult {
+            success: true,
+            messages,
+            broadcast: None,
+            should_stop: false,
+        }
+    }
+
+    /// /kick <player> [reason]
+    async fn cmd_kick(&mut self, sender_addr: SocketAddr, args: &[String]) -> CommandResult {
+        if args.is_empty() {
+            return CommandResult::err("Usage: /kick <player> [reason]");
+        }
+
+        let targets = match self.resolve_target(&args[0], sender_addr) {
+            Ok(t) => t,
+            Err(e) => return CommandResult::err(e),
+        };
+
+        let reason = if args.len() >= 2 {
+            args[1..].join(" ")
+        } else {
+            "Kicked by an operator".to_string()
+        };
+
+        let mut messages = Vec::new();
+
+        for target_name in &targets {
+            let target_addr = match self.find_player_addr(target_name) {
+                Some(a) => a,
+                None => {
+                    messages.push(format!("Player not found: {target_name}"));
+                    continue;
+                }
+            };
+
+            // Send Disconnect packet — cleanup happens via handle_session_disconnected
+            self.send_packet(
+                target_addr,
+                packets::id::DISCONNECT,
+                &Disconnect::with_message(&reason),
+            )
+            .await;
+
+            messages.push(format!("Kicked {target_name}: {reason}"));
+        }
+
+        CommandResult {
+            success: true,
+            messages,
+            broadcast: None,
+            should_stop: false,
+        }
+    }
+
+    /// /op <player>
+    async fn cmd_op(&mut self, sender_addr: SocketAddr, args: &[String]) -> CommandResult {
+        if args.is_empty() {
+            return CommandResult::err("Usage: /op <player>");
+        }
+
+        let targets = match self.resolve_target(&args[0], sender_addr) {
+            Ok(t) => t,
+            Err(e) => return CommandResult::err(e),
+        };
+
+        let mut messages = Vec::new();
+
+        for target_name in &targets {
+            let target_addr = match self.find_player_addr(target_name) {
+                Some(a) => a,
+                None => {
+                    messages.push(format!("Player not found: {target_name}"));
+                    continue;
+                }
+            };
+
+            self.permissions.ops.insert(target_name.clone());
+            self.permissions.save_ops();
+
+            let (entity_unique_id, gamemode) = {
+                let conn = &self.connections[&target_addr];
+                (conn.entity_unique_id, conn.gamemode)
+            };
+            self.send_packet(
+                target_addr,
+                packets::id::UPDATE_ABILITIES,
+                &UpdateAbilities {
+                    command_permission_level: 1,
+                    permission_level: 2,
+                    entity_unique_id,
+                    gamemode,
+                },
+            )
+            .await;
+
+            messages.push(format!("Opped {target_name}"));
+        }
+
+        CommandResult {
+            success: true,
+            messages,
+            broadcast: None,
+            should_stop: false,
+        }
+    }
+
+    /// /deop <player>
+    async fn cmd_deop(&mut self, sender_addr: SocketAddr, args: &[String]) -> CommandResult {
+        if args.is_empty() {
+            return CommandResult::err("Usage: /deop <player>");
+        }
+
+        let targets = match self.resolve_target(&args[0], sender_addr) {
+            Ok(t) => t,
+            Err(e) => return CommandResult::err(e),
+        };
+
+        let mut messages = Vec::new();
+
+        for target_name in &targets {
+            let target_addr = match self.find_player_addr(target_name) {
+                Some(a) => a,
+                None => {
+                    messages.push(format!("Player not found: {target_name}"));
+                    continue;
+                }
+            };
+
+            self.permissions.ops.remove(target_name.as_str());
+            self.permissions.save_ops();
+
+            let (entity_unique_id, gamemode) = {
+                let conn = &self.connections[&target_addr];
+                (conn.entity_unique_id, conn.gamemode)
+            };
+            self.send_packet(
+                target_addr,
+                packets::id::UPDATE_ABILITIES,
+                &UpdateAbilities {
+                    command_permission_level: 0,
+                    permission_level: 1,
+                    entity_unique_id,
+                    gamemode,
+                },
+            )
+            .await;
+
+            messages.push(format!("De-opped {target_name}"));
+        }
+
+        CommandResult {
+            success: true,
+            messages,
+            broadcast: None,
+            should_stop: false,
+        }
+    }
+
+    async fn cmd_ban(&mut self, sender_addr: SocketAddr, args: &[String]) -> CommandResult {
+        if args.is_empty() {
+            return CommandResult::err("Usage: /ban <player> [reason]");
+        }
+
+        let targets = match self.resolve_target(&args[0], sender_addr) {
+            Ok(t) => t,
+            Err(e) => return CommandResult::err(e),
+        };
+
+        let reason = if args.len() > 1 {
+            args[1..].join(" ")
+        } else {
+            "Banned by an operator".to_string()
+        };
+
+        let mut messages = Vec::new();
+
+        for target_name in &targets {
+            self.permissions.banned_players.insert(
+                target_name.clone(),
+                BanEntry {
+                    reason: reason.clone(),
+                },
+            );
+
+            // Kick the player if online
+            if let Some(target_addr) = self.find_player_addr(target_name) {
+                self.send_packet(
+                    target_addr,
+                    packets::id::DISCONNECT,
+                    &Disconnect::with_message(format!("You are banned: {reason}")),
+                )
+                .await;
+            }
+
+            messages.push(format!("Banned {target_name}: {reason}"));
+        }
+
+        self.permissions.save_banned_players();
+
+        CommandResult {
+            success: true,
+            messages,
+            broadcast: None,
+            should_stop: false,
+        }
+    }
+
+    async fn cmd_ban_ip(&mut self, sender_addr: SocketAddr, args: &[String]) -> CommandResult {
+        if args.is_empty() {
+            return CommandResult::err("Usage: /ban-ip <ip> [reason]");
+        }
+
+        let ip = &args[0];
+        let reason = if args.len() > 1 {
+            args[1..].join(" ")
+        } else {
+            "Banned by an operator".to_string()
+        };
+
+        self.permissions.banned_ips.insert(
+            ip.clone(),
+            BanEntry {
+                reason: reason.clone(),
+            },
+        );
+        self.permissions.save_banned_ips();
+
+        // Kick all players connected from this IP
+        let addrs_to_kick: Vec<SocketAddr> = self
+            .connections
+            .iter()
+            .filter(|(a, c)| a.ip().to_string() == *ip && c.state == LoginState::InGame)
+            .map(|(&a, _)| a)
+            .collect();
+
+        for kick_addr in &addrs_to_kick {
+            self.send_packet(
+                *kick_addr,
+                packets::id::DISCONNECT,
+                &Disconnect::with_message(format!("You are banned: {reason}")),
+            )
+            .await;
+        }
+
+        let _ = sender_addr; // used for consistency with other commands
+        CommandResult::ok(format!(
+            "Banned IP {ip}: {reason} ({} player(s) kicked)",
+            addrs_to_kick.len()
+        ))
+    }
+
+    fn cmd_unban(&mut self, args: &[String]) -> CommandResult {
+        if args.is_empty() {
+            return CommandResult::err("Usage: /unban <player>");
+        }
+
+        let name = &args[0];
+        if self.permissions.banned_players.remove(name).is_some() {
+            self.permissions.save_banned_players();
+            CommandResult::ok(format!("Unbanned {name}"))
+        } else {
+            CommandResult::err(format!("{name} is not banned"))
+        }
+    }
+
+    fn cmd_unban_ip(&mut self, args: &[String]) -> CommandResult {
+        if args.is_empty() {
+            return CommandResult::err("Usage: /unban-ip <ip>");
+        }
+
+        let ip = &args[0];
+        if self.permissions.banned_ips.remove(ip.as_str()).is_some() {
+            self.permissions.save_banned_ips();
+            CommandResult::ok(format!("Unbanned IP {ip}"))
+        } else {
+            CommandResult::err(format!("IP {ip} is not banned"))
+        }
+    }
+
+    fn cmd_whitelist(&mut self, args: &[String]) -> CommandResult {
+        if args.is_empty() {
+            return CommandResult::err("Usage: /whitelist <add|remove|list|on|off> [player]");
+        }
+
+        match args[0].as_str() {
+            "add" => {
+                let name = match args.get(1) {
+                    Some(n) => n,
+                    None => return CommandResult::err("Usage: /whitelist add <player>"),
+                };
+                self.permissions.whitelist.insert(name.clone());
+                self.permissions.save_whitelist();
+                CommandResult::ok(format!("Added {name} to the whitelist"))
+            }
+            "remove" => {
+                let name = match args.get(1) {
+                    Some(n) => n,
+                    None => return CommandResult::err("Usage: /whitelist remove <player>"),
+                };
+                if self.permissions.whitelist.remove(name.as_str()) {
+                    self.permissions.save_whitelist();
+                    CommandResult::ok(format!("Removed {name} from the whitelist"))
+                } else {
+                    CommandResult::err(format!("{name} is not on the whitelist"))
+                }
+            }
+            "list" => {
+                let mut names: Vec<&String> = self.permissions.whitelist.iter().collect();
+                names.sort();
+                if names.is_empty() {
+                    CommandResult::ok("Whitelist is empty")
+                } else {
+                    CommandResult::ok(format!(
+                        "Whitelisted players ({}): {}",
+                        names.len(),
+                        names
+                            .iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ))
+                }
+            }
+            "on" => {
+                self.permissions.whitelist_enabled = true;
+                CommandResult::ok("Whitelist enabled")
+            }
+            "off" => {
+                self.permissions.whitelist_enabled = false;
+                CommandResult::ok("Whitelist disabled")
+            }
+            other => CommandResult::err(format!(
+                "Unknown whitelist action: {other}. Use add, remove, list, on, or off."
+            )),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // PvP combat
+    // -----------------------------------------------------------------------
+
+    /// Handle Animate packet (arm swing broadcast).
+    async fn handle_animate(&mut self, addr: SocketAddr, buf: &mut Cursor<&[u8]>) {
+        match self.connections.get(&addr) {
+            Some(c) if c.state == LoginState::InGame && !c.is_dead => {}
+            _ => return,
+        }
+
+        let pkt = match Animate::proto_decode(buf) {
+            Ok(p) => p,
+            Err(e) => {
+                warn!("Bad Animate from {addr}: {e}");
+                return;
+            }
+        };
+
+        if pkt.action_type != mc_rs_proto::packets::animate::ACTION_SWING_ARM {
+            return;
+        }
+
+        let runtime_id = match self.connections.get(&addr) {
+            Some(c) => c.entity_runtime_id,
+            None => return,
+        };
+
+        let broadcast = Animate {
+            action_type: mc_rs_proto::packets::animate::ACTION_SWING_ARM,
+            entity_runtime_id: runtime_id,
+        };
+        self.broadcast_packet_except(addr, packets::id::ANIMATE, &broadcast)
+            .await;
+    }
+
+    /// Find a player's address by their entity runtime ID.
+    fn find_addr_by_runtime_id(&self, runtime_id: u64) -> Option<SocketAddr> {
+        self.connections.iter().find_map(|(&a, conn)| {
+            if conn.entity_runtime_id == runtime_id && conn.state == LoginState::InGame {
+                Some(a)
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Handle a player attacking another entity (PvP).
+    async fn handle_attack(&mut self, attacker_addr: SocketAddr, victim_runtime_id: u64) {
+        let (attacker_gamemode, attacker_pos, held_item_rid, is_sprinting) =
+            match self.connections.get(&attacker_addr) {
+                Some(c) => {
+                    let rid = c.inventory.held_item().runtime_id;
+                    (c.gamemode, c.position, rid, c.is_sprinting)
+                }
+                None => return,
+            };
+
+        // Creative/Spectator cannot attack
+        if attacker_gamemode == 1 || attacker_gamemode == 3 {
+            return;
+        }
+
+        // Find victim by runtime_id
+        let victim_addr = match self.find_addr_by_runtime_id(victim_runtime_id) {
+            Some(a) => a,
+            None => return,
+        };
+
+        // Victim must be alive and in a damageable gamemode
+        let (victim_gamemode, victim_pos) = match self.connections.get(&victim_addr) {
+            Some(c) if c.state == LoginState::InGame && !c.is_dead => (c.gamemode, c.position),
+            _ => return,
+        };
+
+        // Creative/Spectator victims are immune
+        if victim_gamemode == 1 || victim_gamemode == 3 {
+            return;
+        }
+
+        // Distance check (anti-reach, max ~6 blocks)
+        let distance = attacker_pos.distance(&victim_pos);
+        if distance > 6.0 {
+            debug!("Attack rejected: distance {distance:.2} > 6.0 from {attacker_addr}");
+            return;
+        }
+
+        // Invulnerability check (10 ticks = 500ms)
+        let current_tick = self
+            .connections
+            .get(&attacker_addr)
+            .map(|c| c.client_tick)
+            .unwrap_or(0);
+        if let Some(last_tick) = self
+            .connections
+            .get(&victim_addr)
+            .and_then(|c| c.last_damage_tick)
+        {
+            if current_tick.saturating_sub(last_tick) < 10 {
+                return;
+            }
+        }
+
+        // Calculate damage
+        let damage = base_attack_damage(&self.item_registry, held_item_rid);
+
+        // Apply damage
+        let (new_health, victim_rid, victim_name) = {
+            let conn = match self.connections.get_mut(&victim_addr) {
+                Some(c) => c,
+                None => return,
+            };
+            conn.health = (conn.health - damage).max(0.0);
+            conn.last_damage_tick = Some(current_tick);
+            let name = conn
+                .login_data
+                .as_ref()
+                .map(|d| d.display_name.clone())
+                .unwrap_or_default();
+            (conn.health, conn.entity_runtime_id, name)
+        };
+
+        // Send UpdateAttributes (health) to victim
+        self.send_packet(
+            victim_addr,
+            packets::id::UPDATE_ATTRIBUTES,
+            &UpdateAttributes::health(victim_rid, new_health, current_tick),
+        )
+        .await;
+
+        // Broadcast EntityEvent(hurt) to all
+        self.broadcast_packet(packets::id::ENTITY_EVENT, &EntityEvent::hurt(victim_rid))
+            .await;
+
+        // Calculate and apply knockback
+        let dx = victim_pos.x - attacker_pos.x;
+        let dz = victim_pos.z - attacker_pos.z;
+        let horizontal_len = (dx * dx + dz * dz).sqrt();
+
+        if horizontal_len > 0.001 {
+            let norm_x = dx / horizontal_len;
+            let norm_z = dz / horizontal_len;
+            let kb_horizontal = 0.4;
+            let kb_vertical = 0.4;
+            let sprint_mult = if is_sprinting { 1.5 } else { 1.0 };
+
+            let motion = Vec3::new(
+                norm_x * kb_horizontal * sprint_mult,
+                kb_vertical,
+                norm_z * kb_horizontal * sprint_mult,
+            );
+
+            self.send_packet(
+                victim_addr,
+                packets::id::SET_ENTITY_MOTION,
+                &SetEntityMotion {
+                    entity_runtime_id: victim_rid,
+                    motion,
+                },
+            )
+            .await;
+        }
+
+        // Check for death
+        if new_health <= 0.0 {
+            self.handle_player_death(victim_addr, &victim_name, attacker_addr)
+                .await;
+        }
+    }
+
+    /// Handle a player dying.
+    async fn handle_player_death(
+        &mut self,
+        victim_addr: SocketAddr,
+        victim_name: &str,
+        killer_addr: SocketAddr,
+    ) {
+        let victim_rid = match self.connections.get(&victim_addr) {
+            Some(c) => c.entity_runtime_id,
+            None => return,
+        };
+
+        // Mark as dead
+        if let Some(conn) = self.connections.get_mut(&victim_addr) {
+            conn.is_dead = true;
+        }
+
+        // Broadcast death event to all
+        self.broadcast_packet(packets::id::ENTITY_EVENT, &EntityEvent::death(victim_rid))
+            .await;
+
+        // Send Respawn(searching) to dead player — triggers death screen
+        let spawn_pos = Vec3::new(0.5, 5.62, 0.5);
+        self.send_packet(
+            victim_addr,
+            packets::id::RESPAWN,
+            &Respawn {
+                position: spawn_pos,
+                state: 0, // searching
+                runtime_entity_id: victim_rid,
+            },
+        )
+        .await;
+
+        // Broadcast death message
+        let killer_name = self
+            .connections
+            .get(&killer_addr)
+            .and_then(|c| c.login_data.as_ref())
+            .map(|d| d.display_name.clone())
+            .unwrap_or_else(|| "???".to_string());
+
+        let death_msg = Text::system(format!("{victim_name} was slain by {killer_name}"));
+        self.broadcast_packet(packets::id::TEXT, &death_msg).await;
+    }
+
+    /// Handle Respawn packet from client (state=2, client clicked "Respawn").
+    async fn handle_respawn(&mut self, addr: SocketAddr, buf: &mut Cursor<&[u8]>) {
+        match self.connections.get(&addr) {
+            Some(c) if c.state == LoginState::InGame && c.is_dead => {}
+            _ => return,
+        }
+
+        let pkt = match Respawn::proto_decode(buf) {
+            Ok(p) => p,
+            Err(e) => {
+                warn!("Bad Respawn from {addr}: {e}");
+                return;
+            }
+        };
+
+        // Client sends state=2 (client_ready) when "Respawn" is clicked
+        if pkt.state != 2 {
+            return;
+        }
+
+        let spawn_pos = Vec3::new(0.5, 5.62, 0.5);
+
+        let runtime_id = match self.connections.get_mut(&addr) {
+            Some(conn) => {
+                conn.health = 20.0;
+                conn.is_dead = false;
+                conn.last_damage_tick = None;
+                conn.position = spawn_pos;
+                conn.entity_runtime_id
+            }
+            None => return,
+        };
+
+        // Send Respawn(server_ready)
+        self.send_packet(
+            addr,
+            packets::id::RESPAWN,
+            &Respawn {
+                position: spawn_pos,
+                state: 1, // server_ready
+                runtime_entity_id: runtime_id,
+            },
+        )
+        .await;
+
+        // Send full health
+        let tick = self
+            .connections
+            .get(&addr)
+            .map(|c| c.client_tick)
+            .unwrap_or(0);
+        self.send_packet(
+            addr,
+            packets::id::UPDATE_ATTRIBUTES,
+            &UpdateAttributes::health(runtime_id, 20.0, tick),
+        )
+        .await;
+
+        // Broadcast position reset
+        let move_pkt = MovePlayer::reset(runtime_id, spawn_pos, 0.0, 0.0, 0.0, true, tick);
+        self.broadcast_packet(packets::id::MOVE_PLAYER, &move_pkt)
+            .await;
+    }
+
+    // -----------------------------------------------------------------------
+    // Inventory handlers
+    // -----------------------------------------------------------------------
+
+    /// Send the full inventory contents to a player.
+    async fn send_inventory(&mut self, addr: SocketAddr) {
+        let items = match self.connections.get(&addr) {
+            Some(c) => c.inventory.main.clone(),
+            None => return,
+        };
+        self.send_packet(
+            addr,
+            packets::id::INVENTORY_CONTENT,
+            &InventoryContent {
+                window_id: 0,
+                items,
+            },
+        )
+        .await;
+
+        let armor = match self.connections.get(&addr) {
+            Some(c) => c.inventory.armor.clone(),
+            None => return,
+        };
+        self.send_packet(
+            addr,
+            packets::id::INVENTORY_CONTENT,
+            &InventoryContent {
+                window_id: 119,
+                items: armor,
+            },
+        )
+        .await;
+    }
+
+    async fn handle_mob_equipment(&mut self, addr: SocketAddr, buf: &mut Cursor<&[u8]>) {
+        let state = match self.connections.get(&addr) {
+            Some(c) if c.state == LoginState::InGame => c.state,
+            _ => return,
+        };
+        let _ = state;
+
+        let equipment = match MobEquipment::proto_decode(buf) {
+            Ok(e) => e,
+            Err(e) => {
+                debug!("Bad MobEquipment from {addr}: {e}");
+                return;
+            }
+        };
+
+        if let Some(conn) = self.connections.get_mut(&addr) {
+            conn.inventory.held_slot = equipment.hotbar_slot;
+        }
+
+        // Broadcast to other players
+        let entity_runtime_id = match self.connections.get(&addr) {
+            Some(c) => c.entity_runtime_id,
+            None => return,
+        };
+
+        let broadcast_pkt = MobEquipment {
+            entity_runtime_id,
+            item: equipment.item,
+            inventory_slot: equipment.inventory_slot,
+            hotbar_slot: equipment.hotbar_slot,
+            window_id: equipment.window_id,
+        };
+        self.broadcast_packet_except(addr, packets::id::MOB_EQUIPMENT, &broadcast_pkt)
+            .await;
+    }
+
+    async fn handle_item_stack_request(&mut self, addr: SocketAddr, buf: &mut Cursor<&[u8]>) {
+        let state = match self.connections.get(&addr) {
+            Some(c) if c.state == LoginState::InGame => c.state,
+            _ => return,
+        };
+        let _ = state;
+
+        let request = match ItemStackRequest::proto_decode(buf) {
+            Ok(r) => r,
+            Err(e) => {
+                debug!("Bad ItemStackRequest from {addr}: {e}");
+                return;
+            }
+        };
+
+        let mut responses = Vec::new();
+        for req in &request.requests {
+            // Need to borrow inventory mutably but also need item_registry immutably.
+            // Extract response using a helper that takes both.
+            let response = match self.connections.get_mut(&addr) {
+                Some(conn) => conn.inventory.process_request(req, &self.item_registry),
+                None => return,
+            };
+            responses.push(response);
+        }
+
+        self.send_packet(
+            addr,
+            packets::id::ITEM_STACK_RESPONSE,
+            &ItemStackResponse { responses },
+        )
+        .await;
+    }
+
     async fn broadcast_packet(&mut self, packet_id: u32, packet: &impl ProtoEncode) {
-        let addrs: Vec<SocketAddr> = self.connections.keys().copied().collect();
+        let addrs: Vec<SocketAddr> = self
+            .connections
+            .iter()
+            .filter(|(_, c)| c.state == LoginState::InGame)
+            .map(|(&a, _)| a)
+            .collect();
+        for addr in addrs {
+            self.send_packet(addr, packet_id, packet).await;
+        }
+    }
+
+    async fn broadcast_packet_except(
+        &mut self,
+        except: SocketAddr,
+        packet_id: u32,
+        packet: &impl ProtoEncode,
+    ) {
+        let addrs: Vec<SocketAddr> = self
+            .connections
+            .iter()
+            .filter(|(&a, c)| a != except && c.state == LoginState::InGame)
+            .map(|(&a, _)| a)
+            .collect();
         for addr in addrs {
             self.send_packet(addr, packet_id, packet).await;
         }
@@ -1242,7 +2799,7 @@ impl ConnectionHandler {
 
     async fn handle_inventory_transaction(&mut self, addr: SocketAddr, buf: &mut Cursor<&[u8]>) {
         match self.connections.get(&addr) {
-            Some(c) if c.state == LoginState::InGame => {}
+            Some(c) if c.state == LoginState::InGame && !c.is_dead => {}
             _ => return,
         }
 
@@ -1254,9 +2811,18 @@ impl ConnectionHandler {
             }
         };
 
+        // Handle UseItemOnEntity (attack/interact) first
+        if let Some(entity_data) = transaction.use_item_on_entity {
+            if entity_data.action == UseItemOnEntityAction::Attack {
+                self.handle_attack(addr, entity_data.entity_runtime_id)
+                    .await;
+            }
+            return;
+        }
+
         let use_item = match transaction.use_item {
             Some(data) => data,
-            None => return, // Not a UseItem transaction
+            None => return,
         };
 
         match use_item.action {
@@ -1428,6 +2994,166 @@ impl ConnectionHandler {
             .send_to(addr, out.freeze(), Reliability::ReliableOrdered, 0)
             .await;
     }
+
+    // -----------------------------------------------------------------------
+    // Phase 2.1: Multi-player (PlayerList, AddPlayer, RemoveEntity)
+    // -----------------------------------------------------------------------
+
+    /// Send PlayerList(Add) with all existing InGame players to a newly joined player.
+    async fn send_existing_players_to(&mut self, new_addr: SocketAddr) {
+        let entries: Vec<PlayerListAdd> = self
+            .connections
+            .iter()
+            .filter(|(&a, c)| a != new_addr && c.state == LoginState::InGame)
+            .filter_map(|(_, conn)| {
+                let login = conn.login_data.as_ref()?;
+                let uuid = Uuid::parse(&login.identity).unwrap_or(Uuid::ZERO);
+                let client_data = conn.client_data.clone().unwrap_or_default();
+                Some(PlayerListAdd {
+                    uuid,
+                    entity_unique_id: conn.entity_unique_id,
+                    username: login.display_name.clone(),
+                    xuid: login.xuid.clone(),
+                    platform_chat_id: String::new(),
+                    device_os: client_data.device_os,
+                    skin_data: client_data,
+                    is_teacher: false,
+                    is_host: false,
+                    is_sub_client: false,
+                })
+            })
+            .collect();
+
+        if !entries.is_empty() {
+            self.send_packet(
+                new_addr,
+                packets::id::PLAYER_LIST,
+                &PlayerListAddPacket { entries },
+            )
+            .await;
+        }
+    }
+
+    /// Broadcast PlayerList(Add) for the new player to all InGame players (including self).
+    async fn broadcast_new_player_list(&mut self, new_addr: SocketAddr) {
+        let entry = {
+            let conn = match self.connections.get(&new_addr) {
+                Some(c) => c,
+                None => return,
+            };
+            let login = match &conn.login_data {
+                Some(d) => d,
+                None => return,
+            };
+            let uuid = Uuid::parse(&login.identity).unwrap_or(Uuid::ZERO);
+            let client_data = conn.client_data.clone().unwrap_or_default();
+            PlayerListAdd {
+                uuid,
+                entity_unique_id: conn.entity_unique_id,
+                username: login.display_name.clone(),
+                xuid: login.xuid.clone(),
+                platform_chat_id: String::new(),
+                device_os: client_data.device_os,
+                skin_data: client_data,
+                is_teacher: false,
+                is_host: false,
+                is_sub_client: false,
+            }
+        };
+        let packet = PlayerListAddPacket {
+            entries: vec![entry],
+        };
+        self.broadcast_packet(packets::id::PLAYER_LIST, &packet)
+            .await;
+    }
+
+    /// Send AddPlayer for each existing InGame player to a newly joined player.
+    async fn send_existing_add_players_to(&mut self, new_addr: SocketAddr) {
+        let ops = &self.permissions.ops;
+        let players: Vec<AddPlayer> = self
+            .connections
+            .iter()
+            .filter(|(&a, c)| a != new_addr && c.state == LoginState::InGame)
+            .filter_map(|(_, conn)| {
+                let login = conn.login_data.as_ref()?;
+                let uuid = Uuid::parse(&login.identity).unwrap_or(Uuid::ZERO);
+                let client_data = conn.client_data.clone().unwrap_or_default();
+                let held_item = conn
+                    .inventory
+                    .get_slot(0, conn.inventory.held_slot)
+                    .cloned()
+                    .unwrap_or_else(mc_rs_proto::item_stack::ItemStack::empty);
+                let is_op = ops.contains(&login.display_name);
+                Some(AddPlayer {
+                    uuid,
+                    username: login.display_name.clone(),
+                    entity_runtime_id: conn.entity_runtime_id,
+                    platform_chat_id: String::new(),
+                    position: conn.position,
+                    velocity: Vec3::ZERO,
+                    pitch: conn.pitch,
+                    yaw: conn.yaw,
+                    head_yaw: conn.head_yaw,
+                    held_item,
+                    gamemode: conn.gamemode,
+                    metadata: default_player_metadata(&login.display_name),
+                    entity_unique_id: conn.entity_unique_id,
+                    permission_level: if is_op { 2 } else { 1 },
+                    command_permission_level: if is_op { 1 } else { 0 },
+                    device_id: client_data.device_id,
+                    device_os: client_data.device_os,
+                })
+            })
+            .collect();
+
+        for player in &players {
+            self.send_packet(new_addr, packets::id::ADD_PLAYER, player)
+                .await;
+        }
+    }
+
+    /// Broadcast AddPlayer for the new player to all existing InGame players.
+    async fn broadcast_add_player(&mut self, new_addr: SocketAddr) {
+        let packet = {
+            let conn = match self.connections.get(&new_addr) {
+                Some(c) => c,
+                None => return,
+            };
+            let login = match &conn.login_data {
+                Some(d) => d,
+                None => return,
+            };
+            let uuid = Uuid::parse(&login.identity).unwrap_or(Uuid::ZERO);
+            let client_data = conn.client_data.clone().unwrap_or_default();
+            let held_item = conn
+                .inventory
+                .get_slot(0, conn.inventory.held_slot)
+                .cloned()
+                .unwrap_or_else(mc_rs_proto::item_stack::ItemStack::empty);
+            let is_op = self.permissions.ops.contains(&login.display_name);
+            AddPlayer {
+                uuid,
+                username: login.display_name.clone(),
+                entity_runtime_id: conn.entity_runtime_id,
+                platform_chat_id: String::new(),
+                position: conn.position,
+                velocity: Vec3::ZERO,
+                pitch: conn.pitch,
+                yaw: conn.yaw,
+                head_yaw: conn.head_yaw,
+                held_item,
+                gamemode: conn.gamemode,
+                metadata: default_player_metadata(&login.display_name),
+                entity_unique_id: conn.entity_unique_id,
+                permission_level: if is_op { 2 } else { 1 },
+                command_permission_level: if is_op { 1 } else { 0 },
+                device_id: client_data.device_id,
+                device_os: client_data.device_os,
+            }
+        };
+        self.broadcast_packet_except(new_addr, packets::id::ADD_PLAYER, &packet)
+            .await;
+    }
 }
 
 /// Encode a packet struct into a sub-packet: `VarUInt32(id) + proto_encoded fields`.
@@ -1467,5 +3193,77 @@ fn generator_from_str(s: &str) -> i32 {
         "end" => 4,
         "void" => 5,
         _ => 2,
+    }
+}
+
+fn parse_gamemode(s: &str) -> Option<i32> {
+    match s.to_lowercase().as_str() {
+        "0" | "survival" | "s" => Some(0),
+        "1" | "creative" | "c" => Some(1),
+        "2" | "adventure" | "a" => Some(2),
+        "3" | "spectator" | "sp" => Some(3),
+        _ => None,
+    }
+}
+
+fn gamemode_name(gm: i32) -> &'static str {
+    match gm {
+        0 => "Survival",
+        1 => "Creative",
+        2 => "Adventure",
+        3 => "Spectator",
+        _ => "Unknown",
+    }
+}
+
+fn parse_coords(xs: &str, ys: &str, zs: &str) -> Option<(f32, f32, f32)> {
+    let x = xs.parse::<f32>().ok()?;
+    let y = ys.parse::<f32>().ok()?;
+    let z = zs.parse::<f32>().ok()?;
+    Some((x, y, z))
+}
+
+/// Return base attack damage for a held item, looked up by runtime ID.
+fn base_attack_damage(registry: &ItemRegistry, runtime_id: i32) -> f32 {
+    if runtime_id <= 0 {
+        return 1.0; // fist / air
+    }
+    let name = match registry.get_by_id(runtime_id as i16) {
+        Some(info) => info.name.as_str(),
+        None => return 1.0,
+    };
+    match name {
+        // Swords
+        "minecraft:wooden_sword" => 5.0,
+        "minecraft:stone_sword" => 6.0,
+        "minecraft:iron_sword" => 7.0,
+        "minecraft:golden_sword" => 5.0,
+        "minecraft:diamond_sword" => 8.0,
+        "minecraft:netherite_sword" => 9.0,
+        // Axes
+        "minecraft:wooden_axe" => 4.0,
+        "minecraft:stone_axe" => 5.0,
+        "minecraft:iron_axe" => 6.0,
+        "minecraft:golden_axe" => 4.0,
+        "minecraft:diamond_axe" => 7.0,
+        "minecraft:netherite_axe" => 8.0,
+        // Pickaxes
+        "minecraft:wooden_pickaxe" => 3.0,
+        "minecraft:stone_pickaxe" => 4.0,
+        "minecraft:iron_pickaxe" => 5.0,
+        "minecraft:golden_pickaxe" => 3.0,
+        "minecraft:diamond_pickaxe" => 6.0,
+        "minecraft:netherite_pickaxe" => 7.0,
+        // Shovels
+        "minecraft:wooden_shovel" => 2.0,
+        "minecraft:stone_shovel" => 3.0,
+        "minecraft:iron_shovel" => 4.0,
+        "minecraft:golden_shovel" => 2.0,
+        "minecraft:diamond_shovel" => 5.0,
+        "minecraft:netherite_shovel" => 6.0,
+        // Trident
+        "minecraft:trident" => 9.0,
+        // Everything else (hoes, misc items, blocks)
+        _ => 1.0,
     }
 }

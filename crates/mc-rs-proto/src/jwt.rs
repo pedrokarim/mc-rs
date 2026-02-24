@@ -92,11 +92,153 @@ pub fn extract_login_data(chain: &[String]) -> Result<LoginData, ProtoError> {
     ))
 }
 
+// ---------------------------------------------------------------------------
+// Client data (skin, device info) from the client_data JWT
+// ---------------------------------------------------------------------------
+
+/// A skin or cape image (raw RGBA pixels).
+#[derive(Debug, Clone)]
+pub struct SkinImage {
+    pub width: u32,
+    pub height: u32,
+    pub data: Vec<u8>,
+}
+
+impl SkinImage {
+    pub fn empty() -> Self {
+        Self {
+            width: 0,
+            height: 0,
+            data: Vec::new(),
+        }
+    }
+}
+
+/// Client data extracted from the `client_data` JWT sent during login.
+/// Contains skin information, device details, and other client-specific data.
+#[derive(Debug, Clone)]
+pub struct ClientData {
+    pub skin_id: String,
+    pub skin_image: SkinImage,
+    pub cape_id: String,
+    pub cape_image: SkinImage,
+    pub skin_resource_patch: String,
+    pub skin_geometry_data: String,
+    pub skin_color: String,
+    pub arm_size: String,
+    pub persona_skin: bool,
+    pub device_id: String,
+    pub device_os: i32,
+    pub play_fab_id: String,
+}
+
+impl Default for ClientData {
+    fn default() -> Self {
+        Self {
+            skin_id: String::new(),
+            skin_image: SkinImage::empty(),
+            cape_id: String::new(),
+            cape_image: SkinImage::empty(),
+            skin_resource_patch: String::new(),
+            skin_geometry_data: String::new(),
+            skin_color: String::new(),
+            arm_size: "wide".to_string(),
+            persona_skin: false,
+            device_id: String::new(),
+            device_os: 0,
+            play_fab_id: String::new(),
+        }
+    }
+}
+
+/// Raw deserialization target for client_data JWT payload.
+#[derive(Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct ClientDataRaw {
+    #[serde(default)]
+    skin_id: String,
+    #[serde(default)]
+    skin_data: String,
+    #[serde(default)]
+    skin_image_width: u32,
+    #[serde(default)]
+    skin_image_height: u32,
+    #[serde(default)]
+    cape_id: String,
+    #[serde(default)]
+    cape_data: String,
+    #[serde(default)]
+    cape_image_width: u32,
+    #[serde(default)]
+    cape_image_height: u32,
+    #[serde(default)]
+    skin_resource_patch: String,
+    #[serde(default)]
+    skin_geometry_data: String,
+    #[serde(default)]
+    skin_color: String,
+    #[serde(default)]
+    arm_size: String,
+    #[serde(default)]
+    persona_skin: bool,
+    #[serde(default, rename = "DeviceId")]
+    device_id: String,
+    #[serde(default, rename = "DeviceOS")]
+    device_os: i32,
+    #[serde(default, rename = "PlayFabId")]
+    play_fab_id: String,
+}
+
+/// Extract client data (skin, device info) from the client_data JWT.
+pub fn extract_client_data(client_data_jwt: &str) -> Result<ClientData, ProtoError> {
+    let (_, payload) = decode_jwt_unverified(client_data_jwt)?;
+    let raw: ClientDataRaw = serde_json::from_value(payload)
+        .map_err(|e| ProtoError::JsonParse(format!("client_data: {e}")))?;
+
+    let skin_data = decode_base64_standard(&raw.skin_data).unwrap_or_default();
+    let cape_data = decode_base64_standard(&raw.cape_data).unwrap_or_default();
+
+    Ok(ClientData {
+        skin_id: raw.skin_id,
+        skin_image: SkinImage {
+            width: raw.skin_image_width,
+            height: raw.skin_image_height,
+            data: skin_data,
+        },
+        cape_id: raw.cape_id,
+        cape_image: SkinImage {
+            width: raw.cape_image_width,
+            height: raw.cape_image_height,
+            data: cape_data,
+        },
+        skin_resource_patch: raw.skin_resource_patch,
+        skin_geometry_data: raw.skin_geometry_data,
+        skin_color: raw.skin_color,
+        arm_size: if raw.arm_size.is_empty() {
+            "wide".to_string()
+        } else {
+            raw.arm_size
+        },
+        persona_skin: raw.persona_skin,
+        device_id: raw.device_id,
+        device_os: raw.device_os,
+        play_fab_id: raw.play_fab_id,
+    })
+}
+
 /// Decode base64url (try without padding first, then with padding).
 fn decode_base64url(input: &str) -> Result<Vec<u8>, base64::DecodeError> {
     URL_SAFE_NO_PAD
         .decode(input)
         .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(input))
+}
+
+/// Decode standard base64 (skin data uses standard encoding, not URL-safe).
+fn decode_base64_standard(input: &str) -> Result<Vec<u8>, base64::DecodeError> {
+    use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD};
+    STANDARD_NO_PAD
+        .decode(input)
+        .or_else(|_| STANDARD.decode(input))
 }
 
 #[cfg(test)]
@@ -214,6 +356,49 @@ mod tests {
         let encoded_padded = base64::engine::general_purpose::URL_SAFE.encode(data);
         let result = decode_base64url(&encoded_padded).unwrap();
         assert_eq!(result, data);
+    }
+
+    #[test]
+    fn extract_client_data_basic() {
+        let payload = serde_json::json!({
+            "SkinId": "standard.steve",
+            "SkinData": base64::engine::general_purpose::STANDARD.encode(&[0u8; 64 * 32 * 4]),
+            "SkinImageWidth": 64,
+            "SkinImageHeight": 32,
+            "CapeId": "",
+            "CapeData": "",
+            "CapeImageWidth": 0,
+            "CapeImageHeight": 0,
+            "SkinResourcePatch": "{}",
+            "SkinGeometryData": "{}",
+            "SkinColor": "#0",
+            "ArmSize": "wide",
+            "PersonaSkin": false,
+            "DeviceId": "device123",
+            "DeviceOS": 7,
+            "PlayFabId": "pfab123"
+        });
+        let jwt = make_jwt(&sample_header(), &payload);
+        let data = extract_client_data(&jwt).unwrap();
+        assert_eq!(data.skin_id, "standard.steve");
+        assert_eq!(data.skin_image.width, 64);
+        assert_eq!(data.skin_image.height, 32);
+        assert_eq!(data.skin_image.data.len(), 64 * 32 * 4);
+        assert_eq!(data.device_os, 7);
+        assert_eq!(data.device_id, "device123");
+        assert_eq!(data.arm_size, "wide");
+    }
+
+    #[test]
+    fn extract_client_data_defaults() {
+        // Minimal payload — all fields should default gracefully
+        let payload = serde_json::json!({});
+        let jwt = make_jwt(&sample_header(), &payload);
+        let data = extract_client_data(&jwt).unwrap();
+        assert_eq!(data.skin_id, "");
+        assert_eq!(data.skin_image.data.len(), 0);
+        assert_eq!(data.device_os, 0);
+        assert_eq!(data.arm_size, "wide"); // default fallback
     }
 
     #[test]

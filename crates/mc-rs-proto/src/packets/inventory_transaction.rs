@@ -7,7 +7,7 @@ use bytes::Buf;
 
 use crate::codec::{read_string, ProtoDecode};
 use crate::error::ProtoError;
-use crate::types::{BlockPos, VarInt, VarUInt32, Vec3};
+use crate::types::{BlockPos, VarInt, VarUInt32, VarUInt64, Vec3};
 
 /// Action type within a UseItem transaction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,10 +44,30 @@ pub struct UseItemData {
     pub block_runtime_id: u32,
 }
 
-/// Parsed InventoryTransaction — only UseItem is returned as `Some`.
+/// Action type within a UseItemOnEntity transaction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UseItemOnEntityAction {
+    /// Right-click interact (e.g., trade with villager).
+    Interact = 0,
+    /// Left-click attack.
+    Attack = 1,
+}
+
+/// Data from a UseItemOnEntity transaction (type 3).
+#[derive(Debug, Clone)]
+pub struct UseItemOnEntityData {
+    pub entity_runtime_id: u64,
+    pub action: UseItemOnEntityAction,
+    pub hotbar_slot: i32,
+    pub player_position: Vec3,
+    pub click_position: Vec3,
+}
+
+/// Parsed InventoryTransaction.
 #[derive(Debug, Clone)]
 pub struct InventoryTransaction {
     pub use_item: Option<UseItemData>,
+    pub use_item_on_entity: Option<UseItemOnEntityData>,
 }
 
 // ---------------------------------------------------------------------------
@@ -337,9 +357,42 @@ impl ProtoDecode for InventoryTransaction {
             skip_inventory_action(buf)?;
         }
 
+        if transaction_type == 3 {
+            // UseItemOnEntity
+            let entity_runtime_id = VarUInt64::proto_decode(buf)?.0;
+            let action_type_raw = VarUInt32::proto_decode(buf)?.0;
+            let action = match action_type_raw {
+                0 => UseItemOnEntityAction::Interact,
+                1 => UseItemOnEntityAction::Attack,
+                _ => {
+                    return Ok(Self {
+                        use_item: None,
+                        use_item_on_entity: None,
+                    })
+                }
+            };
+            let hotbar_slot = VarInt::proto_decode(buf)?.0;
+            skip_item_stack_descriptor(buf)?; // held item
+            let player_position = Vec3::proto_decode(buf)?;
+            let click_position = Vec3::proto_decode(buf)?;
+            return Ok(Self {
+                use_item: None,
+                use_item_on_entity: Some(UseItemOnEntityData {
+                    entity_runtime_id,
+                    action,
+                    hotbar_slot,
+                    player_position,
+                    click_position,
+                }),
+            });
+        }
+
         if transaction_type != 2 {
-            // Not UseItem — ignore
-            return Ok(Self { use_item: None });
+            // Not UseItem or UseItemOnEntity — ignore
+            return Ok(Self {
+                use_item: None,
+                use_item_on_entity: None,
+            });
         }
 
         // Parse UseItem data
@@ -356,7 +409,12 @@ impl ProtoDecode for InventoryTransaction {
 
         let action = match action {
             Some(a) => a,
-            None => return Ok(Self { use_item: None }),
+            None => {
+                return Ok(Self {
+                    use_item: None,
+                    use_item_on_entity: None,
+                })
+            }
         };
 
         Ok(Self {
@@ -370,6 +428,7 @@ impl ProtoDecode for InventoryTransaction {
                 click_position,
                 block_runtime_id,
             }),
+            use_item_on_entity: None,
         })
     }
 }
@@ -488,5 +547,40 @@ mod tests {
         let data = pkt.use_item.expect("should be UseItem");
         assert_eq!(data.action, UseItemAction::BreakBlock);
         assert_eq!(data.block_runtime_id, 50);
+    }
+
+    fn encode_attack_entity(entity_runtime_id: u64, action: u32) -> BytesMut {
+        let mut buf = BytesMut::new();
+        VarInt(0).proto_encode(&mut buf); // LegacyRequestID
+        VarUInt32(3).proto_encode(&mut buf); // TransactionType = UseItemOnEntity
+        VarUInt32(0).proto_encode(&mut buf); // Actions count = 0
+        VarUInt64(entity_runtime_id).proto_encode(&mut buf);
+        VarUInt32(action).proto_encode(&mut buf); // ActionType
+        VarInt(0).proto_encode(&mut buf); // HotbarSlot
+        encode_empty_item(&mut buf); // HeldItem
+        Vec3::new(1.0, 64.0, 1.0).proto_encode(&mut buf); // PlayerPosition
+        Vec3::new(0.0, 1.0, 0.0).proto_encode(&mut buf); // ClickPosition
+        buf
+    }
+
+    #[test]
+    fn decode_attack_entity() {
+        let buf = encode_attack_entity(42, 1);
+        let pkt = InventoryTransaction::proto_decode(&mut buf.freeze()).unwrap();
+        assert!(pkt.use_item.is_none());
+        let data = pkt.use_item_on_entity.expect("should be UseItemOnEntity");
+        assert_eq!(data.entity_runtime_id, 42);
+        assert_eq!(data.action, UseItemOnEntityAction::Attack);
+        assert_eq!(data.hotbar_slot, 0);
+    }
+
+    #[test]
+    fn decode_interact_entity() {
+        let buf = encode_attack_entity(10, 0);
+        let pkt = InventoryTransaction::proto_decode(&mut buf.freeze()).unwrap();
+        assert!(pkt.use_item.is_none());
+        let data = pkt.use_item_on_entity.expect("should be UseItemOnEntity");
+        assert_eq!(data.entity_runtime_id, 10);
+        assert_eq!(data.action, UseItemOnEntityAction::Interact);
     }
 }

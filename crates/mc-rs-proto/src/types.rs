@@ -576,6 +576,27 @@ impl Uuid {
             least_significant: least,
         }
     }
+
+    /// Parse a UUID from its standard hyphenated string representation
+    /// (e.g. `"12345678-1234-1234-1234-123456789abc"`).
+    /// Also accepts the compact form without hyphens.
+    pub fn parse(s: &str) -> Result<Self, ProtoError> {
+        let hex: String = s.chars().filter(|c| *c != '-').collect();
+        if hex.len() != 32 {
+            return Err(ProtoError::InvalidData(format!("invalid UUID: {s}")));
+        }
+        let mut bytes = [0u8; 16];
+        for i in 0..16 {
+            bytes[i] = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16)
+                .map_err(|_| ProtoError::InvalidData(format!("invalid UUID hex: {s}")))?;
+        }
+        let most = u64::from_be_bytes(bytes[..8].try_into().unwrap());
+        let least = u64::from_be_bytes(bytes[8..].try_into().unwrap());
+        Ok(Self {
+            most_significant: most,
+            least_significant: least,
+        })
+    }
 }
 
 impl ProtoEncode for Uuid {
@@ -994,6 +1015,35 @@ mod tests {
                 least_significant: 0
             }
         );
+    }
+
+    #[test]
+    fn uuid_parse_hyphenated() {
+        let uuid = Uuid::parse("12345678-1234-5678-9abc-def012345678").unwrap();
+        // most = 0x1234567812345678, least = 0x9abcdef012345678
+        assert_eq!(uuid.most_significant, 0x1234567812345678);
+        assert_eq!(uuid.least_significant, 0x9abcdef012345678);
+    }
+
+    #[test]
+    fn uuid_parse_compact() {
+        let uuid = Uuid::parse("12345678123456789abcdef012345678").unwrap();
+        assert_eq!(uuid.most_significant, 0x1234567812345678);
+        assert_eq!(uuid.least_significant, 0x9abcdef012345678);
+    }
+
+    #[test]
+    fn uuid_parse_invalid() {
+        assert!(Uuid::parse("not-a-uuid").is_err());
+        assert!(Uuid::parse("1234").is_err());
+        assert!(Uuid::parse("ZZZZZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZZZZZZZZZ").is_err());
+    }
+
+    #[test]
+    fn uuid_parse_display_roundtrip() {
+        let original = "12345678-1234-5678-9abc-def012345678";
+        let uuid = Uuid::parse(original).unwrap();
+        assert_eq!(format!("{uuid}"), original);
     }
 
     // -- BlockPos --

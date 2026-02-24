@@ -45,4 +45,7 @@ pub enum ProtoError {
 
     #[error("packet checksum mismatch")]
     ChecksumMismatch,
+
+    #[error("invalid data: {0}")]
+    InvalidData(String),
 }

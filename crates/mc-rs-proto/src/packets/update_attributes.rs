@@ -1,0 +1,82 @@
+//! UpdateAttributes (0x1D) — Server → Client.
+//!
+//! Syncs entity attributes (health, movement speed, etc.) to the client.
+
+use bytes::BufMut;
+
+use crate::codec::{write_string, ProtoEncode};
+use crate::types::{VarUInt32, VarUInt64};
+
+/// A single attribute entry.
+pub struct AttributeEntry {
+    pub min: f32,
+    pub max: f32,
+    pub current: f32,
+    pub default: f32,
+    pub name: String,
+}
+
+/// UpdateAttributes packet.
+pub struct UpdateAttributes {
+    pub entity_runtime_id: u64,
+    pub attributes: Vec<AttributeEntry>,
+    pub tick: u64,
+}
+
+impl UpdateAttributes {
+    /// Create a health-only UpdateAttributes packet.
+    pub fn health(entity_runtime_id: u64, current: f32, tick: u64) -> Self {
+        Self {
+            entity_runtime_id,
+            attributes: vec![AttributeEntry {
+                min: 0.0,
+                max: 20.0,
+                current,
+                default: 20.0,
+                name: "minecraft:health".to_string(),
+            }],
+            tick,
+        }
+    }
+}
+
+impl ProtoEncode for UpdateAttributes {
+    fn proto_encode(&self, buf: &mut impl BufMut) {
+        VarUInt64(self.entity_runtime_id).proto_encode(buf);
+        VarUInt32(self.attributes.len() as u32).proto_encode(buf);
+        for attr in &self.attributes {
+            buf.put_f32_le(attr.min);
+            buf.put_f32_le(attr.max);
+            buf.put_f32_le(attr.current);
+            buf.put_f32_le(attr.default);
+            write_string(buf, &attr.name);
+            VarUInt32(0).proto_encode(buf); // modifier count = 0
+        }
+        VarUInt64(self.tick).proto_encode(buf);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bytes::BytesMut;
+
+    #[test]
+    fn encode_health_full() {
+        let pkt = UpdateAttributes::health(1, 20.0, 100);
+        let mut buf = BytesMut::new();
+        pkt.proto_encode(&mut buf);
+        // VarUInt64(1) + VarUInt32(1) + 4*f32(16) + string + VarUInt32(0) + VarUInt64(100)
+        assert!(buf.len() >= 20);
+    }
+
+    #[test]
+    fn encode_health_zero() {
+        let pkt = UpdateAttributes::health(5, 0.0, 200);
+        let mut buf = BytesMut::new();
+        pkt.proto_encode(&mut buf);
+        assert!(buf.len() >= 20);
+        // Verify current=0.0 is somewhere in the buffer (after min=0.0, max=20.0)
+        // min(0.0) at offset after runtime_id+count, then max(20.0), then current(0.0)
+    }
+}

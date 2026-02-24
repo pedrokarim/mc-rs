@@ -1,0 +1,523 @@
+//! Player inventory management.
+//!
+//! Manages the 36-slot main inventory, 4 armor slots, offhand, and cursor.
+//! Processes ItemStackRequest actions and generates responses.
+
+use std::sync::atomic::{AtomicI32, Ordering};
+
+use tracing::debug;
+
+use mc_rs_proto::item_stack::ItemStack;
+use mc_rs_proto::packets::item_stack_request::{StackAction, StackRequest, StackSlot};
+use mc_rs_proto::packets::item_stack_response::{
+    StackResponseContainer, StackResponseEntry, StackResponseSlot,
+};
+use mc_rs_world::item_registry::ItemRegistry;
+
+/// Bedrock container IDs.
+pub const CONTAINER_INVENTORY: u8 = 0;
+pub const CONTAINER_ARMOR: u8 = 119;
+pub const CONTAINER_CREATIVE_OUTPUT: u8 = 120;
+pub const CONTAINER_OFFHAND: u8 = 124;
+pub const CONTAINER_CURSOR: u8 = 58;
+pub const CONTAINER_CREATIVE: u8 = 59;
+
+/// Player inventory with all container slots.
+pub struct PlayerInventory {
+    /// Main inventory: 36 slots (0-35). Slots 0-8 = hotbar.
+    pub main: Vec<ItemStack>,
+    /// Armor: 4 slots (helmet, chestplate, leggings, boots).
+    pub armor: Vec<ItemStack>,
+    /// Offhand: 1 slot.
+    pub offhand: ItemStack,
+    /// Cursor: item being dragged by the player.
+    pub cursor: ItemStack,
+    /// Currently selected hotbar slot (0-8).
+    pub held_slot: u8,
+    /// Global counter for assigning unique stack network IDs.
+    next_stack_id: AtomicI32,
+}
+
+impl Default for PlayerInventory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PlayerInventory {
+    /// Create an empty inventory.
+    pub fn new() -> Self {
+        Self {
+            main: (0..36).map(|_| ItemStack::empty()).collect(),
+            armor: (0..4).map(|_| ItemStack::empty()).collect(),
+            offhand: ItemStack::empty(),
+            cursor: ItemStack::empty(),
+            held_slot: 0,
+            next_stack_id: AtomicI32::new(1),
+        }
+    }
+
+    /// Get a reference to the item in a specific slot.
+    pub fn get_slot(&self, container_id: u8, slot: u8) -> Option<&ItemStack> {
+        match container_id {
+            CONTAINER_INVENTORY => self.main.get(slot as usize),
+            CONTAINER_ARMOR => self.armor.get(slot as usize),
+            CONTAINER_OFFHAND => Some(&self.offhand),
+            CONTAINER_CURSOR => Some(&self.cursor),
+            _ => None,
+        }
+    }
+
+    /// Get a mutable reference to the item in a specific slot.
+    pub fn get_slot_mut(&mut self, container_id: u8, slot: u8) -> Option<&mut ItemStack> {
+        match container_id {
+            CONTAINER_INVENTORY => self.main.get_mut(slot as usize),
+            CONTAINER_ARMOR => self.armor.get_mut(slot as usize),
+            CONTAINER_OFFHAND => Some(&mut self.offhand),
+            CONTAINER_CURSOR => Some(&mut self.cursor),
+            _ => None,
+        }
+    }
+
+    /// Set the item in a specific slot.
+    pub fn set_slot(&mut self, container_id: u8, slot: u8, item: ItemStack) {
+        match container_id {
+            CONTAINER_INVENTORY => {
+                if let Some(s) = self.main.get_mut(slot as usize) {
+                    *s = item;
+                }
+            }
+            CONTAINER_ARMOR => {
+                if let Some(s) = self.armor.get_mut(slot as usize) {
+                    *s = item;
+                }
+            }
+            CONTAINER_OFFHAND => self.offhand = item,
+            CONTAINER_CURSOR => self.cursor = item,
+            _ => {}
+        }
+    }
+
+    /// Get the currently held item (hotbar slot).
+    pub fn held_item(&self) -> &ItemStack {
+        self.main
+            .get(self.held_slot as usize)
+            .unwrap_or(&self.main[0])
+    }
+
+    /// Allocate a unique stack network ID.
+    pub fn next_stack_network_id(&self) -> i32 {
+        self.next_stack_id.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// Assign a stack network ID to an item if it doesn't have one.
+    pub fn assign_stack_id(&self, item: &mut ItemStack) {
+        if !item.is_empty() && item.stack_network_id == 0 {
+            item.stack_network_id = self.next_stack_network_id();
+        }
+    }
+
+    /// Process a single ItemStackRequest and return the response.
+    pub fn process_request(
+        &mut self,
+        request: &StackRequest,
+        item_registry: &ItemRegistry,
+    ) -> StackResponseEntry {
+        let mut changed_containers: std::collections::HashMap<u8, Vec<StackResponseSlot>> =
+            std::collections::HashMap::new();
+
+        for action in &request.actions {
+            match action {
+                StackAction::Take { count, src, dst } | StackAction::Place { count, src, dst } => {
+                    if !self.process_take_place(*count, src, dst, item_registry) {
+                        return error_response(request.request_id);
+                    }
+                    record_slot_change(&mut changed_containers, src, self);
+                    record_slot_change(&mut changed_containers, dst, self);
+                }
+                StackAction::Swap { src, dst } => {
+                    if !self.process_swap(src, dst) {
+                        return error_response(request.request_id);
+                    }
+                    record_slot_change(&mut changed_containers, src, self);
+                    record_slot_change(&mut changed_containers, dst, self);
+                }
+                StackAction::Drop { count, src, .. } => {
+                    if !self.process_drop(*count, src) {
+                        return error_response(request.request_id);
+                    }
+                    record_slot_change(&mut changed_containers, src, self);
+                }
+                StackAction::Destroy { count, src } | StackAction::Consume { count, src } => {
+                    if !self.process_destroy(*count, src) {
+                        return error_response(request.request_id);
+                    }
+                    record_slot_change(&mut changed_containers, src, self);
+                }
+                StackAction::CraftCreative {
+                    creative_item_network_id,
+                } => {
+                    // Creative mode: create the item directly.
+                    // The item will be placed by a subsequent Take/Place action.
+                    debug!("CraftCreative: network_id={}", creative_item_network_id);
+                }
+                StackAction::Create { result_slot } => {
+                    debug!("Create: result_slot={}", result_slot);
+                }
+                StackAction::Unknown { action_type } => {
+                    debug!("Unknown stack action type: {}", action_type);
+                }
+            }
+        }
+
+        // Build success response
+        let containers: Vec<StackResponseContainer> = changed_containers
+            .into_iter()
+            .map(|(container_id, slots)| StackResponseContainer {
+                container_id,
+                slots,
+            })
+            .collect();
+
+        StackResponseEntry {
+            status: 0, // Success
+            request_id: request.request_id,
+            containers,
+        }
+    }
+
+    /// Move `count` items from src to dst. Returns false on failure.
+    fn process_take_place(
+        &mut self,
+        count: u8,
+        src: &StackSlot,
+        dst: &StackSlot,
+        item_registry: &ItemRegistry,
+    ) -> bool {
+        // Special case: source is creative menu (container 59)
+        if src.container_id == CONTAINER_CREATIVE {
+            // In creative mode, items are created from nothing.
+            // The dst slot gets a new item based on what the client requests.
+            return true;
+        }
+
+        let src_item = match self.get_slot(src.container_id, src.slot) {
+            Some(item) => item.clone(),
+            None => return false,
+        };
+
+        if src_item.is_empty() {
+            return false;
+        }
+
+        let actual_count = count.min(src_item.count as u8);
+
+        let dst_item = match self.get_slot(dst.container_id, dst.slot) {
+            Some(item) => item.clone(),
+            None => return false,
+        };
+
+        if dst_item.is_empty() {
+            // Place into empty slot
+            let mut new_dst = src_item.clone();
+            new_dst.count = actual_count as u16;
+            new_dst.stack_network_id = self.next_stack_network_id();
+            self.set_slot(dst.container_id, dst.slot, new_dst);
+
+            // Update source
+            let remaining = src_item.count - actual_count as u16;
+            if remaining == 0 {
+                self.set_slot(src.container_id, src.slot, ItemStack::empty());
+            } else {
+                let mut new_src = src_item;
+                new_src.count = remaining;
+                self.set_slot(src.container_id, src.slot, new_src);
+            }
+        } else if dst_item.runtime_id == src_item.runtime_id
+            && dst_item.metadata == src_item.metadata
+        {
+            // Stack onto existing same item
+            let max_stack = item_registry.max_stack_size(src_item.runtime_id as i16);
+            let space = max_stack as u16 - dst_item.count;
+            let to_move = (actual_count as u16).min(space);
+            if to_move == 0 {
+                return false;
+            }
+
+            let mut new_dst = dst_item;
+            new_dst.count += to_move;
+            self.set_slot(dst.container_id, dst.slot, new_dst);
+
+            let remaining = src_item.count - to_move;
+            if remaining == 0 {
+                self.set_slot(src.container_id, src.slot, ItemStack::empty());
+            } else {
+                let mut new_src = src_item;
+                new_src.count = remaining;
+                self.set_slot(src.container_id, src.slot, new_src);
+            }
+        } else {
+            // Different items — can't stack
+            return false;
+        }
+
+        true
+    }
+
+    /// Swap items between two slots. Returns false on failure.
+    fn process_swap(&mut self, src: &StackSlot, dst: &StackSlot) -> bool {
+        let src_item = match self.get_slot(src.container_id, src.slot) {
+            Some(item) => item.clone(),
+            None => return false,
+        };
+        let dst_item = match self.get_slot(dst.container_id, dst.slot) {
+            Some(item) => item.clone(),
+            None => return false,
+        };
+
+        self.set_slot(src.container_id, src.slot, dst_item);
+        self.set_slot(dst.container_id, dst.slot, src_item);
+        true
+    }
+
+    /// Remove `count` items from src (drop). Returns false on failure.
+    fn process_drop(&mut self, count: u8, src: &StackSlot) -> bool {
+        let src_item = match self.get_slot(src.container_id, src.slot) {
+            Some(item) => item.clone(),
+            None => return false,
+        };
+
+        if src_item.is_empty() {
+            return false;
+        }
+
+        let actual_count = count.min(src_item.count as u8);
+        let remaining = src_item.count - actual_count as u16;
+
+        if remaining == 0 {
+            self.set_slot(src.container_id, src.slot, ItemStack::empty());
+        } else {
+            let mut new_src = src_item;
+            new_src.count = remaining;
+            self.set_slot(src.container_id, src.slot, new_src);
+        }
+
+        true
+    }
+
+    /// Remove `count` items from src (destroy/consume). Returns false on failure.
+    fn process_destroy(&mut self, count: u8, src: &StackSlot) -> bool {
+        self.process_drop(count, src) // Same logic
+    }
+}
+
+/// Create an error response for a failed request.
+fn error_response(request_id: i32) -> StackResponseEntry {
+    StackResponseEntry {
+        status: 1, // Error
+        request_id,
+        containers: Vec::new(),
+    }
+}
+
+/// Record the current state of a slot for the response.
+fn record_slot_change(
+    containers: &mut std::collections::HashMap<u8, Vec<StackResponseSlot>>,
+    slot_ref: &StackSlot,
+    inventory: &PlayerInventory,
+) {
+    if let Some(item) = inventory.get_slot(slot_ref.container_id, slot_ref.slot) {
+        let entry = containers.entry(slot_ref.container_id).or_default();
+        // Avoid duplicate entries for the same slot
+        if !entry.iter().any(|s| s.slot == slot_ref.slot) {
+            entry.push(StackResponseSlot {
+                slot: slot_ref.slot,
+                hotbar_slot: slot_ref.slot,
+                count: if item.is_empty() { 0 } else { item.count as u8 },
+                stack_network_id: item.stack_network_id,
+                custom_name: String::new(),
+                durability_correction: 0,
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_registry() -> ItemRegistry {
+        ItemRegistry::new()
+    }
+
+    #[test]
+    fn new_inventory_is_empty() {
+        let inv = PlayerInventory::new();
+        assert_eq!(inv.main.len(), 36);
+        assert!(inv.main.iter().all(|s| s.is_empty()));
+        assert_eq!(inv.armor.len(), 4);
+        assert!(inv.armor.iter().all(|s| s.is_empty()));
+        assert!(inv.offhand.is_empty());
+        assert!(inv.cursor.is_empty());
+        assert_eq!(inv.held_slot, 0);
+    }
+
+    #[test]
+    fn get_set_slot() {
+        let mut inv = PlayerInventory::new();
+        let item = ItemStack::new(1, 64);
+        inv.set_slot(CONTAINER_INVENTORY, 0, item);
+        let stored = inv.get_slot(CONTAINER_INVENTORY, 0).unwrap();
+        assert_eq!(stored.runtime_id, 1);
+        assert_eq!(stored.count, 64);
+    }
+
+    #[test]
+    fn get_set_armor() {
+        let mut inv = PlayerInventory::new();
+        let helmet = ItemStack::new(379, 1); // diamond_helmet
+        inv.set_slot(CONTAINER_ARMOR, 0, helmet);
+        let stored = inv.get_slot(CONTAINER_ARMOR, 0).unwrap();
+        assert_eq!(stored.runtime_id, 379);
+    }
+
+    #[test]
+    fn get_set_offhand() {
+        let mut inv = PlayerInventory::new();
+        inv.set_slot(CONTAINER_OFFHAND, 0, ItemStack::new(422, 16)); // egg
+        assert_eq!(inv.offhand.runtime_id, 422);
+    }
+
+    #[test]
+    fn held_item_changes_with_slot() {
+        let mut inv = PlayerInventory::new();
+        inv.set_slot(CONTAINER_INVENTORY, 3, ItemStack::new(1, 32));
+        inv.held_slot = 3;
+        assert_eq!(inv.held_item().runtime_id, 1);
+        assert_eq!(inv.held_item().count, 32);
+    }
+
+    #[test]
+    fn stack_network_id_increments() {
+        let inv = PlayerInventory::new();
+        let id1 = inv.next_stack_network_id();
+        let id2 = inv.next_stack_network_id();
+        assert_eq!(id1, 1);
+        assert_eq!(id2, 2);
+    }
+
+    #[test]
+    fn assign_stack_id_to_item() {
+        let inv = PlayerInventory::new();
+        let mut item = ItemStack::new(1, 64);
+        assert_eq!(item.stack_network_id, 0);
+        inv.assign_stack_id(&mut item);
+        assert_ne!(item.stack_network_id, 0);
+    }
+
+    #[test]
+    fn swap_items() {
+        let mut inv = PlayerInventory::new();
+        inv.set_slot(CONTAINER_INVENTORY, 0, ItemStack::new(1, 64)); // stone
+        inv.set_slot(CONTAINER_INVENTORY, 1, ItemStack::new(3, 32)); // dirt
+
+        let src = StackSlot {
+            container_id: CONTAINER_INVENTORY,
+            slot: 0,
+            stack_network_id: 0,
+        };
+        let dst = StackSlot {
+            container_id: CONTAINER_INVENTORY,
+            slot: 1,
+            stack_network_id: 0,
+        };
+
+        assert!(inv.process_swap(&src, &dst));
+        assert_eq!(inv.get_slot(CONTAINER_INVENTORY, 0).unwrap().runtime_id, 3);
+        assert_eq!(inv.get_slot(CONTAINER_INVENTORY, 1).unwrap().runtime_id, 1);
+    }
+
+    #[test]
+    fn drop_partial_stack() {
+        let mut inv = PlayerInventory::new();
+        inv.set_slot(CONTAINER_INVENTORY, 0, ItemStack::new(1, 64));
+
+        let src = StackSlot {
+            container_id: CONTAINER_INVENTORY,
+            slot: 0,
+            stack_network_id: 0,
+        };
+
+        assert!(inv.process_drop(32, &src));
+        assert_eq!(inv.get_slot(CONTAINER_INVENTORY, 0).unwrap().count, 32);
+    }
+
+    #[test]
+    fn drop_full_stack() {
+        let mut inv = PlayerInventory::new();
+        inv.set_slot(CONTAINER_INVENTORY, 0, ItemStack::new(1, 64));
+
+        let src = StackSlot {
+            container_id: CONTAINER_INVENTORY,
+            slot: 0,
+            stack_network_id: 0,
+        };
+
+        assert!(inv.process_drop(64, &src));
+        assert!(inv.get_slot(CONTAINER_INVENTORY, 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn take_place_into_empty_slot() {
+        let mut inv = PlayerInventory::new();
+        let registry = test_registry();
+        let mut item = ItemStack::new(1, 64);
+        item.stack_network_id = 1;
+        inv.set_slot(CONTAINER_INVENTORY, 0, item);
+
+        let src = StackSlot {
+            container_id: CONTAINER_INVENTORY,
+            slot: 0,
+            stack_network_id: 1,
+        };
+        let dst = StackSlot {
+            container_id: CONTAINER_INVENTORY,
+            slot: 1,
+            stack_network_id: 0,
+        };
+
+        assert!(inv.process_take_place(32, &src, &dst, &registry));
+        assert_eq!(inv.get_slot(CONTAINER_INVENTORY, 0).unwrap().count, 32);
+        assert_eq!(inv.get_slot(CONTAINER_INVENTORY, 1).unwrap().count, 32);
+        assert_eq!(inv.get_slot(CONTAINER_INVENTORY, 1).unwrap().runtime_id, 1);
+    }
+
+    #[test]
+    fn process_request_success() {
+        let mut inv = PlayerInventory::new();
+        let registry = test_registry();
+        let mut item = ItemStack::new(1, 64);
+        item.stack_network_id = 1;
+        inv.set_slot(CONTAINER_INVENTORY, 0, item);
+
+        let request = StackRequest {
+            request_id: 1,
+            actions: vec![StackAction::Drop {
+                count: 64,
+                src: StackSlot {
+                    container_id: CONTAINER_INVENTORY,
+                    slot: 0,
+                    stack_network_id: 1,
+                },
+                randomly: false,
+            }],
+            filter_strings: Vec::new(),
+            filter_cause: 0,
+        };
+
+        let response = inv.process_request(&request, &registry);
+        assert_eq!(response.status, 0);
+        assert_eq!(response.request_id, 1);
+        assert!(inv.get_slot(CONTAINER_INVENTORY, 0).unwrap().is_empty());
+    }
+}

@@ -4,6 +4,7 @@ pub mod batch;
 pub mod codec;
 pub mod compression;
 pub mod error;
+pub mod item_stack;
 pub mod jwt;
 pub mod packets;
 pub mod types;

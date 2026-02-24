@@ -6,6 +6,14 @@ pub struct ServerConfig {
     pub server: ServerSection,
     pub world: WorldSection,
     pub logging: LoggingSection,
+    #[serde(default)]
+    pub permissions: PermissionsSection,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct PermissionsSection {
+    #[serde(default)]
+    pub whitelist_enabled: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -72,5 +80,34 @@ mod tests {
         assert_eq!(config.world.generator, "flat");
         assert_eq!(config.world.seed, 12345);
         assert_eq!(config.logging.level, "debug");
+        // permissions section defaults when absent
+        assert!(!config.permissions.whitelist_enabled);
+    }
+
+    #[test]
+    fn parse_config_with_permissions() {
+        let toml_str = r#"
+            [server]
+            address = "0.0.0.0"
+            port = 19132
+            motd = "Test"
+            max_players = 20
+            gamemode = "survival"
+            difficulty = "normal"
+            online_mode = false
+
+            [world]
+            name = "world"
+            generator = "flat"
+            seed = 0
+
+            [logging]
+            level = "info"
+
+            [permissions]
+            whitelist_enabled = true
+        "#;
+        let config: ServerConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.permissions.whitelist_enabled);
     }
 }

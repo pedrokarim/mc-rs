@@ -12,8 +12,10 @@ mc-rs-proto = { path = "../mc-rs-proto" }
 mc-rs-raknet = { path = "../mc-rs-raknet" }
 mc-rs-crypto = { path = "../mc-rs-crypto" }
 mc-rs-world = { path = "../mc-rs-world" }
+mc-rs-game = { path = "../mc-rs-game" }
 mc-rs-command = { path = "../mc-rs-command" }
 serde = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true }
 toml = "0.8"
 tracing = { workspace = true }

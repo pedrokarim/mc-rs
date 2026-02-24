@@ -1,5 +1,6 @@
 mod config;
 mod connection;
+mod permissions;
 
 use std::net::SocketAddr;
 use std::sync::Arc;

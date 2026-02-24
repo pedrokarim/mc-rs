@@ -1,5 +1,7 @@
 //! Command parsing, registry, and built-in commands.
 
+pub mod selector;
+
 use std::collections::HashMap;
 
 /// Context passed to a command handler.
@@ -70,6 +72,14 @@ impl CommandRegistry {
         registry.register("say", "Broadcast a message to all players", cmd_say);
         registry.register("stop", "Stop the server", cmd_stop);
         registry
+    }
+
+    /// Register a command for autocomplete only (no-op handler).
+    /// Used for server commands handled directly in connection.rs.
+    pub fn register_stub(&mut self, name: &str, description: &str) {
+        self.register(name, description, |_| {
+            CommandResult::err("This command is handled internally.")
+        });
     }
 
     /// Register a command.
@@ -269,6 +279,17 @@ mod tests {
         let result = reg.execute("stop", &ctx);
         assert!(result.success);
         assert!(result.should_stop);
+    }
+
+    #[test]
+    fn register_stub_adds_command() {
+        let mut reg = CommandRegistry::new();
+        reg.register_stub("test_cmd", "A test command");
+        assert!(reg.get_commands().contains_key("test_cmd"));
+        // Stub handler returns error
+        let ctx = make_ctx("Steve", vec![]);
+        let result = reg.execute("test_cmd", &ctx);
+        assert!(!result.success);
     }
 
     #[test]

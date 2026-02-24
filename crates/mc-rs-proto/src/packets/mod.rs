@@ -1,5 +1,8 @@
 //! Game packet definitions for Bedrock Edition.
 
+pub mod add_item_entity;
+pub mod add_player;
+pub mod animate;
 pub mod available_commands;
 pub mod available_entity_identifiers;
 pub mod biome_definition_list;
@@ -9,27 +12,44 @@ pub mod command_output;
 pub mod command_request;
 pub mod creative_content;
 pub mod disconnect;
+pub mod entity_event;
+pub mod inventory_content;
+pub mod inventory_slot;
 pub mod inventory_transaction;
+pub mod item_stack_request;
+pub mod item_stack_response;
 pub mod level_chunk;
 pub mod level_event;
 pub mod login;
+pub mod mob_equipment;
 pub mod move_player;
 pub mod network_chunk_publisher_update;
 pub mod network_settings;
 pub mod play_status;
 pub mod player_action;
 pub mod player_auth_input;
+pub mod player_list;
+pub mod remove_entity;
 pub mod request_chunk_radius;
 pub mod request_network_settings;
 pub mod resource_pack_client_response;
 pub mod resource_pack_stack;
 pub mod resource_packs_info;
+pub mod respawn;
 pub mod server_to_client_handshake;
+pub mod set_entity_motion;
 pub mod set_local_player_as_initialized;
+pub mod set_player_game_type;
 pub mod start_game;
+pub mod take_item_entity;
 pub mod text;
+pub mod update_abilities;
+pub mod update_attributes;
 pub mod update_block;
 
+pub use add_item_entity::AddItemEntity;
+pub use add_player::{AddPlayer, EntityMetadataEntry, MetadataValue};
+pub use animate::Animate;
 pub use available_commands::AvailableCommands;
 pub use available_entity_identifiers::AvailableEntityIdentifiers;
 pub use biome_definition_list::BiomeDefinitionList;
@@ -39,25 +59,43 @@ pub use command_output::CommandOutput;
 pub use command_request::{CommandOrigin, CommandRequest};
 pub use creative_content::CreativeContent;
 pub use disconnect::Disconnect;
-pub use inventory_transaction::{InventoryTransaction, UseItemAction, UseItemData};
+pub use entity_event::EntityEvent;
+pub use inventory_content::InventoryContent;
+pub use inventory_slot::InventorySlot;
+pub use inventory_transaction::{
+    InventoryTransaction, UseItemAction, UseItemData, UseItemOnEntityAction, UseItemOnEntityData,
+};
+pub use item_stack_request::ItemStackRequest;
+pub use item_stack_response::{
+    ItemStackResponse, StackResponseContainer, StackResponseEntry, StackResponseSlot,
+};
 pub use level_chunk::LevelChunk;
 pub use level_event::LevelEvent;
 pub use login::LoginPacket;
+pub use mob_equipment::MobEquipment;
 pub use move_player::{MoveMode, MovePlayer};
 pub use network_chunk_publisher_update::NetworkChunkPublisherUpdate;
 pub use network_settings::NetworkSettings;
 pub use play_status::{PlayStatus, PlayStatusType};
 pub use player_action::{PlayerAction, PlayerActionType};
 pub use player_auth_input::PlayerAuthInput;
+pub use player_list::{PlayerListAdd, PlayerListAddPacket, PlayerListRemove};
+pub use remove_entity::RemoveEntity;
 pub use request_chunk_radius::RequestChunkRadius;
 pub use request_network_settings::RequestNetworkSettings;
 pub use resource_pack_client_response::{ResourcePackClientResponse, ResourcePackResponseStatus};
 pub use resource_pack_stack::ResourcePackStack;
 pub use resource_packs_info::ResourcePacksInfo;
+pub use respawn::Respawn;
 pub use server_to_client_handshake::ServerToClientHandshake;
+pub use set_entity_motion::SetEntityMotion;
 pub use set_local_player_as_initialized::SetLocalPlayerAsInitialized;
+pub use set_player_game_type::SetPlayerGameType;
 pub use start_game::StartGame;
+pub use take_item_entity::TakeItemEntity;
 pub use text::{Text, TextType};
+pub use update_abilities::UpdateAbilities;
+pub use update_attributes::{AttributeEntry, UpdateAttributes};
 pub use update_block::UpdateBlock;
 
 /// Game packet IDs.
@@ -72,12 +110,24 @@ pub mod id {
     pub const RESOURCE_PACK_CLIENT_RESPONSE: u32 = 0x08;
     pub const TEXT: u32 = 0x09;
     pub const START_GAME: u32 = 0x0B;
+    pub const ADD_PLAYER: u32 = 0x0C;
+    pub const REMOVE_ENTITY: u32 = 0x0E;
+    pub const ADD_ITEM_ENTITY: u32 = 0x0F;
+    pub const TAKE_ITEM_ENTITY: u32 = 0x11;
+    pub const SET_ENTITY_MOTION: u32 = 0x12;
     pub const MOVE_PLAYER: u32 = 0x13;
     pub const UPDATE_BLOCK: u32 = 0x15;
+    pub const ANIMATE: u32 = 0x2C;
+    pub const RESPAWN: u32 = 0x2D;
     pub const LEVEL_EVENT: u32 = 0x19;
+    pub const ENTITY_EVENT: u32 = 0x1B;
+    pub const UPDATE_ATTRIBUTES: u32 = 0x1D;
     pub const INVENTORY_TRANSACTION: u32 = 0x1E;
+    pub const MOB_EQUIPMENT: u32 = 0x1F;
     pub const PLAYER_ACTION: u32 = 0x24;
     pub const LEVEL_CHUNK: u32 = 0x3A;
+    pub const SET_PLAYER_GAME_TYPE: u32 = 0x3E;
+    pub const PLAYER_LIST: u32 = 0x3F;
     pub const REQUEST_CHUNK_RADIUS: u32 = 0x45;
     pub const CHUNK_RADIUS_UPDATED: u32 = 0x46;
     pub const AVAILABLE_COMMANDS: u32 = 0x4C;
@@ -89,7 +139,12 @@ pub mod id {
     pub const BIOME_DEFINITION_LIST: u32 = 0x7B;
     pub const NETWORK_SETTINGS: u32 = 0x8F;
     pub const PLAYER_AUTH_INPUT: u32 = 0x90;
+    pub const INVENTORY_CONTENT: u32 = 0x31;
+    pub const INVENTORY_SLOT: u32 = 0x32;
     pub const CREATIVE_CONTENT: u32 = 0x91;
+    pub const ITEM_STACK_REQUEST: u32 = 0x93;
+    pub const ITEM_STACK_RESPONSE: u32 = 0x94;
+    pub const UPDATE_ABILITIES: u32 = 0xBB;
     pub const REQUEST_NETWORK_SETTINGS: u32 = 0xC1;
 }
 

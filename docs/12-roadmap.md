@@ -90,8 +90,8 @@ Phase 5 : Polish             ██████████ (continu)
 
 ### 1.1 — Mouvement
 - [x] PlayerAuthInput parsing
-- [ ] Simulation de mouvement basique (gravité, collision AABB)
-- [ ] MovePlayer broadcast (multi-joueur)
+- [x] Simulation de mouvement basique (gravité, collision AABB)
+- [x] MovePlayer broadcast (multi-joueur)
 - [x] Validation server-authoritative (basique)
 - [x] Correction de position si nécessaire
 
@@ -104,13 +104,13 @@ Phase 5 : Polish             ██████████ (continu)
 - [ ] Block entities basiques (panneaux, coffres)
 
 ### 1.3 — Inventaire basique
-- [ ] Structure ItemStack
-- [ ] Inventaire joueur (36 slots + armure + offhand)
-- [ ] InventoryContent (envoi initial)
-- [ ] MobEquipment (item en main)
-- [ ] ItemStackRequest/Response (move, take, place, drop)
-- [ ] Drop d'items (AddItemEntity)
-- [ ] Ramassage d'items (TakeItemEntity)
+- [x] Structure ItemStack
+- [x] Inventaire joueur (36 slots + armure + offhand)
+- [x] InventoryContent (envoi initial)
+- [x] MobEquipment (item en main)
+- [x] ItemStackRequest/Response (move, take, place, drop)
+- [x] Drop d'items (AddItemEntity)
+- [x] Ramassage d'items (TakeItemEntity)
 
 ### 1.4 — Chat et commandes de base
 - [x] Text packet (chat)
@@ -122,7 +122,7 @@ Phase 5 : Polish             ██████████ (continu)
 ### 1.5 — Chunk loading dynamique
 - [x] RequestChunkRadius (spawn + in-game)
 - [x] Chargement de chunks selon la position du joueur
-- [ ] Déchargement des chunks hors de portée (client gère via publisher radius)
+- [x] Déchargement des chunks hors de portée (client gère via publisher radius)
 - [x] NetworkChunkPublisherUpdate à chaque déplacement
 
 **Milestone Phase 1 :** Un joueur peut se déplacer, casser/placer des blocs, et discuter.
@@ -134,34 +134,34 @@ Phase 5 : Polish             ██████████ (continu)
 **Objectif :** Plusieurs joueurs dans le même monde.
 
 ### 2.1 — Gestion multi-joueur
-- [ ] AddPlayer packet (spawn d'un autre joueur)
-- [ ] RemoveEntity (despawn)
-- [ ] PlayerList (tab list)
-- [ ] Broadcast des mouvements entre joueurs
-- [ ] Broadcast des actions (break/place/interact)
-- [ ] Skins (envoi des données skin entre joueurs)
+- [x] AddPlayer packet (spawn d'un autre joueur)
+- [x] RemoveEntity (despawn)
+- [x] PlayerList (tab list)
+- [x] Broadcast des mouvements entre joueurs
+- [x] Broadcast des actions (break/place/interact)
+- [x] Skins (envoi des données skin entre joueurs)
 - [ ] PlayerSkin packet (changement de skin)
 
 ### 2.2 — Interaction entre joueurs
-- [ ] Combat PvP (dégâts, knockback)
-- [ ] Invulnérabilité post-dégâts (10 ticks)
-- [ ] Animate packet (swing arm)
-- [ ] Effets de mort (respawn flow)
+- [x] Combat PvP (dégâts, knockback)
+- [x] Invulnérabilité post-dégâts (10 ticks)
+- [x] Animate packet (swing arm)
+- [x] Effets de mort (respawn flow)
 
 ### 2.3 — Commandes joueur
-- [ ] /gamemode
-- [ ] /tp (teleport)
-- [ ] /give
-- [ ] /kill
-- [ ] /kick
-- [ ] /op, /deop
-- [ ] Entity selectors (@a, @p, @r, @e, @s)
+- [x] /gamemode
+- [x] /tp (teleport)
+- [x] /give
+- [x] /kill
+- [x] /kick
+- [x] /op, /deop
+- [x] Entity selectors (@a, @p, @r, @e, @s)
 
 ### 2.4 — Permissions
-- [ ] Système de permissions basique (visitor, member, operator)
-- [ ] UpdateAbilities packet
-- [ ] Whitelist
-- [ ] Ban list (IP + joueur)
+- [x] Système de permissions basique (visitor, member, operator)
+- [x] UpdateAbilities packet
+- [x] Whitelist
+- [x] Ban list (IP + joueur)
 
 **Milestone Phase 2 :** Plusieurs joueurs peuvent jouer ensemble, se voir, combattre.
 
