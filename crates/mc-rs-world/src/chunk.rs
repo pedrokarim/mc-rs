@@ -19,6 +19,51 @@ pub struct ChunkColumn {
     pub x: i32,
     pub z: i32,
     pub sub_chunks: [SubChunk; OVERWORLD_SUB_CHUNK_COUNT],
+    /// 2D biome map: one biome ID per XZ column, indexed `[x * 16 + z]`.
+    pub biomes: [u8; 256],
+}
+
+impl ChunkColumn {
+    /// Create a new chunk column filled entirely with air (or any single block).
+    pub fn new_air(x: i32, z: i32, air_id: u32) -> Self {
+        Self {
+            x,
+            z,
+            sub_chunks: std::array::from_fn(|_| SubChunk::new_single(air_id)),
+            biomes: [0; 256],
+        }
+    }
+
+    /// Set a block using local x (0..16), world y, local z (0..16).
+    /// Returns false if y is out of range.
+    pub fn set_block_world(
+        &mut self,
+        local_x: usize,
+        world_y: i32,
+        local_z: usize,
+        runtime_id: u32,
+    ) -> bool {
+        let shifted = world_y - OVERWORLD_MIN_Y;
+        if shifted < 0 || shifted >= (OVERWORLD_SUB_CHUNK_COUNT as i32 * 16) {
+            return false;
+        }
+        let sub_index = shifted as usize / 16;
+        let local_y = shifted as usize % 16;
+        self.sub_chunks[sub_index].set_block(local_x, local_y, local_z, runtime_id);
+        true
+    }
+
+    /// Get the runtime ID of a block using local x (0..16), world y, local z (0..16).
+    /// Returns `None` if y is out of range.
+    pub fn get_block_world(&self, local_x: usize, world_y: i32, local_z: usize) -> Option<u32> {
+        let shifted = world_y - OVERWORLD_MIN_Y;
+        if shifted < 0 || shifted >= (OVERWORLD_SUB_CHUNK_COUNT as i32 * 16) {
+            return None;
+        }
+        let sub_index = shifted as usize / 16;
+        let local_y = shifted as usize % 16;
+        Some(self.sub_chunks[sub_index].get_block(local_x, local_y, local_z))
+    }
 }
 
 impl SubChunk {
@@ -93,5 +138,42 @@ mod tests {
         // Verify using raw index: (x*16 + z)*16 + y = (1*16 + 3)*16 + 2 = 306
         let idx = sub.blocks[306] as usize;
         assert_eq!(sub.palette[idx], 99);
+    }
+
+    #[test]
+    fn chunk_column_new_air() {
+        let col = ChunkColumn::new_air(3, -5, 999);
+        assert_eq!(col.x, 3);
+        assert_eq!(col.z, -5);
+        assert_eq!(col.biomes, [0u8; 256]);
+        // All blocks should be the air ID
+        assert_eq!(col.get_block_world(0, 0, 0), Some(999));
+        assert_eq!(col.get_block_world(8, 100, 8), Some(999));
+    }
+
+    #[test]
+    fn set_get_block_world() {
+        let mut col = ChunkColumn::new_air(0, 0, 1);
+        // Set block at Y=0 (sub_chunk index 4, local_y=0)
+        assert!(col.set_block_world(5, 0, 5, 42));
+        assert_eq!(col.get_block_world(5, 0, 5), Some(42));
+        // Set block at Y=-64 (sub_chunk 0, local_y=0)
+        assert!(col.set_block_world(0, -64, 0, 77));
+        assert_eq!(col.get_block_world(0, -64, 0), Some(77));
+        // Set block at Y=319 (sub_chunk 23, local_y=15)
+        assert!(col.set_block_world(0, 319, 0, 88));
+        assert_eq!(col.get_block_world(0, 319, 0), Some(88));
+        // Out of range
+        assert!(!col.set_block_world(0, -65, 0, 99));
+        assert!(!col.set_block_world(0, 320, 0, 99));
+        assert_eq!(col.get_block_world(0, -65, 0), None);
+    }
+
+    #[test]
+    fn biome_storage() {
+        let mut col = ChunkColumn::new_air(0, 0, 1);
+        col.biomes[3 * 16 + 5] = 42;
+        assert_eq!(col.biomes[3 * 16 + 5], 42);
+        assert_eq!(col.biomes[0], 0); // others still default
     }
 }

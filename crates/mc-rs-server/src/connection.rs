@@ -43,6 +43,7 @@ use mc_rs_world::block_registry::BlockRegistry;
 use mc_rs_world::chunk::{ChunkColumn, OVERWORLD_MIN_Y, OVERWORLD_SUB_CHUNK_COUNT};
 use mc_rs_world::flat_generator::generate_flat_chunk;
 use mc_rs_world::item_registry::ItemRegistry;
+use mc_rs_world::overworld_generator::OverworldGenerator;
 use mc_rs_world::physics::{PlayerAabb, MAX_AIRBORNE_TICKS, MAX_FALL_PER_TICK};
 use mc_rs_world::serializer::serialize_chunk_column;
 use tokio::sync::watch;
@@ -162,6 +163,12 @@ pub struct ConnectionHandler {
     game_world: GameWorld,
     server_config: Arc<ServerConfig>,
     flat_world_blocks: FlatWorldBlocks,
+    /// Overworld generator (None if using flat world).
+    overworld_generator: Option<OverworldGenerator>,
+    /// Pre-computed spawn position (eye position).
+    spawn_position: Vec3,
+    /// Pre-computed spawn block position (feet).
+    spawn_block: BlockPos,
     command_registry: CommandRegistry,
     shutdown_tx: Arc<watch::Sender<bool>>,
     /// Cached world chunks — blocks persist across player interactions.
@@ -200,6 +207,23 @@ impl ConnectionHandler {
 
         let permissions = PermissionManager::load(server_config.permissions.whitelist_enabled);
 
+        // Initialize world generator based on config
+        let gen_name = server_config.world.generator.to_lowercase();
+        let overworld_generator = if gen_name == "default" || gen_name == "overworld" {
+            Some(OverworldGenerator::new(server_config.world.seed as u64))
+        } else {
+            None
+        };
+
+        // Compute spawn position
+        let (spawn_position, spawn_block) = if let Some(ref gen) = overworld_generator {
+            let feet_y = gen.find_spawn_y();
+            let eye_y = feet_y as f32 + 1.62;
+            (Vec3::new(8.5, eye_y, 8.5), BlockPos::new(8, feet_y, 8))
+        } else {
+            (Vec3::new(0.5, 5.62, 0.5), BlockPos::new(0, 4, 0))
+        };
+
         Self {
             connections: HashMap::new(),
             server_handle,
@@ -207,6 +231,9 @@ impl ConnectionHandler {
             game_world: GameWorld::new(1),
             server_config,
             flat_world_blocks: FlatWorldBlocks::compute(),
+            overworld_generator,
+            spawn_position,
+            spawn_block,
             command_registry,
             shutdown_tx,
             world_chunks: HashMap::new(),
@@ -219,6 +246,15 @@ impl ConnectionHandler {
 
     fn allocate_entity_id(&mut self) -> i64 {
         self.game_world.allocate_entity_id()
+    }
+
+    /// Generate a chunk using the appropriate generator (overworld or flat).
+    fn generate_chunk(&self, cx: i32, cz: i32) -> ChunkColumn {
+        if let Some(ref gen) = self.overworld_generator {
+            gen.generate_chunk(cx, cz)
+        } else {
+            generate_flat_chunk(cx, cz, &self.flat_world_blocks)
+        }
     }
 
     /// Process a RakNet event.
@@ -455,7 +491,7 @@ impl ConnectionHandler {
                                 addr,
                                 packets::id::RESPAWN,
                                 &Respawn {
-                                    position: Vec3::new(0.5, 5.62, 0.5),
+                                    position: self.spawn_position,
                                     state: 0,
                                     runtime_entity_id: runtime_id,
                                 },
@@ -482,7 +518,7 @@ impl ConnectionHandler {
                 pending_encryption: None,
                 entity_unique_id: entity_id,
                 entity_runtime_id: entity_id as u64,
-                position: Vec3::new(0.5, 5.62, 0.5),
+                position: self.spawn_position,
                 pitch: 0.0,
                 yaw: 0.0,
                 head_yaw: 0.0,
@@ -511,8 +547,16 @@ impl ConnectionHandler {
         );
 
         // Spawn ECS mirror entity for this player
-        self.game_world
-            .spawn_player(entity_id, entity_id as u64, (0.5, 5.62, 0.5), addr);
+        self.game_world.spawn_player(
+            entity_id,
+            entity_id as u64,
+            (
+                self.spawn_position.x,
+                self.spawn_position.y,
+                self.spawn_position.z,
+            ),
+            addr,
+        );
     }
 
     async fn handle_session_disconnected(&mut self, addr: SocketAddr) {
@@ -1064,14 +1108,14 @@ impl ConnectionHandler {
             entity_unique_id,
             entity_runtime_id,
             player_gamemode: gamemode,
-            player_position: Vec3::new(0.5, 5.62, 0.5),
+            player_position: self.spawn_position,
             rotation: Vec2::ZERO,
             seed: config.world.seed as u64,
             dimension: 0,
             generator,
             world_gamemode: gamemode,
             difficulty,
-            spawn_position: BlockPos::new(0, 4, 0),
+            spawn_position: self.spawn_block,
             level_id: "level".into(),
             world_name: config.world.name.clone(),
             game_version: "1.21.50".into(),
@@ -1167,7 +1211,7 @@ impl ConnectionHandler {
                 addr,
                 packets::id::NETWORK_CHUNK_PUBLISHER_UPDATE,
                 &NetworkChunkPublisherUpdate {
-                    position: BlockPos::new(0, 4, 0),
+                    position: self.spawn_block,
                     radius: (accepted_radius * 16) as u32,
                 },
             )
@@ -1210,7 +1254,7 @@ impl ConnectionHandler {
             for cz in -radius..=radius {
                 // Generate chunk if not already cached
                 if !self.world_chunks.contains_key(&(cx, cz)) {
-                    let column = generate_flat_chunk(cx, cz, &self.flat_world_blocks);
+                    let column = self.generate_chunk(cx, cz);
                     self.world_chunks.insert((cx, cz), column);
                 }
 
@@ -1297,7 +1341,7 @@ impl ConnectionHandler {
         // Generate and send new chunks
         for &(cx, cz) in &to_send {
             if !self.world_chunks.contains_key(&(cx, cz)) {
-                let column = generate_flat_chunk(cx, cz, &self.flat_world_blocks);
+                let column = self.generate_chunk(cx, cz);
                 self.world_chunks.insert((cx, cz), column);
             }
 
@@ -2333,7 +2377,7 @@ impl ConnectionHandler {
                 .await;
 
             // Send Respawn(searching) to trigger death screen
-            let spawn_pos = Vec3::new(0.5, 5.62, 0.5);
+            let spawn_pos = self.spawn_position;
             self.send_packet(
                 target_addr,
                 packets::id::RESPAWN,
@@ -3195,7 +3239,7 @@ impl ConnectionHandler {
             .await;
 
         // Send Respawn(searching) to dead player — triggers death screen
-        let spawn_pos = Vec3::new(0.5, 5.62, 0.5);
+        let spawn_pos = self.spawn_position;
         self.send_packet(
             victim_addr,
             packets::id::RESPAWN,
@@ -3235,7 +3279,7 @@ impl ConnectionHandler {
         self.broadcast_packet(packets::id::ENTITY_EVENT, &EntityEvent::death(victim_rid))
             .await;
 
-        let spawn_pos = Vec3::new(0.5, 5.62, 0.5);
+        let spawn_pos = self.spawn_position;
         self.send_packet(
             victim_addr,
             packets::id::RESPAWN,
@@ -3271,7 +3315,7 @@ impl ConnectionHandler {
             return;
         }
 
-        let spawn_pos = Vec3::new(0.5, 5.62, 0.5);
+        let spawn_pos = self.spawn_position;
 
         let runtime_id = match self.connections.get_mut(&addr) {
             Some(conn) => {

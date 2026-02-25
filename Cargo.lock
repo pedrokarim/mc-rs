@@ -793,6 +793,7 @@ name = "mc-rs-world"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "rand",
  "serde",
  "serde_json",
 ]

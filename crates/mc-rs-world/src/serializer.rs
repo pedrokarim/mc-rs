@@ -4,9 +4,6 @@ use bytes::{BufMut, BytesMut};
 
 use crate::chunk::{ChunkColumn, SubChunk, OVERWORLD_SUB_CHUNK_COUNT};
 
-/// Plains biome ID.
-const BIOME_PLAINS: i32 = 1;
-
 /// Serialize a full chunk column to the LevelChunk packet payload.
 ///
 /// Returns `(sub_chunk_count, payload_bytes)`.
@@ -20,8 +17,8 @@ pub fn serialize_chunk_column(column: &ChunkColumn) -> (u32, Vec<u8>) {
         serialize_sub_chunk(&mut buf, sub_chunk, y_index);
     }
 
-    // Biome data: 24 sections, all plains
-    serialize_biome_data(&mut buf);
+    // Biome data from the chunk's biome array
+    serialize_biome_data(&mut buf, &column.biomes);
 
     // Border blocks: empty (not Education Edition)
     buf.put_u8(0x00);
@@ -93,14 +90,88 @@ fn bits_per_block_for_palette(palette_size: usize) -> u8 {
     }
 }
 
-/// Serialize biome data for the chunk payload.
-/// For flat world: all plains, single-palette encoding per section.
-fn serialize_biome_data(buf: &mut BytesMut) {
-    // 24 biome sections (one per sub-chunk).
-    // Single-biome section: header = 0x00 (0 bits = single value), then VarInt biome ID.
+/// Serialize biome data from the chunk's 2D biome array.
+///
+/// Each of 24 sections encodes biomes at 4x4x4 resolution (64 entries).
+/// Since our biome data is 2D, all 4 Y levels in a section share the same biome.
+fn serialize_biome_data(buf: &mut BytesMut, biomes: &[u8; 256]) {
+    // Build a 4x4 biome grid (downsampled from 16x16 to 4x4 by taking every 4th column).
+    // Indexed as [section_x * 4 + section_z] where section_x/z are in 0..4.
+    let mut biome_4x4 = [0u8; 16];
+    for sx in 0..4 {
+        for sz in 0..4 {
+            // Sample the center of each 4-block span
+            let bx = sx * 4 + 2;
+            let bz = sz * 4 + 2;
+            biome_4x4[sx * 4 + sz] = biomes[bx * 16 + bz];
+        }
+    }
+
+    // Check if all 16 entries are the same biome (common case)
+    let all_same = biome_4x4.iter().all(|&b| b == biome_4x4[0]);
+
     for _ in 0..OVERWORLD_SUB_CHUNK_COUNT {
-        buf.put_u8(0x00); // 0 bits per entry = single value
-        write_zigzag_varint(buf, BIOME_PLAINS);
+        if all_same {
+            // Single-biome section: header = 0x00 (0 bits = single value)
+            buf.put_u8(0x00);
+            write_zigzag_varint(buf, biome_4x4[0] as i32);
+        } else {
+            // Multi-biome section: palette-based encoding for 64 entries.
+            // Build palette from the 4x4 grid.
+            let mut palette: Vec<u8> = Vec::new();
+            for &b in &biome_4x4 {
+                if !palette.contains(&b) {
+                    palette.push(b);
+                }
+            }
+
+            let bpe = bits_per_entry_for_biome_palette(palette.len());
+            // Biome storage header: (bpe << 1) — no runtime flag for biomes
+            buf.put_u8(bpe << 1);
+
+            // Pack 64 entries into u32 words (4x4x4, all 4 Y levels have same biome as XZ)
+            let entries_per_word = 32 / bpe as usize;
+            let word_count = 64_usize.div_ceil(entries_per_word);
+
+            for word_idx in 0..word_count {
+                let mut word: u32 = 0;
+                for slot in 0..entries_per_word {
+                    let entry_idx = word_idx * entries_per_word + slot;
+                    if entry_idx < 64 {
+                        // entry_idx maps to (y, z, x) in 4x4x4:
+                        // y = entry_idx / 16, z = (entry_idx / 4) % 4, x = entry_idx % 4
+                        let sx = entry_idx % 4;
+                        let sz = (entry_idx / 4) % 4;
+                        // y doesn't matter — same biome at all Y levels
+                        let biome_id = biome_4x4[sx * 4 + sz];
+                        let palette_idx =
+                            palette.iter().position(|&b| b == biome_id).unwrap() as u32;
+                        word |= palette_idx << (bpe as u32 * slot as u32);
+                    }
+                }
+                buf.put_u32_le(word);
+            }
+
+            // Palette
+            write_zigzag_varint(buf, palette.len() as i32);
+            for &biome_id in &palette {
+                write_zigzag_varint(buf, biome_id as i32);
+            }
+        }
+    }
+}
+
+/// Determine minimum bits-per-entry for a biome palette.
+/// Valid values: 1, 2, 3, 4, 5, 6.
+fn bits_per_entry_for_biome_palette(palette_size: usize) -> u8 {
+    match palette_size {
+        0..=1 => 0,
+        2 => 1,
+        3..=4 => 2,
+        5..=8 => 3,
+        9..=16 => 4,
+        17..=32 => 5,
+        _ => 6,
     }
 }
 
@@ -209,5 +280,43 @@ mod tests {
         assert_eq!(payload[1], 1);
         // Payload should end with border_blocks=0x00
         assert_eq!(*payload.last().unwrap(), 0x00);
+    }
+
+    #[test]
+    fn single_biome_section_encoding() {
+        let biomes = [1u8; 256]; // All plains
+        let mut buf = BytesMut::new();
+        serialize_biome_data(&mut buf, &biomes);
+        // 24 sections, each: 0x00 (header) + zigzag(1) = 0x02
+        assert_eq!(buf.len(), 24 * 2);
+        for i in 0..24 {
+            assert_eq!(buf[i * 2], 0x00, "section {i} header");
+            assert_eq!(buf[i * 2 + 1], 0x02, "section {i} biome plains=zigzag(1)=2");
+        }
+    }
+
+    #[test]
+    fn multi_biome_section_encoding() {
+        let mut biomes = [1u8; 256]; // Plains
+                                     // Set some columns to desert (2)
+        for z in 0..16 {
+            for x in 8..16 {
+                biomes[x * 16 + z] = 2;
+            }
+        }
+        let mut buf = BytesMut::new();
+        serialize_biome_data(&mut buf, &biomes);
+        // Should have palette-based encoding (not single-biome)
+        // First section header should NOT be 0x00 since we have 2 biomes
+        assert_ne!(buf[0], 0x00, "multi-biome should use palette encoding");
+        assert!(buf.len() > 24 * 2, "multi-biome data should be larger");
+    }
+
+    #[test]
+    fn biome_palette_bits() {
+        assert_eq!(bits_per_entry_for_biome_palette(1), 0);
+        assert_eq!(bits_per_entry_for_biome_palette(2), 1);
+        assert_eq!(bits_per_entry_for_biome_palette(4), 2);
+        assert_eq!(bits_per_entry_for_biome_palette(8), 3);
     }
 }

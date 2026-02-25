@@ -233,10 +233,10 @@ Phase 5 : Polish             ██████████ (continu)
 - [ ] Métier à tisser
 
 ### 3.6 — Génération de monde
-- [ ] Générateur overworld (biomes, terrain, grottes)
-- [ ] Minerais
-- [ ] Arbres et végétation
-- [ ] Eau et lave
+- [x] Générateur overworld (biomes, terrain, grottes)
+- [x] Minerais
+- [x] Arbres et végétation
+- [x] Eau et lave
 - [ ] Structures basiques (villages, donjons)
 - [ ] Générateur Nether
 - [ ] Générateur End
