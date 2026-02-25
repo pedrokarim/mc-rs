@@ -38,6 +38,88 @@ impl UpdateAttributes {
             tick,
         }
     }
+
+    /// Create a hunger-only UpdateAttributes packet (food + saturation + exhaustion).
+    pub fn hunger(
+        entity_runtime_id: u64,
+        food: f32,
+        saturation: f32,
+        exhaustion: f32,
+        tick: u64,
+    ) -> Self {
+        Self {
+            entity_runtime_id,
+            attributes: vec![
+                AttributeEntry {
+                    min: 0.0,
+                    max: 20.0,
+                    current: food,
+                    default: 20.0,
+                    name: "minecraft:player.hunger".to_string(),
+                },
+                AttributeEntry {
+                    min: 0.0,
+                    max: 20.0,
+                    current: saturation,
+                    default: 5.0,
+                    name: "minecraft:player.saturation".to_string(),
+                },
+                AttributeEntry {
+                    min: 0.0,
+                    max: 5.0,
+                    current: exhaustion,
+                    default: 0.0,
+                    name: "minecraft:player.exhaustion".to_string(),
+                },
+            ],
+            tick,
+        }
+    }
+
+    /// Create a combined health + hunger UpdateAttributes packet.
+    pub fn health_and_hunger(
+        entity_runtime_id: u64,
+        health: f32,
+        food: f32,
+        saturation: f32,
+        exhaustion: f32,
+        tick: u64,
+    ) -> Self {
+        Self {
+            entity_runtime_id,
+            attributes: vec![
+                AttributeEntry {
+                    min: 0.0,
+                    max: 20.0,
+                    current: health,
+                    default: 20.0,
+                    name: "minecraft:health".to_string(),
+                },
+                AttributeEntry {
+                    min: 0.0,
+                    max: 20.0,
+                    current: food,
+                    default: 20.0,
+                    name: "minecraft:player.hunger".to_string(),
+                },
+                AttributeEntry {
+                    min: 0.0,
+                    max: 20.0,
+                    current: saturation,
+                    default: 5.0,
+                    name: "minecraft:player.saturation".to_string(),
+                },
+                AttributeEntry {
+                    min: 0.0,
+                    max: 5.0,
+                    current: exhaustion,
+                    default: 0.0,
+                    name: "minecraft:player.exhaustion".to_string(),
+                },
+            ],
+            tick,
+        }
+    }
 }
 
 impl ProtoEncode for UpdateAttributes {
@@ -76,7 +158,30 @@ mod tests {
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
         assert!(buf.len() >= 20);
-        // Verify current=0.0 is somewhere in the buffer (after min=0.0, max=20.0)
-        // min(0.0) at offset after runtime_id+count, then max(20.0), then current(0.0)
+    }
+
+    #[test]
+    fn encode_hunger_attributes() {
+        let pkt = UpdateAttributes::hunger(1, 20.0, 5.0, 0.0, 100);
+        let mut buf = BytesMut::new();
+        pkt.proto_encode(&mut buf);
+        // 3 attributes: hunger + saturation + exhaustion
+        assert_eq!(pkt.attributes.len(), 3);
+        assert_eq!(pkt.attributes[0].name, "minecraft:player.hunger");
+        assert_eq!(pkt.attributes[1].name, "minecraft:player.saturation");
+        assert_eq!(pkt.attributes[2].name, "minecraft:player.exhaustion");
+        assert!(buf.len() > 60); // 3 attributes with strings
+    }
+
+    #[test]
+    fn encode_health_and_hunger() {
+        let pkt = UpdateAttributes::health_and_hunger(1, 20.0, 20.0, 5.0, 0.0, 100);
+        let mut buf = BytesMut::new();
+        pkt.proto_encode(&mut buf);
+        // 4 attributes: health + hunger + saturation + exhaustion
+        assert_eq!(pkt.attributes.len(), 4);
+        assert_eq!(pkt.attributes[0].name, "minecraft:health");
+        assert_eq!(pkt.attributes[1].name, "minecraft:player.hunger");
+        assert!(buf.len() > 80); // 4 attributes with strings
     }
 }

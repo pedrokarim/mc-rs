@@ -79,6 +79,18 @@ pub enum StackAction {
     Create {
         result_slot: u8,
     },
+    /// Craft a recipe by network ID (action type 12).
+    CraftRecipe {
+        recipe_network_id: u32,
+    },
+    /// Auto-craft a recipe (shift-click craft) (action type 13).
+    CraftRecipeAuto {
+        recipe_network_id: u32,
+        /// Number of times to repeat the craft.
+        times_crafted: u8,
+        /// Ingredients expected by the client.
+        ingredients: Vec<u8>,
+    },
     CraftCreative {
         creative_item_network_id: u32,
     },
@@ -238,6 +250,38 @@ fn decode_stack_action(buf: &mut impl Buf) -> Result<StackAction, ProtoError> {
             }
             let result_slot = buf.get_u8();
             Ok(StackAction::Create { result_slot })
+        }
+        12 => {
+            // CraftRecipe
+            let recipe_network_id = VarUInt32::proto_decode(buf)?.0;
+            Ok(StackAction::CraftRecipe { recipe_network_id })
+        }
+        13 => {
+            // CraftRecipeAuto
+            let recipe_network_id = VarUInt32::proto_decode(buf)?.0;
+            if buf.remaining() < 1 {
+                return Err(ProtoError::BufferTooShort {
+                    needed: 1,
+                    remaining: buf.remaining(),
+                });
+            }
+            let times_crafted = buf.get_u8();
+            let ingredient_count = VarUInt32::proto_decode(buf)?.0;
+            let mut ingredients = Vec::with_capacity(ingredient_count as usize);
+            for _ in 0..ingredient_count {
+                if buf.remaining() < 1 {
+                    return Err(ProtoError::BufferTooShort {
+                        needed: 1,
+                        remaining: buf.remaining(),
+                    });
+                }
+                ingredients.push(buf.get_u8());
+            }
+            Ok(StackAction::CraftRecipeAuto {
+                recipe_network_id,
+                times_crafted,
+                ingredients,
+            })
         }
         14 => {
             // CraftCreative

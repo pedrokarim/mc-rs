@@ -3,6 +3,8 @@
 pub mod ai;
 pub mod combat;
 pub mod components;
+pub mod food;
 pub mod game_world;
 pub mod inventory;
 pub mod mob_registry;
+pub mod recipe;

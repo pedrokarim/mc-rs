@@ -207,19 +207,24 @@ Phase 5 : Polish             ██████████ (continu)
 - [ ] Projectiles (flèches, tridents)
 
 ### 3.4 — Survie
-- [ ] Système de faim (food, saturation, exhaustion)
-- [ ] Régénération naturelle
-- [ ] Famine (dégâts)
-- [ ] Nourriture (consommation, valeurs nutritives)
-- [ ] Dégâts de chute
-- [ ] Noyade
-- [ ] Feu et lave
-- [ ] Suffocation
+- [x] Système de faim (food, saturation, exhaustion)
+- [x] Régénération naturelle (food >= 18, +1 HP/4s)
+- [x] Famine (food == 0, -1 HP/4s, cap 1 HP)
+- [x] Nourriture (consommation via ClickAir, ~38 items, FoodData)
+- [x] Dégâts de chute (fall_distance > 3 blocks)
+- [x] Noyade (air_ticks countdown, 2 dmg/s, Water Breathing immunity)
+- [x] Feu et lave (Fire Resistance immunity, lava 4 dmg/0.5s)
+- [x] Suffocation (head in solid block, 1 dmg/0.5s)
+- [x] Exhaustion (sprint, swim, jump, attack)
+- [x] Messages de mort contextuels (fell, drowned, lava, burned, suffocated)
+- [x] UpdateAttributes hunger/saturation/exhaustion
 
-### 3.5 — Crafting
-- [ ] CraftingData packet (envoi des recettes au login)
-- [ ] ItemStackRequest(CraftRecipe)
-- [ ] Recettes shaped et shapeless
+### 3.5 — Crafting basique
+- [x] RecipeRegistry (~50 recettes : outils, armures, blocs utilitaires)
+- [x] CraftingData packet (0x34) — envoi des recettes au login
+- [x] ItemStackRequest(CraftRecipe + CraftRecipeAuto) actions 12/13
+- [x] Crafting grid (9 slots) + crafting output dans PlayerInventory
+- [x] process_craft_recipe (shaped + shapeless, single + auto-craft)
 - [ ] Four (smelting)
 - [ ] Table d'enchantement
 - [ ] Enclume

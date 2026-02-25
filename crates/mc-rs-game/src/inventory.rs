@@ -14,6 +14,8 @@ use mc_rs_proto::packets::item_stack_response::{
 };
 use mc_rs_world::item_registry::ItemRegistry;
 
+use crate::recipe::RecipeRegistry;
+
 /// Bedrock container IDs.
 pub const CONTAINER_INVENTORY: u8 = 0;
 pub const CONTAINER_ARMOR: u8 = 119;
@@ -21,6 +23,8 @@ pub const CONTAINER_CREATIVE_OUTPUT: u8 = 120;
 pub const CONTAINER_OFFHAND: u8 = 124;
 pub const CONTAINER_CURSOR: u8 = 58;
 pub const CONTAINER_CREATIVE: u8 = 59;
+pub const CONTAINER_CRAFTING_INPUT: u8 = 28;
+pub const CONTAINER_CRAFTING_OUTPUT: u8 = 29;
 
 /// Player inventory with all container slots.
 pub struct PlayerInventory {
@@ -32,6 +36,10 @@ pub struct PlayerInventory {
     pub offhand: ItemStack,
     /// Cursor: item being dragged by the player.
     pub cursor: ItemStack,
+    /// Crafting grid: 9 slots (3×3, used for crafting table; first 4 for 2×2).
+    pub crafting_grid: Vec<ItemStack>,
+    /// Crafting output: 1 slot for the result.
+    pub crafting_output: ItemStack,
     /// Currently selected hotbar slot (0-8).
     pub held_slot: u8,
     /// Global counter for assigning unique stack network IDs.
@@ -52,6 +60,8 @@ impl PlayerInventory {
             armor: (0..4).map(|_| ItemStack::empty()).collect(),
             offhand: ItemStack::empty(),
             cursor: ItemStack::empty(),
+            crafting_grid: (0..9).map(|_| ItemStack::empty()).collect(),
+            crafting_output: ItemStack::empty(),
             held_slot: 0,
             next_stack_id: AtomicI32::new(1),
         }
@@ -64,6 +74,8 @@ impl PlayerInventory {
             CONTAINER_ARMOR => self.armor.get(slot as usize),
             CONTAINER_OFFHAND => Some(&self.offhand),
             CONTAINER_CURSOR => Some(&self.cursor),
+            CONTAINER_CRAFTING_INPUT => self.crafting_grid.get(slot as usize),
+            CONTAINER_CRAFTING_OUTPUT => Some(&self.crafting_output),
             _ => None,
         }
     }
@@ -75,6 +87,8 @@ impl PlayerInventory {
             CONTAINER_ARMOR => self.armor.get_mut(slot as usize),
             CONTAINER_OFFHAND => Some(&mut self.offhand),
             CONTAINER_CURSOR => Some(&mut self.cursor),
+            CONTAINER_CRAFTING_INPUT => self.crafting_grid.get_mut(slot as usize),
+            CONTAINER_CRAFTING_OUTPUT => Some(&mut self.crafting_output),
             _ => None,
         }
     }
@@ -94,6 +108,12 @@ impl PlayerInventory {
             }
             CONTAINER_OFFHAND => self.offhand = item,
             CONTAINER_CURSOR => self.cursor = item,
+            CONTAINER_CRAFTING_INPUT => {
+                if let Some(s) = self.crafting_grid.get_mut(slot as usize) {
+                    *s = item;
+                }
+            }
+            CONTAINER_CRAFTING_OUTPUT => self.crafting_output = item,
             _ => {}
         }
     }
@@ -122,6 +142,7 @@ impl PlayerInventory {
         &mut self,
         request: &StackRequest,
         item_registry: &ItemRegistry,
+        recipe_registry: &RecipeRegistry,
     ) -> StackResponseEntry {
         let mut changed_containers: std::collections::HashMap<u8, Vec<StackResponseSlot>> =
             std::collections::HashMap::new();
@@ -154,11 +175,38 @@ impl PlayerInventory {
                     }
                     record_slot_change(&mut changed_containers, src, self);
                 }
+                StackAction::CraftRecipe { recipe_network_id } => {
+                    if !self.process_craft_recipe(
+                        *recipe_network_id,
+                        1,
+                        recipe_registry,
+                        item_registry,
+                    ) {
+                        return error_response(request.request_id);
+                    }
+                    // Record crafting output slot change
+                    record_crafting_output_change(&mut changed_containers, self);
+                }
+                StackAction::CraftRecipeAuto {
+                    recipe_network_id,
+                    times_crafted,
+                    ..
+                } => {
+                    let times = (*times_crafted).max(1);
+                    if !self.process_craft_recipe(
+                        *recipe_network_id,
+                        times,
+                        recipe_registry,
+                        item_registry,
+                    ) {
+                        return error_response(request.request_id);
+                    }
+                    record_crafting_output_change(&mut changed_containers, self);
+                }
                 StackAction::CraftCreative {
                     creative_item_network_id,
                 } => {
                     // Creative mode: create the item directly.
-                    // The item will be placed by a subsequent Take/Place action.
                     debug!("CraftCreative: network_id={}", creative_item_network_id);
                 }
                 StackAction::Create { result_slot } => {
@@ -184,6 +232,104 @@ impl PlayerInventory {
             request_id: request.request_id,
             containers,
         }
+    }
+
+    /// Process a CraftRecipe / CraftRecipeAuto action.
+    ///
+    /// Looks up the recipe, places the output in `crafting_output`, and
+    /// consumes ingredients from `crafting_grid`. The client sends
+    /// subsequent Take/Place actions to move the result to inventory.
+    fn process_craft_recipe(
+        &mut self,
+        recipe_network_id: u32,
+        times: u8,
+        recipe_registry: &RecipeRegistry,
+        item_registry: &ItemRegistry,
+    ) -> bool {
+        use crate::recipe::RecipeRef;
+
+        let recipe = match recipe_registry.get_by_network_id(recipe_network_id) {
+            Some(r) => r,
+            None => {
+                debug!("Unknown recipe network_id: {}", recipe_network_id);
+                return false;
+            }
+        };
+
+        let output = &recipe.output()[0];
+        let output_rid = item_registry
+            .get_by_name(&output.item_name)
+            .map(|e| e.numeric_id as i32)
+            .unwrap_or(0);
+        if output_rid == 0 {
+            debug!("Recipe output item not found: {}", output.item_name);
+            return false;
+        }
+
+        // Consume ingredients from crafting grid (simplified: trust the client placement)
+        match &recipe {
+            RecipeRef::Shaped(shaped) => {
+                for (i, inp) in shaped.input.iter().enumerate() {
+                    if inp.item_name.is_empty() {
+                        continue;
+                    }
+                    if let Some(grid_item) = self.crafting_grid.get_mut(i) {
+                        let consume = (inp.count as u16) * (times as u16);
+                        if grid_item.count <= consume {
+                            *grid_item = ItemStack::empty();
+                        } else {
+                            grid_item.count -= consume;
+                        }
+                    }
+                }
+            }
+            RecipeRef::Shapeless(shapeless) => {
+                // For shapeless, consume from any matching grid slots
+                for inp in &shapeless.inputs {
+                    let need_rid = item_registry
+                        .get_by_name(&inp.item_name)
+                        .map(|e| e.numeric_id as i32)
+                        .unwrap_or(0);
+                    let mut remaining = (inp.count as u16) * (times as u16);
+                    for grid_item in &mut self.crafting_grid {
+                        if remaining == 0 {
+                            break;
+                        }
+                        if grid_item.runtime_id == need_rid && !grid_item.is_empty() {
+                            let take = remaining.min(grid_item.count);
+                            grid_item.count -= take;
+                            if grid_item.count == 0 {
+                                *grid_item = ItemStack::empty();
+                            }
+                            remaining -= take;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Place result in crafting output
+        let mut result = ItemStack::new(output_rid, output.count as u16 * times as u16);
+        result.metadata = output.metadata;
+        result.stack_network_id = self.next_stack_network_id();
+        self.crafting_output = result;
+
+        debug!(
+            "Crafted recipe {} (×{}) → {} ×{}",
+            recipe_network_id,
+            times,
+            output.item_name,
+            output.count as u16 * times as u16
+        );
+        true
+    }
+
+    /// Clear the crafting grid (called when the player closes the crafting UI).
+    pub fn clear_crafting_grid(&mut self) {
+        for slot in &mut self.crafting_grid {
+            *slot = ItemStack::empty();
+        }
+        self.crafting_output = ItemStack::empty();
     }
 
     /// Move `count` items from src to dst. Returns false on failure.
@@ -317,6 +463,25 @@ fn error_response(request_id: i32) -> StackResponseEntry {
         status: 1, // Error
         request_id,
         containers: Vec::new(),
+    }
+}
+
+/// Record crafting output slot change for response.
+fn record_crafting_output_change(
+    containers: &mut std::collections::HashMap<u8, Vec<StackResponseSlot>>,
+    inventory: &PlayerInventory,
+) {
+    let item = &inventory.crafting_output;
+    let entry = containers.entry(CONTAINER_CRAFTING_OUTPUT).or_default();
+    if !entry.iter().any(|s| s.slot == 0) {
+        entry.push(StackResponseSlot {
+            slot: 0,
+            hotbar_slot: 0,
+            count: if item.is_empty() { 0 } else { item.count as u8 },
+            stack_network_id: item.stack_network_id,
+            custom_name: String::new(),
+            durability_correction: 0,
+        });
     }
 }
 
@@ -515,9 +680,68 @@ mod tests {
             filter_cause: 0,
         };
 
-        let response = inv.process_request(&request, &registry);
+        let recipe_reg = RecipeRegistry::new();
+        let response = inv.process_request(&request, &registry, &recipe_reg);
         assert_eq!(response.status, 0);
         assert_eq!(response.request_id, 1);
         assert!(inv.get_slot(CONTAINER_INVENTORY, 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn crafting_grid_access() {
+        let mut inv = PlayerInventory::new();
+        assert_eq!(inv.crafting_grid.len(), 9);
+        assert!(inv.crafting_output.is_empty());
+
+        inv.set_slot(CONTAINER_CRAFTING_INPUT, 0, ItemStack::new(1, 4));
+        assert_eq!(
+            inv.get_slot(CONTAINER_CRAFTING_INPUT, 0)
+                .unwrap()
+                .runtime_id,
+            1
+        );
+
+        inv.set_slot(CONTAINER_CRAFTING_OUTPUT, 0, ItemStack::new(5, 1));
+        assert_eq!(
+            inv.get_slot(CONTAINER_CRAFTING_OUTPUT, 0)
+                .unwrap()
+                .runtime_id,
+            5
+        );
+    }
+
+    #[test]
+    fn clear_crafting_grid_works() {
+        let mut inv = PlayerInventory::new();
+        inv.set_slot(CONTAINER_CRAFTING_INPUT, 0, ItemStack::new(1, 4));
+        inv.set_slot(CONTAINER_CRAFTING_INPUT, 1, ItemStack::new(2, 8));
+        inv.crafting_output = ItemStack::new(5, 1);
+
+        inv.clear_crafting_grid();
+        assert!(inv.crafting_grid.iter().all(|s| s.is_empty()));
+        assert!(inv.crafting_output.is_empty());
+    }
+
+    #[test]
+    fn craft_recipe_produces_output() {
+        let mut inv = PlayerInventory::new();
+        let registry = test_registry();
+        let recipe_reg = RecipeRegistry::new();
+
+        // Find the first shapeless recipe (planks from log)
+        let planks_recipe = recipe_reg.shapeless_recipes().first().unwrap();
+        let log_rid = registry
+            .get_by_name(&planks_recipe.inputs[0].item_name)
+            .map(|e| e.numeric_id as i32)
+            .unwrap_or(0);
+
+        // Place log in crafting grid slot 0
+        if log_rid != 0 {
+            inv.set_slot(CONTAINER_CRAFTING_INPUT, 0, ItemStack::new(log_rid, 1));
+            let ok = inv.process_craft_recipe(planks_recipe.network_id, 1, &recipe_reg, &registry);
+            assert!(ok);
+            assert!(!inv.crafting_output.is_empty());
+            assert_eq!(inv.crafting_output.count, 4); // planks = 4
+        }
     }
 }

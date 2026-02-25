@@ -17,6 +17,7 @@ use mc_rs_crypto::{
 use mc_rs_game::combat;
 use mc_rs_game::game_world::{GameEvent, GameWorld};
 use mc_rs_game::inventory::PlayerInventory;
+use mc_rs_game::recipe::RecipeRegistry;
 use mc_rs_proto::batch::{decode_batch, encode_single, BatchConfig};
 use mc_rs_proto::codec::{ProtoDecode, ProtoEncode};
 use mc_rs_proto::compression::CompressionAlgorithm;
@@ -128,6 +129,18 @@ pub struct PlayerConnection {
     pub last_position_delta_y: f32,
     /// Remaining fire ticks (1 damage per 20 ticks). 0 = not on fire.
     pub fire_ticks: i32,
+    /// Food level (0-20). 20 = full.
+    pub food: i32,
+    /// Saturation level (0.0-20.0). Consumed before food.
+    pub saturation: f32,
+    /// Exhaustion accumulator (0.0-4.0+). Drains saturation/food at 4.0.
+    pub exhaustion: f32,
+    /// Accumulated fall distance in blocks.
+    pub fall_distance: f32,
+    /// Air supply ticks (300 = full). Decrements when head is in water.
+    pub air_ticks: i32,
+    /// Whether the player is swimming (from PlayerAuthInput flags).
+    pub is_swimming: bool,
 }
 
 /// An active status effect on a player.
@@ -157,6 +170,8 @@ pub struct ConnectionHandler {
     block_registry: BlockRegistry,
     /// Item registry for all vanilla items.
     item_registry: ItemRegistry,
+    /// Recipe registry for crafting.
+    recipe_registry: RecipeRegistry,
     /// Permission manager: ops, whitelist, bans.
     permissions: PermissionManager,
 }
@@ -197,6 +212,7 @@ impl ConnectionHandler {
             world_chunks: HashMap::new(),
             block_registry: BlockRegistry::new(),
             item_registry: ItemRegistry::new(),
+            recipe_registry: RecipeRegistry::new(),
             permissions,
         }
     }
@@ -228,6 +244,7 @@ impl ConnectionHandler {
         self.game_world.tick();
         self.process_game_events().await;
         self.tick_effects().await;
+        self.tick_survival().await;
     }
 
     /// Drain ECS game events and send the corresponding packets.
@@ -484,6 +501,12 @@ impl ConnectionHandler {
                 effects: Vec::new(),
                 last_position_delta_y: 0.0,
                 fire_ticks: 0,
+                food: 20,
+                saturation: 5.0,
+                exhaustion: 0.0,
+                fall_distance: 0.0,
+                air_ticks: 300,
+                is_swimming: false,
             },
         );
 
@@ -1076,6 +1099,11 @@ impl ConnectionHandler {
         self.send_packet(addr, packets::id::CREATIVE_CONTENT, &creative_content)
             .await;
 
+        // Send crafting recipes
+        let crafting_data = self.build_crafting_data();
+        self.send_packet(addr, packets::id::CRAFTING_DATA, &crafting_data)
+            .await;
+
         self.send_packet(
             addr,
             packets::id::BIOME_DEFINITION_LIST,
@@ -1336,7 +1364,7 @@ impl ConnectionHandler {
         // 5. Send AddActor for all existing mobs to the new player
         self.send_existing_mobs_to(addr).await;
 
-        // 6. Send initial health attribute so the client HUD shows correctly
+        // 6. Send initial health + hunger attributes so the client HUD shows correctly
         let rid = self
             .connections
             .get(&addr)
@@ -1345,7 +1373,7 @@ impl ConnectionHandler {
         self.send_packet(
             addr,
             packets::id::UPDATE_ATTRIBUTES,
-            &UpdateAttributes::health(rid, 20.0, 0),
+            &UpdateAttributes::health_and_hunger(rid, 20.0, 20.0, 5.0, 0.0, 0),
         )
         .await;
 
@@ -1512,6 +1540,14 @@ impl ConnectionHandler {
             conn.last_position_delta_y = input.position_delta.y;
             conn.is_sprinting =
                 input.has_flag(mc_rs_proto::packets::player_auth_input::input_flags::SPRINTING);
+            // Swimming tracking
+            if input.has_flag(mc_rs_proto::packets::player_auth_input::input_flags::START_SWIMMING)
+            {
+                conn.is_swimming = true;
+            }
+            if input.has_flag(mc_rs_proto::packets::player_auth_input::input_flags::STOP_SWIMMING) {
+                conn.is_swimming = false;
+            }
             if on_ground {
                 conn.airborne_ticks = 0;
             } else {
@@ -1560,6 +1596,82 @@ impl ConnectionHandler {
         );
         self.broadcast_packet_except(addr, packets::id::MOVE_PLAYER, &move_pkt)
             .await;
+
+        // --- Fall distance tracking + fall damage (survival only) ---
+        if gamemode == 0 {
+            if !on_ground && input.position_delta.y < 0.0 {
+                if let Some(conn) = self.connections.get_mut(&addr) {
+                    conn.fall_distance += (-input.position_delta.y).abs();
+                }
+            }
+            if on_ground {
+                let fall_dist = self
+                    .connections
+                    .get(&addr)
+                    .map(|c| c.fall_distance)
+                    .unwrap_or(0.0);
+                if fall_dist > 3.0 {
+                    let damage = (fall_dist - 3.0).ceil();
+                    let conn = match self.connections.get_mut(&addr) {
+                        Some(c) => c,
+                        None => return,
+                    };
+                    conn.health = (conn.health - damage).max(0.0);
+                    conn.exhaustion += 0.0; // fall damage doesn't cause exhaustion
+                    conn.fall_distance = 0.0;
+                    let rid = conn.entity_runtime_id;
+                    let hp = conn.health;
+                    let tick = conn.client_tick;
+
+                    self.broadcast_packet(packets::id::ENTITY_EVENT, &EntityEvent::hurt(rid))
+                        .await;
+                    self.send_packet(
+                        addr,
+                        packets::id::UPDATE_ATTRIBUTES,
+                        &UpdateAttributes::health(rid, hp, tick),
+                    )
+                    .await;
+
+                    if hp <= 0.0 {
+                        let name = self
+                            .connections
+                            .get(&addr)
+                            .and_then(|c| c.login_data.as_ref())
+                            .map(|d| d.display_name.clone())
+                            .unwrap_or_default();
+                        self.handle_player_death_with_message(
+                            addr,
+                            &format!("{name} fell from a high place"),
+                        )
+                        .await;
+                        return;
+                    }
+                } else if let Some(conn) = self.connections.get_mut(&addr) {
+                    conn.fall_distance = 0.0;
+                }
+            }
+
+            // --- Exhaustion accumulation ---
+            if let Some(conn) = self.connections.get_mut(&addr) {
+                let hdist = (input.position_delta.x * input.position_delta.x
+                    + input.position_delta.z * input.position_delta.z)
+                    .sqrt();
+
+                if conn.is_sprinting && hdist > 0.0 {
+                    conn.exhaustion += hdist * 0.1;
+                } else if conn.is_swimming && hdist > 0.0 {
+                    conn.exhaustion += hdist * 0.01;
+                }
+
+                if input.has_flag(mc_rs_proto::packets::player_auth_input::input_flags::JUMPING) {
+                    if conn.is_sprinting {
+                        conn.exhaustion += 0.2;
+                    } else {
+                        conn.exhaustion += 0.05;
+                    }
+                }
+            }
+        }
 
         // --- Dynamic chunk loading ---
         let prev_chunk = (
@@ -2810,6 +2922,11 @@ impl ConnectionHandler {
             return;
         }
 
+        // Attack exhaustion
+        if let Some(conn) = self.connections.get_mut(&attacker_addr) {
+            conn.exhaustion += 0.1;
+        }
+
         let base_damage = base_attack_damage(&self.item_registry, held_item_rid);
         let is_critical = combat::is_critical_hit(on_ground, delta_y);
         let (strength_bonus, weakness_penalty) = self.get_attacker_bonuses(attacker_addr);
@@ -3102,8 +3219,8 @@ impl ConnectionHandler {
         self.broadcast_packet(packets::id::TEXT, &death_msg).await;
     }
 
-    /// Handle a player death not caused by another player (fire, environment, etc.).
-    async fn handle_player_death_generic(&mut self, victim_addr: SocketAddr, victim_name: &str) {
+    /// Handle a player death with a custom death message.
+    async fn handle_player_death_with_message(&mut self, victim_addr: SocketAddr, message: &str) {
         let victim_rid = match self.connections.get(&victim_addr) {
             Some(c) => c.entity_runtime_id,
             None => return,
@@ -3130,7 +3247,7 @@ impl ConnectionHandler {
         )
         .await;
 
-        let death_msg = Text::system(format!("{victim_name} died"));
+        let death_msg = Text::system(message.to_string());
         self.broadcast_packet(packets::id::TEXT, &death_msg).await;
     }
 
@@ -3164,6 +3281,12 @@ impl ConnectionHandler {
                 conn.position = spawn_pos;
                 conn.effects.clear();
                 conn.fire_ticks = 0;
+                conn.food = 20;
+                conn.saturation = 5.0;
+                conn.exhaustion = 0.0;
+                conn.fall_distance = 0.0;
+                conn.air_ticks = 300;
+                conn.is_swimming = false;
                 conn.entity_runtime_id
             }
             None => return,
@@ -3190,7 +3313,7 @@ impl ConnectionHandler {
         self.send_packet(
             addr,
             packets::id::UPDATE_ATTRIBUTES,
-            &UpdateAttributes::health(runtime_id, 20.0, tick),
+            &UpdateAttributes::health_and_hunger(runtime_id, 20.0, 20.0, 5.0, 0.0, tick),
         )
         .await;
 
@@ -3291,7 +3414,10 @@ impl ConnectionHandler {
             // Need to borrow inventory mutably but also need item_registry immutably.
             // Extract response using a helper that takes both.
             let response = match self.connections.get_mut(&addr) {
-                Some(conn) => conn.inventory.process_request(req, &self.item_registry),
+                Some(conn) => {
+                    conn.inventory
+                        .process_request(req, &self.item_registry, &self.recipe_registry)
+                }
                 None => return,
             };
             responses.push(response);
@@ -3303,6 +3429,127 @@ impl ConnectionHandler {
             &ItemStackResponse { responses },
         )
         .await;
+    }
+
+    /// Build a CraftingData packet from the recipe registry.
+    fn build_crafting_data(&self) -> mc_rs_proto::packets::crafting_data::CraftingData {
+        use mc_rs_proto::packets::crafting_data::{
+            CraftingOutputItem, RecipeIngredient, ShapedRecipeEntry, ShapelessRecipeEntry,
+        };
+
+        let mut shaped_entries = Vec::new();
+        for recipe in self.recipe_registry.shaped_recipes() {
+            let input: Vec<RecipeIngredient> = recipe
+                .input
+                .iter()
+                .map(|i| {
+                    if i.item_name.is_empty() {
+                        RecipeIngredient {
+                            network_id: 0,
+                            metadata: 0,
+                            count: 0,
+                        }
+                    } else {
+                        let nid = self
+                            .item_registry
+                            .get_by_name(&i.item_name)
+                            .map(|e| e.numeric_id)
+                            .unwrap_or(0);
+                        let meta = if i.metadata == -1 { 0x7FFF } else { i.metadata };
+                        RecipeIngredient {
+                            network_id: nid,
+                            metadata: meta,
+                            count: i.count as i32,
+                        }
+                    }
+                })
+                .collect();
+            let output: Vec<CraftingOutputItem> = recipe
+                .output
+                .iter()
+                .map(|o| {
+                    let nid = self
+                        .item_registry
+                        .get_by_name(&o.item_name)
+                        .map(|e| e.numeric_id as i32)
+                        .unwrap_or(0);
+                    CraftingOutputItem {
+                        network_id: nid,
+                        count: o.count as u16,
+                        metadata: o.metadata,
+                        block_runtime_id: 0,
+                    }
+                })
+                .collect();
+            let mut uuid = [0u8; 16];
+            uuid[0..4].copy_from_slice(&recipe.network_id.to_le_bytes());
+            uuid[4] = 0x01;
+            shaped_entries.push(ShapedRecipeEntry {
+                recipe_id: recipe.id.clone(),
+                width: recipe.width as i32,
+                height: recipe.height as i32,
+                input,
+                output,
+                uuid,
+                tag: recipe.tag.clone(),
+                network_id: recipe.network_id,
+            });
+        }
+
+        let mut shapeless_entries = Vec::new();
+        for recipe in self.recipe_registry.shapeless_recipes() {
+            let input: Vec<RecipeIngredient> = recipe
+                .inputs
+                .iter()
+                .map(|i| {
+                    let nid = self
+                        .item_registry
+                        .get_by_name(&i.item_name)
+                        .map(|e| e.numeric_id)
+                        .unwrap_or(0);
+                    let meta = if i.metadata == -1 { 0x7FFF } else { i.metadata };
+                    RecipeIngredient {
+                        network_id: nid,
+                        metadata: meta,
+                        count: i.count as i32,
+                    }
+                })
+                .collect();
+            let output: Vec<CraftingOutputItem> = recipe
+                .output
+                .iter()
+                .map(|o| {
+                    let nid = self
+                        .item_registry
+                        .get_by_name(&o.item_name)
+                        .map(|e| e.numeric_id as i32)
+                        .unwrap_or(0);
+                    CraftingOutputItem {
+                        network_id: nid,
+                        count: o.count as u16,
+                        metadata: o.metadata,
+                        block_runtime_id: 0,
+                    }
+                })
+                .collect();
+            let mut uuid = [0u8; 16];
+            uuid[0..4].copy_from_slice(&recipe.network_id.to_le_bytes());
+            uuid[4] = 0x00;
+            shapeless_entries.push(ShapelessRecipeEntry {
+                recipe_id: recipe.id.clone(),
+                input,
+                output,
+                uuid,
+                tag: recipe.tag.clone(),
+                network_id: recipe.network_id,
+            });
+        }
+
+        mc_rs_proto::packets::crafting_data::CraftingData {
+            shaped: shaped_entries,
+            shapeless: shapeless_entries,
+            clear_recipes: true,
+        }
     }
 
     async fn broadcast_packet(&mut self, packet_id: u32, packet: &impl ProtoEncode) {
@@ -3578,7 +3825,68 @@ impl ConnectionHandler {
                 debug!("Block placed at {target} by {addr}");
             }
             UseItemAction::ClickAir => {
-                // Nothing to do for creative mode
+                // Food consumption
+                let (item_rid, food_level) = match self.connections.get(&addr) {
+                    Some(c) => (c.inventory.held_item().runtime_id, c.food),
+                    None => return,
+                };
+                if item_rid == 0 {
+                    return;
+                }
+                let item_name = self
+                    .item_registry
+                    .get_by_id(item_rid as i16)
+                    .map(|info| info.name.clone());
+                if let Some(name) = item_name {
+                    if let Some(fd) = mc_rs_game::food::food_data(&name) {
+                        if food_level < 20 {
+                            let conn = match self.connections.get_mut(&addr) {
+                                Some(c) => c,
+                                None => return,
+                            };
+                            conn.food = (conn.food + fd.hunger).min(20);
+                            conn.saturation =
+                                (conn.saturation + fd.saturation).min(conn.food as f32);
+
+                            // Decrement item count
+                            let slot = conn.inventory.held_slot as usize;
+                            let stack = &mut conn.inventory.main[slot];
+                            if stack.count > 1 {
+                                stack.count -= 1;
+                            } else {
+                                conn.inventory.main[slot] =
+                                    mc_rs_proto::item_stack::ItemStack::empty();
+                            }
+
+                            let rid = conn.entity_runtime_id;
+                            let food = conn.food;
+                            let sat = conn.saturation;
+                            let exh = conn.exhaustion;
+                            let tick = conn.client_tick;
+                            let updated_item = conn.inventory.main[slot].clone();
+
+                            // Send updated inventory slot
+                            self.send_packet(
+                                addr,
+                                packets::id::INVENTORY_SLOT,
+                                &InventorySlot {
+                                    window_id: 0,
+                                    slot: slot as u32,
+                                    item: updated_item,
+                                },
+                            )
+                            .await;
+
+                            // Send updated hunger attributes
+                            self.send_packet(
+                                addr,
+                                packets::id::UPDATE_ATTRIBUTES,
+                                &UpdateAttributes::hunger(rid, food as f32, sat, exh, tick),
+                            )
+                            .await;
+                        }
+                    }
+                }
             }
         }
     }
@@ -3900,10 +4208,13 @@ impl ConnectionHandler {
                 None => continue,
             };
 
-            // Tick fire damage
+            // Tick fire damage (skip if Fire Resistance is active)
+            let has_fire_res = conn.effects.iter().any(|e| {
+                e.effect_id == mc_rs_proto::packets::mob_effect::effect_id::FIRE_RESISTANCE
+            });
             if conn.fire_ticks > 0 {
                 conn.fire_ticks -= 1;
-                if conn.fire_ticks % 20 == 0 && conn.fire_ticks >= 0 {
+                if !has_fire_res && conn.fire_ticks % 20 == 0 && conn.fire_ticks >= 0 {
                     // Deal 1 fire damage every second (20 ticks)
                     conn.health = (conn.health - 1.0).max(0.0);
                     let rid = conn.entity_runtime_id;
@@ -3924,7 +4235,11 @@ impl ConnectionHandler {
                             .and_then(|c| c.login_data.as_ref())
                             .map(|d| d.display_name.clone())
                             .unwrap_or_default();
-                        self.handle_player_death_generic(addr, &name).await;
+                        self.handle_player_death_with_message(
+                            addr,
+                            &format!("{name} burned to death"),
+                        )
+                        .await;
                         continue;
                     }
                 }
@@ -3995,6 +4310,287 @@ impl ConnectionHandler {
         }
 
         factor.min(1.0)
+    }
+
+    /// Tick survival mechanics: hunger drain, natural regen, starvation,
+    /// drowning, lava damage, and suffocation. Called once per game tick (50ms).
+    async fn tick_survival(&mut self) {
+        let addrs: Vec<SocketAddr> = self
+            .connections
+            .iter()
+            .filter(|(_, c)| c.state == LoginState::InGame && !c.is_dead && c.gamemode == 0)
+            .map(|(a, _)| *a)
+            .collect();
+
+        for addr in addrs {
+            let (pos, tick, rid) = match self.connections.get(&addr) {
+                Some(c) => (c.position, c.client_tick, c.entity_runtime_id),
+                None => continue,
+            };
+
+            // --- Exhaustion drain ---
+            let hunger_changed = {
+                let conn = match self.connections.get_mut(&addr) {
+                    Some(c) => c,
+                    None => continue,
+                };
+                if conn.exhaustion >= 4.0 {
+                    conn.exhaustion -= 4.0;
+                    if conn.saturation > 0.0 {
+                        conn.saturation = (conn.saturation - 1.0).max(0.0);
+                    } else {
+                        conn.food = (conn.food - 1).max(0);
+                    }
+                    true
+                } else {
+                    false
+                }
+            };
+            if hunger_changed {
+                let conn = match self.connections.get(&addr) {
+                    Some(c) => c,
+                    None => continue,
+                };
+                self.send_packet(
+                    addr,
+                    packets::id::UPDATE_ATTRIBUTES,
+                    &UpdateAttributes::hunger(
+                        rid,
+                        conn.food as f32,
+                        conn.saturation,
+                        conn.exhaustion,
+                        tick,
+                    ),
+                )
+                .await;
+            }
+
+            // --- Natural regeneration (every 80 ticks = 4 seconds) ---
+            let (food, health) = match self.connections.get(&addr) {
+                Some(c) => (c.food, c.health),
+                None => continue,
+            };
+            if food >= 18 && health < 20.0 && tick % 80 == 0 {
+                let conn = match self.connections.get_mut(&addr) {
+                    Some(c) => c,
+                    None => continue,
+                };
+                conn.health = (conn.health + 1.0).min(20.0);
+                conn.exhaustion += 6.0;
+                let hp = conn.health;
+                self.send_packet(
+                    addr,
+                    packets::id::UPDATE_ATTRIBUTES,
+                    &UpdateAttributes::health(rid, hp, tick),
+                )
+                .await;
+            }
+
+            // --- Starvation (every 80 ticks, food == 0) ---
+            let (food, health) = match self.connections.get(&addr) {
+                Some(c) => (c.food, c.health),
+                None => continue,
+            };
+            if food == 0 && tick % 80 == 0 && health > 1.0 {
+                let conn = match self.connections.get_mut(&addr) {
+                    Some(c) => c,
+                    None => continue,
+                };
+                conn.health = (conn.health - 1.0).max(1.0);
+                let hp = conn.health;
+                self.broadcast_packet(packets::id::ENTITY_EVENT, &EntityEvent::hurt(rid))
+                    .await;
+                self.send_packet(
+                    addr,
+                    packets::id::UPDATE_ATTRIBUTES,
+                    &UpdateAttributes::health(rid, hp, tick),
+                )
+                .await;
+            }
+
+            // --- Drowning ---
+            const EYE_HEIGHT: f32 = 1.62;
+            let head_y = pos.y; // position.y is already eye position in Bedrock
+            let head_block_x = head_y.floor() as i32; // reuse for block coord
+            let _ = head_block_x; // suppress warning, we compute below
+            let hx = pos.x.floor() as i32;
+            let hy = head_y.floor() as i32;
+            let hz = pos.z.floor() as i32;
+
+            let head_block_name = self
+                .get_block(hx, hy, hz)
+                .and_then(|hash| self.block_registry.get(hash))
+                .map(|info| info.name);
+
+            let in_water = matches!(
+                head_block_name,
+                Some("minecraft:water") | Some("minecraft:flowing_water")
+            );
+
+            let has_water_breathing = self
+                .connections
+                .get(&addr)
+                .map(|c| {
+                    c.effects.iter().any(|e| {
+                        e.effect_id == mc_rs_proto::packets::mob_effect::effect_id::WATER_BREATHING
+                    })
+                })
+                .unwrap_or(false);
+
+            if in_water {
+                if has_water_breathing {
+                    if let Some(conn) = self.connections.get_mut(&addr) {
+                        conn.air_ticks = 300;
+                    }
+                } else {
+                    if let Some(conn) = self.connections.get_mut(&addr) {
+                        conn.air_ticks -= 1;
+                    }
+                    let air = self
+                        .connections
+                        .get(&addr)
+                        .map(|c| c.air_ticks)
+                        .unwrap_or(0);
+                    if air <= 0 && tick % 20 == 0 {
+                        // Drowning: 2 damage per second
+                        let conn = match self.connections.get_mut(&addr) {
+                            Some(c) => c,
+                            None => continue,
+                        };
+                        conn.health = (conn.health - 2.0).max(0.0);
+                        let hp = conn.health;
+                        self.broadcast_packet(packets::id::ENTITY_EVENT, &EntityEvent::hurt(rid))
+                            .await;
+                        self.send_packet(
+                            addr,
+                            packets::id::UPDATE_ATTRIBUTES,
+                            &UpdateAttributes::health(rid, hp, tick),
+                        )
+                        .await;
+                        if hp <= 0.0 {
+                            let name = self
+                                .connections
+                                .get(&addr)
+                                .and_then(|c| c.login_data.as_ref())
+                                .map(|d| d.display_name.clone())
+                                .unwrap_or_default();
+                            self.handle_player_death_with_message(addr, &format!("{name} drowned"))
+                                .await;
+                            continue;
+                        }
+                    }
+                }
+            } else {
+                // Recover air quickly out of water
+                if let Some(conn) = self.connections.get_mut(&addr) {
+                    conn.air_ticks = (conn.air_ticks + 5).min(300);
+                }
+            }
+
+            // --- Lava damage ---
+            let feet_y = pos.y - EYE_HEIGHT;
+            let fx = pos.x.floor() as i32;
+            let fy = feet_y.floor() as i32;
+            let fz = pos.z.floor() as i32;
+
+            let feet_block_name = self
+                .get_block(fx, fy, fz)
+                .and_then(|hash| self.block_registry.get(hash))
+                .map(|info| info.name);
+
+            let in_lava = matches!(
+                feet_block_name,
+                Some("minecraft:lava") | Some("minecraft:flowing_lava")
+            );
+
+            if in_lava {
+                // Set on fire
+                if let Some(conn) = self.connections.get_mut(&addr) {
+                    conn.fire_ticks = conn.fire_ticks.max(300);
+                }
+
+                let has_fire_res = self
+                    .connections
+                    .get(&addr)
+                    .map(|c| {
+                        c.effects.iter().any(|e| {
+                            e.effect_id
+                                == mc_rs_proto::packets::mob_effect::effect_id::FIRE_RESISTANCE
+                        })
+                    })
+                    .unwrap_or(false);
+
+                if !has_fire_res && tick % 10 == 0 {
+                    // 4 damage every 0.5 seconds
+                    let conn = match self.connections.get_mut(&addr) {
+                        Some(c) => c,
+                        None => continue,
+                    };
+                    conn.health = (conn.health - 4.0).max(0.0);
+                    let hp = conn.health;
+                    self.broadcast_packet(packets::id::ENTITY_EVENT, &EntityEvent::hurt(rid))
+                        .await;
+                    self.send_packet(
+                        addr,
+                        packets::id::UPDATE_ATTRIBUTES,
+                        &UpdateAttributes::health(rid, hp, tick),
+                    )
+                    .await;
+                    if hp <= 0.0 {
+                        let name = self
+                            .connections
+                            .get(&addr)
+                            .and_then(|c| c.login_data.as_ref())
+                            .map(|d| d.display_name.clone())
+                            .unwrap_or_default();
+                        self.handle_player_death_with_message(
+                            addr,
+                            &format!("{name} tried to swim in lava"),
+                        )
+                        .await;
+                        continue;
+                    }
+                }
+            }
+
+            // --- Suffocation (head inside solid block) ---
+            // Check block at head position
+            let head_solid = self
+                .get_block(hx, hy, hz)
+                .map(|hash| self.block_registry.is_solid(hash))
+                .unwrap_or(false);
+
+            if head_solid && tick % 10 == 0 {
+                let conn = match self.connections.get_mut(&addr) {
+                    Some(c) => c,
+                    None => continue,
+                };
+                conn.health = (conn.health - 1.0).max(0.0);
+                let hp = conn.health;
+                self.broadcast_packet(packets::id::ENTITY_EVENT, &EntityEvent::hurt(rid))
+                    .await;
+                self.send_packet(
+                    addr,
+                    packets::id::UPDATE_ATTRIBUTES,
+                    &UpdateAttributes::health(rid, hp, tick),
+                )
+                .await;
+                if hp <= 0.0 {
+                    let name = self
+                        .connections
+                        .get(&addr)
+                        .and_then(|c| c.login_data.as_ref())
+                        .map(|d| d.display_name.clone())
+                        .unwrap_or_default();
+                    self.handle_player_death_with_message(
+                        addr,
+                        &format!("{name} suffocated in a wall"),
+                    )
+                    .await;
+                    continue;
+                }
+            }
+        }
     }
 }
 
