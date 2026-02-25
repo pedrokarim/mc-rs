@@ -1,5 +1,6 @@
 //! Game packet definitions for Bedrock Edition.
 
+pub mod add_actor;
 pub mod add_item_entity;
 pub mod add_player;
 pub mod animate;
@@ -21,7 +22,9 @@ pub mod item_stack_response;
 pub mod level_chunk;
 pub mod level_event;
 pub mod login;
+pub mod mob_effect;
 pub mod mob_equipment;
+pub mod move_actor_absolute;
 pub mod move_player;
 pub mod network_chunk_publisher_update;
 pub mod network_settings;
@@ -47,6 +50,7 @@ pub mod update_abilities;
 pub mod update_attributes;
 pub mod update_block;
 
+pub use add_actor::{ActorAttribute, AddActor};
 pub use add_item_entity::AddItemEntity;
 pub use add_player::{AddPlayer, EntityMetadataEntry, MetadataValue};
 pub use animate::Animate;
@@ -72,7 +76,9 @@ pub use item_stack_response::{
 pub use level_chunk::LevelChunk;
 pub use level_event::LevelEvent;
 pub use login::LoginPacket;
+pub use mob_effect::MobEffect;
 pub use mob_equipment::MobEquipment;
+pub use move_actor_absolute::MoveActorAbsolute;
 pub use move_player::{MoveMode, MovePlayer};
 pub use network_chunk_publisher_update::NetworkChunkPublisherUpdate;
 pub use network_settings::NetworkSettings;
@@ -111,8 +117,10 @@ pub mod id {
     pub const TEXT: u32 = 0x09;
     pub const START_GAME: u32 = 0x0B;
     pub const ADD_PLAYER: u32 = 0x0C;
+    pub const ADD_ACTOR: u32 = 0x0D;
     pub const REMOVE_ENTITY: u32 = 0x0E;
     pub const ADD_ITEM_ENTITY: u32 = 0x0F;
+    pub const MOVE_ACTOR_ABSOLUTE: u32 = 0x10;
     pub const TAKE_ITEM_ENTITY: u32 = 0x11;
     pub const SET_ENTITY_MOTION: u32 = 0x12;
     pub const MOVE_PLAYER: u32 = 0x13;
@@ -121,6 +129,7 @@ pub mod id {
     pub const RESPAWN: u32 = 0x2D;
     pub const LEVEL_EVENT: u32 = 0x19;
     pub const ENTITY_EVENT: u32 = 0x1B;
+    pub const MOB_EFFECT: u32 = 0x1C;
     pub const UPDATE_ATTRIBUTES: u32 = 0x1D;
     pub const INVENTORY_TRANSACTION: u32 = 0x1E;
     pub const MOB_EQUIPMENT: u32 = 0x1F;

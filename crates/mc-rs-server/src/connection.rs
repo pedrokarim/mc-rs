@@ -14,6 +14,8 @@ use mc_rs_command::{CommandRegistry, CommandResult};
 use mc_rs_crypto::{
     create_handshake_jwt, derive_key, parse_client_public_key, PacketEncryption, ServerKeyPair,
 };
+use mc_rs_game::combat;
+use mc_rs_game::game_world::{GameEvent, GameWorld};
 use mc_rs_game::inventory::PlayerInventory;
 use mc_rs_proto::batch::{decode_batch, encode_single, BatchConfig};
 use mc_rs_proto::codec::{ProtoDecode, ProtoEncode};
@@ -21,10 +23,11 @@ use mc_rs_proto::compression::CompressionAlgorithm;
 use mc_rs_proto::jwt;
 use mc_rs_proto::packets::add_player::default_player_metadata;
 use mc_rs_proto::packets::{
-    self, AddPlayer, Animate, AvailableCommands, AvailableEntityIdentifiers, BiomeDefinitionList,
-    ChunkRadiusUpdated, ClientToServerHandshake, CommandOutput, CommandRequest, Disconnect,
-    EntityEvent, InventoryContent, InventorySlot, InventoryTransaction, ItemStackRequest,
-    ItemStackResponse, LevelChunk, LevelEvent, MobEquipment, MoveMode, MovePlayer,
+    self, ActorAttribute, AddActor, AddPlayer, Animate, AvailableCommands,
+    AvailableEntityIdentifiers, BiomeDefinitionList, ChunkRadiusUpdated, ClientToServerHandshake,
+    CommandOutput, CommandRequest, Disconnect, EntityEvent, EntityMetadataEntry, InventoryContent,
+    InventorySlot, InventoryTransaction, ItemStackRequest, ItemStackResponse, LevelChunk,
+    LevelEvent, MetadataValue, MobEffect, MobEquipment, MoveActorAbsolute, MoveMode, MovePlayer,
     NetworkChunkPublisherUpdate, NetworkSettings, PlayStatus, PlayStatusType, PlayerAction,
     PlayerActionType, PlayerAuthInput, PlayerListAdd, PlayerListAddPacket, PlayerListRemove,
     RemoveEntity, RequestChunkRadius, ResourcePackClientResponse, ResourcePackResponseStatus,
@@ -119,6 +122,23 @@ pub struct PlayerConnection {
     pub is_dead: bool,
     /// Whether the player is sprinting (from PlayerAuthInput flags).
     pub is_sprinting: bool,
+    /// Active status effects on this player.
+    pub effects: Vec<ActiveEffect>,
+    /// Last vertical velocity (position_delta.y) for critical hit detection.
+    pub last_position_delta_y: f32,
+    /// Remaining fire ticks (1 damage per 20 ticks). 0 = not on fire.
+    pub fire_ticks: i32,
+}
+
+/// An active status effect on a player.
+#[derive(Debug, Clone)]
+pub struct ActiveEffect {
+    /// Effect ID (see `mc_rs_proto::packets::mob_effect::effect_id`).
+    pub effect_id: i32,
+    /// Amplifier (0 = level I, 1 = level II, etc.).
+    pub amplifier: i32,
+    /// Remaining duration in ticks.
+    pub remaining_ticks: i32,
 }
 
 /// Manages all player connections and their login state machines.
@@ -126,7 +146,7 @@ pub struct ConnectionHandler {
     connections: HashMap<SocketAddr, PlayerConnection>,
     server_handle: ServerHandle,
     online_mode: bool,
-    next_entity_id: i64,
+    game_world: GameWorld,
     server_config: Arc<ServerConfig>,
     flat_world_blocks: FlatWorldBlocks,
     command_registry: CommandRegistry,
@@ -161,6 +181,7 @@ impl ConnectionHandler {
         command_registry.register_stub("unban", "Unban a player");
         command_registry.register_stub("unban-ip", "Unban an IP address");
         command_registry.register_stub("whitelist", "Manage the whitelist");
+        command_registry.register_stub("summon", "Summon an entity");
 
         let permissions = PermissionManager::load(server_config.permissions.whitelist_enabled);
 
@@ -168,7 +189,7 @@ impl ConnectionHandler {
             connections: HashMap::new(),
             server_handle,
             online_mode,
-            next_entity_id: 1,
+            game_world: GameWorld::new(1),
             server_config,
             flat_world_blocks: FlatWorldBlocks::compute(),
             command_registry,
@@ -181,9 +202,7 @@ impl ConnectionHandler {
     }
 
     fn allocate_entity_id(&mut self) -> i64 {
-        let id = self.next_entity_id;
-        self.next_entity_id += 1;
-        id
+        self.game_world.allocate_entity_id()
     }
 
     /// Process a RakNet event.
@@ -197,6 +216,237 @@ impl ConnectionHandler {
             }
             RakNetEvent::Packet { addr, payload } => {
                 self.handle_packet(addr, payload).await;
+            }
+        }
+        // Immediately process any game events generated during packet handling
+        // (e.g. mob spawns, damage) so clients see results without waiting for next tick.
+        self.process_game_events().await;
+    }
+
+    /// Run one ECS game tick (called every 50ms from main loop) and process outgoing events.
+    pub async fn game_tick(&mut self) {
+        self.game_world.tick();
+        self.process_game_events().await;
+        self.tick_effects().await;
+    }
+
+    /// Drain ECS game events and send the corresponding packets.
+    async fn process_game_events(&mut self) {
+        let events = self.game_world.drain_events();
+        for event in events {
+            match event {
+                GameEvent::MobSpawned {
+                    runtime_id,
+                    unique_id,
+                    mob_type,
+                    position,
+                    health,
+                    max_health,
+                    bb_width,
+                    bb_height,
+                } => {
+                    let pkt = AddActor {
+                        entity_unique_id: unique_id,
+                        entity_runtime_id: runtime_id,
+                        entity_type: mob_type,
+                        position: Vec3::new(position.0, position.1, position.2),
+                        velocity: Vec3::ZERO,
+                        pitch: 0.0,
+                        yaw: 0.0,
+                        head_yaw: 0.0,
+                        body_yaw: 0.0,
+                        attributes: vec![ActorAttribute {
+                            name: "minecraft:health".to_string(),
+                            min: 0.0,
+                            max: max_health,
+                            current: health,
+                            default: max_health,
+                        }],
+                        metadata: default_mob_metadata(bb_width, bb_height),
+                    };
+                    self.broadcast_packet(packets::id::ADD_ACTOR, &pkt).await;
+                }
+                GameEvent::MobMoved {
+                    runtime_id,
+                    position,
+                    pitch,
+                    yaw,
+                    head_yaw,
+                    on_ground,
+                } => {
+                    let pkt = MoveActorAbsolute::normal(
+                        runtime_id,
+                        Vec3::new(position.0, position.1, position.2),
+                        pitch,
+                        yaw,
+                        head_yaw,
+                        on_ground,
+                    );
+                    self.broadcast_packet(packets::id::MOVE_ACTOR_ABSOLUTE, &pkt)
+                        .await;
+                }
+                GameEvent::MobHurt {
+                    runtime_id,
+                    new_health,
+                    tick,
+                } => {
+                    self.broadcast_packet(
+                        packets::id::ENTITY_EVENT,
+                        &EntityEvent::hurt(runtime_id),
+                    )
+                    .await;
+                    self.broadcast_packet(
+                        packets::id::UPDATE_ATTRIBUTES,
+                        &UpdateAttributes::health(runtime_id, new_health, tick),
+                    )
+                    .await;
+                }
+                GameEvent::MobDied {
+                    runtime_id,
+                    unique_id,
+                } => {
+                    self.broadcast_packet(
+                        packets::id::ENTITY_EVENT,
+                        &EntityEvent::death(runtime_id),
+                    )
+                    .await;
+                    self.broadcast_packet(
+                        packets::id::REMOVE_ENTITY,
+                        &RemoveEntity {
+                            entity_unique_id: unique_id,
+                        },
+                    )
+                    .await;
+                }
+                GameEvent::EntityRemoved { unique_id } => {
+                    self.broadcast_packet(
+                        packets::id::REMOVE_ENTITY,
+                        &RemoveEntity {
+                            entity_unique_id: unique_id,
+                        },
+                    )
+                    .await;
+                }
+                GameEvent::MobAttackPlayer {
+                    mob_runtime_id: _,
+                    target_runtime_id,
+                    damage: raw_damage,
+                    knockback,
+                } => {
+                    // Find the target player by runtime_id
+                    let target_addr = self
+                        .connections
+                        .iter()
+                        .find(|(_, c)| c.entity_runtime_id == target_runtime_id)
+                        .map(|(a, _)| *a);
+                    if let Some(addr) = target_addr {
+                        // Invulnerability check
+                        let tick = match self.connections.get(&addr) {
+                            Some(c) => c.client_tick,
+                            None => continue,
+                        };
+                        if let Some(last) =
+                            self.connections.get(&addr).and_then(|c| c.last_damage_tick)
+                        {
+                            if tick.saturating_sub(last) < 10 {
+                                continue;
+                            }
+                        }
+
+                        // Apply armor + protection + resistance reduction
+                        let (armor_defense, armor_nbt_slots) = {
+                            let conn = match self.connections.get(&addr) {
+                                Some(c) => c,
+                                None => continue,
+                            };
+                            let defense = combat::total_armor_defense(
+                                &self.item_registry,
+                                &conn.inventory.armor,
+                            );
+                            let nbt: Vec<Vec<u8>> = conn
+                                .inventory
+                                .armor
+                                .iter()
+                                .map(|i| i.nbt_data.clone())
+                                .collect();
+                            (defense, nbt)
+                        };
+                        let armor_refs: Vec<&[u8]> =
+                            armor_nbt_slots.iter().map(|v| v.as_slice()).collect();
+                        let resistance = self.get_resistance_factor(addr);
+
+                        // Mob attacks have no weapon enchantments or criticals
+                        let damage = combat::calculate_damage(&combat::DamageInput {
+                            base_damage: raw_damage,
+                            weapon_nbt: &[],
+                            armor_defense,
+                            armor_nbt_slots: &armor_refs,
+                            is_critical: false,
+                            strength_bonus: 0.0,
+                            weakness_penalty: 0.0,
+                            resistance_factor: resistance,
+                        });
+
+                        // Apply damage
+                        let conn = match self.connections.get_mut(&addr) {
+                            Some(c) => c,
+                            None => continue,
+                        };
+                        conn.health = (conn.health - damage).max(0.0);
+                        conn.last_damage_tick = Some(tick);
+                        let new_health = conn.health;
+                        let runtime_id = conn.entity_runtime_id;
+                        let is_dead = new_health <= 0.0;
+
+                        // Send hurt animation
+                        self.broadcast_packet(
+                            packets::id::ENTITY_EVENT,
+                            &EntityEvent::hurt(runtime_id),
+                        )
+                        .await;
+
+                        // Send updated health
+                        self.broadcast_packet(
+                            packets::id::UPDATE_ATTRIBUTES,
+                            &UpdateAttributes::health(runtime_id, new_health, tick),
+                        )
+                        .await;
+
+                        // Knockback
+                        self.broadcast_packet(
+                            packets::id::SET_ENTITY_MOTION,
+                            &SetEntityMotion {
+                                entity_runtime_id: runtime_id,
+                                motion: Vec3::new(knockback.0, knockback.1, knockback.2),
+                            },
+                        )
+                        .await;
+
+                        if is_dead {
+                            // Death flow
+                            let conn = self.connections.get_mut(&addr).unwrap();
+                            conn.is_dead = true;
+                            conn.health = 0.0;
+
+                            self.broadcast_packet(
+                                packets::id::ENTITY_EVENT,
+                                &EntityEvent::death(runtime_id),
+                            )
+                            .await;
+
+                            self.send_packet(
+                                addr,
+                                packets::id::RESPAWN,
+                                &Respawn {
+                                    position: Vec3::new(0.5, 5.62, 0.5),
+                                    state: 0,
+                                    runtime_entity_id: runtime_id,
+                                },
+                            )
+                            .await;
+                        }
+                    }
+                }
             }
         }
     }
@@ -231,8 +481,15 @@ impl ConnectionHandler {
                 last_damage_tick: None,
                 is_dead: false,
                 is_sprinting: false,
+                effects: Vec::new(),
+                last_position_delta_y: 0.0,
+                fire_ticks: 0,
             },
         );
+
+        // Spawn ECS mirror entity for this player
+        self.game_world
+            .spawn_player(entity_id, entity_id as u64, (0.5, 5.62, 0.5), addr);
     }
 
     async fn handle_session_disconnected(&mut self, addr: SocketAddr) {
@@ -256,6 +513,9 @@ impl ConnectionHandler {
 
         // Remove the connection
         self.connections.remove(&addr);
+
+        // Despawn the ECS mirror entity for this player
+        self.game_world.despawn_player(entity_unique_id);
 
         if was_in_game {
             // Broadcast RemoveEntity to all remaining players
@@ -1073,8 +1333,10 @@ impl ConnectionHandler {
         self.send_existing_add_players_to(addr).await;
         // 4. Broadcast AddPlayer for the new player to all existing InGame players
         self.broadcast_add_player(addr).await;
+        // 5. Send AddActor for all existing mobs to the new player
+        self.send_existing_mobs_to(addr).await;
 
-        // 5. Send initial health attribute so the client HUD shows correctly
+        // 6. Send initial health attribute so the client HUD shows correctly
         let rid = self
             .connections
             .get(&addr)
@@ -1094,7 +1356,7 @@ impl ConnectionHandler {
             .map(|d| d.display_name.clone())
             .unwrap_or_default();
 
-        // 6. Broadcast join message
+        // 7. Broadcast join message
         let join_msg = Text::system(format!("{name} joined the game"));
         self.broadcast_packet(packets::id::TEXT, &join_msg).await;
 
@@ -1247,6 +1509,7 @@ impl ConnectionHandler {
             conn.head_yaw = input.head_yaw;
             conn.client_tick = input.tick;
             conn.on_ground = on_ground;
+            conn.last_position_delta_y = input.position_delta.y;
             conn.is_sprinting =
                 input.has_flag(mc_rs_proto::packets::player_auth_input::input_flags::SPRINTING);
             if on_ground {
@@ -1254,6 +1517,15 @@ impl ConnectionHandler {
             } else {
                 conn.airborne_ticks = conn.airborne_ticks.saturating_add(1);
             }
+
+            // Sync position to ECS mirror entity
+            let uid = conn.entity_unique_id;
+            self.game_world.update_player_position(
+                uid,
+                input.position.x,
+                input.position.y,
+                input.position.z,
+            );
         }
 
         if anti_fly_correction {
@@ -1405,6 +1677,7 @@ impl ConnectionHandler {
                 | "unban"
                 | "unban-ip"
                 | "whitelist"
+                | "summon"
                 | "stop"
         );
         if needs_op && !self.permissions.ops.contains(&sender_name) {
@@ -1433,6 +1706,8 @@ impl ConnectionHandler {
             "unban" => Some(self.cmd_unban(&raw_args)),
             "unban-ip" => Some(self.cmd_unban_ip(&raw_args)),
             "whitelist" => Some(self.cmd_whitelist(&raw_args)),
+            "summon" => Some(self.cmd_summon(addr, &raw_args)),
+            "effect" => Some(self.cmd_effect(addr, &sender_name, &raw_args).await),
             _ => None,
         };
 
@@ -1742,14 +2017,21 @@ impl ConnectionHandler {
         y: f32,
         z: f32,
     ) -> CommandResult {
-        let (runtime_id, tick) = match self.connections.get_mut(&target_addr) {
+        let (runtime_id, tick, uid) = match self.connections.get_mut(&target_addr) {
             Some(conn) => {
                 conn.position = Vec3::new(x, y, z);
                 conn.on_ground = false;
-                (conn.entity_runtime_id, conn.client_tick)
+                (
+                    conn.entity_runtime_id,
+                    conn.client_tick,
+                    conn.entity_unique_id,
+                )
             }
             None => return CommandResult::err(format!("Player not found: {target_name}")),
         };
+
+        // Sync position to ECS mirror entity
+        self.game_world.update_player_position(uid, x, y, z);
 
         let pkt = MovePlayer {
             runtime_entity_id: runtime_id,
@@ -2292,6 +2574,164 @@ impl ConnectionHandler {
         }
     }
 
+    /// /summon <entity_type> [x y z]
+    fn cmd_summon(&mut self, sender_addr: SocketAddr, args: &[String]) -> CommandResult {
+        if args.is_empty() {
+            let known: Vec<&str> = self
+                .game_world
+                .mob_registry
+                .all()
+                .iter()
+                .map(|m| m.type_id)
+                .collect();
+            return CommandResult::err(format!(
+                "Usage: /summon <type> [x y z]. Available: {}",
+                known.join(", ")
+            ));
+        }
+
+        let entity_type = &args[0];
+        let full_type = if entity_type.contains(':') {
+            entity_type.clone()
+        } else {
+            format!("minecraft:{entity_type}")
+        };
+
+        if self.game_world.mob_registry.get(&full_type).is_none() {
+            let known: Vec<&str> = self
+                .game_world
+                .mob_registry
+                .all()
+                .iter()
+                .map(|m| m.type_id)
+                .collect();
+            return CommandResult::err(format!(
+                "Unknown entity type: {full_type}. Available: {}",
+                known.join(", ")
+            ));
+        }
+
+        let (x, y, z) = if args.len() >= 4 {
+            match parse_coords(&args[1], &args[2], &args[3]) {
+                Some(c) => c,
+                None => return CommandResult::err("Invalid coordinates"),
+            }
+        } else {
+            match self.connections.get(&sender_addr) {
+                Some(c) => (c.position.x, c.position.y, c.position.z),
+                None => return CommandResult::err("Sender not found"),
+            }
+        };
+
+        match self.game_world.spawn_mob(&full_type, x, y, z) {
+            Some(_) => {
+                CommandResult::ok(format!("Summoned {full_type} at ({x:.1}, {y:.1}, {z:.1})"))
+            }
+            None => CommandResult::err(format!("Failed to summon {full_type}")),
+        }
+    }
+
+    /// /effect <target> <effect> [amplifier] [duration_seconds]
+    /// /effect <target> clear
+    async fn cmd_effect(
+        &mut self,
+        sender_addr: SocketAddr,
+        _sender_name: &str,
+        args: &[String],
+    ) -> CommandResult {
+        if args.len() < 2 {
+            return CommandResult::err(
+                "Usage: /effect <target> <effect> [amplifier] [duration] or /effect <target> clear",
+            );
+        }
+
+        let targets = match self.resolve_target(&args[0], sender_addr) {
+            Ok(t) => t,
+            Err(e) => return CommandResult::err(e),
+        };
+
+        // /effect <target> clear
+        if args[1] == "clear" {
+            let mut messages = Vec::new();
+            for target_name in &targets {
+                let target_addr = match self.find_player_addr(target_name) {
+                    Some(a) => a,
+                    None => {
+                        messages.push(format!("Player not found: {target_name}"));
+                        continue;
+                    }
+                };
+                self.clear_effects(target_addr).await;
+                messages.push(format!("Cleared effects for {target_name}"));
+            }
+            return CommandResult {
+                success: true,
+                messages,
+                broadcast: None,
+                should_stop: false,
+            };
+        }
+
+        // Parse effect name
+        let effect_id = match effect_name_to_id(&args[1]) {
+            Some(id) => id,
+            None => {
+                return CommandResult::err(format!(
+                "Unknown effect: {}. Available: speed, slowness, strength, weakness, resistance, \
+                     haste, mining_fatigue, jump_boost, nausea, regeneration, fire_resistance, \
+                     water_breathing, invisibility, blindness, night_vision, hunger, poison, \
+                     wither, absorption",
+                args[1]
+            ))
+            }
+        };
+
+        let amplifier = if args.len() >= 3 {
+            match args[2].parse::<i32>() {
+                Ok(a) => a.clamp(0, 255),
+                Err(_) => return CommandResult::err("Invalid amplifier (must be 0-255)"),
+            }
+        } else {
+            0
+        };
+
+        let duration_secs = if args.len() >= 4 {
+            match args[3].parse::<i32>() {
+                Ok(d) if d > 0 => d,
+                _ => return CommandResult::err("Invalid duration (must be > 0)"),
+            }
+        } else {
+            30
+        };
+        let duration_ticks = duration_secs * 20;
+
+        let mut messages = Vec::new();
+        for target_name in &targets {
+            let target_addr = match self.find_player_addr(target_name) {
+                Some(a) => a,
+                None => {
+                    messages.push(format!("Player not found: {target_name}"));
+                    continue;
+                }
+            };
+
+            self.apply_effect(target_addr, effect_id, amplifier, duration_ticks)
+                .await;
+            messages.push(format!(
+                "Applied {} {} to {target_name} for {duration_secs}s",
+                args[1],
+                amplifier + 1
+            ));
+        }
+
+        CommandResult {
+            success: true,
+            messages,
+            broadcast: None,
+            should_stop: false,
+        }
+    }
+
     // -----------------------------------------------------------------------
     // PvP combat
     // -----------------------------------------------------------------------
@@ -2339,40 +2779,140 @@ impl ConnectionHandler {
         })
     }
 
-    /// Handle a player attacking another entity (PvP).
+    /// Handle a player attacking another entity (PvP or PvE).
     async fn handle_attack(&mut self, attacker_addr: SocketAddr, victim_runtime_id: u64) {
-        let (attacker_gamemode, attacker_pos, held_item_rid, is_sprinting) =
-            match self.connections.get(&attacker_addr) {
-                Some(c) => {
-                    let rid = c.inventory.held_item().runtime_id;
-                    (c.gamemode, c.position, rid, c.is_sprinting)
-                }
-                None => return,
-            };
+        let (
+            attacker_gamemode,
+            attacker_pos,
+            held_item_rid,
+            is_sprinting,
+            on_ground,
+            delta_y,
+            weapon_nbt,
+        ) = match self.connections.get(&attacker_addr) {
+            Some(c) => {
+                let item = c.inventory.held_item();
+                (
+                    c.gamemode,
+                    c.position,
+                    item.runtime_id,
+                    c.is_sprinting,
+                    c.on_ground,
+                    c.last_position_delta_y,
+                    item.nbt_data.clone(),
+                )
+            }
+            None => return,
+        };
 
         // Creative/Spectator cannot attack
         if attacker_gamemode == 1 || attacker_gamemode == 3 {
             return;
         }
 
-        // Find victim by runtime_id
+        let base_damage = base_attack_damage(&self.item_registry, held_item_rid);
+        let is_critical = combat::is_critical_hit(on_ground, delta_y);
+        let (strength_bonus, weakness_penalty) = self.get_attacker_bonuses(attacker_addr);
+
+        // Check if target is a mob (PvE)
+        if self.game_world.is_mob(victim_runtime_id) {
+            let mob_pos = match self.game_world.mob_position(victim_runtime_id) {
+                Some(p) => Vec3::new(p.0, p.1, p.2),
+                None => return,
+            };
+
+            if attacker_pos.distance(&mob_pos) > 6.0 {
+                return;
+            }
+
+            // PvE: no armor/protection/resistance on mobs (simplified)
+            let damage = combat::calculate_damage(&combat::DamageInput {
+                base_damage,
+                weapon_nbt: &weapon_nbt,
+                armor_defense: 0.0,
+                armor_nbt_slots: &[],
+                is_critical,
+                strength_bonus,
+                weakness_penalty,
+                resistance_factor: 0.0,
+            });
+
+            let attacker_tick = self
+                .connections
+                .get(&attacker_addr)
+                .map(|c| c.client_tick)
+                .unwrap_or(0);
+
+            if self
+                .game_world
+                .damage_mob(victim_runtime_id, damage, attacker_tick)
+                .is_none()
+            {
+                return; // invulnerable
+            }
+
+            // Broadcast critical hit animation
+            if is_critical {
+                let attacker_rid = self
+                    .connections
+                    .get(&attacker_addr)
+                    .map(|c| c.entity_runtime_id)
+                    .unwrap_or(0);
+                self.broadcast_packet(
+                    packets::id::ANIMATE,
+                    &Animate {
+                        action_type: 4, // critical hit particles
+                        entity_runtime_id: attacker_rid,
+                    },
+                )
+                .await;
+            }
+
+            // Knockback (with enchantment bonus)
+            let kb_enchant = combat::knockback_bonus(&weapon_nbt);
+            let dx = mob_pos.x - attacker_pos.x;
+            let dz = mob_pos.z - attacker_pos.z;
+            let horizontal_len = (dx * dx + dz * dz).sqrt();
+            if horizontal_len > 0.001 {
+                let norm_x = dx / horizontal_len;
+                let norm_z = dz / horizontal_len;
+                let kb = 0.4 + kb_enchant as f32 * 0.3;
+                let sprint_mult = if is_sprinting { 1.5 } else { 1.0 };
+                let vx = norm_x * kb * sprint_mult;
+                let vy = 0.4;
+                let vz = norm_z * kb * sprint_mult;
+
+                self.game_world
+                    .apply_knockback(victim_runtime_id, vx, vy, vz);
+
+                self.broadcast_packet(
+                    packets::id::SET_ENTITY_MOTION,
+                    &SetEntityMotion {
+                        entity_runtime_id: victim_runtime_id,
+                        motion: Vec3::new(vx, vy, vz),
+                    },
+                )
+                .await;
+            }
+
+            return;
+        }
+
+        // --- PvP: find victim player by runtime_id ---
         let victim_addr = match self.find_addr_by_runtime_id(victim_runtime_id) {
             Some(a) => a,
             None => return,
         };
 
-        // Victim must be alive and in a damageable gamemode
         let (victim_gamemode, victim_pos) = match self.connections.get(&victim_addr) {
             Some(c) if c.state == LoginState::InGame && !c.is_dead => (c.gamemode, c.position),
             _ => return,
         };
 
-        // Creative/Spectator victims are immune
         if victim_gamemode == 1 || victim_gamemode == 3 {
             return;
         }
 
-        // Distance check (anti-reach, max ~6 blocks)
         let distance = attacker_pos.distance(&victim_pos);
         if distance > 6.0 {
             debug!("Attack rejected: distance {distance:.2} > 6.0 from {attacker_addr}");
@@ -2395,8 +2935,36 @@ impl ConnectionHandler {
             }
         }
 
-        // Calculate damage
-        let damage = base_attack_damage(&self.item_registry, held_item_rid);
+        // Gather victim armor data for damage calculation
+        let (armor_defense, armor_nbt_slots) = {
+            let victim_conn = match self.connections.get(&victim_addr) {
+                Some(c) => c,
+                None => return,
+            };
+            let defense =
+                combat::total_armor_defense(&self.item_registry, &victim_conn.inventory.armor);
+            let nbt_slots: Vec<Vec<u8>> = victim_conn
+                .inventory
+                .armor
+                .iter()
+                .map(|item| item.nbt_data.clone())
+                .collect();
+            (defense, nbt_slots)
+        };
+        let armor_nbt_refs: Vec<&[u8]> = armor_nbt_slots.iter().map(|v| v.as_slice()).collect();
+        let resistance_factor = self.get_resistance_factor(victim_addr);
+
+        // Full damage pipeline
+        let damage = combat::calculate_damage(&combat::DamageInput {
+            base_damage,
+            weapon_nbt: &weapon_nbt,
+            armor_defense,
+            armor_nbt_slots: &armor_nbt_refs,
+            is_critical,
+            strength_bonus,
+            weakness_penalty,
+            resistance_factor,
+        });
 
         // Apply damage
         let (new_health, victim_rid, victim_name) = {
@@ -2426,7 +2994,25 @@ impl ConnectionHandler {
         self.broadcast_packet(packets::id::ENTITY_EVENT, &EntityEvent::hurt(victim_rid))
             .await;
 
-        // Calculate and apply knockback
+        // Broadcast critical hit animation
+        if is_critical {
+            let attacker_rid = self
+                .connections
+                .get(&attacker_addr)
+                .map(|c| c.entity_runtime_id)
+                .unwrap_or(0);
+            self.broadcast_packet(
+                packets::id::ANIMATE,
+                &Animate {
+                    action_type: 4, // critical hit particles
+                    entity_runtime_id: attacker_rid,
+                },
+            )
+            .await;
+        }
+
+        // Knockback (with enchantment bonus)
+        let kb_enchant = combat::knockback_bonus(&weapon_nbt);
         let dx = victim_pos.x - attacker_pos.x;
         let dz = victim_pos.z - attacker_pos.z;
         let horizontal_len = (dx * dx + dz * dz).sqrt();
@@ -2434,7 +3020,7 @@ impl ConnectionHandler {
         if horizontal_len > 0.001 {
             let norm_x = dx / horizontal_len;
             let norm_z = dz / horizontal_len;
-            let kb_horizontal = 0.4;
+            let kb_horizontal = 0.4 + kb_enchant as f32 * 0.3;
             let kb_vertical = 0.4;
             let sprint_mult = if is_sprinting { 1.5 } else { 1.0 };
 
@@ -2453,6 +3039,14 @@ impl ConnectionHandler {
                 },
             )
             .await;
+        }
+
+        // Fire Aspect: set victim on fire
+        let fire_level = combat::fire_aspect_level(&weapon_nbt);
+        if fire_level > 0 {
+            if let Some(conn) = self.connections.get_mut(&victim_addr) {
+                conn.fire_ticks = fire_level as i32 * 80; // 4 seconds per level
+            }
         }
 
         // Check for death
@@ -2508,6 +3102,38 @@ impl ConnectionHandler {
         self.broadcast_packet(packets::id::TEXT, &death_msg).await;
     }
 
+    /// Handle a player death not caused by another player (fire, environment, etc.).
+    async fn handle_player_death_generic(&mut self, victim_addr: SocketAddr, victim_name: &str) {
+        let victim_rid = match self.connections.get(&victim_addr) {
+            Some(c) => c.entity_runtime_id,
+            None => return,
+        };
+
+        if let Some(conn) = self.connections.get_mut(&victim_addr) {
+            conn.is_dead = true;
+            conn.fire_ticks = 0;
+            conn.effects.clear();
+        }
+
+        self.broadcast_packet(packets::id::ENTITY_EVENT, &EntityEvent::death(victim_rid))
+            .await;
+
+        let spawn_pos = Vec3::new(0.5, 5.62, 0.5);
+        self.send_packet(
+            victim_addr,
+            packets::id::RESPAWN,
+            &Respawn {
+                position: spawn_pos,
+                state: 0,
+                runtime_entity_id: victim_rid,
+            },
+        )
+        .await;
+
+        let death_msg = Text::system(format!("{victim_name} died"));
+        self.broadcast_packet(packets::id::TEXT, &death_msg).await;
+    }
+
     /// Handle Respawn packet from client (state=2, client clicked "Respawn").
     async fn handle_respawn(&mut self, addr: SocketAddr, buf: &mut Cursor<&[u8]>) {
         match self.connections.get(&addr) {
@@ -2536,6 +3162,8 @@ impl ConnectionHandler {
                 conn.is_dead = false;
                 conn.last_damage_tick = None;
                 conn.position = spawn_pos;
+                conn.effects.clear();
+                conn.fire_ticks = 0;
                 conn.entity_runtime_id
             }
             None => return,
@@ -3112,6 +3740,33 @@ impl ConnectionHandler {
         }
     }
 
+    /// Send AddActor for all existing mobs to a newly joined player.
+    async fn send_existing_mobs_to(&mut self, addr: SocketAddr) {
+        let mobs = self.game_world.all_mobs();
+        for mob in mobs {
+            let pkt = AddActor {
+                entity_unique_id: mob.unique_id,
+                entity_runtime_id: mob.runtime_id,
+                entity_type: mob.mob_type,
+                position: Vec3::new(mob.position.0, mob.position.1, mob.position.2),
+                velocity: Vec3::ZERO,
+                pitch: mob.pitch,
+                yaw: mob.yaw,
+                head_yaw: mob.head_yaw,
+                body_yaw: mob.yaw,
+                attributes: vec![ActorAttribute {
+                    name: "minecraft:health".to_string(),
+                    min: 0.0,
+                    max: mob.max_health,
+                    current: mob.health,
+                    default: mob.max_health,
+                }],
+                metadata: default_mob_metadata(mob.bb_width, mob.bb_height),
+            };
+            self.send_packet(addr, packets::id::ADD_ACTOR, &pkt).await;
+        }
+    }
+
     /// Broadcast AddPlayer for the new player to all existing InGame players.
     async fn broadcast_add_player(&mut self, new_addr: SocketAddr) {
         let packet = {
@@ -3153,6 +3808,222 @@ impl ConnectionHandler {
         };
         self.broadcast_packet_except(new_addr, packets::id::ADD_PLAYER, &packet)
             .await;
+    }
+
+    // ------------------------------------------------------------------
+    // Status effect management
+    // ------------------------------------------------------------------
+
+    /// Apply a status effect to a player, sending the MobEffect packet.
+    async fn apply_effect(
+        &mut self,
+        addr: SocketAddr,
+        effect_id: i32,
+        amplifier: i32,
+        duration_ticks: i32,
+    ) {
+        let runtime_id = match self.connections.get_mut(&addr) {
+            Some(conn) => {
+                // Remove existing effect of same type
+                conn.effects.retain(|e| e.effect_id != effect_id);
+                conn.effects.push(ActiveEffect {
+                    effect_id,
+                    amplifier,
+                    remaining_ticks: duration_ticks,
+                });
+                conn.entity_runtime_id
+            }
+            None => return,
+        };
+
+        self.send_packet(
+            addr,
+            packets::id::MOB_EFFECT,
+            &MobEffect::add(runtime_id, effect_id, amplifier, duration_ticks, true),
+        )
+        .await;
+    }
+
+    /// Remove a status effect from a player, sending the MobEffect(remove) packet.
+    #[allow(dead_code)]
+    async fn remove_effect(&mut self, addr: SocketAddr, effect_id: i32) {
+        let runtime_id = match self.connections.get_mut(&addr) {
+            Some(conn) => {
+                conn.effects.retain(|e| e.effect_id != effect_id);
+                conn.entity_runtime_id
+            }
+            None => return,
+        };
+
+        self.send_packet(
+            addr,
+            packets::id::MOB_EFFECT,
+            &MobEffect::remove(runtime_id, effect_id),
+        )
+        .await;
+    }
+
+    /// Remove all status effects from a player.
+    async fn clear_effects(&mut self, addr: SocketAddr) {
+        let (runtime_id, effect_ids) = match self.connections.get_mut(&addr) {
+            Some(conn) => {
+                let ids: Vec<i32> = conn.effects.iter().map(|e| e.effect_id).collect();
+                conn.effects.clear();
+                (conn.entity_runtime_id, ids)
+            }
+            None => return,
+        };
+
+        for eid in effect_ids {
+            self.send_packet(
+                addr,
+                packets::id::MOB_EFFECT,
+                &MobEffect::remove(runtime_id, eid),
+            )
+            .await;
+        }
+    }
+
+    /// Tick all active effects for all players. Called once per game tick (50ms).
+    async fn tick_effects(&mut self) {
+        // Collect addresses of all in-game players
+        let addrs: Vec<SocketAddr> = self
+            .connections
+            .iter()
+            .filter(|(_, c)| c.state == LoginState::InGame && !c.is_dead)
+            .map(|(a, _)| *a)
+            .collect();
+
+        for addr in addrs {
+            let conn = match self.connections.get_mut(&addr) {
+                Some(c) => c,
+                None => continue,
+            };
+
+            // Tick fire damage
+            if conn.fire_ticks > 0 {
+                conn.fire_ticks -= 1;
+                if conn.fire_ticks % 20 == 0 && conn.fire_ticks >= 0 {
+                    // Deal 1 fire damage every second (20 ticks)
+                    conn.health = (conn.health - 1.0).max(0.0);
+                    let rid = conn.entity_runtime_id;
+                    let hp = conn.health;
+                    let tick = conn.client_tick;
+                    self.broadcast_packet(packets::id::ENTITY_EVENT, &EntityEvent::hurt(rid))
+                        .await;
+                    self.send_packet(
+                        addr,
+                        packets::id::UPDATE_ATTRIBUTES,
+                        &UpdateAttributes::health(rid, hp, tick),
+                    )
+                    .await;
+                    if hp <= 0.0 {
+                        let name = self
+                            .connections
+                            .get(&addr)
+                            .and_then(|c| c.login_data.as_ref())
+                            .map(|d| d.display_name.clone())
+                            .unwrap_or_default();
+                        self.handle_player_death_generic(addr, &name).await;
+                        continue;
+                    }
+                }
+            }
+
+            // Tick effect durations
+            let mut expired = Vec::new();
+            if let Some(conn) = self.connections.get_mut(&addr) {
+                for effect in &mut conn.effects {
+                    effect.remaining_ticks -= 1;
+                    if effect.remaining_ticks <= 0 {
+                        expired.push(effect.effect_id);
+                    }
+                }
+                conn.effects.retain(|e| e.remaining_ticks > 0);
+            }
+
+            // Send remove packets for expired effects
+            if let Some(conn) = self.connections.get(&addr) {
+                let rid = conn.entity_runtime_id;
+                for eid in expired {
+                    self.send_packet(addr, packets::id::MOB_EFFECT, &MobEffect::remove(rid, eid))
+                        .await;
+                }
+            }
+        }
+    }
+
+    /// Get combat bonuses from active effects for an attacker.
+    /// Returns (strength_bonus, weakness_penalty).
+    fn get_attacker_bonuses(&self, addr: SocketAddr) -> (f32, f32) {
+        use mc_rs_proto::packets::mob_effect::effect_id as eid;
+
+        let conn = match self.connections.get(&addr) {
+            Some(c) => c,
+            None => return (0.0, 0.0),
+        };
+
+        let mut strength = 0.0_f32;
+        let mut weakness = 0.0_f32;
+
+        for effect in &conn.effects {
+            match effect.effect_id {
+                eid::STRENGTH => strength += 3.0 * (effect.amplifier as f32 + 1.0),
+                eid::WEAKNESS => weakness += 4.0,
+                _ => {}
+            }
+        }
+
+        (strength, weakness)
+    }
+
+    /// Get damage resistance factor from victim's effects and armor.
+    /// Returns the resistance factor (0.0 to 1.0).
+    fn get_resistance_factor(&self, addr: SocketAddr) -> f32 {
+        use mc_rs_proto::packets::mob_effect::effect_id as eid;
+
+        let conn = match self.connections.get(&addr) {
+            Some(c) => c,
+            None => return 0.0,
+        };
+
+        let mut factor = 0.0_f32;
+        for effect in &conn.effects {
+            if effect.effect_id == eid::RESISTANCE {
+                factor += 0.2 * (effect.amplifier as f32 + 1.0);
+            }
+        }
+
+        factor.min(1.0)
+    }
+}
+
+/// Map an effect name to its Bedrock protocol ID.
+fn effect_name_to_id(name: &str) -> Option<i32> {
+    use mc_rs_proto::packets::mob_effect::effect_id;
+    match name.to_lowercase().as_str() {
+        "speed" => Some(effect_id::SPEED),
+        "slowness" => Some(effect_id::SLOWNESS),
+        "haste" => Some(effect_id::HASTE),
+        "mining_fatigue" => Some(effect_id::MINING_FATIGUE),
+        "strength" => Some(effect_id::STRENGTH),
+        "instant_health" => Some(effect_id::INSTANT_HEALTH),
+        "instant_damage" => Some(effect_id::INSTANT_DAMAGE),
+        "jump_boost" => Some(effect_id::JUMP_BOOST),
+        "nausea" => Some(effect_id::NAUSEA),
+        "regeneration" => Some(effect_id::REGENERATION),
+        "resistance" => Some(effect_id::RESISTANCE),
+        "fire_resistance" => Some(effect_id::FIRE_RESISTANCE),
+        "water_breathing" => Some(effect_id::WATER_BREATHING),
+        "invisibility" => Some(effect_id::INVISIBILITY),
+        "blindness" => Some(effect_id::BLINDNESS),
+        "night_vision" => Some(effect_id::NIGHT_VISION),
+        "hunger" => Some(effect_id::HUNGER),
+        "weakness" => Some(effect_id::WEAKNESS),
+        "poison" => Some(effect_id::POISON),
+        "wither" => Some(effect_id::WITHER),
+        "absorption" => Some(effect_id::ABSORPTION),
+        _ => None,
     }
 }
 
@@ -3266,4 +4137,30 @@ fn base_attack_damage(registry: &ItemRegistry, runtime_id: i32) -> f32 {
         // Everything else (hoes, misc items, blocks)
         _ => 1.0,
     }
+}
+
+/// Build default entity metadata for a mob (FLAGS, SCALE, bounding box).
+fn default_mob_metadata(bb_width: f32, bb_height: f32) -> Vec<EntityMetadataEntry> {
+    vec![
+        EntityMetadataEntry {
+            key: 0,
+            data_type: 7,
+            value: MetadataValue::Long(0), // FLAGS
+        },
+        EntityMetadataEntry {
+            key: 23,
+            data_type: 3,
+            value: MetadataValue::Float(1.0), // SCALE
+        },
+        EntityMetadataEntry {
+            key: 38,
+            data_type: 3,
+            value: MetadataValue::Float(bb_width), // BB_WIDTH
+        },
+        EntityMetadataEntry {
+            key: 39,
+            data_type: 3,
+            value: MetadataValue::Float(bb_height), // BB_HEIGHT
+        },
+    ]
 }

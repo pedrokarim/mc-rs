@@ -5,5 +5,8 @@ edition = "2021"
 
 [dependencies]
 mc-rs-proto = { path = "../mc-rs-proto" }
+mc-rs-nbt = { path = "../mc-rs-nbt" }
 mc-rs-world = { path = "../mc-rs-world" }
 tracing = { workspace = true }
+bevy_ecs = { version = "0.15", default-features = false, features = ["multi_threaded"] }
+rand = { workspace = true }

@@ -78,7 +78,7 @@ impl ProtoEncode for AddPlayer {
 }
 
 /// Encode entity metadata entries.
-fn encode_entity_metadata(buf: &mut impl BufMut, entries: &[EntityMetadataEntry]) {
+pub fn encode_entity_metadata(buf: &mut impl BufMut, entries: &[EntityMetadataEntry]) {
     VarUInt32(entries.len() as u32).proto_encode(buf);
     for entry in entries {
         VarUInt32(entry.key).proto_encode(buf);

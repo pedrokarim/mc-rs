@@ -4,6 +4,7 @@ mod permissions;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use config::ServerConfig;
 use connection::ConnectionHandler;
@@ -109,8 +110,19 @@ async fn main() {
             server_config,
             shutdown_tx_handler,
         );
-        while let Some(event) = events.recv().await {
-            handler.handle_event(event).await;
+        let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
+        loop {
+            tokio::select! {
+                event = events.recv() => {
+                    match event {
+                        Some(e) => handler.handle_event(e).await,
+                        None => break, // channel closed
+                    }
+                }
+                _ = tick_interval.tick() => {
+                    handler.game_tick().await;
+                }
+            }
         }
     });
 

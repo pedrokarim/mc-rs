@@ -172,28 +172,38 @@ Phase 5 : Polish             ██████████ (continu)
 **Objectif :** Le jeu est fonctionnel avec les mécaniques principales.
 
 ### 3.1 — Entités (ECS)
-- [ ] Setup bevy_ecs
-- [ ] Composants de base (Position, Velocity, Health, etc.)
-- [ ] Systèmes de base (physics, movement, despawn)
-- [ ] Spawn de mobs basiques (zombie, squelette, creeper)
-- [ ] Entity metadata synchronization (SetEntityData)
-- [ ] EntityEvent, UpdateAttributes
+- [x] Setup bevy_ecs (0.15, standalone)
+- [x] Composants de base (Position, Velocity, Health, etc.)
+- [x] Systèmes de base (gravity, movement collection, dead cleanup)
+- [x] Spawn de mobs basiques (zombie, squelette, vache, cochon, poulet)
+- [x] AddActor (0x0D) + MoveActorAbsolute (0x10) packets
+- [x] EntityEvent, UpdateAttributes (hurt/death)
+- [x] PvE combat (joueur attaque mob)
+- [x] /summon command
+- [x] Mob sync to new players
+- [x] Joueurs miroir ECS (spawn/despawn)
 
 ### 3.2 — IA des mobs
-- [ ] Système de behaviors par priorité
-- [ ] Pathfinding A* basique
-- [ ] Behaviors : RandomStroll, LookAtPlayer, Float
-- [ ] Behaviors hostiles : MeleeAttack, HurtByTarget, NearestAttackableTarget
-- [ ] Behaviors passifs : Panic, TemptGoal, BreedGoal
-- [ ] Spawn naturel avec caps
+- [x] Système de behaviors par priorité
+- [x] Pathfinding simplifié (flat world, stub A*)
+- [x] Behaviors : RandomStroll, LookAtPlayer, Float
+- [x] Behaviors hostiles : MeleeAttack, HurtByTarget, NearestAttackableTarget
+- [x] Behaviors passifs : Panic
+- [x] Spawn naturel avec caps et despawn par distance
+- [x] MobAttackPlayer (mob → joueur, dégâts + knockback)
+- [x] Sync position joueur → ECS (prérequis AI)
+- [ ] TemptGoal, BreedGoal (nécessite items en main)
 
 ### 3.3 — Combat complet
-- [ ] Dégâts par arme
-- [ ] Enchantements offensifs et défensifs
-- [ ] Effets de potion (Strength, Weakness, etc.)
-- [ ] Coups critiques
-- [ ] Réduction par armure
-- [ ] Knockback
+- [x] Dégâts par arme
+- [x] Enchantements offensifs et défensifs (Sharpness, Protection, Knockback, Fire Aspect)
+- [x] Effets de potion (Strength, Weakness, Resistance + 21 effets via /effect)
+- [x] Coups critiques (falling detection + 1.5× multiplier + Animate particle)
+- [x] Réduction par armure (Bedrock formula, all materials)
+- [x] Knockback (enchantment bonus + sprint multiplier)
+- [x] Fire Aspect (set target on fire, tick fire damage)
+- [x] Paquet MobEffect (0x1C) — add/modify/remove
+- [x] Commande /effect (apply, clear, entity selectors)
 - [ ] Projectiles (flèches, tridents)
 
 ### 3.4 — Survie
