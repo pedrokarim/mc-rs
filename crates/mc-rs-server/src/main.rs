@@ -1,6 +1,7 @@
 mod config;
 mod connection;
 mod permissions;
+mod persistence;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -103,6 +104,7 @@ async fn main() {
     let online_mode = config.server.online_mode;
     let server_config = config;
     let shutdown_tx_handler = shutdown_tx.clone();
+    let mut shutdown_rx_handler = shutdown_rx.clone();
     tokio::spawn(async move {
         let mut handler = ConnectionHandler::new(
             server_handle,
@@ -121,6 +123,13 @@ async fn main() {
                 }
                 _ = tick_interval.tick() => {
                     handler.game_tick().await;
+                }
+                _ = shutdown_rx_handler.changed() => {
+                    if *shutdown_rx_handler.borrow() {
+                        info!("Saving world before shutdown...");
+                        handler.save_all();
+                        break;
+                    }
                 }
             }
         }

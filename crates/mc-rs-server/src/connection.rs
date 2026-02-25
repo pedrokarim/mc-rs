@@ -38,18 +38,24 @@ use mc_rs_proto::packets::{
 };
 use mc_rs_proto::types::{BlockPos, Uuid, VarUInt32, Vec2, Vec3};
 use mc_rs_raknet::{RakNetEvent, Reliability, ServerHandle};
-use mc_rs_world::block_hash::FlatWorldBlocks;
+use rand::prelude::*;
+
+use mc_rs_world::block_hash::{FlatWorldBlocks, TickBlocks};
 use mc_rs_world::block_registry::BlockRegistry;
+use mc_rs_world::block_tick::{process_random_tick, process_scheduled_tick, TickScheduler};
 use mc_rs_world::chunk::{ChunkColumn, OVERWORLD_MIN_Y, OVERWORLD_SUB_CHUNK_COUNT};
 use mc_rs_world::flat_generator::generate_flat_chunk;
+use mc_rs_world::fluid;
 use mc_rs_world::item_registry::ItemRegistry;
 use mc_rs_world::overworld_generator::OverworldGenerator;
 use mc_rs_world::physics::{PlayerAabb, MAX_AIRBORNE_TICKS, MAX_FALL_PER_TICK};
 use mc_rs_world::serializer::serialize_chunk_column;
+use mc_rs_world::storage::LevelDbProvider;
 use tokio::sync::watch;
 
 use crate::config::ServerConfig;
 use crate::permissions::{BanEntry, PermissionManager};
+use crate::persistence::{LevelDat, PlayerData};
 
 /// Login state machine states.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -181,6 +187,20 @@ pub struct ConnectionHandler {
     recipe_registry: RecipeRegistry,
     /// Permission manager: ops, whitelist, bans.
     permissions: PermissionManager,
+    /// LevelDB chunk storage provider.
+    chunk_storage: LevelDbProvider,
+    /// World metadata (level.dat).
+    level_dat: LevelDat,
+    /// Path to the world directory on disk.
+    world_dir: std::path::PathBuf,
+    /// Tick counter for auto-save scheduling.
+    save_tick_counter: u64,
+    /// Auto-save interval in ticks (0 = disabled).
+    auto_save_interval_ticks: u64,
+    /// Pre-computed block hashes for tick processing.
+    tick_blocks: TickBlocks,
+    /// Scheduled block tick queue.
+    tick_scheduler: TickScheduler,
 }
 
 impl ConnectionHandler {
@@ -224,6 +244,51 @@ impl ConnectionHandler {
             (Vec3::new(0.5, 5.62, 0.5), BlockPos::new(0, 4, 0))
         };
 
+        // Initialize world storage
+        let world_dir = std::path::PathBuf::from(format!("worlds/{}", server_config.world.name));
+        std::fs::create_dir_all(world_dir.join("db")).expect("Failed to create world db directory");
+        std::fs::create_dir_all(world_dir.join("players"))
+            .expect("Failed to create players directory");
+
+        let chunk_storage =
+            LevelDbProvider::open(&world_dir.join("db")).expect("Failed to open LevelDB");
+
+        // Load or create level.dat
+        let level_dat_path = world_dir.join("level.dat");
+        let level_dat = if level_dat_path.exists() {
+            LevelDat::load(&level_dat_path).unwrap_or_else(|e| {
+                warn!("Failed to load level.dat: {e}, creating new");
+                LevelDat::new(
+                    &server_config.world.name,
+                    server_config.world.seed,
+                    &server_config.world.generator,
+                    (spawn_block.x, spawn_block.y, spawn_block.z),
+                )
+            })
+        } else {
+            let dat = LevelDat::new(
+                &server_config.world.name,
+                server_config.world.seed,
+                &server_config.world.generator,
+                (spawn_block.x, spawn_block.y, spawn_block.z),
+            );
+            if let Err(e) = dat.save(&level_dat_path) {
+                warn!("Failed to save initial level.dat: {e}");
+            }
+            dat
+        };
+
+        // Write levelname.txt
+        std::fs::write(world_dir.join("levelname.txt"), &server_config.world.name).ok();
+
+        let auto_save_interval_ticks = server_config.world.auto_save_interval * 20;
+
+        info!(
+            "World directory: {} (auto-save every {}s)",
+            world_dir.display(),
+            server_config.world.auto_save_interval
+        );
+
         Self {
             connections: HashMap::new(),
             server_handle,
@@ -241,6 +306,13 @@ impl ConnectionHandler {
             item_registry: ItemRegistry::new(),
             recipe_registry: RecipeRegistry::new(),
             permissions,
+            chunk_storage,
+            level_dat,
+            world_dir,
+            save_tick_counter: 0,
+            auto_save_interval_ticks,
+            tick_blocks: TickBlocks::compute(),
+            tick_scheduler: TickScheduler::new(),
         }
     }
 
@@ -281,6 +353,16 @@ impl ConnectionHandler {
         self.process_game_events().await;
         self.tick_effects().await;
         self.tick_survival().await;
+        self.tick_block_updates().await;
+
+        // Auto-save
+        if self.auto_save_interval_ticks > 0 {
+            self.save_tick_counter += 1;
+            if self.save_tick_counter >= self.auto_save_interval_ticks {
+                self.save_tick_counter = 0;
+                self.save_all();
+            }
+        }
     }
 
     /// Drain ECS game events and send the corresponding packets.
@@ -560,6 +642,18 @@ impl ConnectionHandler {
     }
 
     async fn handle_session_disconnected(&mut self, addr: SocketAddr) {
+        // Save player data before removing connection
+        if let Some(conn) = self.connections.get(&addr) {
+            if conn.state == LoginState::InGame {
+                if let Some(ref login) = conn.login_data {
+                    let player_data = PlayerData::from_connection(conn);
+                    if let Err(e) = player_data.save(&self.world_dir, &login.identity) {
+                        warn!("Failed to save player data for {}: {e}", login.display_name);
+                    }
+                }
+            }
+        }
+
         // Collect data before removing from connections
         let (was_in_game, entity_unique_id, uuid, display_name) = match self.connections.get(&addr)
         {
@@ -1094,13 +1188,47 @@ impl ConnectionHandler {
     // -----------------------------------------------------------------------
 
     async fn send_start_game(&mut self, addr: SocketAddr) {
-        let (entity_unique_id, entity_runtime_id) = match self.connections.get(&addr) {
-            Some(c) => (c.entity_unique_id, c.entity_runtime_id),
+        let (entity_unique_id, entity_runtime_id, player_uuid) = match self.connections.get(&addr) {
+            Some(c) => {
+                let uuid = c
+                    .login_data
+                    .as_ref()
+                    .map(|d| d.identity.clone())
+                    .unwrap_or_default();
+                (c.entity_unique_id, c.entity_runtime_id, uuid)
+            }
             None => return,
         };
 
+        // Try to load saved player data
+        let saved = if !player_uuid.is_empty() {
+            PlayerData::load(&self.world_dir, &player_uuid)
+        } else {
+            None
+        };
+
+        // Apply saved data to connection (position, health, inventory, effects, etc.)
+        let player_position = if let Some(ref data) = saved {
+            if let Some(conn) = self.connections.get_mut(&addr) {
+                data.apply_to_connection(conn);
+            }
+            Vec3::new(data.position[0], data.position[1], data.position[2])
+        } else {
+            self.spawn_position
+        };
+
+        let player_rotation = if let Some(ref data) = saved {
+            Vec2::new(data.pitch, data.yaw)
+        } else {
+            Vec2::ZERO
+        };
+
         let config = &self.server_config;
-        let gamemode = gamemode_from_str(&config.server.gamemode);
+        let gamemode = if let Some(ref data) = saved {
+            data.gamemode
+        } else {
+            gamemode_from_str(&config.server.gamemode)
+        };
         let difficulty = difficulty_from_str(&config.server.difficulty);
         let generator = generator_from_str(&config.world.generator);
 
@@ -1108,8 +1236,8 @@ impl ConnectionHandler {
             entity_unique_id,
             entity_runtime_id,
             player_gamemode: gamemode,
-            player_position: self.spawn_position,
-            rotation: Vec2::ZERO,
+            player_position,
+            rotation: player_rotation,
             seed: config.world.seed as u64,
             dimension: 0,
             generator,
@@ -1252,9 +1380,15 @@ impl ConnectionHandler {
         let mut count = 0u32;
         for cx in -radius..=radius {
             for cz in -radius..=radius {
-                // Generate chunk if not already cached
+                // Load from disk or generate chunk if not already cached
                 if !self.world_chunks.contains_key(&(cx, cz)) {
-                    let column = self.generate_chunk(cx, cz);
+                    let column = if let Some(loaded) = self.chunk_storage.load_chunk(cx, cz) {
+                        loaded
+                    } else {
+                        let mut gen = self.generate_chunk(cx, cz);
+                        gen.dirty = true;
+                        gen
+                    };
                     self.world_chunks.insert((cx, cz), column);
                 }
 
@@ -1341,7 +1475,13 @@ impl ConnectionHandler {
         // Generate and send new chunks
         for &(cx, cz) in &to_send {
             if !self.world_chunks.contains_key(&(cx, cz)) {
-                let column = self.generate_chunk(cx, cz);
+                let column = if let Some(loaded) = self.chunk_storage.load_chunk(cx, cz) {
+                    loaded
+                } else {
+                    let mut gen = self.generate_chunk(cx, cz);
+                    gen.dirty = true;
+                    gen
+                };
                 self.world_chunks.insert((cx, cz), column);
             }
 
@@ -1918,6 +2058,7 @@ impl ConnectionHandler {
         // Shutdown if requested
         if result.should_stop {
             info!("Server stop requested by {sender_name}");
+            self.save_all();
             let _ = self.shutdown_tx.send(true);
         }
     }
@@ -3667,6 +3808,7 @@ impl ConnectionHandler {
         let local_z = (z & 15) as usize;
 
         column.sub_chunks[sub_index as usize].set_block(local_x, local_y, local_z, runtime_id);
+        column.dirty = true;
         true
     }
 
@@ -3826,6 +3968,9 @@ impl ConnectionHandler {
                 self.broadcast_packet(packets::id::LEVEL_EVENT, &event)
                     .await;
 
+                // Trigger fluid updates for neighbors (water/lava may flow into the gap)
+                self.schedule_fluid_neighbors(pos.x, pos.y, pos.z);
+
                 debug!("Block broken at {pos} by {addr}");
             }
             UseItemAction::ClickBlock => {
@@ -3865,6 +4010,10 @@ impl ConnectionHandler {
                 let update = UpdateBlock::new(target, block_runtime_id);
                 self.broadcast_packet(packets::id::UPDATE_BLOCK, &update)
                     .await;
+
+                // Trigger fluid updates: if placed block is fluid, schedule self;
+                // also schedule neighboring fluids that may be affected
+                self.schedule_fluid_neighbors(target.x, target.y, target.z);
 
                 debug!("Block placed at {target} by {addr}");
             }
@@ -4635,6 +4784,207 @@ impl ConnectionHandler {
                 }
             }
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Block tick system
+    // -----------------------------------------------------------------------
+
+    /// Process random ticks and scheduled ticks for loaded chunks.
+    async fn tick_block_updates(&mut self) {
+        let current_tick = self.game_world.current_tick();
+
+        // 1. Random ticks: 1 random block per non-empty sub-chunk for chunks near players
+        // Collect all changes first (RNG must be scoped before any .await)
+        let all_changes = {
+            let sim_chunks = self.get_simulation_chunks();
+            let mut rng = thread_rng();
+            let mut changes: Vec<(i32, i32, i32, u32)> = Vec::new();
+
+            for (cx, cz) in &sim_chunks {
+                if let Some(column) = self.world_chunks.get(&(*cx, *cz)) {
+                    for sub_idx in 0..OVERWORLD_SUB_CHUNK_COUNT {
+                        // Skip empty sub-chunks (palette = [air] only)
+                        if column.sub_chunks[sub_idx].palette.len() <= 1 {
+                            continue;
+                        }
+
+                        let bx = rng.gen_range(0..16usize);
+                        let by = rng.gen_range(0..16usize);
+                        let bz = rng.gen_range(0..16usize);
+                        let rid = column.sub_chunks[sub_idx].get_block(bx, by, bz);
+
+                        if rid == self.tick_blocks.air {
+                            continue;
+                        }
+
+                        let wx = cx * 16 + bx as i32;
+                        let wy = OVERWORLD_MIN_Y + sub_idx as i32 * 16 + by as i32;
+                        let wz = cz * 16 + bz as i32;
+
+                        let result = process_random_tick(
+                            rid,
+                            wx,
+                            wy,
+                            wz,
+                            &self.tick_blocks,
+                            |x, y, z| self.get_block(x, y, z),
+                            |rid| self.block_registry.is_solid(rid),
+                        );
+                        changes.extend(result);
+                    }
+                }
+            }
+            changes
+        }; // rng dropped here, before any .await
+
+        // Apply all random tick changes
+        for (x, y, z, new_rid) in all_changes {
+            self.set_block_and_broadcast(x, y, z, new_rid).await;
+        }
+
+        // 2. Scheduled ticks (fluid flow, gravity, redstone)
+        let ready = self.tick_scheduler.drain_ready(current_tick);
+        let scheduled_results: Vec<_> = ready
+            .iter()
+            .map(|tick| {
+                process_scheduled_tick(
+                    tick.x,
+                    tick.y,
+                    tick.z,
+                    &self.tick_blocks,
+                    |x, y, z| self.get_block(x, y, z),
+                    |rid| self.block_registry.is_solid(rid),
+                )
+            })
+            .collect();
+        for result in scheduled_results {
+            for (x, y, z, rid) in result.changes {
+                self.set_block_and_broadcast(x, y, z, rid).await;
+            }
+            for (x, y, z, delay, prio) in result.schedule {
+                self.tick_scheduler
+                    .schedule(x, y, z, delay, current_tick, prio);
+            }
+        }
+    }
+
+    /// Get the set of chunk coordinates within simulation distance (4 chunks) of any player.
+    fn get_simulation_chunks(&self) -> HashSet<(i32, i32)> {
+        let mut chunks = HashSet::new();
+        let sim_radius = 4i32;
+
+        for conn in self.connections.values() {
+            if conn.state != LoginState::InGame {
+                continue;
+            }
+            let pcx = (conn.position.x as i32) >> 4;
+            let pcz = (conn.position.z as i32) >> 4;
+
+            for dx in -sim_radius..=sim_radius {
+                for dz in -sim_radius..=sim_radius {
+                    let key = (pcx + dx, pcz + dz);
+                    if self.world_chunks.contains_key(&key) {
+                        chunks.insert(key);
+                    }
+                }
+            }
+        }
+        chunks
+    }
+
+    /// Set a block and broadcast the change to all players.
+    async fn set_block_and_broadcast(&mut self, x: i32, y: i32, z: i32, runtime_id: u32) {
+        if self.set_block(x, y, z, runtime_id) {
+            let pos = BlockPos::new(x, y, z);
+            self.broadcast_packet(
+                packets::id::UPDATE_BLOCK,
+                &UpdateBlock::new(pos, runtime_id),
+            )
+            .await;
+        }
+    }
+
+    /// Schedule fluid ticks for the 6 neighbors of a position (and the position itself if fluid).
+    fn schedule_fluid_neighbors(&mut self, x: i32, y: i32, z: i32) {
+        let current_tick = self.game_world.current_tick();
+        let positions = [
+            (x, y, z),
+            (x - 1, y, z),
+            (x + 1, y, z),
+            (x, y - 1, z),
+            (x, y + 1, z),
+            (x, y, z - 1),
+            (x, y, z + 1),
+        ];
+        for (nx, ny, nz) in positions {
+            if let Some(rid) = self.get_block(nx, ny, nz) {
+                if let Some(ft) = self.tick_blocks.fluid_type(rid) {
+                    let delay = fluid::tick_delay(ft);
+                    self.tick_scheduler
+                        .schedule(nx, ny, nz, delay, current_tick, 0);
+                }
+            }
+        }
+    }
+
+    /// Save all dirty chunks, online player data, and level.dat to disk.
+    pub fn save_all(&mut self) {
+        // Save dirty chunks
+        let dirty_keys: Vec<(i32, i32)> = self
+            .world_chunks
+            .iter()
+            .filter(|(_, col)| col.dirty)
+            .map(|(&k, _)| k)
+            .collect();
+
+        let chunk_count = dirty_keys.len();
+        for key in &dirty_keys {
+            if let Some(col) = self.world_chunks.get(key) {
+                if let Err(e) = self.chunk_storage.save_chunk(col) {
+                    warn!("Failed to save chunk ({},{}): {e}", key.0, key.1);
+                }
+            }
+        }
+        // Mark saved chunks as clean
+        for key in &dirty_keys {
+            if let Some(col) = self.world_chunks.get_mut(key) {
+                col.dirty = false;
+            }
+        }
+
+        if let Err(e) = self.chunk_storage.flush() {
+            warn!("Failed to flush LevelDB: {e}");
+        }
+
+        // Save all online players
+        let mut player_count = 0u32;
+        let player_entries: Vec<(SocketAddr, String)> = self
+            .connections
+            .iter()
+            .filter(|(_, c)| c.state == LoginState::InGame)
+            .filter_map(|(&addr, c)| c.login_data.as_ref().map(|d| (addr, d.identity.clone())))
+            .collect();
+
+        for (addr, uuid) in &player_entries {
+            if let Some(conn) = self.connections.get(addr) {
+                let data = PlayerData::from_connection(conn);
+                if let Err(e) = data.save(&self.world_dir, uuid) {
+                    warn!("Failed to save player {uuid}: {e}");
+                } else {
+                    player_count += 1;
+                }
+            }
+        }
+
+        // Update and save level.dat
+        let tick = self.game_world.current_tick();
+        self.level_dat.update_on_save(tick);
+        if let Err(e) = self.level_dat.save(&self.world_dir.join("level.dat")) {
+            warn!("Failed to save level.dat: {e}");
+        }
+
+        info!("World saved: {chunk_count} chunks, {player_count} players");
     }
 }
 

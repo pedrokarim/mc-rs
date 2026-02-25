@@ -29,3 +29,4 @@ p384 = { version = "0.13", features = ["ecdh", "ecdsa", "pkcs8"] }
 sha2 = "0.10"
 aes = "0.8"
 cfb8 = "0.8"
+rusty-leveldb = "3"

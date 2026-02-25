@@ -242,16 +242,16 @@ Phase 5 : Polish             ██████████ (continu)
 - [ ] Générateur End
 
 ### 3.7 — Monde persistant
-- [ ] LevelDB provider
-- [ ] Sauvegarde/chargement de chunks
-- [ ] level.dat
-- [ ] Sauvegarde des joueurs
-- [ ] Auto-save périodique
+- [x] LevelDB provider (rusty-leveldb, chunk keys, sub-chunk disk serialization)
+- [x] Sauvegarde/chargement de chunks (dirty tracking, load-or-generate pattern)
+- [x] level.dat (8-byte header + NBT LE, load/save/backup)
+- [x] Sauvegarde des joueurs (JSON: position, health, inventory, effects)
+- [x] Auto-save périodique (configurable interval, save on /stop and Ctrl+C)
 
 ### 3.8 — Block ticks et redstone
-- [ ] Random ticks (crops, herbe, feuilles)
-- [ ] Scheduled ticks
-- [ ] Eau et lave (flow)
+- [x] Random ticks (crops growth, grass spread/decay, leaf decay)
+- [x] Scheduled ticks (TickScheduler infrastructure, ready for fluids/redstone)
+- [x] Eau et lave (flow)
 - [ ] Sable/gravier (gravité)
 - [ ] Redstone basique (wire, torch, repeater, lever)
 - [ ] Pistons

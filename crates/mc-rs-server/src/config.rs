@@ -32,6 +32,13 @@ pub struct WorldSection {
     pub name: String,
     pub generator: String,
     pub seed: i64,
+    /// Auto-save interval in seconds. 0 = disabled. Default: 300 (5 minutes).
+    #[serde(default = "default_auto_save_interval")]
+    pub auto_save_interval: u64,
+}
+
+fn default_auto_save_interval() -> u64 {
+    300
 }
 
 #[derive(Debug, Deserialize)]
@@ -79,6 +86,7 @@ mod tests {
         assert_eq!(config.world.name, "world");
         assert_eq!(config.world.generator, "flat");
         assert_eq!(config.world.seed, 12345);
+        assert_eq!(config.world.auto_save_interval, 300); // default
         assert_eq!(config.logging.level, "debug");
         // permissions section defaults when absent
         assert!(!config.permissions.whitelist_enabled);

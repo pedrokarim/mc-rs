@@ -14,6 +14,7 @@ mc-rs-crypto = { path = "../mc-rs-crypto" }
 mc-rs-world = { path = "../mc-rs-world" }
 mc-rs-game = { path = "../mc-rs-game" }
 mc-rs-command = { path = "../mc-rs-command" }
+mc-rs-nbt = { path = "../mc-rs-nbt" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

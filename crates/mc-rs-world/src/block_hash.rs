@@ -87,6 +87,52 @@ fn write_zigzag_varint(buf: &mut BytesMut, value: i32) {
     write_varuint32(buf, encoded);
 }
 
+/// Compute the block runtime ID for a block with a single integer state property.
+///
+/// This produces the same hash the Bedrock client computes when
+/// `block_network_ids_are_hashes = true`.  The NBT compound "states"
+/// contains exactly one TAG_Int entry with the given property name and value.
+pub fn hash_block_state_with_int(name: &str, prop_name: &str, value: i32) -> u32 {
+    let nbt_bytes = serialize_block_state_nbt_with_int(name, prop_name, value);
+    fnv1a_32(&nbt_bytes)
+}
+
+/// Serialize a block state with a single integer state property to network NBT.
+///
+/// Key order inside root compound: "name", "states", "version" (alphabetical).
+/// Inside "states" there is exactly one TAG_Int entry.
+fn serialize_block_state_nbt_with_int(name: &str, prop_name: &str, value: i32) -> Vec<u8> {
+    let mut buf = BytesMut::new();
+
+    // Root TAG_Compound with empty name
+    buf.put_u8(0x0A);
+    write_nbt_varuint_string(&mut buf, "");
+
+    // "name" -> TAG_String
+    buf.put_u8(0x08);
+    write_nbt_varuint_string(&mut buf, "name");
+    write_nbt_varuint_string(&mut buf, name);
+
+    // "states" -> TAG_Compound with one TAG_Int entry
+    buf.put_u8(0x0A);
+    write_nbt_varuint_string(&mut buf, "states");
+    // TAG_Int inside the compound
+    buf.put_u8(0x03);
+    write_nbt_varuint_string(&mut buf, prop_name);
+    write_zigzag_varint(&mut buf, value);
+    buf.put_u8(0x00); // TAG_End for states compound
+
+    // "version" -> TAG_Int
+    buf.put_u8(0x03);
+    write_nbt_varuint_string(&mut buf, "version");
+    write_zigzag_varint(&mut buf, BLOCK_STATE_VERSION);
+
+    // TAG_End for root compound
+    buf.put_u8(0x00);
+
+    buf.to_vec()
+}
+
 /// Pre-computed block runtime IDs for the flat world.
 #[derive(Debug, Clone)]
 pub struct FlatWorldBlocks {
@@ -242,6 +288,224 @@ impl WorldBlocks {
     }
 }
 
+/// Pre-computed block runtime IDs for the tick system (random ticks, fluids, gravity, redstone).
+#[derive(Debug, Clone)]
+pub struct TickBlocks {
+    pub air: u32,
+    pub dirt: u32,
+    pub grass_block: u32,
+    // Crops (growth 0..N)
+    pub wheat: [u32; 8],
+    pub carrots: [u32; 8],
+    pub potatoes: [u32; 8],
+    pub beetroot: [u32; 4],
+    pub farmland: [u32; 8],
+    // Fluids (liquid_depth 0..15)
+    pub water: [u32; 16],
+    pub lava: [u32; 16],
+    // Gravity blocks
+    pub sand: u32,
+    pub gravel: u32,
+    pub red_sand: u32,
+    // Leaves (for decay)
+    pub oak_leaves: u32,
+    pub birch_leaves: u32,
+    pub spruce_leaves: u32,
+    pub acacia_leaves: u32,
+    // Logs (for leaf decay check)
+    pub oak_log: u32,
+    pub birch_log: u32,
+    pub spruce_log: u32,
+    pub acacia_log: u32,
+    // Interaction products (for fluid phase)
+    pub obsidian: u32,
+    pub cobblestone: u32,
+    pub stone: u32,
+}
+
+impl TickBlocks {
+    /// Compute all block hashes needed by the tick system.
+    pub fn compute() -> Self {
+        let mut wheat = [0u32; 8];
+        let mut carrots = [0u32; 8];
+        let mut potatoes = [0u32; 8];
+        let mut beetroot = [0u32; 4];
+        let mut farmland = [0u32; 8];
+        let mut water = [0u32; 16];
+        let mut lava = [0u32; 16];
+
+        for (i, slot) in wheat.iter_mut().enumerate() {
+            *slot = hash_block_state_with_int("minecraft:wheat", "growth", i as i32);
+        }
+        for (i, slot) in carrots.iter_mut().enumerate() {
+            *slot = hash_block_state_with_int("minecraft:carrots", "growth", i as i32);
+        }
+        for (i, slot) in potatoes.iter_mut().enumerate() {
+            *slot = hash_block_state_with_int("minecraft:potatoes", "growth", i as i32);
+        }
+        for (i, slot) in farmland.iter_mut().enumerate() {
+            *slot = hash_block_state_with_int("minecraft:farmland", "moisturized_amount", i as i32);
+        }
+        for (i, slot) in beetroot.iter_mut().enumerate() {
+            *slot = hash_block_state_with_int("minecraft:beetroot", "growth", i as i32);
+        }
+        for (i, slot) in water.iter_mut().enumerate() {
+            *slot = hash_block_state_with_int("minecraft:water", "liquid_depth", i as i32);
+        }
+        for (i, slot) in lava.iter_mut().enumerate() {
+            *slot = hash_block_state_with_int("minecraft:lava", "liquid_depth", i as i32);
+        }
+
+        Self {
+            air: hash_block_state("minecraft:air"),
+            dirt: hash_block_state("minecraft:dirt"),
+            grass_block: hash_block_state("minecraft:grass_block"),
+            wheat,
+            carrots,
+            potatoes,
+            beetroot,
+            farmland,
+            water,
+            lava,
+            sand: hash_block_state("minecraft:sand"),
+            gravel: hash_block_state("minecraft:gravel"),
+            red_sand: hash_block_state("minecraft:red_sand"),
+            oak_leaves: hash_block_state("minecraft:oak_leaves"),
+            birch_leaves: hash_block_state("minecraft:birch_leaves"),
+            spruce_leaves: hash_block_state("minecraft:spruce_leaves"),
+            acacia_leaves: hash_block_state("minecraft:acacia_leaves"),
+            oak_log: hash_block_state("minecraft:oak_log"),
+            birch_log: hash_block_state("minecraft:birch_log"),
+            spruce_log: hash_block_state("minecraft:spruce_log"),
+            acacia_log: hash_block_state("minecraft:acacia_log"),
+            obsidian: hash_block_state("minecraft:obsidian"),
+            cobblestone: hash_block_state("minecraft:cobblestone"),
+            stone: hash_block_state("minecraft:stone"),
+        }
+    }
+
+    /// Check if a runtime ID is any leaf type.
+    pub fn is_leaf(&self, rid: u32) -> bool {
+        rid == self.oak_leaves
+            || rid == self.birch_leaves
+            || rid == self.spruce_leaves
+            || rid == self.acacia_leaves
+    }
+
+    /// Check if a runtime ID is any log type.
+    pub fn is_log(&self, rid: u32) -> bool {
+        rid == self.oak_log
+            || rid == self.birch_log
+            || rid == self.spruce_log
+            || rid == self.acacia_log
+    }
+
+    /// Find the growth stage of a crop block. Returns None if not a crop.
+    pub fn crop_growth(&self, rid: u32) -> Option<(CropType, usize)> {
+        for (i, &h) in self.wheat.iter().enumerate() {
+            if h == rid {
+                return Some((CropType::Wheat, i));
+            }
+        }
+        for (i, &h) in self.carrots.iter().enumerate() {
+            if h == rid {
+                return Some((CropType::Carrots, i));
+            }
+        }
+        for (i, &h) in self.potatoes.iter().enumerate() {
+            if h == rid {
+                return Some((CropType::Potatoes, i));
+            }
+        }
+        for (i, &h) in self.beetroot.iter().enumerate() {
+            if h == rid {
+                return Some((CropType::Beetroot, i));
+            }
+        }
+        None
+    }
+
+    /// Get the runtime ID for a crop at the given growth stage.
+    pub fn crop_at_growth(&self, crop: CropType, growth: usize) -> u32 {
+        match crop {
+            CropType::Wheat => self.wheat[growth],
+            CropType::Carrots => self.carrots[growth],
+            CropType::Potatoes => self.potatoes[growth],
+            CropType::Beetroot => self.beetroot[growth],
+        }
+    }
+
+    /// Maximum growth stage for a crop type.
+    pub fn crop_max_growth(crop: CropType) -> usize {
+        match crop {
+            CropType::Wheat | CropType::Carrots | CropType::Potatoes => 7,
+            CropType::Beetroot => 3,
+        }
+    }
+
+    /// Get the liquid_depth of a water block, or None if not water.
+    pub fn water_depth(&self, rid: u32) -> Option<u8> {
+        for (i, &h) in self.water.iter().enumerate() {
+            if h == rid {
+                return Some(i as u8);
+            }
+        }
+        None
+    }
+
+    /// Get the liquid_depth of a lava block, or None if not lava.
+    pub fn lava_depth(&self, rid: u32) -> Option<u8> {
+        for (i, &h) in self.lava.iter().enumerate() {
+            if h == rid {
+                return Some(i as u8);
+            }
+        }
+        None
+    }
+
+    /// Check if a runtime ID is any water block (any liquid_depth).
+    pub fn is_water(&self, rid: u32) -> bool {
+        self.water.contains(&rid)
+    }
+
+    /// Check if a runtime ID is any lava block (any liquid_depth).
+    pub fn is_lava(&self, rid: u32) -> bool {
+        self.lava.contains(&rid)
+    }
+
+    /// Check if a runtime ID is any fluid (water or lava).
+    pub fn is_fluid(&self, rid: u32) -> bool {
+        self.is_water(rid) || self.is_lava(rid)
+    }
+
+    /// Get the fluid type of a block, or None if not a fluid.
+    pub fn fluid_type(&self, rid: u32) -> Option<FluidType> {
+        if self.is_water(rid) {
+            Some(FluidType::Water)
+        } else if self.is_lava(rid) {
+            Some(FluidType::Lava)
+        } else {
+            None
+        }
+    }
+}
+
+/// Crop type for growth stage lookup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CropType {
+    Wheat,
+    Carrots,
+    Potatoes,
+    Beetroot,
+}
+
+/// Fluid type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FluidType {
+    Water,
+    Lava,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -358,5 +622,96 @@ mod tests {
         assert_eq!(flat.bedrock, world.bedrock);
         assert_eq!(flat.dirt, world.dirt);
         assert_eq!(flat.grass_block, world.grass_block);
+    }
+
+    #[test]
+    fn hash_with_int_differs_from_empty_states() {
+        let empty = hash_block_state("minecraft:water");
+        let with_state = hash_block_state_with_int("minecraft:water", "liquid_depth", 0);
+        // With an explicit state property, the NBT is different from empty states
+        assert_ne!(empty, with_state);
+    }
+
+    #[test]
+    fn hash_with_int_is_deterministic() {
+        let h1 = hash_block_state_with_int("minecraft:wheat", "growth", 3);
+        let h2 = hash_block_state_with_int("minecraft:wheat", "growth", 3);
+        assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn hash_with_int_different_values_differ() {
+        let h0 = hash_block_state_with_int("minecraft:wheat", "growth", 0);
+        let h1 = hash_block_state_with_int("minecraft:wheat", "growth", 1);
+        let h7 = hash_block_state_with_int("minecraft:wheat", "growth", 7);
+        assert_ne!(h0, h1);
+        assert_ne!(h0, h7);
+        assert_ne!(h1, h7);
+    }
+
+    #[test]
+    fn tick_blocks_all_nonzero() {
+        let tb = TickBlocks::compute();
+        assert_ne!(tb.air, 0);
+        assert_ne!(tb.dirt, 0);
+        assert_ne!(tb.grass_block, 0);
+        assert_ne!(tb.sand, 0);
+        assert_ne!(tb.obsidian, 0);
+        for i in 0..8 {
+            assert_ne!(tb.wheat[i], 0, "wheat[{i}]");
+        }
+        for i in 0..16 {
+            assert_ne!(tb.water[i], 0, "water[{i}]");
+            assert_ne!(tb.lava[i], 0, "lava[{i}]");
+        }
+    }
+
+    #[test]
+    fn tick_blocks_water_depths_all_distinct() {
+        let tb = TickBlocks::compute();
+        for i in 0..16 {
+            for j in (i + 1)..16 {
+                assert_ne!(tb.water[i], tb.water[j], "water[{i}] == water[{j}]");
+            }
+        }
+    }
+
+    #[test]
+    fn tick_blocks_crop_growth_lookup() {
+        let tb = TickBlocks::compute();
+        // Wheat growth 3
+        assert_eq!(tb.crop_growth(tb.wheat[3]), Some((CropType::Wheat, 3)));
+        // Beetroot growth 2
+        assert_eq!(
+            tb.crop_growth(tb.beetroot[2]),
+            Some((CropType::Beetroot, 2))
+        );
+        // Air is not a crop
+        assert_eq!(tb.crop_growth(tb.air), None);
+    }
+
+    #[test]
+    fn tick_blocks_is_leaf_and_log() {
+        let tb = TickBlocks::compute();
+        assert!(tb.is_leaf(tb.oak_leaves));
+        assert!(tb.is_leaf(tb.birch_leaves));
+        assert!(!tb.is_leaf(tb.oak_log));
+        assert!(tb.is_log(tb.oak_log));
+        assert!(tb.is_log(tb.spruce_log));
+        assert!(!tb.is_log(tb.oak_leaves));
+    }
+
+    #[test]
+    fn tick_blocks_compatible_with_world_blocks() {
+        let tb = TickBlocks::compute();
+        let wb = WorldBlocks::compute();
+        assert_eq!(tb.air, wb.air);
+        assert_eq!(tb.dirt, wb.dirt);
+        assert_eq!(tb.grass_block, wb.grass_block);
+        assert_eq!(tb.sand, wb.sand);
+        assert_eq!(tb.gravel, wb.gravel);
+        assert_eq!(tb.oak_log, wb.oak_log);
+        assert_eq!(tb.oak_leaves, wb.oak_leaves);
+        assert_eq!(tb.stone, wb.stone);
     }
 }

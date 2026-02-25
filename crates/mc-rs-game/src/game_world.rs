@@ -153,6 +153,11 @@ impl GameWorld {
         std::mem::take(&mut self.world.resource_mut::<OutgoingEvents>().events)
     }
 
+    /// Return the current tick count.
+    pub fn current_tick(&mut self) -> u64 {
+        self.world.resource::<TickCounter>().0
+    }
+
     /// Allocate an entity ID (for players or mobs).
     pub fn allocate_entity_id(&self) -> i64 {
         self.world.resource::<EntityIdAllocator>().allocate()

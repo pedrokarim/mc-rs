@@ -21,6 +21,8 @@ pub struct ChunkColumn {
     pub sub_chunks: [SubChunk; OVERWORLD_SUB_CHUNK_COUNT],
     /// 2D biome map: one biome ID per XZ column, indexed `[x * 16 + z]`.
     pub biomes: [u8; 256],
+    /// Whether this chunk has unsaved modifications.
+    pub dirty: bool,
 }
 
 impl ChunkColumn {
@@ -31,6 +33,7 @@ impl ChunkColumn {
             z,
             sub_chunks: std::array::from_fn(|_| SubChunk::new_single(air_id)),
             biomes: [0; 256],
+            dirty: false,
         }
     }
 
