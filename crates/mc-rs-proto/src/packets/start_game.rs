@@ -279,7 +279,7 @@ fn default_game_rules() -> Vec<GameRule> {
     ]
 }
 
-fn encode_game_rules(buf: &mut impl BufMut, rules: &[GameRule]) {
+pub fn encode_game_rules(buf: &mut impl BufMut, rules: &[GameRule]) {
     VarUInt32(rules.len() as u32).proto_encode(buf);
     for rule in rules {
         codec::write_string(buf, &rule.name);

@@ -2,6 +2,7 @@ mod config;
 mod connection;
 mod permissions;
 mod persistence;
+mod plugin_manager;
 
 use std::net::SocketAddr;
 use std::sync::Arc;

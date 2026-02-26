@@ -29,6 +29,14 @@ pub struct LevelDat {
     pub last_played: i64,
     pub generator: i32,
     pub storage_version: i32,
+    /// Current rain intensity (0.0-1.0).
+    pub rain_level: f32,
+    /// Current lightning intensity (0.0-1.0).
+    pub lightning_level: f32,
+    /// Remaining rain duration in ticks.
+    pub rain_time: i32,
+    /// Remaining thunder duration in ticks.
+    pub lightning_time: i32,
 }
 
 impl LevelDat {
@@ -51,6 +59,10 @@ impl LevelDat {
             last_played: unix_timestamp(),
             generator,
             storage_version: 10,
+            rain_level: 0.0,
+            lightning_level: 0.0,
+            rain_time: 0,
+            lightning_time: 0,
         }
     }
 
@@ -92,6 +104,13 @@ impl LevelDat {
                 .get("StorageVersion")
                 .and_then(|t| t.as_int())
                 .unwrap_or(10),
+            rain_level: c.get("rainLevel").and_then(|t| t.as_float()).unwrap_or(0.0),
+            lightning_level: c
+                .get("lightningLevel")
+                .and_then(|t| t.as_float())
+                .unwrap_or(0.0),
+            rain_time: c.get("rainTime").and_then(|t| t.as_int()).unwrap_or(0),
+            lightning_time: c.get("LightningTime").and_then(|t| t.as_int()).unwrap_or(0),
         })
     }
 
@@ -117,6 +136,10 @@ impl LevelDat {
         compound.insert("Generator".into(), NbtTag::Int(self.generator));
         compound.insert("StorageVersion".into(), NbtTag::Int(self.storage_version));
         compound.insert("NetworkVersion".into(), NbtTag::Int(766));
+        compound.insert("rainLevel".into(), NbtTag::Float(self.rain_level));
+        compound.insert("lightningLevel".into(), NbtTag::Float(self.lightning_level));
+        compound.insert("rainTime".into(), NbtTag::Int(self.rain_time));
+        compound.insert("LightningTime".into(), NbtTag::Int(self.lightning_time));
 
         let root = NbtRoot::new("", compound);
 
@@ -382,6 +405,31 @@ mod tests {
         assert_eq!(loaded.spawn_y, 64);
         assert_eq!(loaded.spawn_z, -20);
         assert_eq!(loaded.storage_version, 10);
+        assert_eq!(loaded.rain_level, 0.0);
+        assert_eq!(loaded.lightning_level, 0.0);
+        assert_eq!(loaded.rain_time, 0);
+        assert_eq!(loaded.lightning_time, 0);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn level_dat_weather_roundtrip() {
+        let dir = temp_dir();
+        let path = dir.join("level.dat");
+
+        let mut dat = LevelDat::new("WeatherWorld", 42, "default", (0, 64, 0));
+        dat.rain_level = 0.75;
+        dat.lightning_level = 0.5;
+        dat.rain_time = 6000;
+        dat.lightning_time = 3000;
+        dat.save(&path).unwrap();
+
+        let loaded = LevelDat::load(&path).unwrap();
+        assert!((loaded.rain_level - 0.75).abs() < 0.001);
+        assert!((loaded.lightning_level - 0.5).abs() < 0.001);
+        assert_eq!(loaded.rain_time, 6000);
+        assert_eq!(loaded.lightning_time, 3000);
 
         std::fs::remove_dir_all(&dir).ok();
     }

@@ -10,6 +10,12 @@ use crate::types::{VarInt, Vec3};
 /// Event ID for block-destroy particles.
 pub const PARTICLE_DESTROY_BLOCK: i32 = 2001;
 
+/// Weather event IDs.
+pub const START_RAIN: i32 = 3001;
+pub const START_THUNDER: i32 = 3002;
+pub const STOP_RAIN: i32 = 3003;
+pub const STOP_THUNDER: i32 = 3004;
+
 /// LevelEvent packet.
 #[derive(Debug, Clone)]
 pub struct LevelEvent {
@@ -19,6 +25,42 @@ pub struct LevelEvent {
 }
 
 impl LevelEvent {
+    /// Start rain weather event.
+    pub fn start_rain() -> Self {
+        Self {
+            event_id: START_RAIN,
+            position: Vec3::ZERO,
+            data: 0,
+        }
+    }
+
+    /// Stop rain weather event.
+    pub fn stop_rain() -> Self {
+        Self {
+            event_id: STOP_RAIN,
+            position: Vec3::ZERO,
+            data: 0,
+        }
+    }
+
+    /// Start thunder weather event.
+    pub fn start_thunder() -> Self {
+        Self {
+            event_id: START_THUNDER,
+            position: Vec3::ZERO,
+            data: 0,
+        }
+    }
+
+    /// Stop thunder weather event.
+    pub fn stop_thunder() -> Self {
+        Self {
+            event_id: STOP_THUNDER,
+            position: Vec3::ZERO,
+            data: 0,
+        }
+    }
+
     /// Create a block-destroy particle event at the block center.
     pub fn destroy_block(block_x: i32, block_y: i32, block_z: i32, runtime_id: u32) -> Self {
         Self {
