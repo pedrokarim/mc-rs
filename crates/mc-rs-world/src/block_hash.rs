@@ -87,22 +87,45 @@ fn write_zigzag_varint(buf: &mut BytesMut, value: i32) {
     write_varuint32(buf, encoded);
 }
 
+/// A block state property value for multi-property hashing.
+#[derive(Debug, Clone)]
+pub enum StateValue<'a> {
+    /// TAG_Int (0x03) — numeric properties like `redstone_signal`, `direction`.
+    Int(i32),
+    /// TAG_Byte (0x01) — boolean-like properties like `open_bit`.
+    Byte(i8),
+    /// TAG_String (0x08) — string properties like `lever_direction`.
+    Str(&'a str),
+}
+
 /// Compute the block runtime ID for a block with a single integer state property.
 ///
 /// This produces the same hash the Bedrock client computes when
 /// `block_network_ids_are_hashes = true`.  The NBT compound "states"
 /// contains exactly one TAG_Int entry with the given property name and value.
 pub fn hash_block_state_with_int(name: &str, prop_name: &str, value: i32) -> u32 {
-    let nbt_bytes = serialize_block_state_nbt_with_int(name, prop_name, value);
+    hash_block_state_with_props(name, &[(prop_name, StateValue::Int(value))])
+}
+
+/// Compute the block runtime ID for a block with multiple state properties.
+///
+/// Properties are sorted alphabetically by name inside the "states" compound,
+/// matching the Bedrock client's serialization order.
+pub fn hash_block_state_with_props(name: &str, props: &[(&str, StateValue)]) -> u32 {
+    let nbt_bytes = serialize_block_state_nbt_with_props(name, props);
     fnv1a_32(&nbt_bytes)
 }
 
-/// Serialize a block state with a single integer state property to network NBT.
+/// Serialize a block state with multiple state properties to network NBT.
 ///
-/// Key order inside root compound: "name", "states", "version" (alphabetical).
-/// Inside "states" there is exactly one TAG_Int entry.
-fn serialize_block_state_nbt_with_int(name: &str, prop_name: &str, value: i32) -> Vec<u8> {
+/// Key order inside root compound: "name", "states", "version".
+/// Properties inside "states" are sorted alphabetically by name.
+fn serialize_block_state_nbt_with_props(name: &str, props: &[(&str, StateValue)]) -> Vec<u8> {
     let mut buf = BytesMut::new();
+
+    // Sort properties alphabetically
+    let mut sorted: Vec<_> = props.iter().collect();
+    sorted.sort_by_key(|(k, _)| *k);
 
     // Root TAG_Compound with empty name
     buf.put_u8(0x0A);
@@ -113,13 +136,28 @@ fn serialize_block_state_nbt_with_int(name: &str, prop_name: &str, value: i32) -
     write_nbt_varuint_string(&mut buf, "name");
     write_nbt_varuint_string(&mut buf, name);
 
-    // "states" -> TAG_Compound with one TAG_Int entry
+    // "states" -> TAG_Compound with entries
     buf.put_u8(0x0A);
     write_nbt_varuint_string(&mut buf, "states");
-    // TAG_Int inside the compound
-    buf.put_u8(0x03);
-    write_nbt_varuint_string(&mut buf, prop_name);
-    write_zigzag_varint(&mut buf, value);
+    for (prop_name, value) in &sorted {
+        match value {
+            StateValue::Int(v) => {
+                buf.put_u8(0x03); // TAG_Int
+                write_nbt_varuint_string(&mut buf, prop_name);
+                write_zigzag_varint(&mut buf, *v);
+            }
+            StateValue::Byte(v) => {
+                buf.put_u8(0x01); // TAG_Byte
+                write_nbt_varuint_string(&mut buf, prop_name);
+                buf.put_i8(*v);
+            }
+            StateValue::Str(v) => {
+                buf.put_u8(0x08); // TAG_String
+                write_nbt_varuint_string(&mut buf, prop_name);
+                write_nbt_varuint_string(&mut buf, v);
+            }
+        }
+    }
     buf.put_u8(0x00); // TAG_End for states compound
 
     // "version" -> TAG_Int
@@ -288,6 +326,21 @@ impl WorldBlocks {
     }
 }
 
+/// Lever direction string values (alphabetical order for indexing).
+pub const LEVER_DIRS: [&str; 8] = [
+    "down_east_west",
+    "down_north_south",
+    "east",
+    "north",
+    "south",
+    "up_east_west",
+    "up_north_south",
+    "west",
+];
+
+/// Torch facing direction string values.
+pub const TORCH_DIRS: [&str; 6] = ["east", "north", "south", "top", "unknown", "west"];
+
 /// Pre-computed block runtime IDs for the tick system (random ticks, fluids, gravity, redstone).
 #[derive(Debug, Clone)]
 pub struct TickBlocks {
@@ -321,6 +374,18 @@ pub struct TickBlocks {
     pub obsidian: u32,
     pub cobblestone: u32,
     pub stone: u32,
+    // Redstone wire (redstone_signal 0..15)
+    pub redstone_wire: [u32; 16],
+    // Lever: [direction_idx][open_bit] — 8 dirs × 2 states
+    pub lever: [[u32; 2]; 8],
+    // Redstone torch: lit and unlit, indexed by direction
+    pub torch_lit: [u32; 6],
+    pub torch_unlit: [u32; 6],
+    // Repeater: [direction][delay] — unpowered and powered
+    pub repeater_off: [[u32; 4]; 4],
+    pub repeater_on: [[u32; 4]; 4],
+    // Redstone block (constant power source)
+    pub redstone_block: u32,
 }
 
 impl TickBlocks {
@@ -356,6 +421,63 @@ impl TickBlocks {
             *slot = hash_block_state_with_int("minecraft:lava", "liquid_depth", i as i32);
         }
 
+        // Redstone wire: redstone_signal 0..15
+        let mut redstone_wire = [0u32; 16];
+        for (i, slot) in redstone_wire.iter_mut().enumerate() {
+            *slot =
+                hash_block_state_with_int("minecraft:redstone_wire", "redstone_signal", i as i32);
+        }
+
+        // Lever: lever_direction (8 strings) × open_bit (0/1)
+        let mut lever = [[0u32; 2]; 8];
+        for (di, dir) in LEVER_DIRS.iter().enumerate() {
+            for bit in 0..2i8 {
+                lever[di][bit as usize] = hash_block_state_with_props(
+                    "minecraft:lever",
+                    &[
+                        ("lever_direction", StateValue::Str(dir)),
+                        ("open_bit", StateValue::Byte(bit)),
+                    ],
+                );
+            }
+        }
+
+        // Redstone torch: torch_facing_direction (6 strings), lit and unlit
+        let mut torch_lit = [0u32; 6];
+        let mut torch_unlit = [0u32; 6];
+        for (di, dir) in TORCH_DIRS.iter().enumerate() {
+            torch_lit[di] = hash_block_state_with_props(
+                "minecraft:redstone_torch",
+                &[("torch_facing_direction", StateValue::Str(dir))],
+            );
+            torch_unlit[di] = hash_block_state_with_props(
+                "minecraft:unlit_redstone_torch",
+                &[("torch_facing_direction", StateValue::Str(dir))],
+            );
+        }
+
+        // Repeater: direction (0-3) × repeater_delay (0-3), unpowered and powered
+        let mut repeater_off = [[0u32; 4]; 4];
+        let mut repeater_on = [[0u32; 4]; 4];
+        for dir in 0..4 {
+            for delay in 0..4 {
+                repeater_off[dir][delay] = hash_block_state_with_props(
+                    "minecraft:unpowered_repeater",
+                    &[
+                        ("direction", StateValue::Int(dir as i32)),
+                        ("repeater_delay", StateValue::Int(delay as i32)),
+                    ],
+                );
+                repeater_on[dir][delay] = hash_block_state_with_props(
+                    "minecraft:powered_repeater",
+                    &[
+                        ("direction", StateValue::Int(dir as i32)),
+                        ("repeater_delay", StateValue::Int(delay as i32)),
+                    ],
+                );
+            }
+        }
+
         Self {
             air: hash_block_state("minecraft:air"),
             dirt: hash_block_state("minecraft:dirt"),
@@ -381,6 +503,13 @@ impl TickBlocks {
             obsidian: hash_block_state("minecraft:obsidian"),
             cobblestone: hash_block_state("minecraft:cobblestone"),
             stone: hash_block_state("minecraft:stone"),
+            redstone_wire,
+            lever,
+            torch_lit,
+            torch_unlit,
+            repeater_off,
+            repeater_on,
+            redstone_block: hash_block_state("minecraft:redstone_block"),
         }
     }
 
@@ -487,6 +616,188 @@ impl TickBlocks {
         } else {
             None
         }
+    }
+
+    /// Check if a runtime ID is a gravity-affected block (sand, gravel, red sand).
+    pub fn is_gravity_block(&self, rid: u32) -> bool {
+        rid == self.sand || rid == self.gravel || rid == self.red_sand
+    }
+
+    // -----------------------------------------------------------------------
+    // Redstone helpers
+    // -----------------------------------------------------------------------
+
+    /// Check if a runtime ID is redstone wire (any signal level).
+    pub fn is_wire(&self, rid: u32) -> bool {
+        self.redstone_wire.contains(&rid)
+    }
+
+    /// Get the signal level of a redstone wire, or None if not wire.
+    pub fn wire_signal(&self, rid: u32) -> Option<u8> {
+        for (i, &h) in self.redstone_wire.iter().enumerate() {
+            if h == rid {
+                return Some(i as u8);
+            }
+        }
+        None
+    }
+
+    /// Check if a runtime ID is any lever state.
+    pub fn is_lever(&self, rid: u32) -> bool {
+        self.lever
+            .iter()
+            .any(|pair| rid == pair[0] || rid == pair[1])
+    }
+
+    /// Check if a lever is in the ON state (open_bit=1).
+    pub fn is_lever_on(&self, rid: u32) -> bool {
+        self.lever.iter().any(|pair| rid == pair[1])
+    }
+
+    /// Toggle a lever: returns the toggled hash, or None if not a lever.
+    pub fn toggle_lever(&self, rid: u32) -> Option<u32> {
+        for pair in &self.lever {
+            if rid == pair[0] {
+                return Some(pair[1]);
+            }
+            if rid == pair[1] {
+                return Some(pair[0]);
+            }
+        }
+        None
+    }
+
+    /// Check if a runtime ID is a lit redstone torch.
+    pub fn is_torch_lit(&self, rid: u32) -> bool {
+        self.torch_lit.contains(&rid)
+    }
+
+    /// Check if a runtime ID is an unlit redstone torch.
+    pub fn is_torch_unlit(&self, rid: u32) -> bool {
+        self.torch_unlit.contains(&rid)
+    }
+
+    /// Check if a runtime ID is any redstone torch (lit or unlit).
+    pub fn is_torch(&self, rid: u32) -> bool {
+        self.is_torch_lit(rid) || self.is_torch_unlit(rid)
+    }
+
+    /// Toggle a torch between lit and unlit, preserving direction.
+    pub fn toggle_torch(&self, rid: u32) -> Option<u32> {
+        for (i, &h) in self.torch_lit.iter().enumerate() {
+            if h == rid {
+                return Some(self.torch_unlit[i]);
+            }
+        }
+        for (i, &h) in self.torch_unlit.iter().enumerate() {
+            if h == rid {
+                return Some(self.torch_lit[i]);
+            }
+        }
+        None
+    }
+
+    /// Get the direction index of a torch (index into TORCH_DIRS).
+    pub fn torch_direction(&self, rid: u32) -> Option<usize> {
+        for (i, &h) in self.torch_lit.iter().enumerate() {
+            if h == rid {
+                return Some(i);
+            }
+        }
+        for (i, &h) in self.torch_unlit.iter().enumerate() {
+            if h == rid {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    /// Check if a runtime ID is any repeater (powered or unpowered).
+    pub fn is_repeater(&self, rid: u32) -> bool {
+        self.repeater_off
+            .iter()
+            .flatten()
+            .chain(self.repeater_on.iter().flatten())
+            .any(|&h| h == rid)
+    }
+
+    /// Check if a repeater is in the powered state.
+    pub fn is_repeater_powered(&self, rid: u32) -> bool {
+        self.repeater_on.iter().flatten().any(|&h| h == rid)
+    }
+
+    /// Toggle a repeater between powered and unpowered, preserving direction and delay.
+    pub fn toggle_repeater(&self, rid: u32) -> Option<u32> {
+        for dir in 0..4 {
+            for delay in 0..4 {
+                if rid == self.repeater_off[dir][delay] {
+                    return Some(self.repeater_on[dir][delay]);
+                }
+                if rid == self.repeater_on[dir][delay] {
+                    return Some(self.repeater_off[dir][delay]);
+                }
+            }
+        }
+        None
+    }
+
+    /// Cycle a repeater's delay: 0→1→2→3→0, preserving direction and powered state.
+    pub fn cycle_repeater_delay(&self, rid: u32) -> Option<u32> {
+        for dir in 0..4 {
+            for delay in 0..4 {
+                let next = (delay + 1) % 4;
+                if rid == self.repeater_off[dir][delay] {
+                    return Some(self.repeater_off[dir][next]);
+                }
+                if rid == self.repeater_on[dir][delay] {
+                    return Some(self.repeater_on[dir][next]);
+                }
+            }
+        }
+        None
+    }
+
+    /// Get the delay setting (0-3) of a repeater.
+    pub fn repeater_delay(&self, rid: u32) -> Option<u8> {
+        for dir in 0..4 {
+            for delay in 0..4 {
+                if rid == self.repeater_off[dir][delay] || rid == self.repeater_on[dir][delay] {
+                    return Some(delay as u8);
+                }
+            }
+        }
+        None
+    }
+
+    /// Get the direction (0-3) of a repeater.
+    pub fn repeater_direction(&self, rid: u32) -> Option<u8> {
+        for dir in 0..4 {
+            for delay in 0..4 {
+                if rid == self.repeater_off[dir][delay] || rid == self.repeater_on[dir][delay] {
+                    return Some(dir as u8);
+                }
+            }
+        }
+        None
+    }
+
+    /// Check if a block is a redstone power source (lever on, torch lit, redstone block).
+    pub fn is_power_source(&self, rid: u32) -> bool {
+        self.is_lever_on(rid) || self.is_torch_lit(rid) || rid == self.redstone_block
+    }
+
+    /// Get the power output of a block (15 for power sources, 0 otherwise).
+    pub fn power_output(&self, rid: u32) -> u8 {
+        if self.is_power_source(rid) {
+            15
+        } else {
+            0
+        }
+    }
+
+    /// Check if a block is any redstone component (wire, torch, or repeater).
+    pub fn is_redstone_component(&self, rid: u32) -> bool {
+        self.is_wire(rid) || self.is_torch(rid) || self.is_repeater(rid)
     }
 }
 

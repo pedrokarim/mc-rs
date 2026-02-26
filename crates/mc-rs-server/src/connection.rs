@@ -18,6 +18,7 @@ use mc_rs_game::combat;
 use mc_rs_game::game_world::{GameEvent, GameWorld};
 use mc_rs_game::inventory::PlayerInventory;
 use mc_rs_game::recipe::RecipeRegistry;
+use mc_rs_game::xp;
 use mc_rs_proto::batch::{decode_batch, encode_single, BatchConfig};
 use mc_rs_proto::codec::{ProtoDecode, ProtoEncode};
 use mc_rs_proto::compression::CompressionAlgorithm;
@@ -46,9 +47,11 @@ use mc_rs_world::block_tick::{process_random_tick, process_scheduled_tick, TickS
 use mc_rs_world::chunk::{ChunkColumn, OVERWORLD_MIN_Y, OVERWORLD_SUB_CHUNK_COUNT};
 use mc_rs_world::flat_generator::generate_flat_chunk;
 use mc_rs_world::fluid;
+use mc_rs_world::gravity;
 use mc_rs_world::item_registry::ItemRegistry;
 use mc_rs_world::overworld_generator::OverworldGenerator;
 use mc_rs_world::physics::{PlayerAabb, MAX_AIRBORNE_TICKS, MAX_FALL_PER_TICK};
+use mc_rs_world::redstone;
 use mc_rs_world::serializer::serialize_chunk_column;
 use mc_rs_world::storage::LevelDbProvider;
 use tokio::sync::watch;
@@ -148,6 +151,10 @@ pub struct PlayerConnection {
     pub air_ticks: i32,
     /// Whether the player is swimming (from PlayerAuthInput flags).
     pub is_swimming: bool,
+    /// XP level (0+).
+    pub xp_level: i32,
+    /// Total accumulated XP.
+    pub xp_total: i32,
 }
 
 /// An active status effect on a player.
@@ -224,6 +231,7 @@ impl ConnectionHandler {
         command_registry.register_stub("unban-ip", "Unban an IP address");
         command_registry.register_stub("whitelist", "Manage the whitelist");
         command_registry.register_stub("summon", "Summon an entity");
+        command_registry.register_stub("enchant", "Enchant the held item");
 
         let permissions = PermissionManager::load(server_config.permissions.whitelist_enabled);
 
@@ -439,6 +447,8 @@ impl ConnectionHandler {
                 GameEvent::MobDied {
                     runtime_id,
                     unique_id,
+                    ref mob_type,
+                    killed_by,
                 } => {
                     self.broadcast_packet(
                         packets::id::ENTITY_EVENT,
@@ -452,6 +462,20 @@ impl ConnectionHandler {
                         },
                     )
                     .await;
+                    // Award XP to the killer
+                    if let Some(killer_rid) = killed_by {
+                        if let Some(killer_addr) = self.find_addr_by_runtime_id(killer_rid) {
+                            let looting_bonus = self
+                                .connections
+                                .get(&killer_addr)
+                                .map(|c| {
+                                    combat::looting_level(&c.inventory.held_item().nbt_data) as i32
+                                })
+                                .unwrap_or(0);
+                            let base_xp = xp::mob_xp(mob_type);
+                            self.award_xp(killer_addr, base_xp + looting_bonus).await;
+                        }
+                    }
                 }
                 GameEvent::EntityRemoved { unique_id } => {
                     self.broadcast_packet(
@@ -463,7 +487,7 @@ impl ConnectionHandler {
                     .await;
                 }
                 GameEvent::MobAttackPlayer {
-                    mob_runtime_id: _,
+                    mob_runtime_id,
                     target_runtime_id,
                     damage: raw_damage,
                     knockback,
@@ -557,9 +581,21 @@ impl ConnectionHandler {
                         )
                         .await;
 
+                        // Thorns: reflect damage back to the attacking mob
+                        let thorns = combat::thorns_level(&armor_refs);
+                        if thorns > 0 {
+                            let thorns_dmg = (thorns as f32).min(4.0);
+                            let mob_tick = self.game_world.current_tick();
+                            self.game_world
+                                .damage_mob(mob_runtime_id, thorns_dmg, mob_tick, None);
+                        }
+
                         if is_dead {
-                            // Death flow
+                            // Death flow — XP loss + mark dead
                             let conn = self.connections.get_mut(&addr).unwrap();
+                            let (nl, nt) = xp::after_death(conn.xp_level, conn.xp_total);
+                            conn.xp_level = nl;
+                            conn.xp_total = nt;
                             conn.is_dead = true;
                             conn.health = 0.0;
 
@@ -625,6 +661,8 @@ impl ConnectionHandler {
                 fall_distance: 0.0,
                 air_ticks: 300,
                 is_swimming: false,
+                xp_level: 0,
+                xp_total: 0,
             },
         );
 
@@ -1548,16 +1586,24 @@ impl ConnectionHandler {
         // 5. Send AddActor for all existing mobs to the new player
         self.send_existing_mobs_to(addr).await;
 
-        // 6. Send initial health + hunger attributes so the client HUD shows correctly
-        let rid = self
-            .connections
-            .get(&addr)
-            .map(|c| c.entity_runtime_id)
-            .unwrap_or(0);
+        // 6. Send initial health + hunger + XP attributes so the client HUD shows correctly
+        let (rid, hp, food, sat, exh, xl, xt) = match self.connections.get(&addr) {
+            Some(c) => (
+                c.entity_runtime_id,
+                c.health,
+                c.food as f32,
+                c.saturation,
+                c.exhaustion,
+                c.xp_level,
+                c.xp_total,
+            ),
+            None => return,
+        };
+        let xp_progress = xp::xp_progress(xl, xt);
         self.send_packet(
             addr,
             packets::id::UPDATE_ATTRIBUTES,
-            &UpdateAttributes::health_and_hunger(rid, 20.0, 20.0, 5.0, 0.0, 0),
+            &UpdateAttributes::all(rid, hp, food, sat, exh, xl, xp_progress, 0),
         )
         .await;
 
@@ -1795,7 +1841,16 @@ impl ConnectionHandler {
                     .map(|c| c.fall_distance)
                     .unwrap_or(0.0);
                 if fall_dist > 3.0 {
-                    let damage = (fall_dist - 3.0).ceil();
+                    let mut damage = (fall_dist - 3.0).ceil();
+                    // Feather Falling reduction from boots (armor slot 3)
+                    let ff_reduction = self
+                        .connections
+                        .get(&addr)
+                        .map(|c| combat::feather_falling_reduction(&c.inventory.armor[3].nbt_data))
+                        .unwrap_or(0.0);
+                    if ff_reduction > 0.0 {
+                        damage *= 1.0 - ff_reduction;
+                    }
                     let conn = match self.connections.get_mut(&addr) {
                         Some(c) => c,
                         None => return,
@@ -1974,6 +2029,7 @@ impl ConnectionHandler {
                 | "unban-ip"
                 | "whitelist"
                 | "summon"
+                | "enchant"
                 | "stop"
         );
         if needs_op && !self.permissions.ops.contains(&sender_name) {
@@ -2004,6 +2060,7 @@ impl ConnectionHandler {
             "whitelist" => Some(self.cmd_whitelist(&raw_args)),
             "summon" => Some(self.cmd_summon(addr, &raw_args)),
             "effect" => Some(self.cmd_effect(addr, &sender_name, &raw_args).await),
+            "enchant" => Some(self.cmd_enchant(addr, &sender_name, &raw_args).await),
             _ => None,
         };
 
@@ -3029,6 +3086,95 @@ impl ConnectionHandler {
         }
     }
 
+    /// /enchant <target> <enchantment_name> [level]
+    async fn cmd_enchant(
+        &mut self,
+        sender_addr: SocketAddr,
+        _sender_name: &str,
+        args: &[String],
+    ) -> CommandResult {
+        if args.len() < 2 {
+            return CommandResult::err("Usage: /enchant <target> <enchantment> [level]");
+        }
+
+        let targets = match self.resolve_target(&args[0], sender_addr) {
+            Ok(t) => t,
+            Err(e) => return CommandResult::err(e),
+        };
+
+        let ench_name = &args[1];
+        let info = match combat::enchantment_by_name(ench_name) {
+            Some(i) => i,
+            None => {
+                return CommandResult::err(format!("Unknown enchantment: {ench_name}"));
+            }
+        };
+
+        let level: i16 = if args.len() >= 3 {
+            match args[2].parse::<i16>() {
+                Ok(l) if l >= 1 => l.min(info.max_level),
+                _ => return CommandResult::err("Invalid level (must be >= 1)"),
+            }
+        } else {
+            1
+        };
+
+        let mut messages = Vec::new();
+        for target_name in &targets {
+            let target_addr = match self.find_player_addr(target_name) {
+                Some(a) => a,
+                None => {
+                    messages.push(format!("Player not found: {target_name}"));
+                    continue;
+                }
+            };
+
+            // Get current enchantments on held item
+            let old_nbt = match self.connections.get(&target_addr) {
+                Some(c) => {
+                    let held = c.inventory.held_item();
+                    if held.runtime_id == 0 {
+                        messages.push(format!("{target_name} is not holding an item"));
+                        continue;
+                    }
+                    held.nbt_data.clone()
+                }
+                None => continue,
+            };
+
+            // Parse existing enchantments, update/add the new one
+            let mut enchants = combat::parse_enchantments(&old_nbt);
+            if let Some(existing) = enchants.iter_mut().find(|e| e.id == info.id) {
+                existing.level = level;
+            } else {
+                enchants.push(combat::Enchantment { id: info.id, level });
+            }
+
+            // Rebuild NBT
+            let new_nbt = combat::build_enchantment_nbt(&enchants);
+
+            // Apply to held item
+            if let Some(conn) = self.connections.get_mut(&target_addr) {
+                conn.inventory.held_item_mut().nbt_data = new_nbt;
+            }
+
+            // Send updated inventory
+            self.send_inventory(target_addr).await;
+
+            messages.push(format!(
+                "Applied {} {} to {target_name}'s held item",
+                info.name, level
+            ));
+        }
+
+        CommandResult {
+            success: true,
+            messages,
+            broadcast: None,
+            should_stop: false,
+        }
+    }
+
     // -----------------------------------------------------------------------
     // PvP combat
     // -----------------------------------------------------------------------
@@ -3145,9 +3291,14 @@ impl ConnectionHandler {
                 .map(|c| c.client_tick)
                 .unwrap_or(0);
 
+            let attacker_rid = self
+                .connections
+                .get(&attacker_addr)
+                .map(|c| c.entity_runtime_id)
+                .unwrap_or(0);
             if self
                 .game_world
-                .damage_mob(victim_runtime_id, damage, attacker_tick)
+                .damage_mob(victim_runtime_id, damage, attacker_tick, Some(attacker_rid))
                 .is_none()
             {
                 return; // invulnerable
@@ -3370,8 +3521,11 @@ impl ConnectionHandler {
             None => return,
         };
 
-        // Mark as dead
+        // XP loss on death + mark as dead
         if let Some(conn) = self.connections.get_mut(&victim_addr) {
+            let (nl, nt) = xp::after_death(conn.xp_level, conn.xp_total);
+            conn.xp_level = nl;
+            conn.xp_total = nt;
             conn.is_dead = true;
         }
 
@@ -3412,6 +3566,9 @@ impl ConnectionHandler {
         };
 
         if let Some(conn) = self.connections.get_mut(&victim_addr) {
+            let (nl, nt) = xp::after_death(conn.xp_level, conn.xp_total);
+            conn.xp_level = nl;
+            conn.xp_total = nt;
             conn.is_dead = true;
             conn.fire_ticks = 0;
             conn.effects.clear();
@@ -3489,16 +3646,16 @@ impl ConnectionHandler {
         )
         .await;
 
-        // Send full health
-        let tick = self
-            .connections
-            .get(&addr)
-            .map(|c| c.client_tick)
-            .unwrap_or(0);
+        // Send full health + hunger + XP
+        let (tick, xl, xt) = match self.connections.get(&addr) {
+            Some(c) => (c.client_tick, c.xp_level, c.xp_total),
+            None => return,
+        };
+        let xp_prog = xp::xp_progress(xl, xt);
         self.send_packet(
             addr,
             packets::id::UPDATE_ATTRIBUTES,
-            &UpdateAttributes::health_and_hunger(runtime_id, 20.0, 20.0, 5.0, 0.0, tick),
+            &UpdateAttributes::all(runtime_id, 20.0, 20.0, 5.0, 0.0, xl, xp_prog, tick),
         )
         .await;
 
@@ -3926,14 +4083,25 @@ impl ConnectionHandler {
                     if let Some(expected_secs) =
                         self.block_registry.expected_mining_secs(old_runtime_id)
                     {
-                        if expected_secs > 0.0 {
+                        // Apply Efficiency enchantment to expected mining time
+                        let eff_level = self
+                            .connections
+                            .get(&addr)
+                            .map(|c| combat::efficiency_level(&c.inventory.held_item().nbt_data))
+                            .unwrap_or(0);
+                        let adjusted_secs = if eff_level > 0 {
+                            expected_secs / (1.0 + (eff_level * eff_level) as f32)
+                        } else {
+                            expected_secs
+                        };
+                        if adjusted_secs > 0.0 {
                             match breaking_info {
                                 Some((break_pos, start_time)) if break_pos == pos => {
                                     let elapsed = start_time.elapsed().as_secs_f32();
-                                    let min_allowed = expected_secs * 0.8;
+                                    let min_allowed = adjusted_secs * 0.8;
                                     if elapsed < min_allowed {
                                         debug!(
-                                            "Mining too fast at {pos} by {addr}: {elapsed:.2}s < {min_allowed:.2}s (expected {expected_secs:.2}s)"
+                                            "Mining too fast at {pos} by {addr}: {elapsed:.2}s < {min_allowed:.2}s (expected {adjusted_secs:.2}s)"
                                         );
                                         return;
                                     }
@@ -3971,9 +4139,44 @@ impl ConnectionHandler {
                 // Trigger fluid updates for neighbors (water/lava may flow into the gap)
                 self.schedule_fluid_neighbors(pos.x, pos.y, pos.z);
 
+                // Trigger redstone updates if broken near wire
+                self.update_redstone_from(pos.x, pos.y, pos.z).await;
+
+                // Award XP for ore mining (survival only)
+                if gamemode == 0 {
+                    if let Some(info) = self.block_registry.get(old_runtime_id) {
+                        let ore_xp = xp::ore_xp_random(info.name);
+                        if ore_xp > 0 {
+                            self.award_xp(addr, ore_xp).await;
+                        }
+                    }
+                }
+
                 debug!("Block broken at {pos} by {addr}");
             }
             UseItemAction::ClickBlock => {
+                // Check if the clicked block is interactive (lever, repeater)
+                let click_pos = use_item.block_position;
+                if let Some(rid) = self.get_block(click_pos.x, click_pos.y, click_pos.z) {
+                    if let Some(toggled) = self.tick_blocks.toggle_lever(rid) {
+                        self.set_block_and_broadcast(
+                            click_pos.x,
+                            click_pos.y,
+                            click_pos.z,
+                            toggled,
+                        )
+                        .await;
+                        self.update_redstone_from(click_pos.x, click_pos.y, click_pos.z)
+                            .await;
+                        return;
+                    }
+                    if let Some(cycled) = self.tick_blocks.cycle_repeater_delay(rid) {
+                        self.set_block_and_broadcast(click_pos.x, click_pos.y, click_pos.z, cycled)
+                            .await;
+                        return;
+                    }
+                }
+
                 let target = Self::face_offset(use_item.block_position, use_item.face);
 
                 // Check bounds
@@ -4014,6 +4217,10 @@ impl ConnectionHandler {
                 // Trigger fluid updates: if placed block is fluid, schedule self;
                 // also schedule neighboring fluids that may be affected
                 self.schedule_fluid_neighbors(target.x, target.y, target.z);
+
+                // Trigger redstone updates if placed near wire
+                self.update_redstone_from(target.x, target.y, target.z)
+                    .await;
 
                 debug!("Block placed at {target} by {addr}");
             }
@@ -4408,8 +4615,16 @@ impl ConnectionHandler {
             if conn.fire_ticks > 0 {
                 conn.fire_ticks -= 1;
                 if !has_fire_res && conn.fire_ticks % 20 == 0 && conn.fire_ticks >= 0 {
-                    // Deal 1 fire damage every second (20 ticks)
-                    conn.health = (conn.health - 1.0).max(0.0);
+                    // Deal 1 fire damage every second, reduced by Fire Protection
+                    let nbt: Vec<&[u8]> = conn
+                        .inventory
+                        .armor
+                        .iter()
+                        .map(|i| i.nbt_data.as_slice())
+                        .collect();
+                    let fp_reduction = combat::fire_protection_reduction(&nbt);
+                    let fire_dmg = 1.0 * (1.0 - fp_reduction);
+                    conn.health = (conn.health - fire_dmg).max(0.0);
                     let rid = conn.entity_runtime_id;
                     let hp = conn.health;
                     let tick = conn.client_tick;
@@ -4636,8 +4851,17 @@ impl ConnectionHandler {
                         conn.air_ticks = 300;
                     }
                 } else {
-                    if let Some(conn) = self.connections.get_mut(&addr) {
-                        conn.air_ticks -= 1;
+                    // Respiration: slow air consumption (skip decrement some ticks)
+                    let resp_level = self
+                        .connections
+                        .get(&addr)
+                        .map(|c| combat::respiration_level(&c.inventory.armor[0].nbt_data))
+                        .unwrap_or(0);
+                    let should_drain = resp_level == 0 || tick % (resp_level as u64 + 1) == 0;
+                    if should_drain {
+                        if let Some(conn) = self.connections.get_mut(&addr) {
+                            conn.air_ticks -= 1;
+                        }
                     }
                     let air = self
                         .connections
@@ -4714,12 +4938,26 @@ impl ConnectionHandler {
                     .unwrap_or(false);
 
                 if !has_fire_res && tick % 10 == 0 {
-                    // 4 damage every 0.5 seconds
+                    // 4 damage every 0.5 seconds, reduced by Fire Protection
+                    let fp_reduction = self
+                        .connections
+                        .get(&addr)
+                        .map(|c| {
+                            let nbt: Vec<&[u8]> = c
+                                .inventory
+                                .armor
+                                .iter()
+                                .map(|i| i.nbt_data.as_slice())
+                                .collect();
+                            combat::fire_protection_reduction(&nbt)
+                        })
+                        .unwrap_or(0.0);
+                    let lava_dmg = 4.0 * (1.0 - fp_reduction);
                     let conn = match self.connections.get_mut(&addr) {
                         Some(c) => c,
                         None => continue,
                     };
-                    conn.health = (conn.health - 4.0).max(0.0);
+                    conn.health = (conn.health - lava_dmg).max(0.0);
                     let hp = conn.health;
                     self.broadcast_packet(packets::id::ENTITY_EVENT, &EntityEvent::hurt(rid))
                         .await;
@@ -4905,7 +5143,7 @@ impl ConnectionHandler {
         }
     }
 
-    /// Schedule fluid ticks for the 6 neighbors of a position (and the position itself if fluid).
+    /// Schedule fluid and gravity ticks for neighbors of a changed position.
     fn schedule_fluid_neighbors(&mut self, x: i32, y: i32, z: i32) {
         let current_tick = self.game_world.current_tick();
         let positions = [
@@ -4923,9 +5161,75 @@ impl ConnectionHandler {
                     let delay = fluid::tick_delay(ft);
                     self.tick_scheduler
                         .schedule(nx, ny, nz, delay, current_tick, 0);
+                } else if self.tick_blocks.is_gravity_block(rid) {
+                    self.tick_scheduler.schedule(
+                        nx,
+                        ny,
+                        nz,
+                        gravity::GRAVITY_TICK_DELAY,
+                        current_tick,
+                        0,
+                    );
                 }
             }
         }
+    }
+
+    /// Recalculate redstone wire near a position and apply changes.
+    ///
+    /// Called after block break/place or lever toggle to propagate signal changes.
+    async fn update_redstone_from(&mut self, x: i32, y: i32, z: i32) {
+        let current_tick = self.game_world.current_tick();
+        let result = redstone::recalculate_wire_from(
+            x,
+            y,
+            z,
+            &self.tick_blocks,
+            |bx, by, bz| self.get_block(bx, by, bz),
+            |rid| self.block_registry.is_solid(rid),
+        );
+        for (cx, cy, cz, rid) in result.changes {
+            self.set_block_and_broadcast(cx, cy, cz, rid).await;
+        }
+        for (sx, sy, sz, delay, prio) in result.schedule {
+            self.tick_scheduler
+                .schedule(sx, sy, sz, delay, current_tick, prio);
+        }
+    }
+
+    /// Send XP attributes to a player.
+    async fn send_xp_attributes(&mut self, addr: SocketAddr) {
+        let (rid, level, total, tick) = match self.connections.get(&addr) {
+            Some(c) => (c.entity_runtime_id, c.xp_level, c.xp_total, c.client_tick),
+            None => return,
+        };
+        let progress = xp::xp_progress(level, total);
+        self.send_packet(
+            addr,
+            packets::id::UPDATE_ATTRIBUTES,
+            &UpdateAttributes::xp(rid, level, progress, tick),
+        )
+        .await;
+    }
+
+    /// Award XP to a player (survival mode only) and send attribute update.
+    async fn award_xp(&mut self, addr: SocketAddr, amount: i32) {
+        if amount <= 0 {
+            return;
+        }
+        let gamemode = match self.connections.get(&addr) {
+            Some(c) if !c.is_dead => c.gamemode,
+            _ => return,
+        };
+        if gamemode != 0 {
+            return; // survival only
+        }
+        if let Some(conn) = self.connections.get_mut(&addr) {
+            let (nl, nt) = xp::add_xp(conn.xp_level, conn.xp_total, amount);
+            conn.xp_level = nl;
+            conn.xp_total = nt;
+        }
+        self.send_xp_attributes(addr).await;
     }
 
     /// Save all dirty chunks, online player data, and level.dat to disk.

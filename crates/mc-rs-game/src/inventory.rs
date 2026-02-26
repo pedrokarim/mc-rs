@@ -125,6 +125,12 @@ impl PlayerInventory {
             .unwrap_or(&self.main[0])
     }
 
+    /// Get a mutable reference to the currently held item.
+    pub fn held_item_mut(&mut self) -> &mut ItemStack {
+        let slot = self.held_slot as usize;
+        &mut self.main[slot]
+    }
+
     /// Allocate a unique stack network ID.
     pub fn next_stack_network_id(&self) -> i32 {
         self.next_stack_id.fetch_add(1, Ordering::Relaxed)

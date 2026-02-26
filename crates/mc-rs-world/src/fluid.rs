@@ -181,8 +181,7 @@ fn process_flowing<G: Fn(i32, i32, i32) -> Option<u32>, S: Fn(u32) -> bool>(
     update: &mut FluidUpdate,
 ) {
     // Check infinite water source: 2+ horizontal water sources → become source
-    if ctx.fluid == FluidType::Water
-        && check_infinite_water_source(x, y, z, ctx.tb, &ctx.get_block)
+    if ctx.fluid == FluidType::Water && check_infinite_water_source(x, y, z, ctx.tb, &ctx.get_block)
     {
         update
             .changes

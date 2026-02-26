@@ -85,6 +85,10 @@ pub struct NetworkAddr(pub SocketAddr);
 #[derive(Component, Debug, Clone, Copy)]
 pub struct MovementSpeed(pub f32);
 
+/// The runtime_id of the last entity that dealt damage to this mob.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct LastAttacker(pub Option<u64>);
+
 /// The entity this mob is currently targeting.
 #[derive(Component, Debug, Clone)]
 pub struct AiTarget {

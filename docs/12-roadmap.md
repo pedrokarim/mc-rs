@@ -252,15 +252,17 @@ Phase 5 : Polish             ██████████ (continu)
 - [x] Random ticks (crops growth, grass spread/decay, leaf decay)
 - [x] Scheduled ticks (TickScheduler infrastructure, ready for fluids/redstone)
 - [x] Eau et lave (flow)
-- [ ] Sable/gravier (gravité)
-- [ ] Redstone basique (wire, torch, repeater, lever)
+- [x] Sable/gravier (gravité)
+- [x] Redstone basique (wire, torch, repeater, lever)
 - [ ] Pistons
 
 ### 3.9 — Expérience et enchantements
-- [ ] Système XP (gain, perte, niveaux)
-- [ ] Table d'enchantement
-- [ ] Enchantements (stockage NBT, application d'effets)
-- [ ] Réparation (enclume)
+- [x] Système XP (formules, gain mob kill/ore mining, perte à la mort, persistance, sync client)
+- [x] Enchantements complets (37 IDs Bedrock, EnchantmentInfo registry, stockage NBT)
+- [x] Effets enchantements (Feather Falling, Respiration, Fire Protection, Efficiency, Thorns, Looting)
+- [x] Commande /enchant (target, enchantment, level)
+- [ ] Table d'enchantement (nécessite ContainerOpen/Close + block entities)
+- [ ] Enclume (nécessite ContainerOpen/Close + block entities)
 
 ### 3.10 — Météo et cycle jour/nuit
 - [ ] Cycle jour/nuit (daylight cycle)

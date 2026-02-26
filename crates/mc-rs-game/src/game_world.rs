@@ -99,7 +99,12 @@ pub enum GameEvent {
         tick: u64,
     },
     /// A mob died — broadcast EntityEvent(death) + RemoveEntity.
-    MobDied { runtime_id: u64, unique_id: i64 },
+    MobDied {
+        runtime_id: u64,
+        unique_id: i64,
+        mob_type: String,
+        killed_by: Option<u64>,
+    },
     /// An entity was removed (despawn).
     EntityRemoved { unique_id: i64 },
     /// A mob attacks a player (melee).
@@ -198,6 +203,7 @@ impl GameWorld {
             MobType(type_id.to_string()),
             AttackDamage(def.attack_damage),
             LastDamageTick(None),
+            LastAttacker(None),
             MovementSpeed(def.movement_speed),
             BehaviorList::new(mob_behaviors::create_behaviors(type_id)),
         ));
@@ -220,7 +226,15 @@ impl GameWorld {
     }
 
     /// Deal damage to a mob. Returns remaining health, or `None` if invulnerable or not found.
-    pub fn damage_mob(&mut self, runtime_id: u64, damage: f32, tick: u64) -> Option<f32> {
+    ///
+    /// `attacker_rid` is the runtime_id of the attacking entity (for XP attribution).
+    pub fn damage_mob(
+        &mut self,
+        runtime_id: u64,
+        damage: f32,
+        tick: u64,
+        attacker_rid: Option<u64>,
+    ) -> Option<f32> {
         let target = self.find_mob_entity(runtime_id)?;
 
         // Invulnerability check (10 ticks)
@@ -244,15 +258,30 @@ impl GameWorld {
             ldt.0 = Some(tick);
         }
 
+        // Track attacker for XP attribution
+        if attacker_rid.is_some() {
+            if let Some(mut la) = self.world.get_mut::<LastAttacker>(target) {
+                la.0 = attacker_rid;
+            }
+        }
+
         let eid = self.world.get::<EntityId>(target)?.clone();
 
         if new_health <= 0.0 {
+            let mob_type = self
+                .world
+                .get::<MobType>(target)
+                .map(|m| m.0.clone())
+                .unwrap_or_default();
+            let killed_by = self.world.get::<LastAttacker>(target).and_then(|la| la.0);
             self.world
                 .resource_mut::<OutgoingEvents>()
                 .events
                 .push(GameEvent::MobDied {
                     runtime_id,
                     unique_id: eid.unique_id,
+                    mob_type,
+                    killed_by,
                 });
             self.world.entity_mut(target).insert(Dead);
         } else {
@@ -526,7 +555,7 @@ mod tests {
         let (_, rid) = gw.spawn_mob("minecraft:zombie", 0.0, 4.0, 0.0).unwrap();
         gw.drain_events(); // clear spawn event
 
-        let result = gw.damage_mob(rid, 5.0, 0);
+        let result = gw.damage_mob(rid, 5.0, 0, None);
         assert_eq!(result, Some(15.0));
     }
 
@@ -536,12 +565,12 @@ mod tests {
         let (_, rid) = gw.spawn_mob("minecraft:zombie", 0.0, 4.0, 0.0).unwrap();
 
         // First hit at tick 0
-        gw.damage_mob(rid, 5.0, 0);
+        gw.damage_mob(rid, 5.0, 0, None);
         // Second hit at tick 5 — should be blocked (< 10 ticks)
-        let result = gw.damage_mob(rid, 5.0, 5);
+        let result = gw.damage_mob(rid, 5.0, 5, None);
         assert!(result.is_none());
         // Third hit at tick 10 — should work
-        let result = gw.damage_mob(rid, 5.0, 10);
+        let result = gw.damage_mob(rid, 5.0, 10, None);
         assert_eq!(result, Some(10.0));
     }
 
@@ -552,7 +581,7 @@ mod tests {
         gw.drain_events();
 
         // Chicken has 4 HP
-        let result = gw.damage_mob(rid, 10.0, 0);
+        let result = gw.damage_mob(rid, 10.0, 0, None);
         assert_eq!(result, Some(0.0));
 
         let events = gw.drain_events();
@@ -585,7 +614,7 @@ mod tests {
         let (_, rid) = gw.spawn_mob("minecraft:chicken", 0.0, 4.0, 0.0).unwrap();
 
         // Kill it
-        gw.damage_mob(rid, 100.0, 0);
+        gw.damage_mob(rid, 100.0, 0, None);
         // Tick triggers cleanup
         gw.tick();
 

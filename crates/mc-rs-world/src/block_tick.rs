@@ -7,6 +7,8 @@ use rand::prelude::*;
 
 use crate::block_hash::TickBlocks;
 use crate::fluid;
+use crate::gravity;
+use crate::redstone;
 
 // ---------------------------------------------------------------------------
 // Scheduled tick queue
@@ -138,7 +140,28 @@ pub fn process_scheduled_tick(
         }
     }
 
-    // Not a fluid — future phases (3.8c gravity, 3.8d redstone) will add more here
+    // Gravity blocks (sand, gravel, red sand)
+    if let Some(rid) = get_block(x, y, z) {
+        if tb.is_gravity_block(rid) {
+            let gu = gravity::process_gravity_tick(x, y, z, tb, &get_block, &is_solid);
+            return ScheduledTickResult {
+                changes: gu.changes,
+                schedule: gu.schedule,
+            };
+        }
+    }
+
+    // Redstone components (torch, repeater)
+    if let Some(rid) = get_block(x, y, z) {
+        if tb.is_torch(rid) || tb.is_repeater(rid) {
+            let ru = redstone::process_redstone_tick(x, y, z, tb, &get_block, &is_solid);
+            return ScheduledTickResult {
+                changes: ru.changes,
+                schedule: ru.schedule,
+            };
+        }
+    }
+
     ScheduledTickResult::default()
 }
 

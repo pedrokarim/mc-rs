@@ -20,9 +20,252 @@ pub struct Enchantment {
 /// Well-known Bedrock enchantment IDs.
 pub mod enchantment_id {
     pub const PROTECTION: i16 = 0;
+    pub const FIRE_PROTECTION: i16 = 1;
+    pub const FEATHER_FALLING: i16 = 2;
+    pub const BLAST_PROTECTION: i16 = 3;
+    pub const PROJECTILE_PROTECTION: i16 = 4;
+    pub const THORNS: i16 = 5;
+    pub const RESPIRATION: i16 = 6;
+    pub const DEPTH_STRIDER: i16 = 7;
+    pub const AQUA_AFFINITY: i16 = 8;
     pub const SHARPNESS: i16 = 9;
+    pub const SMITE: i16 = 10;
+    pub const BANE_OF_ARTHROPODS: i16 = 11;
     pub const KNOCKBACK: i16 = 12;
     pub const FIRE_ASPECT: i16 = 13;
+    pub const LOOTING: i16 = 14;
+    pub const EFFICIENCY: i16 = 15;
+    pub const SILK_TOUCH: i16 = 16;
+    pub const UNBREAKING: i16 = 17;
+    pub const FORTUNE: i16 = 18;
+    pub const POWER: i16 = 19;
+    pub const PUNCH: i16 = 20;
+    pub const FLAME: i16 = 21;
+    pub const INFINITY: i16 = 22;
+    pub const LUCK_OF_THE_SEA: i16 = 23;
+    pub const LURE: i16 = 24;
+    pub const FROST_WALKER: i16 = 25;
+    pub const MENDING: i16 = 26;
+    pub const BINDING_CURSE: i16 = 27;
+    pub const VANISHING_CURSE: i16 = 28;
+    pub const IMPALING: i16 = 29;
+    pub const RIPTIDE: i16 = 30;
+    pub const LOYALTY: i16 = 31;
+    pub const CHANNELING: i16 = 32;
+    pub const MULTISHOT: i16 = 33;
+    pub const PIERCING: i16 = 34;
+    pub const QUICK_CHARGE: i16 = 35;
+    pub const SOUL_SPEED: i16 = 36;
+}
+
+// ---------------------------------------------------------------------------
+// Enchantment info registry
+// ---------------------------------------------------------------------------
+
+/// Static information about an enchantment type.
+pub struct EnchantmentInfo {
+    pub id: i16,
+    pub name: &'static str,
+    pub max_level: i16,
+}
+
+/// All known Bedrock enchantments with their max levels.
+pub const ENCHANTMENT_LIST: &[EnchantmentInfo] = &[
+    EnchantmentInfo {
+        id: 0,
+        name: "protection",
+        max_level: 4,
+    },
+    EnchantmentInfo {
+        id: 1,
+        name: "fire_protection",
+        max_level: 4,
+    },
+    EnchantmentInfo {
+        id: 2,
+        name: "feather_falling",
+        max_level: 4,
+    },
+    EnchantmentInfo {
+        id: 3,
+        name: "blast_protection",
+        max_level: 4,
+    },
+    EnchantmentInfo {
+        id: 4,
+        name: "projectile_protection",
+        max_level: 4,
+    },
+    EnchantmentInfo {
+        id: 5,
+        name: "thorns",
+        max_level: 3,
+    },
+    EnchantmentInfo {
+        id: 6,
+        name: "respiration",
+        max_level: 3,
+    },
+    EnchantmentInfo {
+        id: 7,
+        name: "depth_strider",
+        max_level: 3,
+    },
+    EnchantmentInfo {
+        id: 8,
+        name: "aqua_affinity",
+        max_level: 1,
+    },
+    EnchantmentInfo {
+        id: 9,
+        name: "sharpness",
+        max_level: 5,
+    },
+    EnchantmentInfo {
+        id: 10,
+        name: "smite",
+        max_level: 5,
+    },
+    EnchantmentInfo {
+        id: 11,
+        name: "bane_of_arthropods",
+        max_level: 5,
+    },
+    EnchantmentInfo {
+        id: 12,
+        name: "knockback",
+        max_level: 2,
+    },
+    EnchantmentInfo {
+        id: 13,
+        name: "fire_aspect",
+        max_level: 2,
+    },
+    EnchantmentInfo {
+        id: 14,
+        name: "looting",
+        max_level: 3,
+    },
+    EnchantmentInfo {
+        id: 15,
+        name: "efficiency",
+        max_level: 5,
+    },
+    EnchantmentInfo {
+        id: 16,
+        name: "silk_touch",
+        max_level: 1,
+    },
+    EnchantmentInfo {
+        id: 17,
+        name: "unbreaking",
+        max_level: 3,
+    },
+    EnchantmentInfo {
+        id: 18,
+        name: "fortune",
+        max_level: 3,
+    },
+    EnchantmentInfo {
+        id: 19,
+        name: "power",
+        max_level: 5,
+    },
+    EnchantmentInfo {
+        id: 20,
+        name: "punch",
+        max_level: 2,
+    },
+    EnchantmentInfo {
+        id: 21,
+        name: "flame",
+        max_level: 1,
+    },
+    EnchantmentInfo {
+        id: 22,
+        name: "infinity",
+        max_level: 1,
+    },
+    EnchantmentInfo {
+        id: 23,
+        name: "luck_of_the_sea",
+        max_level: 3,
+    },
+    EnchantmentInfo {
+        id: 24,
+        name: "lure",
+        max_level: 3,
+    },
+    EnchantmentInfo {
+        id: 25,
+        name: "frost_walker",
+        max_level: 2,
+    },
+    EnchantmentInfo {
+        id: 26,
+        name: "mending",
+        max_level: 1,
+    },
+    EnchantmentInfo {
+        id: 27,
+        name: "binding_curse",
+        max_level: 1,
+    },
+    EnchantmentInfo {
+        id: 28,
+        name: "vanishing_curse",
+        max_level: 1,
+    },
+    EnchantmentInfo {
+        id: 29,
+        name: "impaling",
+        max_level: 5,
+    },
+    EnchantmentInfo {
+        id: 30,
+        name: "riptide",
+        max_level: 3,
+    },
+    EnchantmentInfo {
+        id: 31,
+        name: "loyalty",
+        max_level: 3,
+    },
+    EnchantmentInfo {
+        id: 32,
+        name: "channeling",
+        max_level: 1,
+    },
+    EnchantmentInfo {
+        id: 33,
+        name: "multishot",
+        max_level: 1,
+    },
+    EnchantmentInfo {
+        id: 34,
+        name: "piercing",
+        max_level: 4,
+    },
+    EnchantmentInfo {
+        id: 35,
+        name: "quick_charge",
+        max_level: 3,
+    },
+    EnchantmentInfo {
+        id: 36,
+        name: "soul_speed",
+        max_level: 3,
+    },
+];
+
+/// Look up an enchantment by name (for `/enchant` command).
+pub fn enchantment_by_name(name: &str) -> Option<&'static EnchantmentInfo> {
+    ENCHANTMENT_LIST.iter().find(|e| e.name == name)
+}
+
+/// Look up an enchantment by ID.
+pub fn enchantment_by_id(id: i16) -> Option<&'static EnchantmentInfo> {
+    ENCHANTMENT_LIST.iter().find(|e| e.id == id)
 }
 
 // ---------------------------------------------------------------------------
@@ -180,11 +423,70 @@ pub fn knockback_bonus(nbt_data: &[u8]) -> i16 {
 
 /// Fire Aspect enchantment level.
 pub fn fire_aspect_level(nbt_data: &[u8]) -> i16 {
+    enchantment_level_on_item(nbt_data, enchantment_id::FIRE_ASPECT)
+}
+
+// ---------------------------------------------------------------------------
+// Enchantment effect helpers
+// ---------------------------------------------------------------------------
+
+/// Get the level of a specific enchantment on an item. Returns 0 if not present.
+fn enchantment_level_on_item(nbt_data: &[u8], enchant_id: i16) -> i16 {
     parse_enchantments(nbt_data)
         .iter()
-        .filter(|e| e.id == enchantment_id::FIRE_ASPECT)
+        .filter(|e| e.id == enchant_id)
         .map(|e| e.level)
         .sum()
+}
+
+/// Sum enchantment levels across multiple armor pieces for a given enchantment ID.
+fn enchantment_level_on_armor(armor_nbt_slots: &[&[u8]], enchant_id: i16) -> i16 {
+    armor_nbt_slots
+        .iter()
+        .map(|nbt| enchantment_level_on_item(nbt, enchant_id))
+        .sum()
+}
+
+/// Feather Falling damage reduction from boots. 12% per level, cap at 48% (4 levels).
+pub fn feather_falling_reduction(boots_nbt: &[u8]) -> f32 {
+    let level = enchantment_level_on_item(boots_nbt, enchantment_id::FEATHER_FALLING);
+    (level.min(4) as f32 * 0.12).min(0.48)
+}
+
+/// Fire Protection damage reduction from all armor. 8% per level total, cap at 80%.
+pub fn fire_protection_reduction(armor_nbt_slots: &[&[u8]]) -> f32 {
+    let total = enchantment_level_on_armor(armor_nbt_slots, enchantment_id::FIRE_PROTECTION);
+    (total.min(10) as f32 * 0.08).min(0.80)
+}
+
+/// Respiration level from helmet. 0 if not present.
+pub fn respiration_level(helmet_nbt: &[u8]) -> i16 {
+    enchantment_level_on_item(helmet_nbt, enchantment_id::RESPIRATION)
+}
+
+/// Efficiency level from tool. 0 if not present.
+pub fn efficiency_level(tool_nbt: &[u8]) -> i16 {
+    enchantment_level_on_item(tool_nbt, enchantment_id::EFFICIENCY)
+}
+
+/// Total Thorns level from all armor pieces.
+pub fn thorns_level(armor_nbt_slots: &[&[u8]]) -> i16 {
+    enchantment_level_on_armor(armor_nbt_slots, enchantment_id::THORNS)
+}
+
+/// Looting level from weapon. 0 if not present.
+pub fn looting_level(weapon_nbt: &[u8]) -> i16 {
+    enchantment_level_on_item(weapon_nbt, enchantment_id::LOOTING)
+}
+
+/// Depth Strider level from boots. 0 if not present.
+pub fn depth_strider_level(boots_nbt: &[u8]) -> i16 {
+    enchantment_level_on_item(boots_nbt, enchantment_id::DEPTH_STRIDER)
+}
+
+/// Whether the helmet has Aqua Affinity (level >= 1).
+pub fn has_aqua_affinity(helmet_nbt: &[u8]) -> bool {
+    enchantment_level_on_item(helmet_nbt, enchantment_id::AQUA_AFFINITY) > 0
 }
 
 // ---------------------------------------------------------------------------
@@ -368,5 +670,123 @@ mod tests {
     fn is_critical_on_ground() {
         assert!(!is_critical_hit(true, -0.5));
         assert!(!is_critical_hit(false, 0.1));
+    }
+
+    // ── Enchantment registry tests ──────────────────────────────────────
+
+    #[test]
+    fn enchantment_by_name_found() {
+        let info = enchantment_by_name("sharpness").unwrap();
+        assert_eq!(info.id, 9);
+        assert_eq!(info.max_level, 5);
+    }
+
+    #[test]
+    fn enchantment_by_name_not_found() {
+        assert!(enchantment_by_name("nonexistent").is_none());
+    }
+
+    #[test]
+    fn enchantment_by_id_found() {
+        let info = enchantment_by_id(2).unwrap();
+        assert_eq!(info.name, "feather_falling");
+        assert_eq!(info.max_level, 4);
+    }
+
+    #[test]
+    fn enchantment_by_id_not_found() {
+        assert!(enchantment_by_id(999).is_none());
+    }
+
+    #[test]
+    fn enchantment_list_complete() {
+        // Should have 37 entries (IDs 0..36)
+        assert_eq!(ENCHANTMENT_LIST.len(), 37);
+        // IDs should be sequential
+        for (i, info) in ENCHANTMENT_LIST.iter().enumerate() {
+            assert_eq!(info.id, i as i16);
+        }
+    }
+
+    // ── Effect helpers ──────────────────────────────────────────────────
+
+    #[test]
+    fn feather_falling_reduction_values() {
+        // No enchantment
+        assert!((feather_falling_reduction(&[]) - 0.0).abs() < 0.001);
+
+        // Level 4 → 48%
+        let nbt = build_enchantment_nbt(&[Enchantment {
+            id: enchantment_id::FEATHER_FALLING,
+            level: 4,
+        }]);
+        assert!((feather_falling_reduction(&nbt) - 0.48).abs() < 0.001);
+
+        // Level 2 → 24%
+        let nbt2 = build_enchantment_nbt(&[Enchantment {
+            id: enchantment_id::FEATHER_FALLING,
+            level: 2,
+        }]);
+        assert!((feather_falling_reduction(&nbt2) - 0.24).abs() < 0.001);
+    }
+
+    #[test]
+    fn fire_protection_reduction_values() {
+        // Fire Protection IV on 2 pieces → 8 levels → 64%
+        let fp4 = build_enchantment_nbt(&[Enchantment {
+            id: enchantment_id::FIRE_PROTECTION,
+            level: 4,
+        }]);
+        let slots: Vec<&[u8]> = vec![&fp4, &fp4, &[], &[]];
+        assert!((fire_protection_reduction(&slots) - 0.64).abs() < 0.001);
+    }
+
+    #[test]
+    fn thorns_level_multi_piece() {
+        let t2 = build_enchantment_nbt(&[Enchantment {
+            id: enchantment_id::THORNS,
+            level: 2,
+        }]);
+        let t1 = build_enchantment_nbt(&[Enchantment {
+            id: enchantment_id::THORNS,
+            level: 1,
+        }]);
+        let slots: Vec<&[u8]> = vec![&t2, &t1, &[], &[]];
+        assert_eq!(thorns_level(&slots), 3);
+    }
+
+    #[test]
+    fn efficiency_level_value() {
+        let nbt = build_enchantment_nbt(&[Enchantment {
+            id: enchantment_id::EFFICIENCY,
+            level: 5,
+        }]);
+        assert_eq!(efficiency_level(&nbt), 5);
+        assert_eq!(efficiency_level(&[]), 0);
+    }
+
+    #[test]
+    fn respiration_and_looting_levels() {
+        let resp3 = build_enchantment_nbt(&[Enchantment {
+            id: enchantment_id::RESPIRATION,
+            level: 3,
+        }]);
+        assert_eq!(respiration_level(&resp3), 3);
+
+        let loot2 = build_enchantment_nbt(&[Enchantment {
+            id: enchantment_id::LOOTING,
+            level: 2,
+        }]);
+        assert_eq!(looting_level(&loot2), 2);
+    }
+
+    #[test]
+    fn aqua_affinity_check() {
+        assert!(!has_aqua_affinity(&[]));
+        let aa = build_enchantment_nbt(&[Enchantment {
+            id: enchantment_id::AQUA_AFFINITY,
+            level: 1,
+        }]);
+        assert!(has_aqua_affinity(&aa));
     }
 }

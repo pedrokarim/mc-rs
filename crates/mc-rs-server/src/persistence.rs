@@ -167,6 +167,10 @@ pub struct PlayerData {
     pub fall_distance: f32,
     pub inventory: SerializedInventory,
     pub effects: Vec<SerializedEffect>,
+    #[serde(default)]
+    pub xp_level: i32,
+    #[serde(default)]
+    pub xp_total: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -276,6 +280,8 @@ impl PlayerData {
                     remaining_ticks: e.remaining_ticks,
                 })
                 .collect(),
+            xp_level: conn.xp_level,
+            xp_total: conn.xp_total,
         }
     }
 
@@ -309,6 +315,10 @@ impl PlayerData {
         }
         conn.inventory.offhand = self.inventory.offhand.to_item_stack(0);
         conn.inventory.held_slot = self.inventory.held_slot;
+
+        // Restore XP
+        conn.xp_level = self.xp_level;
+        conn.xp_total = self.xp_total;
 
         // Restore effects
         conn.effects = self
@@ -445,6 +455,8 @@ mod tests {
                 amplifier: 0,
                 remaining_ticks: 600,
             }],
+            xp_level: 5,
+            xp_total: 160,
         };
 
         data.save(&dir, "test-uuid-1234").unwrap();
@@ -460,6 +472,8 @@ mod tests {
         assert_eq!(loaded.effects.len(), 1);
         assert_eq!(loaded.effects[0].effect_id, 1);
         assert_eq!(loaded.effects[0].remaining_ticks, 600);
+        assert_eq!(loaded.xp_level, 5);
+        assert_eq!(loaded.xp_total, 160);
 
         std::fs::remove_dir_all(&dir).ok();
     }
