@@ -37,6 +37,22 @@ pub enum BlockEntityData {
         item: ItemStack,
         lapis: ItemStack,
     },
+    Stonecutter {
+        input: ItemStack,
+    },
+    Grindstone {
+        input1: ItemStack,
+        input2: ItemStack,
+    },
+    Loom {
+        banner: ItemStack,
+        dye: ItemStack,
+        pattern: ItemStack,
+    },
+    Anvil {
+        input: ItemStack,
+        material: ItemStack,
+    },
 }
 
 /// Number of slots in a single chest.
@@ -47,6 +63,18 @@ pub const FURNACE_SLOTS: usize = 3;
 
 /// Number of slots in an enchanting table.
 pub const ENCHANTING_TABLE_SLOTS: usize = 2;
+
+/// Number of slots in a stonecutter.
+pub const STONECUTTER_SLOTS: usize = 1;
+
+/// Number of slots in a grindstone.
+pub const GRINDSTONE_SLOTS: usize = 2;
+
+/// Number of slots in a loom.
+pub const LOOM_SLOTS: usize = 3;
+
+/// Number of slots in an anvil.
+pub const ANVIL_SLOTS: usize = 2;
 
 impl BlockEntityData {
     /// Create a new empty sign (editable, no text).
@@ -70,6 +98,38 @@ impl BlockEntityData {
         BlockEntityData::EnchantingTable {
             item: ItemStack::empty(),
             lapis: ItemStack::empty(),
+        }
+    }
+
+    /// Create a new empty stonecutter (1 input slot).
+    pub fn new_stonecutter() -> Self {
+        BlockEntityData::Stonecutter {
+            input: ItemStack::empty(),
+        }
+    }
+
+    /// Create a new empty grindstone (2 input slots).
+    pub fn new_grindstone() -> Self {
+        BlockEntityData::Grindstone {
+            input1: ItemStack::empty(),
+            input2: ItemStack::empty(),
+        }
+    }
+
+    /// Create a new empty loom (3 slots: banner + dye + pattern).
+    pub fn new_loom() -> Self {
+        BlockEntityData::Loom {
+            banner: ItemStack::empty(),
+            dye: ItemStack::empty(),
+            pattern: ItemStack::empty(),
+        }
+    }
+
+    /// Create a new empty anvil.
+    pub fn new_anvil() -> Self {
+        BlockEntityData::Anvil {
+            input: ItemStack::empty(),
+            material: ItemStack::empty(),
         }
     }
 
@@ -243,6 +303,11 @@ impl BlockEntityData {
                     .collect();
                 c.insert("Items".to_string(), NbtTag::List(item_list));
             }
+            // Transient containers — items are lost on close, no disk persistence.
+            BlockEntityData::Stonecutter { .. }
+            | BlockEntityData::Grindstone { .. }
+            | BlockEntityData::Loom { .. }
+            | BlockEntityData::Anvil { .. } => {}
         }
 
         c

@@ -100,15 +100,25 @@ impl ConnectionHandler {
 
         let mut responses = Vec::new();
         for req in &request.requests {
-            // Check if this is an enchanting selection (CraftRecipeOptional)
-            let has_enchant_action = req.actions.iter().any(|a| {
+            // Check if this is an enchanting / anvil action (CraftRecipeOptional)
+            let has_optional_action = req.actions.iter().any(|a| {
                 matches!(
                     a,
                     mc_rs_proto::packets::item_stack_request::StackAction::CraftRecipeOptional { .. }
                 )
             });
-            if has_enchant_action {
-                let resp = self.handle_enchant_selection(addr, req).await;
+            if has_optional_action {
+                // Distinguish anvil (container_type 5) from enchanting table
+                let is_anvil = self
+                    .connections
+                    .get(&addr)
+                    .and_then(|c| c.open_container.as_ref())
+                    .is_some_and(|oc| oc.container_type == 5);
+                let resp = if is_anvil {
+                    self.handle_anvil_craft(addr, req).await
+                } else {
+                    self.handle_enchant_selection(addr, req).await
+                };
                 responses.push(resp);
                 continue;
             }
@@ -132,6 +142,22 @@ impl ConnectionHandler {
                     }) => vec![input.clone(), fuel.clone(), output.clone()],
                     Some(BlockEntityData::EnchantingTable { item, lapis }) => {
                         vec![item.clone(), lapis.clone()]
+                    }
+                    Some(BlockEntityData::Stonecutter { input }) => {
+                        vec![input.clone()]
+                    }
+                    Some(BlockEntityData::Grindstone { input1, input2 }) => {
+                        vec![input1.clone(), input2.clone()]
+                    }
+                    Some(BlockEntityData::Loom {
+                        banner,
+                        dye,
+                        pattern,
+                    }) => {
+                        vec![banner.clone(), dye.clone(), pattern.clone()]
+                    }
+                    Some(BlockEntityData::Anvil { input, material }) => {
+                        vec![input.clone(), material.clone()]
                     }
                     _ => vec![mc_rs_proto::item_stack::ItemStack::empty(); 3],
                 };
@@ -167,6 +193,34 @@ impl ConnectionHandler {
                         if container_items.len() >= 2 {
                             *item = container_items[0].clone();
                             *lapis = container_items[1].clone();
+                        }
+                    }
+                    Some(BlockEntityData::Stonecutter { input }) => {
+                        if !container_items.is_empty() {
+                            *input = container_items[0].clone();
+                        }
+                    }
+                    Some(BlockEntityData::Grindstone { input1, input2 }) => {
+                        if container_items.len() >= 2 {
+                            *input1 = container_items[0].clone();
+                            *input2 = container_items[1].clone();
+                        }
+                    }
+                    Some(BlockEntityData::Loom {
+                        banner,
+                        dye,
+                        pattern,
+                    }) => {
+                        if container_items.len() >= 3 {
+                            *banner = container_items[0].clone();
+                            *dye = container_items[1].clone();
+                            *pattern = container_items[2].clone();
+                        }
+                    }
+                    Some(BlockEntityData::Anvil { input, material }) => {
+                        if container_items.len() >= 2 {
+                            *input = container_items[0].clone();
+                            *material = container_items[1].clone();
                         }
                     }
                     _ => {}
@@ -619,6 +673,22 @@ impl ConnectionHandler {
                     }
                     if self.block_entity_hashes.is_enchanting_table(rid) {
                         self.open_enchanting_table(addr, click_pos).await;
+                        return;
+                    }
+                    if self.block_entity_hashes.is_stonecutter(rid) {
+                        self.open_stonecutter(addr, click_pos).await;
+                        return;
+                    }
+                    if self.block_entity_hashes.is_grindstone(rid) {
+                        self.open_grindstone(addr, click_pos).await;
+                        return;
+                    }
+                    if self.block_entity_hashes.is_loom(rid) {
+                        self.open_loom(addr, click_pos).await;
+                        return;
+                    }
+                    if self.block_entity_hashes.is_anvil(rid) {
+                        self.open_anvil(addr, click_pos).await;
                         return;
                     }
                 }
@@ -1078,6 +1148,236 @@ impl ConnectionHandler {
         debug!("Opened enchanting table at {pos} for {addr} (window_id={window_id})");
     }
 
+    /// Open a stonecutter container UI for a player.
+    async fn open_stonecutter(&mut self, addr: SocketAddr, pos: BlockPos) {
+        self.block_entities
+            .entry((pos.x, pos.y, pos.z))
+            .or_insert_with(BlockEntityData::new_stonecutter);
+
+        let window_id = match self.connections.get_mut(&addr) {
+            Some(conn) => {
+                let wid = conn.next_window_id;
+                conn.next_window_id = conn.next_window_id.wrapping_add(1);
+                if conn.next_window_id == 0 {
+                    conn.next_window_id = 1;
+                }
+                conn.open_container = Some(OpenContainer {
+                    window_id: wid,
+                    container_type: 29, // STONECUTTER
+                    position: pos,
+                });
+                wid
+            }
+            None => return,
+        };
+
+        self.send_packet(
+            addr,
+            packets::id::CONTAINER_OPEN,
+            &ContainerOpen {
+                window_id,
+                container_type: 29,
+                position: pos,
+                entity_unique_id: -1,
+            },
+        )
+        .await;
+
+        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+            Some(BlockEntityData::Stonecutter { input }) => vec![input.clone()],
+            _ => vec![mc_rs_proto::item_stack::ItemStack::empty()],
+        };
+
+        self.send_packet(
+            addr,
+            packets::id::INVENTORY_CONTENT,
+            &InventoryContent {
+                window_id: window_id as u32,
+                items,
+            },
+        )
+        .await;
+
+        debug!("Opened stonecutter at {pos} for {addr} (window_id={window_id})");
+    }
+
+    /// Open a grindstone container UI for a player.
+    async fn open_grindstone(&mut self, addr: SocketAddr, pos: BlockPos) {
+        self.block_entities
+            .entry((pos.x, pos.y, pos.z))
+            .or_insert_with(BlockEntityData::new_grindstone);
+
+        let window_id = match self.connections.get_mut(&addr) {
+            Some(conn) => {
+                let wid = conn.next_window_id;
+                conn.next_window_id = conn.next_window_id.wrapping_add(1);
+                if conn.next_window_id == 0 {
+                    conn.next_window_id = 1;
+                }
+                conn.open_container = Some(OpenContainer {
+                    window_id: wid,
+                    container_type: 26, // GRINDSTONE
+                    position: pos,
+                });
+                wid
+            }
+            None => return,
+        };
+
+        self.send_packet(
+            addr,
+            packets::id::CONTAINER_OPEN,
+            &ContainerOpen {
+                window_id,
+                container_type: 26,
+                position: pos,
+                entity_unique_id: -1,
+            },
+        )
+        .await;
+
+        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+            Some(BlockEntityData::Grindstone { input1, input2 }) => {
+                vec![input1.clone(), input2.clone()]
+            }
+            _ => vec![
+                mc_rs_proto::item_stack::ItemStack::empty(),
+                mc_rs_proto::item_stack::ItemStack::empty(),
+            ],
+        };
+
+        self.send_packet(
+            addr,
+            packets::id::INVENTORY_CONTENT,
+            &InventoryContent {
+                window_id: window_id as u32,
+                items,
+            },
+        )
+        .await;
+
+        debug!("Opened grindstone at {pos} for {addr} (window_id={window_id})");
+    }
+
+    /// Open a loom container UI for a player.
+    async fn open_loom(&mut self, addr: SocketAddr, pos: BlockPos) {
+        self.block_entities
+            .entry((pos.x, pos.y, pos.z))
+            .or_insert_with(BlockEntityData::new_loom);
+
+        let window_id = match self.connections.get_mut(&addr) {
+            Some(conn) => {
+                let wid = conn.next_window_id;
+                conn.next_window_id = conn.next_window_id.wrapping_add(1);
+                if conn.next_window_id == 0 {
+                    conn.next_window_id = 1;
+                }
+                conn.open_container = Some(OpenContainer {
+                    window_id: wid,
+                    container_type: 24, // LOOM
+                    position: pos,
+                });
+                wid
+            }
+            None => return,
+        };
+
+        self.send_packet(
+            addr,
+            packets::id::CONTAINER_OPEN,
+            &ContainerOpen {
+                window_id,
+                container_type: 24,
+                position: pos,
+                entity_unique_id: -1,
+            },
+        )
+        .await;
+
+        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+            Some(BlockEntityData::Loom {
+                banner,
+                dye,
+                pattern,
+            }) => vec![banner.clone(), dye.clone(), pattern.clone()],
+            _ => vec![
+                mc_rs_proto::item_stack::ItemStack::empty(),
+                mc_rs_proto::item_stack::ItemStack::empty(),
+                mc_rs_proto::item_stack::ItemStack::empty(),
+            ],
+        };
+
+        self.send_packet(
+            addr,
+            packets::id::INVENTORY_CONTENT,
+            &InventoryContent {
+                window_id: window_id as u32,
+                items,
+            },
+        )
+        .await;
+
+        debug!("Opened loom at {pos} for {addr} (window_id={window_id})");
+    }
+
+    /// Open an anvil container for a player.
+    async fn open_anvil(&mut self, addr: SocketAddr, pos: BlockPos) {
+        self.block_entities
+            .entry((pos.x, pos.y, pos.z))
+            .or_insert_with(BlockEntityData::new_anvil);
+
+        let window_id = match self.connections.get_mut(&addr) {
+            Some(conn) => {
+                let wid = conn.next_window_id;
+                conn.next_window_id = conn.next_window_id.wrapping_add(1);
+                if conn.next_window_id == 0 {
+                    conn.next_window_id = 1;
+                }
+                conn.open_container = Some(OpenContainer {
+                    window_id: wid,
+                    container_type: 5, // ANVIL
+                    position: pos,
+                });
+                wid
+            }
+            None => return,
+        };
+
+        self.send_packet(
+            addr,
+            packets::id::CONTAINER_OPEN,
+            &ContainerOpen {
+                window_id,
+                container_type: 5,
+                position: pos,
+                entity_unique_id: -1,
+            },
+        )
+        .await;
+
+        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+            Some(BlockEntityData::Anvil { input, material }) => {
+                vec![input.clone(), material.clone()]
+            }
+            _ => vec![
+                mc_rs_proto::item_stack::ItemStack::empty(),
+                mc_rs_proto::item_stack::ItemStack::empty(),
+            ],
+        };
+
+        self.send_packet(
+            addr,
+            packets::id::INVENTORY_CONTENT,
+            &InventoryContent {
+                window_id: window_id as u32,
+                items,
+            },
+        )
+        .await;
+
+        debug!("Opened anvil at {pos} for {addr} (window_id={window_id})");
+    }
+
     /// Send enchantment options to a player based on their enchanting table state.
     async fn send_enchant_options(&mut self, addr: SocketAddr, pos: BlockPos) {
         use mc_rs_game::enchanting;
@@ -1346,6 +1646,175 @@ impl ConnectionHandler {
                     hotbar_slot: 0,
                     count: lapis_resp.count as u8,
                     stack_network_id: lapis_resp.stack_network_id,
+                    custom_name: String::new(),
+                    durability_correction: 0,
+                }],
+            },
+        ];
+
+        StackResponseEntry {
+            request_id: req.request_id,
+            status: 0, // OK
+            containers,
+        }
+    }
+
+    /// Handle an anvil craft action (CraftRecipeOptional from an anvil container).
+    async fn handle_anvil_craft(
+        &mut self,
+        addr: SocketAddr,
+        req: &mc_rs_proto::packets::item_stack_request::StackRequest,
+    ) -> mc_rs_proto::packets::item_stack_response::StackResponseEntry {
+        use mc_rs_proto::packets::item_stack_request::StackAction;
+        use mc_rs_proto::packets::item_stack_response::{
+            StackResponseContainer, StackResponseEntry, StackResponseSlot,
+        };
+
+        let reject = StackResponseEntry {
+            request_id: req.request_id,
+            status: 1,
+            containers: Vec::new(),
+        };
+
+        // Get the filter_string_index from the CraftRecipeOptional action
+        let filter_string_index = match req.actions.iter().find_map(|a| match a {
+            StackAction::CraftRecipeOptional {
+                filter_string_index,
+                ..
+            } => Some(*filter_string_index),
+            _ => None,
+        }) {
+            Some(idx) => idx,
+            None => return reject,
+        };
+
+        // Get the rename text from filter_strings
+        let new_name = if filter_string_index >= 0 {
+            req.filter_strings
+                .get(filter_string_index as usize)
+                .map(|s| s.as_str())
+        } else {
+            None
+        };
+
+        // Get the container position
+        let container_pos = match self
+            .connections
+            .get(&addr)
+            .and_then(|c| c.open_container.as_ref())
+        {
+            Some(oc) => oc.position,
+            None => return reject,
+        };
+
+        // Get input items from block entity
+        let (input, material) =
+            match self
+                .block_entities
+                .get(&(container_pos.x, container_pos.y, container_pos.z))
+            {
+                Some(BlockEntityData::Anvil { input, material }) => {
+                    (input.clone(), material.clone())
+                }
+                _ => return reject,
+            };
+
+        // Compute anvil output
+        let item_registry = &self.item_registry;
+        let result =
+            match mc_rs_game::anvil::compute_anvil_output(&input, &material, new_name, |rid| {
+                item_registry.get_by_id(rid as i16).map(|i| i.name.clone())
+            }) {
+                Some(r) => r,
+                None => return reject,
+            };
+
+        // Validate XP
+        let has_enough_xp = match self.connections.get(&addr) {
+            Some(conn) => conn.xp_level >= result.xp_cost,
+            None => return reject,
+        };
+        if !has_enough_xp {
+            return reject;
+        }
+
+        // Update block entity: place output in input slot, clear material
+        let pos = container_pos;
+        if let Some(BlockEntityData::Anvil {
+            input: ref mut inp,
+            material: ref mut mat,
+        }) = self.block_entities.get_mut(&(pos.x, pos.y, pos.z))
+        {
+            *inp = result.output.clone();
+            *mat = mc_rs_proto::item_stack::ItemStack::empty();
+        }
+
+        // Deduct XP levels
+        let cost = result.xp_cost;
+        if let Some(conn) = self.connections.get_mut(&addr) {
+            conn.xp_level -= cost;
+            conn.xp_total = mc_rs_game::xp::total_xp_for_level(conn.xp_level);
+        }
+
+        // Send updated XP attributes
+        let (rid, xp_level, xp_total, tick) = match self.connections.get(&addr) {
+            Some(c) => (c.entity_runtime_id, c.xp_level, c.xp_total, c.client_tick),
+            None => return reject,
+        };
+        let xp_progress = mc_rs_game::xp::xp_progress(xp_level, xp_total);
+        self.send_packet(
+            addr,
+            packets::id::UPDATE_ATTRIBUTES,
+            &UpdateAttributes::xp(rid, xp_level, xp_progress, tick),
+        )
+        .await;
+
+        // Get updated container items for response
+        let (input_resp, material_resp) = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+            Some(BlockEntityData::Anvil { input, material }) => (input.clone(), material.clone()),
+            _ => (
+                mc_rs_proto::item_stack::ItemStack::empty(),
+                mc_rs_proto::item_stack::ItemStack::empty(),
+            ),
+        };
+
+        // Send updated container contents
+        let window_id = self
+            .connections
+            .get(&addr)
+            .and_then(|c| c.open_container.as_ref())
+            .map(|oc| oc.window_id)
+            .unwrap_or(1);
+        self.send_packet(
+            addr,
+            packets::id::INVENTORY_CONTENT,
+            &InventoryContent {
+                window_id: window_id as u32,
+                items: vec![input_resp.clone(), material_resp.clone()],
+            },
+        )
+        .await;
+
+        // Build response with updated slot info
+        let containers = vec![
+            StackResponseContainer {
+                container_id: 13, // ANVIL_INPUT
+                slots: vec![StackResponseSlot {
+                    slot: 0,
+                    hotbar_slot: 0,
+                    count: input_resp.count as u8,
+                    stack_network_id: input_resp.stack_network_id,
+                    custom_name: String::new(),
+                    durability_correction: 0,
+                }],
+            },
+            StackResponseContainer {
+                container_id: 14, // ANVIL_MATERIAL
+                slots: vec![StackResponseSlot {
+                    slot: 0,
+                    hotbar_slot: 0,
+                    count: material_resp.count as u8,
+                    stack_network_id: material_resp.stack_network_id,
                     custom_name: String::new(),
                     durability_correction: 0,
                 }],

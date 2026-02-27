@@ -279,7 +279,7 @@ fn valid_enchantments(cat: ItemCategory) -> Vec<EnchantWeight> {
 }
 
 /// Mutually exclusive enchantment groups.
-fn conflicts(a: i16, b: i16) -> bool {
+pub fn conflicts(a: i16, b: i16) -> bool {
     use enchantment_id::*;
     let protection_group = [
         PROTECTION,

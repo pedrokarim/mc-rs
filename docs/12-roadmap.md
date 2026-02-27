@@ -140,7 +140,7 @@ Phase 5 : Polish             ██████████ (continu)
 - [x] Broadcast des mouvements entre joueurs
 - [x] Broadcast des actions (break/place/interact)
 - [x] Skins (envoi des données skin entre joueurs)
-- [ ] PlayerSkin packet (changement de skin)
+- [x] PlayerSkin packet (changement de skin)
 
 ### 2.2 — Interaction entre joueurs
 - [x] Combat PvP (dégâts, knockback)
@@ -192,7 +192,7 @@ Phase 5 : Polish             ██████████ (continu)
 - [x] Spawn naturel avec caps et despawn par distance
 - [x] MobAttackPlayer (mob → joueur, dégâts + knockback)
 - [x] Sync position joueur → ECS (prérequis AI)
-- [ ] TemptGoal, BreedGoal (nécessite items en main)
+- [x] TemptGoal, BreedGoal (nécessite items en main)
 
 ### 3.3 — Combat complet
 - [x] Dégâts par arme
@@ -225,12 +225,12 @@ Phase 5 : Polish             ██████████ (continu)
 - [x] ItemStackRequest(CraftRecipe + CraftRecipeAuto) actions 12/13
 - [x] Crafting grid (9 slots) + crafting output dans PlayerInventory
 - [x] process_craft_recipe (shaped + shapeless, single + auto-craft)
-- [ ] Four (smelting)
-- [ ] Table d'enchantement
-- [ ] Enclume
-- [ ] Pierre à aiguiser
-- [ ] Tailleur de pierre
-- [ ] Métier à tisser
+- [x] Four (smelting)
+- [x] Table d'enchantement
+- [x] Enclume
+- [x] Pierre à aiguiser
+- [x] Tailleur de pierre
+- [x] Métier à tisser
 
 ### 3.6 — Génération de monde
 - [x] Générateur overworld (biomes, terrain, grottes)
@@ -261,8 +261,8 @@ Phase 5 : Polish             ██████████ (continu)
 - [x] Enchantements complets (37 IDs Bedrock, EnchantmentInfo registry, stockage NBT)
 - [x] Effets enchantements (Feather Falling, Respiration, Fire Protection, Efficiency, Thorns, Looting)
 - [x] Commande /enchant (target, enchantment, level)
-- [ ] Table d'enchantement (nécessite ContainerOpen/Close + block entities)
-- [ ] Enclume (nécessite ContainerOpen/Close + block entities)
+- [x] Table d'enchantement (nécessite ContainerOpen/Close + block entities)
+- [x] Enclume (nécessite ContainerOpen/Close + block entities)
 
 ### 3.10 — Météo et cycle jour/nuit
 - [x] Cycle jour/nuit (daylight cycle, 24000 tick cycle, SetTime 0x0A)

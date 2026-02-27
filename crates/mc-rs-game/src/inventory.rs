@@ -218,11 +218,21 @@ impl PlayerInventory {
                 StackAction::CraftRecipeOptional {
                     recipe_network_id, ..
                 } => {
-                    // Enchanting table selection — handled server-side, not in inventory
+                    // Enchanting table / anvil — handled server-side, not in inventory
                     debug!(
                         "CraftRecipeOptional: recipe_network_id={}",
                         recipe_network_id
                     );
+                }
+                StackAction::CraftGrindstone {
+                    recipe_network_id, ..
+                } => {
+                    // Grindstone — handled server-side
+                    debug!("CraftGrindstone: recipe_network_id={}", recipe_network_id);
+                }
+                StackAction::CraftLoom { pattern_id, .. } => {
+                    // Loom — handled server-side
+                    debug!("CraftLoom: pattern_id={}", pattern_id);
                 }
                 StackAction::Create { result_slot } => {
                     debug!("Create: result_slot={}", result_slot);

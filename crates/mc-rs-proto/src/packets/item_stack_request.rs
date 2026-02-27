@@ -99,6 +99,14 @@ pub enum StackAction {
         recipe_network_id: u32,
         filter_string_index: i32,
     },
+    /// Craft via grindstone (action type 16).
+    CraftGrindstone {
+        recipe_network_id: u32,
+    },
+    /// Craft via loom (action type 17).
+    CraftLoom {
+        pattern_id: String,
+    },
     /// Any action type we don't handle yet.
     Unknown {
         action_type: u8,
@@ -303,6 +311,16 @@ fn decode_stack_action(buf: &mut impl Buf) -> Result<StackAction, ProtoError> {
                 recipe_network_id,
                 filter_string_index,
             })
+        }
+        16 => {
+            // CraftGrindstone
+            let recipe_network_id = VarUInt32::proto_decode(buf)?.0;
+            Ok(StackAction::CraftGrindstone { recipe_network_id })
+        }
+        17 => {
+            // CraftLoom
+            let pattern_id = read_string(buf)?;
+            Ok(StackAction::CraftLoom { pattern_id })
         }
         _ => {
             // Unknown action — we can't skip it safely since we don't know the size.

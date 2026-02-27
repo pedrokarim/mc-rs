@@ -246,6 +246,9 @@ impl ConnectionHandler {
                 packets::id::BLOCK_ACTOR_DATA => {
                     self.handle_block_actor_data(addr, &mut cursor).await;
                 }
+                packets::id::PLAYER_SKIN => {
+                    self.handle_player_skin(addr, &mut cursor).await;
+                }
                 other => {
                     debug!(
                         "Game packet 0x{other:02X} from {addr}: {} bytes",
@@ -974,5 +977,45 @@ impl ConnectionHandler {
         let snapshot = self.build_snapshot();
         let (_result, actions) = self.plugin_manager.dispatch(&event, &snapshot);
         self.apply_plugin_actions(actions).await;
+    }
+
+    // -----------------------------------------------------------------------
+    // PlayerSkin (0x5D)
+    // -----------------------------------------------------------------------
+
+    async fn handle_player_skin(&mut self, addr: SocketAddr, buf: &mut Cursor<&[u8]>) {
+        let pkt = match packets::PlayerSkin::proto_decode(buf) {
+            Ok(p) => p,
+            Err(e) => {
+                debug!("Bad PlayerSkin from {addr}: {e}");
+                return;
+            }
+        };
+
+        // Update the stored skin data for this player.
+        if let Some(conn) = self.connections.get_mut(&addr) {
+            if let Some(ref mut cd) = conn.client_data {
+                cd.skin_id = pkt.skin_data.skin_id.clone();
+                cd.skin_image = pkt.skin_data.skin_image.clone();
+                cd.cape_id = pkt.skin_data.cape_id.clone();
+                cd.cape_image = pkt.skin_data.cape_image.clone();
+                cd.skin_resource_patch = pkt.skin_data.skin_resource_patch.clone();
+                cd.skin_geometry_data = pkt.skin_data.skin_geometry_data.clone();
+                cd.skin_color = pkt.skin_data.skin_color.clone();
+                cd.arm_size = pkt.skin_data.arm_size.clone();
+                cd.persona_skin = pkt.skin_data.persona_skin;
+                cd.play_fab_id = pkt.skin_data.play_fab_id.clone();
+            }
+        }
+
+        // Broadcast the PlayerSkin packet to all other players.
+        let broadcast = packets::PlayerSkin {
+            uuid: pkt.uuid,
+            skin_data: pkt.skin_data,
+            new_skin_name: pkt.new_skin_name,
+            old_skin_name: pkt.old_skin_name,
+        };
+        self.broadcast_packet_except(addr, packets::id::PLAYER_SKIN, &broadcast)
+            .await;
     }
 }

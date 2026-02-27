@@ -848,6 +848,14 @@ pub struct BlockEntityHashes {
     pub enchanting_table: u32,
     /// Bookshelf (no directional state).
     pub bookshelf: u32,
+    /// Stonecutter: `minecraft:cardinal_direction` east/north/south/west.
+    pub stonecutter: [u32; 4],
+    /// Grindstone: `direction` (Int 0-3) × `attachment` (String: 4 values) = 16 hashes.
+    pub grindstone: Vec<u32>,
+    /// Loom: `direction` (Int 0-3).
+    pub loom: [u32; 4],
+    /// Anvil: `minecraft:cardinal_direction` (4 dirs) × `damage` (3 states) = 12 hashes.
+    pub anvil: Vec<u32>,
 }
 
 impl BlockEntityHashes {
@@ -907,6 +915,51 @@ impl BlockEntityHashes {
         let enchanting_table = hash_block_state("minecraft:enchanting_table");
         let bookshelf = hash_block_state("minecraft:bookshelf");
 
+        // Stonecutter: uses minecraft:cardinal_direction (same as furnace)
+        let mut stonecutter = [0u32; 4];
+        for (di, dir) in CARDINAL_DIRS.iter().enumerate() {
+            stonecutter[di] = hash_block_state_with_props(
+                "minecraft:stonecutter_block",
+                &[("minecraft:cardinal_direction", StateValue::Str(dir))],
+            );
+        }
+
+        // Grindstone: direction (Int 0-3) × attachment (String: 4 values)
+        let attachments = ["hanging", "multiple", "side", "standing"];
+        let mut grindstone = Vec::with_capacity(16);
+        for att in &attachments {
+            for dir in 0..4i32 {
+                grindstone.push(hash_block_state_with_props(
+                    "minecraft:grindstone",
+                    &[
+                        ("attachment", StateValue::Str(att)),
+                        ("direction", StateValue::Int(dir)),
+                    ],
+                ));
+            }
+        }
+
+        // Loom: direction (Int 0-3)
+        let mut loom = [0u32; 4];
+        for dir in 0..4i32 {
+            loom[dir as usize] = hash_block_state_with_int("minecraft:loom", "direction", dir);
+        }
+
+        // Anvil: minecraft:cardinal_direction (4 dirs) × damage (3 states)
+        let damage_states = ["undamaged", "slightly_damaged", "very_damaged"];
+        let mut anvil = Vec::with_capacity(12);
+        for dmg in &damage_states {
+            for dir in &CARDINAL_DIRS {
+                anvil.push(hash_block_state_with_props(
+                    "minecraft:anvil",
+                    &[
+                        ("damage", StateValue::Str(dmg)),
+                        ("minecraft:cardinal_direction", StateValue::Str(dir)),
+                    ],
+                ));
+            }
+        }
+
         Self {
             standing_sign,
             wall_sign,
@@ -919,6 +972,10 @@ impl BlockEntityHashes {
             lit_smoker,
             enchanting_table,
             bookshelf,
+            stonecutter,
+            grindstone,
+            loom,
+            anvil,
         }
     }
 
@@ -950,6 +1007,26 @@ impl BlockEntityHashes {
     /// Check if a block runtime ID is a bookshelf.
     pub fn is_bookshelf(&self, rid: u32) -> bool {
         rid == self.bookshelf
+    }
+
+    /// Check if a block runtime ID is a stonecutter.
+    pub fn is_stonecutter(&self, rid: u32) -> bool {
+        self.stonecutter.contains(&rid)
+    }
+
+    /// Check if a block runtime ID is a grindstone.
+    pub fn is_grindstone(&self, rid: u32) -> bool {
+        self.grindstone.contains(&rid)
+    }
+
+    /// Check if a block runtime ID is a loom.
+    pub fn is_loom(&self, rid: u32) -> bool {
+        self.loom.contains(&rid)
+    }
+
+    /// Check if a block runtime ID is an anvil.
+    pub fn is_anvil(&self, rid: u32) -> bool {
+        self.anvil.contains(&rid)
     }
 
     /// Check if a block runtime ID is a lit furnace variant.
@@ -1411,5 +1488,49 @@ mod tests {
         assert!(!beh.is_enchanting_table(beh.chest[0]));
         assert!(beh.is_bookshelf(beh.bookshelf));
         assert!(!beh.is_bookshelf(beh.enchanting_table));
+    }
+
+    #[test]
+    fn stonecutter_detection() {
+        let beh = BlockEntityHashes::compute();
+        for &h in &beh.stonecutter {
+            assert!(beh.is_stonecutter(h));
+            assert!(!beh.is_chest(h));
+        }
+        assert!(!beh.is_stonecutter(beh.enchanting_table));
+    }
+
+    #[test]
+    fn grindstone_detection() {
+        let beh = BlockEntityHashes::compute();
+        assert_eq!(beh.grindstone.len(), 16); // 4 dirs × 4 attachments
+        for &h in &beh.grindstone {
+            assert!(beh.is_grindstone(h));
+            assert!(!beh.is_furnace(h));
+        }
+        assert!(!beh.is_grindstone(beh.enchanting_table));
+    }
+
+    #[test]
+    fn loom_detection() {
+        let beh = BlockEntityHashes::compute();
+        for &h in &beh.loom {
+            assert!(beh.is_loom(h));
+            assert!(!beh.is_stonecutter(h));
+        }
+        assert!(!beh.is_loom(beh.enchanting_table));
+    }
+
+    #[test]
+    fn anvil_detection() {
+        let beh = BlockEntityHashes::compute();
+        assert_eq!(beh.anvil.len(), 12); // 4 dirs × 3 damage states
+        for &h in &beh.anvil {
+            assert_ne!(h, 0);
+            assert!(beh.is_anvil(h));
+            assert!(!beh.is_stonecutter(h));
+            assert!(!beh.is_loom(h));
+        }
+        assert!(!beh.is_anvil(beh.enchanting_table));
     }
 }

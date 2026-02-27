@@ -801,6 +801,79 @@ impl RecipeRegistry {
             1
         );
 
+        // ---- Stonecutter recipes ----
+        macro_rules! stonecutter {
+            ($input:expr, $output:expr, $count:expr) => {{
+                let nid = next_id;
+                next_id += 1;
+                shapeless.push(ShapelessRecipe {
+                    id: format!("mc-rs:stonecutter_{}", nid),
+                    network_id: nid,
+                    inputs: vec![inp($input, 0)],
+                    output: vec![RecipeOutput {
+                        item_name: $output.to_string(),
+                        count: $count,
+                        metadata: 0,
+                    }],
+                    tag: "stonecutter".to_string(),
+                });
+            }};
+        }
+
+        // Stone
+        stonecutter!("minecraft:stone", "minecraft:stone_bricks", 1);
+        stonecutter!("minecraft:stone", "minecraft:stone_brick_slab", 2);
+        stonecutter!("minecraft:stone", "minecraft:stone_brick_stairs", 1);
+        stonecutter!("minecraft:stone", "minecraft:stone_brick_wall", 1);
+        stonecutter!("minecraft:stone", "minecraft:chiseled_stone_bricks", 1);
+        stonecutter!("minecraft:stone", "minecraft:stone_slab", 2);
+        stonecutter!("minecraft:stone", "minecraft:stone_stairs", 1);
+        // Stone bricks
+        stonecutter!("minecraft:stone_bricks", "minecraft:stone_brick_slab", 2);
+        stonecutter!("minecraft:stone_bricks", "minecraft:stone_brick_stairs", 1);
+        stonecutter!("minecraft:stone_bricks", "minecraft:stone_brick_wall", 1);
+        stonecutter!(
+            "minecraft:stone_bricks",
+            "minecraft:chiseled_stone_bricks",
+            1
+        );
+        // Cobblestone
+        stonecutter!("minecraft:cobblestone", "minecraft:cobblestone_slab", 2);
+        stonecutter!("minecraft:cobblestone", "minecraft:cobblestone_stairs", 1);
+        stonecutter!("minecraft:cobblestone", "minecraft:cobblestone_wall", 1);
+        // Granite
+        stonecutter!("minecraft:granite", "minecraft:granite_slab", 2);
+        stonecutter!("minecraft:granite", "minecraft:granite_stairs", 1);
+        stonecutter!("minecraft:granite", "minecraft:granite_wall", 1);
+        stonecutter!("minecraft:granite", "minecraft:polished_granite", 1);
+        stonecutter!("minecraft:granite", "minecraft:polished_granite_slab", 2);
+        stonecutter!("minecraft:granite", "minecraft:polished_granite_stairs", 1);
+        // Diorite
+        stonecutter!("minecraft:diorite", "minecraft:diorite_slab", 2);
+        stonecutter!("minecraft:diorite", "minecraft:diorite_stairs", 1);
+        stonecutter!("minecraft:diorite", "minecraft:diorite_wall", 1);
+        stonecutter!("minecraft:diorite", "minecraft:polished_diorite", 1);
+        stonecutter!("minecraft:diorite", "minecraft:polished_diorite_slab", 2);
+        stonecutter!("minecraft:diorite", "minecraft:polished_diorite_stairs", 1);
+        // Andesite
+        stonecutter!("minecraft:andesite", "minecraft:andesite_slab", 2);
+        stonecutter!("minecraft:andesite", "minecraft:andesite_stairs", 1);
+        stonecutter!("minecraft:andesite", "minecraft:andesite_wall", 1);
+        stonecutter!("minecraft:andesite", "minecraft:polished_andesite", 1);
+        stonecutter!("minecraft:andesite", "minecraft:polished_andesite_slab", 2);
+        stonecutter!(
+            "minecraft:andesite",
+            "minecraft:polished_andesite_stairs",
+            1
+        );
+        // Sandstone
+        stonecutter!("minecraft:sandstone", "minecraft:sandstone_slab", 2);
+        stonecutter!("minecraft:sandstone", "minecraft:sandstone_stairs", 1);
+        stonecutter!("minecraft:sandstone", "minecraft:sandstone_wall", 1);
+        stonecutter!("minecraft:sandstone", "minecraft:cut_sandstone", 1);
+        stonecutter!("minecraft:sandstone", "minecraft:cut_sandstone_slab", 2);
+        stonecutter!("minecraft:sandstone", "minecraft:chiseled_sandstone", 1);
+
         let _ = next_id;
         Self { shaped, shapeless }
     }
@@ -980,5 +1053,53 @@ mod tests {
                 .any(|r| r.output.iter().any(|o| o.item_name == *tool));
             assert!(found, "Missing recipe for {tool}");
         }
+    }
+
+    #[test]
+    fn stonecutter_recipes_exist() {
+        let reg = RecipeRegistry::new();
+        let stonecutter_count = reg
+            .shapeless_recipes()
+            .iter()
+            .filter(|r| r.tag == "stonecutter")
+            .count();
+        assert!(
+            stonecutter_count >= 30,
+            "Expected at least 30 stonecutter recipes, got {stonecutter_count}"
+        );
+    }
+
+    #[test]
+    fn stonecutter_recipes_single_input() {
+        let reg = RecipeRegistry::new();
+        for r in reg.shapeless_recipes() {
+            if r.tag == "stonecutter" {
+                assert_eq!(
+                    r.inputs.len(),
+                    1,
+                    "Stonecutter recipe {} should have 1 input",
+                    r.id
+                );
+                assert_eq!(
+                    r.output.len(),
+                    1,
+                    "Stonecutter recipe {} should have 1 output",
+                    r.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn stonecutter_recipe_lookup() {
+        let reg = RecipeRegistry::new();
+        // Find a stonecutter recipe and verify it can be looked up by network ID
+        let sc = reg
+            .shapeless_recipes()
+            .iter()
+            .find(|r| r.tag == "stonecutter")
+            .expect("Should have at least one stonecutter recipe");
+        let found = reg.get_by_network_id(sc.network_id);
+        assert!(found.is_some());
     }
 }

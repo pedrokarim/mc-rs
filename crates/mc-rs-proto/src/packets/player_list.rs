@@ -66,7 +66,7 @@ impl ProtoEncode for PlayerListRemove {
 }
 
 /// Encode a skin image (width, height, data with VarUInt32 length).
-fn encode_skin_image(buf: &mut impl BufMut, image: &SkinImage) {
+pub(crate) fn encode_skin_image(buf: &mut impl BufMut, image: &SkinImage) {
     buf.put_i32_le(image.width as i32);
     buf.put_i32_le(image.height as i32);
     VarUInt32(image.data.len() as u32).proto_encode(buf);
@@ -74,7 +74,7 @@ fn encode_skin_image(buf: &mut impl BufMut, image: &SkinImage) {
 }
 
 /// Encode the full skin data block within a PlayerList Add entry.
-fn encode_skin_data(buf: &mut impl BufMut, data: &ClientData) {
+pub(crate) fn encode_skin_data(buf: &mut impl BufMut, data: &ClientData) {
     write_string(buf, &data.skin_id);
     write_string(buf, &data.play_fab_id);
     write_string(buf, &data.skin_resource_patch);
