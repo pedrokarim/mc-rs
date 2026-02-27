@@ -171,6 +171,8 @@ pub struct PlayerConnection {
     pub xp_level: i32,
     /// Total accumulated XP.
     pub xp_total: i32,
+    /// Pending forms awaiting response: form_id -> form_type ("simple"/"modal"/"custom").
+    pub pending_forms: HashMap<u32, String>,
 }
 
 /// An active status effect on a player.

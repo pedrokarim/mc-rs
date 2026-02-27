@@ -828,5 +828,8 @@ mod tests {
         fn schedule_repeating(&mut self, _: &str, _: u64, _: u64, _: u32) {}
         fn cancel_task(&mut self, _: &str, _: u32) {}
         fn register_command(&mut self, _: &str, _: &str, _: &str) {}
+        fn show_simple_form(&mut self, _: &str, _: u32, _: &str) {}
+        fn show_modal_form(&mut self, _: &str, _: u32, _: &str) {}
+        fn show_custom_form(&mut self, _: &str, _: u32, _: &str) {}
     }
 }

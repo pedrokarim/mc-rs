@@ -42,6 +42,7 @@ impl ConnectionHandler {
                 is_swimming: false,
                 xp_level: 0,
                 xp_total: 0,
+                pending_forms: HashMap::new(),
             },
         );
 
@@ -231,6 +232,9 @@ impl ConnectionHandler {
                 }
                 packets::id::RESPAWN => {
                     self.handle_respawn(addr, &mut cursor).await;
+                }
+                packets::id::MODAL_FORM_RESPONSE => {
+                    self.handle_modal_form_response(addr, &mut cursor).await;
                 }
                 other => {
                     debug!(
@@ -619,8 +623,7 @@ impl ConnectionHandler {
                             .find(|p| p.manifest.header.uuid == uuid)?;
                         let bytes = pack.pack_bytes.as_ref()?;
                         let chunk_size: u32 = 1_048_576;
-                        let chunk_count =
-                            (bytes.len() as u64).div_ceil(chunk_size as u64) as u32;
+                        let chunk_count = (bytes.len() as u64).div_ceil(chunk_size as u64) as u32;
                         Some((
                             packets::ResourcePackDataInfo {
                                 pack_id: format!(
@@ -904,5 +907,56 @@ impl ConnectionHandler {
         }
 
         info!("Sent world initialization packets to {addr}");
+    }
+
+    // -----------------------------------------------------------------------
+    // Forms UI
+    // -----------------------------------------------------------------------
+
+    async fn handle_modal_form_response(&mut self, addr: SocketAddr, buf: &mut Cursor<&[u8]>) {
+        let response = match packets::ModalFormResponse::proto_decode(buf) {
+            Ok(r) => r,
+            Err(e) => {
+                warn!("Bad ModalFormResponse from {addr}: {e}");
+                return;
+            }
+        };
+
+        // Look up the form type from pending_forms
+        let form_type = match self.connections.get_mut(&addr) {
+            Some(conn) => conn.pending_forms.remove(&response.form_id),
+            None => return,
+        };
+
+        let form_type = match form_type {
+            Some(ft) => ft,
+            None => {
+                debug!(
+                    "ModalFormResponse for unknown form_id {} from {addr}",
+                    response.form_id
+                );
+                return;
+            }
+        };
+
+        // Parse the response based on form type
+        let form_response =
+            mc_rs_plugin_api::parse_form_response(&form_type, response.response_data.as_deref());
+
+        // Build plugin player and dispatch event
+        let player = match self.connections.get(&addr) {
+            Some(conn) => Self::make_plugin_player(conn),
+            None => return,
+        };
+
+        let event = PluginEvent::FormResponse {
+            player,
+            form_id: response.form_id,
+            response: form_response,
+        };
+
+        let snapshot = self.build_snapshot();
+        let (_result, actions) = self.plugin_manager.dispatch(&event, &snapshot);
+        self.apply_plugin_actions(actions).await;
     }
 }

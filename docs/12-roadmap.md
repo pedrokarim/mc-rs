@@ -313,11 +313,15 @@ Phase 5 : Polish             ██████████ (continu)
 - [x] Loot tables with weighted pool/entry system and `roll()` method (3 tests)
 
 ### 4.5 — Formulaires (Forms UI)
-- [ ] SimpleForm
-- [ ] ModalForm
-- [ ] CustomForm
-- [ ] API forms pour les plugins
-- [ ] ModalFormRequest/Response handling
+- [x] ModalFormRequest (0x64) ProtoEncode + ModalFormResponse (0x65) ProtoDecode
+- [x] SimpleFormBuilder (type "form", buttons with optional images)
+- [x] ModalFormBuilder (type "modal", two-button yes/no dialog)
+- [x] CustomFormBuilder (type "custom_form", 6 element types: label, input, toggle, dropdown, slider, step_slider)
+- [x] FormResponse enum (Cancelled/Simple/Modal/Custom) + parse_form_response()
+- [x] ServerApi: show_simple_form/show_modal_form/show_custom_form
+- [x] PendingAction::ShowForm + pending_forms tracking per player
+- [x] PluginEvent::FormResponse dispatch to plugins on client response
+- [x] Lua/WASM plugin runtime support for FormResponse event
 
 **Milestone Phase 4 :** Les développeurs peuvent créer et distribuer des plugins.
 

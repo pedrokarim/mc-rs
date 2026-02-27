@@ -313,6 +313,16 @@ impl LuaPlugin {
                 t.set("new_time", *new_time)?;
                 "time_change"
             }
+            PluginEvent::FormResponse {
+                player,
+                form_id,
+                response,
+            } => {
+                Self::set_player_fields(lua, &t, player)?;
+                t.set("form_id", *form_id)?;
+                t.set("response", format!("{response:?}"))?;
+                "form_response"
+            }
             PluginEvent::ServerStarted => "server_started",
             PluginEvent::ServerStopping => "server_stopping",
         };

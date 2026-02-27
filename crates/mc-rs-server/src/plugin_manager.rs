@@ -80,6 +80,12 @@ pub enum PendingAction {
         level: LogLevel,
         message: String,
     },
+    ShowForm {
+        player_name: String,
+        form_id: u32,
+        form_data: String,
+        form_type: String,
+    },
 }
 
 // ─── ServerApiImpl ───────────────────────────────────────────────────────────
@@ -237,6 +243,33 @@ impl ServerApi for ServerApiImpl<'_> {
             name: name.to_string(),
             description: description.to_string(),
             plugin_name: plugin_name.to_string(),
+        });
+    }
+
+    fn show_simple_form(&mut self, player_name: &str, form_id: u32, json: &str) {
+        self.actions.push(PendingAction::ShowForm {
+            player_name: player_name.to_string(),
+            form_id,
+            form_data: json.to_string(),
+            form_type: "simple".to_string(),
+        });
+    }
+
+    fn show_modal_form(&mut self, player_name: &str, form_id: u32, json: &str) {
+        self.actions.push(PendingAction::ShowForm {
+            player_name: player_name.to_string(),
+            form_id,
+            form_data: json.to_string(),
+            form_type: "modal".to_string(),
+        });
+    }
+
+    fn show_custom_form(&mut self, player_name: &str, form_id: u32, json: &str) {
+        self.actions.push(PendingAction::ShowForm {
+            player_name: player_name.to_string(),
+            form_id,
+            form_data: json.to_string(),
+            form_type: "custom".to_string(),
         });
     }
 }

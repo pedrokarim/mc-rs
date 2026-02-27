@@ -109,6 +109,24 @@ impl ConnectionHandler {
                         .plugin_commands
                         .insert(name, plugin_name);
                 }
+                PendingAction::ShowForm {
+                    player_name,
+                    form_id,
+                    form_data,
+                    form_type,
+                } => {
+                    if let Some(addr) = self.find_player_addr(&player_name) {
+                        if let Some(conn) = self.connections.get_mut(&addr) {
+                            conn.pending_forms.insert(form_id, form_type);
+                        }
+                        self.send_packet(
+                            addr,
+                            packets::id::MODAL_FORM_REQUEST,
+                            &packets::ModalFormRequest { form_id, form_data },
+                        )
+                        .await;
+                    }
+                }
                 PendingAction::ScheduleTask { .. } | PendingAction::CancelTask { .. } => {
                     // These are handled internally by PluginManager
                 }
