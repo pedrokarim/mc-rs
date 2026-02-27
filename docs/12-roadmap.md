@@ -265,11 +265,12 @@ Phase 5 : Polish             ██████████ (continu)
 - [ ] Enclume (nécessite ContainerOpen/Close + block entities)
 
 ### 3.10 — Météo et cycle jour/nuit
-- [ ] Cycle jour/nuit (daylight cycle)
-- [ ] Game rule doDaylightCycle
-- [ ] Pluie et orage
-- [ ] Lightning (foudre)
-- [ ] Commandes /time et /weather
+- [x] Cycle jour/nuit (daylight cycle, 24000 tick cycle, SetTime 0x0A)
+- [x] Game rules (doDaylightCycle, doWeatherCycle, GameRulesChanged 0x48)
+- [x] Pluie et orage (smooth transitions, LevelEvent 3001-3004)
+- [x] Lightning (foudre, lightning strikes)
+- [x] Commandes /time, /weather, /gamerule
+- [x] Persistance météo dans level.dat
 
 **Milestone Phase 3 :** Le jeu survival est jouable avec mobs, combat, craft, mining.
 
@@ -280,28 +281,29 @@ Phase 5 : Polish             ██████████ (continu)
 **Objectif :** Les développeurs tiers peuvent créer des plugins.
 
 ### 4.1 — Plugin API Rust
-- [ ] Trait Plugin
-- [ ] Système d'événements (EventBus)
-- [ ] Tous les événements (joueur, entité, monde, serveur)
-- [ ] API joueur, monde, entité
-- [ ] Système de commandes plugin
-- [ ] Scheduler (delayed, repeating tasks)
-- [ ] Configuration par plugin
+- [x] Trait Plugin (info, on_enable, on_disable, on_event, on_task, on_command)
+- [x] Système d'événements (PluginEvent enum, 17 événements, 10 cancellables)
+- [x] Tous les événements (Join, Quit, Chat, Command, Move, Death, Respawn, BlockBreak, BlockPlace, PlayerDamage, MobSpawn, MobDeath, WeatherChange, TimeChange, ServerStarted, ServerStopping)
+- [x] API joueur, monde, entité (ServerApi trait, 17 méthodes)
+- [x] Système de commandes plugin (register_command, plugin_commands HashMap)
+- [x] Scheduler (delayed, repeating tasks via PendingAction)
+- [x] PluginManager (ServerSnapshot + PendingAction pattern, 15 hooks dans connection.rs)
 
 ### 4.2 — Plugins WASM
-- [ ] Runtime wasmtime
-- [ ] Host functions (API serveur → plugin)
-- [ ] Guest exports (plugin → serveur callbacks)
-- [ ] Manifest plugin.toml
-- [ ] Sandbox (CPU fuel, mémoire max)
+- [x] Runtime wasmtime 29 (Engine, Store, Instance)
+- [x] Host functions (17 fonctions dans module "mcrs" : players, world, entities, scheduler, commands)
+- [x] Guest exports (on_enable, on_event, on_task, on_command, get_info)
+- [x] Manifest plugin.toml (fuel limits, memory pages)
+- [x] Sandbox (fuel metering par event/command/task, memory limits)
 - [ ] Hot-reload (/reload command)
 
 ### 4.3 — Scripts Lua
-- [ ] Runtime mlua/LuaJIT
-- [ ] API Lua (événements, joueurs, monde)
-- [ ] Sandbox Lua (suppression os, io, debug)
+- [x] Runtime mlua (Lua 5.4 vendored)
+- [x] API Lua (mc.on, mc.broadcast, mc.send_message, mc.kick, mc.teleport, mc.schedule, etc.)
+- [x] Sandbox Lua (suppression os, io, debug, loadfile, dofile + memory limit)
+- [x] Commandes Lua (mc.register_command + on_command routing)
+- [x] Action queue pattern (LuaAction enum, flush via ServerApi)
 - [ ] Hot-reload
-- [ ] Commandes Lua
 
 ### 4.4 — Behavior Packs (Bedrock addons)
 - [ ] Parsing manifest.json
