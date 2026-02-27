@@ -67,6 +67,8 @@ use mc_rs_world::serializer::serialize_chunk_column;
 use mc_rs_world::storage::LevelDbProvider;
 use tokio::sync::watch;
 
+use mc_rs_behavior_pack::loader::LoadedBehaviorPack;
+use mc_rs_behavior_pack::loot_table::LootTableFile;
 use mc_rs_plugin_api::{DamageCause, EventResult, PluginBlockPos, PluginEvent, PluginPlayer};
 
 use crate::config::ServerConfig;
@@ -246,6 +248,11 @@ pub struct ConnectionHandler {
     is_thundering: bool,
     /// Whether the ServerStarted plugin event has been dispatched.
     plugin_started: bool,
+    /// Loaded behavior packs (for resource pack transfer to clients).
+    behavior_packs: Vec<LoadedBehaviorPack>,
+    /// Merged loot tables from all loaded behavior packs.
+    #[allow(dead_code)]
+    loot_tables: HashMap<String, LootTableFile>,
 }
 
 impl ConnectionHandler {
@@ -344,11 +351,133 @@ impl ConnectionHandler {
             server_config.world.auto_save_interval
         );
 
+        // Load behavior packs
+        let packs_dir = std::path::PathBuf::from(&server_config.packs.directory);
+        std::fs::create_dir_all(&packs_dir).ok();
+        let behavior_packs = mc_rs_behavior_pack::load_all_packs(&packs_dir);
+
+        // Build registries and register behavior pack content
+        let mut block_registry = BlockRegistry::new();
+        let mut item_registry = ItemRegistry::new();
+        let mut recipe_registry = RecipeRegistry::new();
+        let mut game_world = GameWorld::new(1);
+        let mut loot_tables: HashMap<String, LootTableFile> = HashMap::new();
+
+        for pack in &behavior_packs {
+            // Register custom entities into mob registry
+            for entity in &pack.entities {
+                game_world
+                    .mob_registry
+                    .register_mob(mc_rs_game::mob_registry::MobDefinition {
+                        type_id: entity.identifier.clone(),
+                        display_name: entity
+                            .identifier
+                            .split(':')
+                            .next_back()
+                            .unwrap_or(&entity.identifier)
+                            .to_string(),
+                        category: if entity.attack_damage > 0.0 {
+                            mc_rs_game::mob_registry::MobCategory::Hostile
+                        } else {
+                            mc_rs_game::mob_registry::MobCategory::Passive
+                        },
+                        max_health: entity.max_health,
+                        attack_damage: entity.attack_damage,
+                        movement_speed: entity.movement_speed,
+                        bb_width: entity.bb_width,
+                        bb_height: entity.bb_height,
+                    });
+            }
+
+            // Register custom items
+            for item in &pack.items {
+                item_registry.register_item(
+                    item.identifier.clone(),
+                    item.max_stack_size,
+                    item.is_component_based,
+                );
+            }
+
+            // Register custom blocks
+            for block in &pack.blocks {
+                block_registry.register_block(
+                    block.identifier.clone(),
+                    block.hardness,
+                    block.is_solid,
+                );
+            }
+
+            // Register custom recipes
+            for recipe_file in &pack.recipes {
+                if let Some(ref shaped) = recipe_file.shaped {
+                    let (width, height, flat_inputs) = shaped.flatten();
+                    let inputs: Vec<mc_rs_game::recipe::RecipeInput> = flat_inputs
+                        .iter()
+                        .map(|fi| mc_rs_game::recipe::RecipeInput {
+                            item_name: fi.item_name.clone(),
+                            count: fi.count,
+                            metadata: fi.metadata,
+                        })
+                        .collect();
+                    let output = mc_rs_game::recipe::RecipeOutput {
+                        item_name: shaped.result.item.clone(),
+                        count: shaped.result.count,
+                        metadata: shaped.result.data,
+                    };
+                    recipe_registry.register_shaped(mc_rs_game::recipe::ShapedRecipe {
+                        id: shaped.description.identifier.clone(),
+                        network_id: 0,
+                        width,
+                        height,
+                        input: inputs,
+                        output: vec![output],
+                        tag: shaped
+                            .tags
+                            .first()
+                            .cloned()
+                            .unwrap_or_else(|| "crafting_table".into()),
+                    });
+                }
+                if let Some(ref shapeless) = recipe_file.shapeless {
+                    let inputs: Vec<mc_rs_game::recipe::RecipeInput> = shapeless
+                        .ingredients
+                        .iter()
+                        .map(|ing| mc_rs_game::recipe::RecipeInput {
+                            item_name: ing.item.clone(),
+                            count: ing.count,
+                            metadata: ing.data,
+                        })
+                        .collect();
+                    let output = mc_rs_game::recipe::RecipeOutput {
+                        item_name: shapeless.result.item.clone(),
+                        count: shapeless.result.count,
+                        metadata: shapeless.result.data,
+                    };
+                    recipe_registry.register_shapeless(mc_rs_game::recipe::ShapelessRecipe {
+                        id: shapeless.description.identifier.clone(),
+                        network_id: 0,
+                        inputs,
+                        output: vec![output],
+                        tag: shapeless
+                            .tags
+                            .first()
+                            .cloned()
+                            .unwrap_or_else(|| "crafting_table".into()),
+                    });
+                }
+            }
+
+            // Merge loot tables
+            for (key, table) in &pack.loot_tables {
+                loot_tables.insert(key.clone(), table.clone());
+            }
+        }
+
         Self {
             connections: HashMap::new(),
             server_handle,
             online_mode,
-            game_world: GameWorld::new(1),
+            game_world,
             server_config,
             flat_world_blocks: FlatWorldBlocks::compute(),
             overworld_generator,
@@ -357,9 +486,9 @@ impl ConnectionHandler {
             command_registry,
             shutdown_tx,
             world_chunks: HashMap::new(),
-            block_registry: BlockRegistry::new(),
-            item_registry: ItemRegistry::new(),
-            recipe_registry: RecipeRegistry::new(),
+            block_registry,
+            item_registry,
+            recipe_registry,
             permissions,
             chunk_storage,
             level_dat,
@@ -396,6 +525,8 @@ impl ConnectionHandler {
                 mgr
             },
             plugin_started: false,
+            behavior_packs,
+            loot_tables,
         }
     }
 

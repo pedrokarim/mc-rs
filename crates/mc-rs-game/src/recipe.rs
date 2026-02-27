@@ -839,6 +839,34 @@ impl RecipeRegistry {
     pub fn is_empty(&self) -> bool {
         self.shaped.is_empty() && self.shapeless.is_empty()
     }
+
+    /// Next available network ID.
+    fn next_network_id(&self) -> u32 {
+        let max_shaped = self.shaped.iter().map(|r| r.network_id).max().unwrap_or(0);
+        let max_shapeless = self
+            .shapeless
+            .iter()
+            .map(|r| r.network_id)
+            .max()
+            .unwrap_or(0);
+        max_shaped.max(max_shapeless) + 1
+    }
+
+    /// Register a custom shaped recipe. Returns the assigned network_id.
+    pub fn register_shaped(&mut self, mut recipe: ShapedRecipe) -> u32 {
+        let id = self.next_network_id();
+        recipe.network_id = id;
+        self.shaped.push(recipe);
+        id
+    }
+
+    /// Register a custom shapeless recipe. Returns the assigned network_id.
+    pub fn register_shapeless(&mut self, mut recipe: ShapelessRecipe) -> u32 {
+        let id = self.next_network_id();
+        recipe.network_id = id;
+        self.shapeless.push(recipe);
+        id
+    }
 }
 
 /// Helper to create a recipe input.
@@ -912,6 +940,29 @@ mod tests {
         ids.sort();
         ids.dedup();
         assert_eq!(ids.len(), len, "Duplicate network IDs found");
+    }
+
+    #[test]
+    fn register_custom_recipe() {
+        let mut reg = RecipeRegistry::new();
+        let old_len = reg.len();
+        let id = reg.register_shapeless(ShapelessRecipe {
+            id: "custom:rubies".to_string(),
+            network_id: 0,
+            inputs: vec![RecipeInput {
+                item_name: "custom:ruby_block".to_string(),
+                count: 1,
+                metadata: -1,
+            }],
+            output: vec![RecipeOutput {
+                item_name: "custom:ruby".to_string(),
+                count: 9,
+                metadata: 0,
+            }],
+            tag: "crafting_table".to_string(),
+        });
+        assert_eq!(reg.len(), old_len + 1);
+        assert!(reg.get_by_network_id(id).is_some());
     }
 
     #[test]

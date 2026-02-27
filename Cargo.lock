@@ -1237,6 +1237,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mc-rs-behavior-pack"
+version = "0.1.0"
+dependencies = [
+ "rand",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "mc-rs-command"
 version = "0.1.0"
 
@@ -1338,6 +1348,7 @@ name = "mc-rs-server"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "mc-rs-behavior-pack",
  "mc-rs-command",
  "mc-rs-crypto",
  "mc-rs-game",

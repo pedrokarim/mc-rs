@@ -989,7 +989,7 @@ impl ConnectionHandler {
                 .mob_registry
                 .all()
                 .iter()
-                .map(|m| m.type_id)
+                .map(|m| m.type_id.as_str())
                 .collect();
             return CommandResult::err(format!(
                 "Usage: /summon <type> [x y z]. Available: {}",
@@ -1010,7 +1010,7 @@ impl ConnectionHandler {
                 .mob_registry
                 .all()
                 .iter()
-                .map(|m| m.type_id)
+                .map(|m| m.type_id.as_str())
                 .collect();
             return CommandResult::err(format!(
                 "Unknown entity type: {full_type}. Available: {}",

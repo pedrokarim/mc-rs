@@ -32,9 +32,19 @@ pub struct BlockInfo {
     pub tool_type: ToolType,
 }
 
+/// Custom block info for behavior pack blocks (owned strings).
+#[derive(Debug, Clone)]
+pub struct CustomBlockInfo {
+    pub name: String,
+    pub hardness: f32,
+    pub is_solid: bool,
+    pub tool_type: ToolType,
+}
+
 /// Registry mapping block runtime ID hashes to block info.
 pub struct BlockRegistry {
     blocks: HashMap<u32, &'static BlockInfo>,
+    custom: HashMap<u32, CustomBlockInfo>,
 }
 
 impl Default for BlockRegistry {
@@ -51,7 +61,10 @@ impl BlockRegistry {
             let hash = hash_block_state(info.name);
             blocks.insert(hash, info);
         }
-        Self { blocks }
+        Self {
+            blocks,
+            custom: HashMap::new(),
+        }
     }
 
     /// Look up full block info by runtime ID hash.
@@ -61,28 +74,55 @@ impl BlockRegistry {
 
     /// Check if a block is solid. Defaults to `true` for unknown blocks.
     pub fn is_solid(&self, hash: u32) -> bool {
-        self.blocks
-            .get(&hash)
-            .map(|info| info.is_solid)
-            .unwrap_or(true)
+        if let Some(info) = self.blocks.get(&hash) {
+            return info.is_solid;
+        }
+        if let Some(info) = self.custom.get(&hash) {
+            return info.is_solid;
+        }
+        true
     }
 
     /// Get block hardness. Returns `None` for unknown blocks.
     pub fn hardness(&self, hash: u32) -> Option<f32> {
-        self.blocks.get(&hash).map(|info| info.hardness)
+        if let Some(info) = self.blocks.get(&hash) {
+            return Some(info.hardness);
+        }
+        self.custom.get(&hash).map(|info| info.hardness)
     }
 
     /// Calculate expected mining time in seconds (bare hand, no tool).
     pub fn expected_mining_secs(&self, hash: u32) -> Option<f32> {
-        self.blocks.get(&hash).map(|info| {
-            if info.hardness <= 0.0 {
-                return 0.0;
-            }
-            match info.tool_type {
-                ToolType::None => info.hardness * 1.5,
-                _ => info.hardness * 5.0, // wrong tool penalty
-            }
-        })
+        if let Some(info) = self.blocks.get(&hash) {
+            return Some(mining_secs(info.hardness, info.tool_type));
+        }
+        self.custom
+            .get(&hash)
+            .map(|info| mining_secs(info.hardness, info.tool_type))
+    }
+
+    /// Register a custom block (e.g. from a behavior pack).
+    pub fn register_block(&mut self, name: String, hardness: f32, is_solid: bool) {
+        let hash = hash_block_state(&name);
+        self.custom.insert(
+            hash,
+            CustomBlockInfo {
+                name,
+                hardness,
+                is_solid,
+                tool_type: ToolType::None,
+            },
+        );
+    }
+}
+
+fn mining_secs(hardness: f32, tool_type: ToolType) -> f32 {
+    if hardness <= 0.0 {
+        return 0.0;
+    }
+    match tool_type {
+        ToolType::None => hardness * 1.5,
+        _ => hardness * 5.0,
     }
 }
 
@@ -941,5 +981,14 @@ mod tests {
             "Expected >= 300 blocks, got {}",
             registry.blocks.len()
         );
+    }
+
+    #[test]
+    fn register_custom_block() {
+        let mut registry = BlockRegistry::new();
+        registry.register_block("custom:marble".to_string(), 2.5, true);
+        let hash = hash_block_state("custom:marble");
+        assert_eq!(registry.hardness(hash), Some(2.5));
+        assert!(registry.is_solid(hash));
     }
 }

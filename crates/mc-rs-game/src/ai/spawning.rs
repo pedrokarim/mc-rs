@@ -70,7 +70,7 @@ pub fn system_natural_spawn(world: &mut World, mob_registry: &MobRegistry, confi
             .all()
             .iter()
             .filter(|d| matches!(d.category, MobCategory::Hostile))
-            .map(|d| d.type_id)
+            .map(|d| d.type_id.as_str())
             .collect();
 
         if !hostile_types.is_empty() {
@@ -94,7 +94,7 @@ pub fn system_natural_spawn(world: &mut World, mob_registry: &MobRegistry, confi
             .all()
             .iter()
             .filter(|d| matches!(d.category, MobCategory::Passive))
-            .map(|d| d.type_id)
+            .map(|d| d.type_id.as_str())
             .collect();
 
         if !passive_types.is_empty() {

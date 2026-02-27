@@ -8,6 +8,8 @@ pub struct ServerConfig {
     pub logging: LoggingSection,
     #[serde(default)]
     pub permissions: PermissionsSection,
+    #[serde(default)]
+    pub packs: PacksSection,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -39,6 +41,27 @@ pub struct WorldSection {
 
 fn default_auto_save_interval() -> u64 {
     300
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PacksSection {
+    #[serde(default = "default_packs_directory")]
+    pub directory: String,
+    #[serde(default)]
+    pub force_packs: bool,
+}
+
+fn default_packs_directory() -> String {
+    "packs".into()
+}
+
+impl Default for PacksSection {
+    fn default() -> Self {
+        Self {
+            directory: default_packs_directory(),
+            force_packs: false,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -90,6 +113,9 @@ mod tests {
         assert_eq!(config.logging.level, "debug");
         // permissions section defaults when absent
         assert!(!config.permissions.whitelist_enabled);
+        // packs section defaults when absent
+        assert_eq!(config.packs.directory, "packs");
+        assert!(!config.packs.force_packs);
     }
 
     #[test]

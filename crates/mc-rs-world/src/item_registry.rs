@@ -114,6 +114,26 @@ impl ItemRegistry {
     pub fn is_empty(&self) -> bool {
         self.by_name.is_empty()
     }
+
+    /// Register a custom item (e.g. from a behavior pack).
+    ///
+    /// Assigns the next available numeric_id automatically.
+    pub fn register_item(&mut self, name: String, max_stack_size: u8, is_component_based: bool) {
+        if self.by_name.contains_key(&name) {
+            return;
+        }
+        let next_id = self.by_id.keys().copied().max().unwrap_or(0) + 1;
+        self.by_id.insert(next_id, name.clone());
+        self.by_name.insert(
+            name.clone(),
+            ItemInfo {
+                name,
+                numeric_id: next_id,
+                max_stack_size,
+                is_component_based,
+            },
+        );
+    }
 }
 
 /// Determine max stack size based on item name patterns.
@@ -353,5 +373,22 @@ mod tests {
         let registry = ItemRegistry::new();
         let boat = registry.get_by_name("minecraft:acacia_boat").unwrap();
         assert_eq!(boat.max_stack_size, 1);
+    }
+
+    #[test]
+    fn register_custom_item() {
+        let mut registry = ItemRegistry::new();
+        let old_len = registry.len();
+        registry.register_item("custom:ruby".to_string(), 64, true);
+        assert_eq!(registry.len(), old_len + 1);
+        let ruby = registry.get_by_name("custom:ruby").unwrap();
+        assert_eq!(ruby.max_stack_size, 64);
+        assert!(ruby.is_component_based);
+        // Should also be in item table entries
+        let entries = registry.item_table_entries();
+        assert!(entries.iter().any(|e| e.string_id == "custom:ruby"));
+        // Registering same item again should be a no-op
+        registry.register_item("custom:ruby".to_string(), 16, true);
+        assert_eq!(registry.len(), old_len + 1);
     }
 }

@@ -11,6 +11,7 @@ members = [
     "crates/mc-rs-plugin-api",
     "crates/mc-rs-plugin-wasm",
     "crates/mc-rs-plugin-lua",
+    "crates/mc-rs-behavior-pack",
     "crates/mc-rs-server",
 ]
 

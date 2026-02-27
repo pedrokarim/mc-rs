@@ -306,13 +306,11 @@ Phase 5 : Polish             ██████████ (continu)
 - [ ] Hot-reload
 
 ### 4.4 — Behavior Packs (Bedrock addons)
-- [ ] Parsing manifest.json
-- [ ] Entités custom (JSON)
-- [ ] Items custom (JSON)
-- [ ] Blocs custom (JSON)
-- [ ] Recettes custom
-- [ ] Loot tables
-- [ ] Resource pack transfer (envoi aux clients)
+- [x] New crate `mc-rs-behavior-pack`: JSON parsing for manifest, entity, item, block, recipe, loot_table, loader (17 tests)
+- [x] Extensible registries: `register_mob()`, `register_item()`, `register_block()`, `register_shaped()`/`register_shapeless()` (4 tests)
+- [x] 3 resource pack transfer packets: ResourcePackDataInfo (0x52), ResourcePackChunkData (0x53), ResourcePackChunkRequest (0x54) (4 tests)
+- [x] Server integration: `[packs]` config section, pack loading in `ConnectionHandler::new()`, login flow with pack announcement/transfer
+- [x] Loot tables with weighted pool/entry system and `roll()` method (3 tests)
 
 ### 4.5 — Formulaires (Forms UI)
 - [ ] SimpleForm

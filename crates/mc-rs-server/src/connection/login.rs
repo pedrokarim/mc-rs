@@ -194,6 +194,10 @@ impl ConnectionHandler {
                     self.handle_resource_pack_client_response(addr, &mut cursor)
                         .await;
                 }
+                packets::id::RESOURCE_PACK_CHUNK_REQUEST => {
+                    self.handle_resource_pack_chunk_request(addr, &mut cursor)
+                        .await;
+                }
                 packets::id::REQUEST_CHUNK_RADIUS => {
                     self.handle_request_chunk_radius(addr, &mut cursor).await;
                 }
@@ -540,18 +544,42 @@ impl ConnectionHandler {
     // -----------------------------------------------------------------------
 
     async fn send_resource_packs_info(&mut self, addr: SocketAddr) {
-        self.send_packet(
-            addr,
-            packets::id::RESOURCE_PACKS_INFO,
-            &ResourcePacksInfo::default(),
-        )
-        .await;
+        use mc_rs_proto::packets::resource_packs_info::BehaviorPackEntry;
+
+        let bp_entries: Vec<BehaviorPackEntry> = self
+            .behavior_packs
+            .iter()
+            .map(|pack| BehaviorPackEntry {
+                uuid: pack.manifest.header.uuid.clone(),
+                version: pack.manifest.version_string(),
+                size: pack.pack_size,
+                content_key: String::new(),
+                sub_pack_name: String::new(),
+                content_identity: String::new(),
+                has_scripts: false,
+            })
+            .collect();
+
+        let pack_info = ResourcePacksInfo {
+            forcing_server_packs: self.server_config.packs.force_packs
+                && !self.behavior_packs.is_empty(),
+            behavior_packs: bp_entries,
+            ..ResourcePacksInfo::default()
+        };
+
+        let pack_count = pack_info.behavior_packs.len();
+        self.send_packet(addr, packets::id::RESOURCE_PACKS_INFO, &pack_info)
+            .await;
 
         if let Some(conn) = self.connections.get_mut(&addr) {
             conn.state = LoginState::AwaitingResourcePackResponse;
         }
 
-        info!("Sent ResourcePacksInfo to {addr} (empty packs)");
+        if pack_count > 0 {
+            info!("Sent ResourcePacksInfo to {addr} ({pack_count} behavior pack(s))");
+        } else {
+            info!("Sent ResourcePacksInfo to {addr} (no packs)");
+        }
     }
 
     async fn handle_resource_pack_client_response(
@@ -578,18 +606,76 @@ impl ConnectionHandler {
         );
 
         match (current_state, response.status) {
+            (LoginState::AwaitingResourcePackResponse, ResourcePackResponseStatus::SendPacks) => {
+                // Client wants us to send pack data — collect DataInfo packets first
+                let data_infos: Vec<(packets::ResourcePackDataInfo, String)> = response
+                    .resource_pack_ids
+                    .iter()
+                    .filter_map(|pack_id_str| {
+                        let uuid = pack_id_str.split('_').next().unwrap_or(pack_id_str);
+                        let pack = self
+                            .behavior_packs
+                            .iter()
+                            .find(|p| p.manifest.header.uuid == uuid)?;
+                        let bytes = pack.pack_bytes.as_ref()?;
+                        let chunk_size: u32 = 1_048_576;
+                        let chunk_count =
+                            (bytes.len() as u64).div_ceil(chunk_size as u64) as u32;
+                        Some((
+                            packets::ResourcePackDataInfo {
+                                pack_id: format!(
+                                    "{}_{}",
+                                    pack.manifest.header.uuid,
+                                    pack.manifest.version_string()
+                                ),
+                                max_chunk_size: chunk_size,
+                                chunk_count,
+                                pack_size: bytes.len() as u64,
+                                pack_hash: String::new(),
+                                is_premium: false,
+                                pack_type: 2,
+                            },
+                            pack.manifest.header.name.clone(),
+                        ))
+                    })
+                    .collect();
+
+                for (data_info, name) in &data_infos {
+                    self.send_packet(addr, packets::id::RESOURCE_PACK_DATA_INFO, data_info)
+                        .await;
+                    info!(
+                        "Sent ResourcePackDataInfo for {name} to {addr} ({} chunks)",
+                        data_info.chunk_count
+                    );
+                }
+            }
             (
                 LoginState::AwaitingResourcePackResponse,
                 ResourcePackResponseStatus::HaveAllPacks,
             )
             | (LoginState::AwaitingResourcePackResponse, ResourcePackResponseStatus::Completed) => {
                 // Client has all packs (or none needed) — send stack
-                self.send_packet(
-                    addr,
-                    packets::id::RESOURCE_PACK_STACK,
-                    &ResourcePackStack::default(),
-                )
-                .await;
+                use mc_rs_proto::packets::resource_pack_stack::StackPackEntry;
+
+                let bp_stack: Vec<StackPackEntry> = self
+                    .behavior_packs
+                    .iter()
+                    .map(|pack| StackPackEntry {
+                        uuid: pack.manifest.header.uuid.clone(),
+                        version: pack.manifest.version_string(),
+                        sub_pack_name: String::new(),
+                    })
+                    .collect();
+
+                let stack = ResourcePackStack {
+                    must_accept: self.server_config.packs.force_packs
+                        && !self.behavior_packs.is_empty(),
+                    behavior_packs: bp_stack,
+                    ..ResourcePackStack::default()
+                };
+
+                self.send_packet(addr, packets::id::RESOURCE_PACK_STACK, &stack)
+                    .await;
 
                 if let Some(conn) = self.connections.get_mut(&addr) {
                     conn.state = LoginState::AwaitingResourcePackComplete;
@@ -606,6 +692,68 @@ impl ConnectionHandler {
                 warn!(
                     "Unexpected ResourcePackClientResponse {:?} in state {:?} from {addr}",
                     response.status, current_state
+                );
+            }
+        }
+    }
+
+    /// Handle a ResourcePackChunkRequest (0x54) — send the requested chunk data.
+    pub(super) async fn handle_resource_pack_chunk_request(
+        &mut self,
+        addr: SocketAddr,
+        buf: &mut Cursor<&[u8]>,
+    ) {
+        let request = match packets::ResourcePackChunkRequest::proto_decode(buf) {
+            Ok(r) => r,
+            Err(e) => {
+                warn!("Bad ResourcePackChunkRequest from {addr}: {e}");
+                return;
+            }
+        };
+
+        // Extract chunk data from the pack (collect before send to avoid borrow conflict)
+        let uuid = request
+            .pack_id
+            .split('_')
+            .next()
+            .unwrap_or(&request.pack_id);
+        let chunk_size: usize = 1_048_576;
+
+        let chunk_data = self
+            .behavior_packs
+            .iter()
+            .find(|p| p.manifest.header.uuid == uuid)
+            .and_then(|pack| {
+                let bytes = pack.pack_bytes.as_ref()?;
+                let offset = request.chunk_index as usize * chunk_size;
+                if offset >= bytes.len() {
+                    return None;
+                }
+                let end = (offset + chunk_size).min(bytes.len());
+                Some((
+                    packets::ResourcePackChunkData {
+                        pack_id: request.pack_id.clone(),
+                        chunk_index: request.chunk_index,
+                        progress: offset as u64,
+                        data: bytes[offset..end].to_vec(),
+                    },
+                    bytes.len().div_ceil(chunk_size),
+                ))
+            });
+
+        match chunk_data {
+            Some((data, total_chunks)) => {
+                self.send_packet(addr, packets::id::RESOURCE_PACK_CHUNK_DATA, &data)
+                    .await;
+                debug!(
+                    "Sent chunk {}/{total_chunks} for pack {} to {addr}",
+                    request.chunk_index, request.pack_id,
+                );
+            }
+            None => {
+                warn!(
+                    "Failed to find chunk {} for pack {} from {addr}",
+                    request.chunk_index, request.pack_id
                 );
             }
         }
