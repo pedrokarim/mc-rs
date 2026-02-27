@@ -26,6 +26,12 @@ Un petit workspace de rien du tout :
 | `mc-rs-plugin-lua` | Runtime de scripting Lua |
 | `mc-rs-plugin-wasm` | Runtime de plugins WASM |
 
+## Documentation
+
+La documentation développeur pour le système de plugins (Lua & WASM) est disponible ici :
+
+**[https://pedrokarim.github.io/mc-rs/](https://pedrokarim.github.io/mc-rs/)**
+
 ## Compilation
 
 ```bash
