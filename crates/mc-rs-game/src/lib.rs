@@ -9,4 +9,5 @@ pub mod game_world;
 pub mod inventory;
 pub mod mob_registry;
 pub mod recipe;
+pub mod smelting;
 pub mod xp;

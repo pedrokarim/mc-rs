@@ -97,35 +97,46 @@ impl ConnectionHandler {
                 .map(|oc| (oc.window_id, oc.position));
 
             let response = if let Some((window_id, pos)) = container_info {
-                // Clone chest items for processing
-                let mut chest_items = self
-                    .block_entities
-                    .get(&(pos.x, pos.y, pos.z))
-                    .and_then(|be| match be {
-                        BlockEntityData::Chest { items } => Some(items.clone()),
-                        _ => None,
-                    })
-                    .unwrap_or_else(|| {
-                        (0..27)
-                            .map(|_| mc_rs_proto::item_stack::ItemStack::empty())
-                            .collect()
-                    });
+                // Extract container items based on block entity type
+                let mut container_items = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+                    Some(BlockEntityData::Chest { items }) => items.clone(),
+                    Some(BlockEntityData::Furnace {
+                        input,
+                        fuel,
+                        output,
+                        ..
+                    }) => vec![input.clone(), fuel.clone(), output.clone()],
+                    _ => vec![mc_rs_proto::item_stack::ItemStack::empty(); 3],
+                };
 
                 let resp = match self.connections.get_mut(&addr) {
                     Some(conn) => conn.inventory.process_request_with_container(
                         req,
                         &self.item_registry,
                         window_id,
-                        &mut chest_items,
+                        &mut container_items,
                     ),
                     None => return,
                 };
 
-                // Write back modified chest items
-                if let Some(BlockEntityData::Chest { items }) =
-                    self.block_entities.get_mut(&(pos.x, pos.y, pos.z))
-                {
-                    *items = chest_items;
+                // Write back modified items to the block entity
+                match self.block_entities.get_mut(&(pos.x, pos.y, pos.z)) {
+                    Some(BlockEntityData::Chest { items }) => {
+                        *items = container_items;
+                    }
+                    Some(BlockEntityData::Furnace {
+                        input,
+                        fuel,
+                        output,
+                        ..
+                    }) => {
+                        if container_items.len() >= 3 {
+                            *input = container_items[0].clone();
+                            *fuel = container_items[1].clone();
+                            *output = container_items[2].clone();
+                        }
+                    }
+                    _ => {}
                 }
 
                 resp
@@ -264,9 +275,51 @@ impl ConnectionHandler {
             });
         }
 
+        // Furnace recipes (type 3 = FurnaceDataRecipe)
+        use mc_rs_proto::packets::crafting_data::FurnaceRecipeEntry;
+        let mut furnace_entries = Vec::new();
+        for recipe in self.smelting_registry.recipes() {
+            let input_nid = self
+                .item_registry
+                .get_by_name(&recipe.input_name)
+                .map(|e| e.numeric_id as i32)
+                .unwrap_or(0);
+            if input_nid == 0 {
+                continue;
+            }
+            let output_nid = self
+                .item_registry
+                .get_by_name(&recipe.output_name)
+                .map(|e| e.numeric_id as i32)
+                .unwrap_or(0);
+            if output_nid == 0 {
+                continue;
+            }
+            let input_meta = if recipe.input_metadata == -1 {
+                0x7FFF
+            } else {
+                recipe.input_metadata as i32
+            };
+            // Emit one entry per tag
+            for tag in &recipe.tags {
+                furnace_entries.push(FurnaceRecipeEntry {
+                    input_id: input_nid,
+                    input_metadata: input_meta,
+                    output: CraftingOutputItem {
+                        network_id: output_nid,
+                        count: recipe.output_count as u16,
+                        metadata: recipe.output_metadata,
+                        block_runtime_id: 0,
+                    },
+                    tag: tag.clone(),
+                });
+            }
+        }
+
         mc_rs_proto::packets::crafting_data::CraftingData {
             shaped: shaped_entries,
             shapeless: shapeless_entries,
+            furnace: furnace_entries,
             clear_recipes: true,
         }
     }
@@ -500,6 +553,10 @@ impl ConnectionHandler {
                         self.open_chest(addr, click_pos).await;
                         return;
                     }
+                    if self.block_entity_hashes.is_furnace(rid) {
+                        self.open_furnace(addr, click_pos).await;
+                        return;
+                    }
                 }
 
                 let target = Self::face_offset(use_item.block_position, use_item.face);
@@ -567,6 +624,12 @@ impl ConnectionHandler {
                 } else if self.block_entity_hashes.is_chest(block_runtime_id) {
                     // Chest faces the player
                     self.block_entity_hashes.chest_from_yaw(yaw)
+                } else if let Some(variant) =
+                    self.block_entity_hashes.furnace_variant(block_runtime_id)
+                {
+                    // Furnace faces the player
+                    self.block_entity_hashes
+                        .furnace_from_yaw(variant, yaw, false)
                 } else {
                     block_runtime_id
                 };
@@ -600,6 +663,19 @@ impl ConnectionHandler {
                 } else if self.block_entity_hashes.is_chest(final_rid) {
                     self.block_entities
                         .insert((target.x, target.y, target.z), BlockEntityData::new_chest());
+                } else if let Some(variant) = self.block_entity_hashes.furnace_variant(final_rid) {
+                    use mc_rs_game::smelting::FurnaceType;
+                    let ft = match variant {
+                        mc_rs_world::block_hash::FurnaceVariant::Furnace => FurnaceType::Furnace,
+                        mc_rs_world::block_hash::FurnaceVariant::BlastFurnace => {
+                            FurnaceType::BlastFurnace
+                        }
+                        mc_rs_world::block_hash::FurnaceVariant::Smoker => FurnaceType::Smoker,
+                    };
+                    self.block_entities.insert(
+                        (target.x, target.y, target.z),
+                        BlockEntityData::new_furnace(ft),
+                    );
                 }
 
                 // Trigger fluid updates: if placed block is fluid, schedule self;
@@ -737,6 +813,128 @@ impl ConnectionHandler {
         .await;
 
         debug!("Opened chest at {pos} for {addr} (window_id={window_id})");
+    }
+
+    /// Open a furnace container UI for a player.
+    async fn open_furnace(&mut self, addr: SocketAddr, pos: BlockPos) {
+        // Determine furnace type from block entity
+        let furnace_type = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+            Some(BlockEntityData::Furnace { furnace_type, .. }) => *furnace_type,
+            _ => return,
+        };
+
+        let container_type = furnace_type.container_type();
+
+        let window_id = match self.connections.get_mut(&addr) {
+            Some(conn) => {
+                let wid = conn.next_window_id;
+                conn.next_window_id = conn.next_window_id.wrapping_add(1);
+                if conn.next_window_id == 0 {
+                    conn.next_window_id = 1;
+                }
+                conn.open_container = Some(OpenContainer {
+                    window_id: wid,
+                    container_type,
+                    position: pos,
+                });
+                wid
+            }
+            None => return,
+        };
+
+        // Send ContainerOpen
+        self.send_packet(
+            addr,
+            packets::id::CONTAINER_OPEN,
+            &ContainerOpen {
+                window_id,
+                container_type,
+                position: pos,
+                entity_unique_id: -1,
+            },
+        )
+        .await;
+
+        // Get furnace items
+        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+            Some(BlockEntityData::Furnace {
+                input,
+                fuel,
+                output,
+                ..
+            }) => vec![input.clone(), fuel.clone(), output.clone()],
+            _ => vec![mc_rs_proto::item_stack::ItemStack::empty(); 3],
+        };
+
+        // Send InventoryContent
+        self.send_packet(
+            addr,
+            packets::id::INVENTORY_CONTENT,
+            &InventoryContent {
+                window_id: window_id as u32,
+                items,
+            },
+        )
+        .await;
+
+        // Send ContainerSetData for furnace progress bars
+        let furnace_data = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+            Some(BlockEntityData::Furnace {
+                cook_time,
+                cook_time_total,
+                lit_time,
+                lit_duration,
+                ..
+            }) => Some((*cook_time, *cook_time_total, *lit_time, *lit_duration)),
+            _ => None,
+        };
+        if let Some((ct, ctt, lt, ld)) = furnace_data {
+            self.send_packet(
+                addr,
+                packets::id::CONTAINER_SET_DATA,
+                &ContainerSetData {
+                    window_id,
+                    property: 0,
+                    value: ct as i32,
+                },
+            )
+            .await;
+            self.send_packet(
+                addr,
+                packets::id::CONTAINER_SET_DATA,
+                &ContainerSetData {
+                    window_id,
+                    property: 1,
+                    value: lt as i32,
+                },
+            )
+            .await;
+            self.send_packet(
+                addr,
+                packets::id::CONTAINER_SET_DATA,
+                &ContainerSetData {
+                    window_id,
+                    property: 2,
+                    value: ld as i32,
+                },
+            )
+            .await;
+            self.send_packet(
+                addr,
+                packets::id::CONTAINER_SET_DATA,
+                &ContainerSetData {
+                    window_id,
+                    property: 3,
+                    value: ctt as i32,
+                },
+            )
+            .await;
+        }
+
+        debug!(
+            "Opened {:?} at {pos} for {addr} (window_id={window_id})",
+            furnace_type
+        );
     }
 
     /// Close any open containers at the given position for all players.

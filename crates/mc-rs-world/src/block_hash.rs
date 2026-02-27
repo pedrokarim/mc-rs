@@ -817,7 +817,18 @@ pub enum FluidType {
     Lava,
 }
 
-/// Pre-computed block runtime IDs for block entities (signs, chests).
+/// Cardinal direction strings for furnace/blast_furnace/smoker (sorted alphabetically for hash).
+const CARDINAL_DIRS: [&str; 4] = ["east", "north", "south", "west"];
+
+/// Furnace variant type (mirrors mc_rs_game::smelting::FurnaceType without dep).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FurnaceVariant {
+    Furnace,
+    BlastFurnace,
+    Smoker,
+}
+
+/// Pre-computed block runtime IDs for block entities (signs, chests, furnaces).
 #[derive(Debug, Clone)]
 pub struct BlockEntityHashes {
     /// Standing sign: `ground_sign_direction` 0-15.
@@ -826,6 +837,13 @@ pub struct BlockEntityHashes {
     pub wall_sign: [u32; 4],
     /// Chest: `facing_direction` 2-5 (index 0-3 maps to face 2-5).
     pub chest: [u32; 4],
+    /// Furnace: `minecraft:cardinal_direction` east/north/south/west.
+    pub furnace: [u32; 4],
+    pub lit_furnace: [u32; 4],
+    pub blast_furnace: [u32; 4],
+    pub lit_blast_furnace: [u32; 4],
+    pub smoker: [u32; 4],
+    pub lit_smoker: [u32; 4],
 }
 
 impl BlockEntityHashes {
@@ -848,10 +866,50 @@ impl BlockEntityHashes {
             chest[idx] = hash_block_state_with_int("minecraft:chest", "facing_direction", face);
         }
 
+        let furnace_names = [
+            ("minecraft:furnace", "minecraft:lit_furnace"),
+            ("minecraft:blast_furnace", "minecraft:lit_blast_furnace"),
+            ("minecraft:smoker", "minecraft:lit_smoker"),
+        ];
+        let mut furnace = [0u32; 4];
+        let mut lit_furnace = [0u32; 4];
+        let mut blast_furnace = [0u32; 4];
+        let mut lit_blast_furnace = [0u32; 4];
+        let mut smoker = [0u32; 4];
+        let mut lit_smoker = [0u32; 4];
+
+        let all_arrays = [
+            (&mut furnace, &mut lit_furnace),
+            (&mut blast_furnace, &mut lit_blast_furnace),
+            (&mut smoker, &mut lit_smoker),
+        ];
+
+        for (i, ((unlit_arr, lit_arr), (unlit_name, lit_name))) in
+            all_arrays.into_iter().zip(furnace_names.iter()).enumerate()
+        {
+            let _ = i;
+            for (di, dir) in CARDINAL_DIRS.iter().enumerate() {
+                unlit_arr[di] = hash_block_state_with_props(
+                    unlit_name,
+                    &[("minecraft:cardinal_direction", StateValue::Str(dir))],
+                );
+                lit_arr[di] = hash_block_state_with_props(
+                    lit_name,
+                    &[("minecraft:cardinal_direction", StateValue::Str(dir))],
+                );
+            }
+        }
+
         Self {
             standing_sign,
             wall_sign,
             chest,
+            furnace,
+            lit_furnace,
+            blast_furnace,
+            lit_blast_furnace,
+            smoker,
+            lit_smoker,
         }
     }
 
@@ -863,6 +921,93 @@ impl BlockEntityHashes {
     /// Check if a block runtime ID is a chest.
     pub fn is_chest(&self, rid: u32) -> bool {
         self.chest.contains(&rid)
+    }
+
+    /// Check if a block runtime ID is any furnace variant (lit or unlit).
+    pub fn is_furnace(&self, rid: u32) -> bool {
+        self.furnace.contains(&rid)
+            || self.lit_furnace.contains(&rid)
+            || self.blast_furnace.contains(&rid)
+            || self.lit_blast_furnace.contains(&rid)
+            || self.smoker.contains(&rid)
+            || self.lit_smoker.contains(&rid)
+    }
+
+    /// Check if a block runtime ID is a lit furnace variant.
+    pub fn is_lit_furnace(&self, rid: u32) -> bool {
+        self.lit_furnace.contains(&rid)
+            || self.lit_blast_furnace.contains(&rid)
+            || self.lit_smoker.contains(&rid)
+    }
+
+    /// Get the furnace variant for a runtime ID.
+    pub fn furnace_variant(&self, rid: u32) -> Option<FurnaceVariant> {
+        if self.furnace.contains(&rid) || self.lit_furnace.contains(&rid) {
+            Some(FurnaceVariant::Furnace)
+        } else if self.blast_furnace.contains(&rid) || self.lit_blast_furnace.contains(&rid) {
+            Some(FurnaceVariant::BlastFurnace)
+        } else if self.smoker.contains(&rid) || self.lit_smoker.contains(&rid) {
+            Some(FurnaceVariant::Smoker)
+        } else {
+            None
+        }
+    }
+
+    /// Get the furnace hash for a player yaw (furnace faces the player).
+    pub fn furnace_from_yaw(&self, variant: FurnaceVariant, yaw: f32, lit: bool) -> u32 {
+        let y = yaw.rem_euclid(360.0);
+        // cardinal_direction: east=0, north=1, south=2, west=3
+        // Furnace faces opposite to player look direction
+        let idx = if (315.0..360.0).contains(&y) || y < 45.0 {
+            1 // north (player looks south → furnace faces north)
+        } else if (45.0..135.0).contains(&y) {
+            3 // west
+        } else if (135.0..225.0).contains(&y) {
+            2 // south
+        } else {
+            0 // east
+        };
+        let arr = match (variant, lit) {
+            (FurnaceVariant::Furnace, false) => &self.furnace,
+            (FurnaceVariant::Furnace, true) => &self.lit_furnace,
+            (FurnaceVariant::BlastFurnace, false) => &self.blast_furnace,
+            (FurnaceVariant::BlastFurnace, true) => &self.lit_blast_furnace,
+            (FurnaceVariant::Smoker, false) => &self.smoker,
+            (FurnaceVariant::Smoker, true) => &self.lit_smoker,
+        };
+        arr[idx]
+    }
+
+    /// Get the lit hash corresponding to an unlit furnace hash.
+    pub fn lit_hash_for(&self, rid: u32) -> Option<u32> {
+        for i in 0..4 {
+            if self.furnace[i] == rid {
+                return Some(self.lit_furnace[i]);
+            }
+            if self.blast_furnace[i] == rid {
+                return Some(self.lit_blast_furnace[i]);
+            }
+            if self.smoker[i] == rid {
+                return Some(self.lit_smoker[i]);
+            }
+        }
+        None
+    }
+
+    /// Get the unlit hash corresponding to a lit furnace hash.
+    pub fn unlit_hash_for(&self, rid: u32) -> Option<u32> {
+        for i in 0..4 {
+            if self.lit_furnace[i] == rid {
+                return Some(self.furnace[i]);
+            }
+            if self.lit_blast_furnace[i] == rid {
+                return Some(self.blast_furnace[i]);
+            }
+            if self.lit_smoker[i] == rid {
+                return Some(self.smoker[i]);
+            }
+        }
+        None
     }
 
     /// Get the standing sign hash for a given player yaw.
@@ -1168,5 +1313,66 @@ mod tests {
         assert!(beh.wall_sign_face(5).is_some());
         assert!(beh.wall_sign_face(0).is_none());
         assert!(beh.wall_sign_face(1).is_none());
+    }
+
+    #[test]
+    fn furnace_hashes_nonzero() {
+        let beh = BlockEntityHashes::compute();
+        for h in &beh.furnace {
+            assert_ne!(*h, 0, "furnace hash");
+        }
+        for h in &beh.lit_furnace {
+            assert_ne!(*h, 0, "lit_furnace hash");
+        }
+        for h in &beh.blast_furnace {
+            assert_ne!(*h, 0, "blast_furnace hash");
+        }
+        for h in &beh.smoker {
+            assert_ne!(*h, 0, "smoker hash");
+        }
+    }
+
+    #[test]
+    fn furnace_is_detected() {
+        let beh = BlockEntityHashes::compute();
+        assert!(beh.is_furnace(beh.furnace[0]));
+        assert!(beh.is_furnace(beh.lit_furnace[1]));
+        assert!(beh.is_furnace(beh.blast_furnace[2]));
+        assert!(beh.is_furnace(beh.smoker[3]));
+        assert!(!beh.is_furnace(beh.chest[0]));
+        assert!(!beh.is_furnace(0));
+    }
+
+    #[test]
+    fn furnace_variant_detection() {
+        let beh = BlockEntityHashes::compute();
+        assert_eq!(
+            beh.furnace_variant(beh.furnace[0]),
+            Some(FurnaceVariant::Furnace)
+        );
+        assert_eq!(
+            beh.furnace_variant(beh.blast_furnace[1]),
+            Some(FurnaceVariant::BlastFurnace)
+        );
+        assert_eq!(
+            beh.furnace_variant(beh.lit_smoker[2]),
+            Some(FurnaceVariant::Smoker)
+        );
+        assert_eq!(beh.furnace_variant(beh.chest[0]), None);
+    }
+
+    #[test]
+    fn furnace_lit_unlit_conversion() {
+        let beh = BlockEntityHashes::compute();
+        for i in 0..4 {
+            assert_eq!(beh.lit_hash_for(beh.furnace[i]), Some(beh.lit_furnace[i]));
+            assert_eq!(beh.unlit_hash_for(beh.lit_furnace[i]), Some(beh.furnace[i]));
+            assert_eq!(
+                beh.lit_hash_for(beh.blast_furnace[i]),
+                Some(beh.lit_blast_furnace[i])
+            );
+            assert_eq!(beh.unlit_hash_for(beh.lit_smoker[i]), Some(beh.smoker[i]));
+        }
+        assert_eq!(beh.lit_hash_for(beh.chest[0]), None);
     }
 }

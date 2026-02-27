@@ -38,22 +38,23 @@ use mc_rs_proto::packets::{
     self, ActorAttribute, AddActor, AddPlayer, Animate, AvailableCommands,
     AvailableEntityIdentifiers, BiomeDefinitionList, BlockActorData, ChunkRadiusUpdated,
     ClientToServerHandshake, CommandOutput, CommandRequest, ContainerClose, ContainerOpen,
-    Disconnect, EntityEvent, EntityMetadataEntry, GameRule, GameRuleValue, GameRulesChanged,
-    InventoryContent, InventorySlot, InventoryTransaction, ItemStackRequest, ItemStackResponse,
-    LevelChunk, LevelEvent, MetadataValue, MobEffect, MobEquipment, MoveActorAbsolute, MoveMode,
-    MovePlayer, NetworkChunkPublisherUpdate, NetworkSettings, PlayStatus, PlayStatusType,
-    PlayerAction, PlayerActionType, PlayerAuthInput, PlayerListAdd, PlayerListAddPacket,
-    PlayerListRemove, RemoveEntity, RequestChunkRadius, ResourcePackClientResponse,
-    ResourcePackResponseStatus, ResourcePackStack, ResourcePacksInfo, Respawn,
-    ServerToClientHandshake, SetEntityMotion, SetLocalPlayerAsInitialized, SetPlayerGameType,
-    SetTime, StartGame, Text, UpdateAbilities, UpdateAttributes, UpdateBlock, UseItemAction,
-    UseItemOnEntityAction,
+    ContainerSetData, Disconnect, EntityEvent, EntityMetadataEntry, GameRule, GameRuleValue,
+    GameRulesChanged, InventoryContent, InventorySlot, InventoryTransaction, ItemStackRequest,
+    ItemStackResponse, LevelChunk, LevelEvent, MetadataValue, MobEffect, MobEquipment,
+    MoveActorAbsolute, MoveMode, MovePlayer, NetworkChunkPublisherUpdate, NetworkSettings,
+    PlayStatus, PlayStatusType, PlayerAction, PlayerActionType, PlayerAuthInput, PlayerListAdd,
+    PlayerListAddPacket, PlayerListRemove, RemoveEntity, RequestChunkRadius,
+    ResourcePackClientResponse, ResourcePackResponseStatus, ResourcePackStack, ResourcePacksInfo,
+    Respawn, ServerToClientHandshake, SetEntityMotion, SetLocalPlayerAsInitialized,
+    SetPlayerGameType, SetTime, StartGame, Text, UpdateAbilities, UpdateAttributes, UpdateBlock,
+    UseItemAction, UseItemOnEntityAction,
 };
 use mc_rs_proto::types::{BlockPos, Uuid, VarUInt32, Vec2, Vec3};
 use mc_rs_raknet::{RakNetEvent, Reliability, ServerHandle};
 use rand::prelude::*;
 
 use mc_rs_game::block_entity::{self, BlockEntityData};
+use mc_rs_game::smelting::SmeltingRegistry;
 use mc_rs_world::block_hash::{BlockEntityHashes, FlatWorldBlocks, TickBlocks};
 use mc_rs_world::block_registry::BlockRegistry;
 use mc_rs_world::block_tick::{process_random_tick, process_scheduled_tick, TickScheduler};
@@ -273,10 +274,12 @@ pub struct ConnectionHandler {
     /// Merged loot tables from all loaded behavior packs.
     #[allow(dead_code)]
     loot_tables: HashMap<String, LootTableFile>,
-    /// Block entities (signs, chests) keyed by world position (x, y, z).
+    /// Block entities (signs, chests, furnaces) keyed by world position (x, y, z).
     block_entities: HashMap<(i32, i32, i32), BlockEntityData>,
     /// Pre-computed block entity hashes for detection.
     block_entity_hashes: BlockEntityHashes,
+    /// Smelting recipes and fuel data.
+    smelting_registry: SmeltingRegistry,
 }
 
 impl ConnectionHandler {
@@ -553,6 +556,7 @@ impl ConnectionHandler {
             loot_tables,
             block_entities: HashMap::new(),
             block_entity_hashes: BlockEntityHashes::compute(),
+            smelting_registry: SmeltingRegistry::new(),
         }
     }
 
@@ -634,6 +638,7 @@ impl ConnectionHandler {
         self.tick_effects().await;
         self.tick_survival().await;
         self.tick_block_updates().await;
+        self.tick_furnaces().await;
         self.tick_time_and_weather().await;
 
         // Plugin: dispatch ServerStarted on first tick

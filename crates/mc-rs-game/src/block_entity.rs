@@ -8,8 +8,11 @@ use mc_rs_nbt::tag::{NbtCompound, NbtRoot, NbtTag};
 use mc_rs_nbt::{read_nbt_le, read_nbt_network, write_nbt_le, write_nbt_network};
 use mc_rs_proto::item_stack::ItemStack;
 
+use crate::smelting::FurnaceType;
+
 /// Block entity data stored per-block.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum BlockEntityData {
     Sign {
         front_text: String,
@@ -19,10 +22,24 @@ pub enum BlockEntityData {
     Chest {
         items: Vec<ItemStack>,
     },
+    Furnace {
+        furnace_type: FurnaceType,
+        input: ItemStack,
+        fuel: ItemStack,
+        output: ItemStack,
+        cook_time: i16,
+        cook_time_total: i16,
+        lit_time: i16,
+        lit_duration: i16,
+        stored_xp: f32,
+    },
 }
 
 /// Number of slots in a single chest.
 pub const CHEST_SLOTS: usize = 27;
+
+/// Number of slots in a furnace.
+pub const FURNACE_SLOTS: usize = 3;
 
 impl BlockEntityData {
     /// Create a new empty sign (editable, no text).
@@ -38,6 +55,21 @@ impl BlockEntityData {
     pub fn new_chest() -> Self {
         BlockEntityData::Chest {
             items: (0..CHEST_SLOTS).map(|_| ItemStack::empty()).collect(),
+        }
+    }
+
+    /// Create a new empty furnace of the given type.
+    pub fn new_furnace(furnace_type: FurnaceType) -> Self {
+        BlockEntityData::Furnace {
+            furnace_type,
+            input: ItemStack::empty(),
+            fuel: ItemStack::empty(),
+            output: ItemStack::empty(),
+            cook_time: 0,
+            cook_time_total: furnace_type.cook_time(),
+            lit_time: 0,
+            lit_duration: 0,
+            stored_xp: 0.0,
         }
     }
 
@@ -141,6 +173,43 @@ impl BlockEntityData {
 
                 c.insert("Items".to_string(), NbtTag::List(item_list));
             }
+            BlockEntityData::Furnace {
+                furnace_type,
+                input,
+                fuel,
+                output,
+                cook_time,
+                cook_time_total,
+                lit_time,
+                lit_duration,
+                stored_xp,
+            } => {
+                c.insert(
+                    "id".to_string(),
+                    NbtTag::String(furnace_type.nbt_id().to_string()),
+                );
+
+                let slots = [(0i8, input), (1, fuel), (2, output)];
+                let item_list: Vec<NbtTag> = slots
+                    .iter()
+                    .filter(|(_, item)| !item.is_empty())
+                    .map(|(slot, item)| {
+                        let mut ic = NbtCompound::new();
+                        ic.insert("Slot".to_string(), NbtTag::Byte(*slot));
+                        ic.insert("id".to_string(), NbtTag::Short(item.runtime_id as i16));
+                        ic.insert("Count".to_string(), NbtTag::Byte(item.count as i8));
+                        ic.insert("Damage".to_string(), NbtTag::Short(item.metadata as i16));
+                        NbtTag::Compound(ic)
+                    })
+                    .collect();
+                c.insert("Items".to_string(), NbtTag::List(item_list));
+
+                c.insert("BurnTime".to_string(), NbtTag::Short(*lit_time));
+                c.insert("CookTime".to_string(), NbtTag::Short(*cook_time));
+                c.insert("CookTimeTotal".to_string(), NbtTag::Short(*cook_time_total));
+                c.insert("BurnDuration".to_string(), NbtTag::Short(*lit_duration));
+                c.insert("StoredXPInt".to_string(), NbtTag::Int(*stored_xp as i32));
+            }
         }
 
         c
@@ -206,7 +275,67 @@ impl BlockEntityData {
                 }
                 BlockEntityData::Chest { items }
             }
-            _ => return None,
+            other => {
+                if let Some(ft) = FurnaceType::from_nbt_id(other) {
+                    let mut input = ItemStack::empty();
+                    let mut fuel = ItemStack::empty();
+                    let mut output = ItemStack::empty();
+                    if let Some(NbtTag::List(item_list)) = c.get("Items") {
+                        for tag in item_list {
+                            if let NbtTag::Compound(ic) = tag {
+                                let slot = ic.get("Slot").and_then(|t| t.as_byte()).unwrap_or(-1);
+                                let rid = ic.get("id").and_then(|t| t.as_short()).unwrap_or(0);
+                                let count = ic.get("Count").and_then(|t| t.as_byte()).unwrap_or(0);
+                                let damage =
+                                    ic.get("Damage").and_then(|t| t.as_short()).unwrap_or(0);
+                                if rid != 0 && count > 0 {
+                                    let item = ItemStack {
+                                        runtime_id: rid as i32,
+                                        count: count as u16,
+                                        metadata: damage as u16,
+                                        block_runtime_id: 0,
+                                        nbt_data: Vec::new(),
+                                        can_place_on: Vec::new(),
+                                        can_destroy: Vec::new(),
+                                        stack_network_id: 0,
+                                    };
+                                    match slot {
+                                        0 => input = item,
+                                        1 => fuel = item,
+                                        2 => output = item,
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    let lit_time = c.get("BurnTime").and_then(|t| t.as_short()).unwrap_or(0);
+                    let cook_time = c.get("CookTime").and_then(|t| t.as_short()).unwrap_or(0);
+                    let cook_time_total = c
+                        .get("CookTimeTotal")
+                        .and_then(|t| t.as_short())
+                        .unwrap_or(ft.cook_time());
+                    let lit_duration = c
+                        .get("BurnDuration")
+                        .and_then(|t| t.as_short())
+                        .unwrap_or(0);
+                    let stored_xp =
+                        c.get("StoredXPInt").and_then(|t| t.as_int()).unwrap_or(0) as f32;
+                    BlockEntityData::Furnace {
+                        furnace_type: ft,
+                        input,
+                        fuel,
+                        output,
+                        cook_time,
+                        cook_time_total,
+                        lit_time,
+                        lit_duration,
+                        stored_xp,
+                    }
+                } else {
+                    return None;
+                }
+            }
         };
 
         Some(((x, y, z), data))
@@ -385,5 +514,122 @@ mod tests {
         let (front, back) = BlockEntityData::sign_from_network_nbt(&nbt).unwrap();
         assert!(front.is_empty());
         assert!(back.is_empty());
+    }
+
+    #[test]
+    fn new_furnace_defaults() {
+        let be = BlockEntityData::new_furnace(FurnaceType::Furnace);
+        match &be {
+            BlockEntityData::Furnace {
+                furnace_type,
+                input,
+                fuel,
+                output,
+                cook_time,
+                cook_time_total,
+                lit_time,
+                ..
+            } => {
+                assert_eq!(*furnace_type, FurnaceType::Furnace);
+                assert!(input.is_empty());
+                assert!(fuel.is_empty());
+                assert!(output.is_empty());
+                assert_eq!(*cook_time, 0);
+                assert_eq!(*cook_time_total, 200);
+                assert_eq!(*lit_time, 0);
+            }
+            _ => panic!("Expected Furnace"),
+        }
+    }
+
+    #[test]
+    fn furnace_le_nbt_roundtrip() {
+        let mut be = BlockEntityData::new_furnace(FurnaceType::BlastFurnace);
+        if let BlockEntityData::Furnace {
+            ref mut input,
+            ref mut fuel,
+            ref mut cook_time,
+            ref mut lit_time,
+            ref mut lit_duration,
+            ..
+        } = be
+        {
+            *input = ItemStack {
+                runtime_id: 10,
+                count: 5,
+                metadata: 0,
+                block_runtime_id: 0,
+                nbt_data: Vec::new(),
+                can_place_on: Vec::new(),
+                can_destroy: Vec::new(),
+                stack_network_id: 0,
+            };
+            *fuel = ItemStack {
+                runtime_id: 20,
+                count: 64,
+                metadata: 0,
+                block_runtime_id: 0,
+                nbt_data: Vec::new(),
+                can_place_on: Vec::new(),
+                can_destroy: Vec::new(),
+                stack_network_id: 0,
+            };
+            *cook_time = 50;
+            *lit_time = 1200;
+            *lit_duration = 1600;
+        }
+        let data = be.to_le_nbt(3, 65, -7);
+        let ((x, y, z), parsed) = BlockEntityData::from_le_nbt(&data).unwrap();
+        assert_eq!((x, y, z), (3, 65, -7));
+        match parsed {
+            BlockEntityData::Furnace {
+                furnace_type,
+                input,
+                fuel,
+                output,
+                cook_time,
+                lit_time,
+                lit_duration,
+                ..
+            } => {
+                assert_eq!(furnace_type, FurnaceType::BlastFurnace);
+                assert_eq!(input.runtime_id, 10);
+                assert_eq!(input.count, 5);
+                assert_eq!(fuel.runtime_id, 20);
+                assert_eq!(fuel.count, 64);
+                assert!(output.is_empty());
+                assert_eq!(cook_time, 50);
+                assert_eq!(lit_time, 1200);
+                assert_eq!(lit_duration, 1600);
+            }
+            _ => panic!("Expected Furnace"),
+        }
+    }
+
+    #[test]
+    fn furnace_network_nbt() {
+        let be = BlockEntityData::new_furnace(FurnaceType::Smoker);
+        let nbt = be.to_network_nbt(0, 64, 0);
+        assert!(!nbt.is_empty());
+        let root = read_nbt_network(&mut &nbt[..]).unwrap();
+        assert_eq!(
+            root.compound.get("id").and_then(|t| t.as_string()),
+            Some("Smoker")
+        );
+    }
+
+    #[test]
+    fn parse_mixed_block_entities_with_furnace() {
+        let sign = BlockEntityData::new_sign();
+        let furnace = BlockEntityData::new_furnace(FurnaceType::Furnace);
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&sign.to_le_nbt(0, 64, 0));
+        data.extend_from_slice(&furnace.to_le_nbt(1, 65, 1));
+
+        let entries = parse_block_entities(&data);
+        assert_eq!(entries.len(), 2);
+        assert!(matches!(entries[0].1, BlockEntityData::Sign { .. }));
+        assert!(matches!(entries[1].1, BlockEntityData::Furnace { .. }));
     }
 }

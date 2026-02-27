@@ -105,17 +105,31 @@ impl ProtoEncode for CraftingOutputItem {
     }
 }
 
+/// A furnace/smelting recipe entry (type 3 = FurnaceDataRecipe).
+#[derive(Debug, Clone)]
+pub struct FurnaceRecipeEntry {
+    /// Input item numeric ID.
+    pub input_id: i32,
+    /// Input item metadata (0x7FFF = any variant).
+    pub input_metadata: i32,
+    /// Output item.
+    pub output: CraftingOutputItem,
+    /// Block tag: "furnace", "blast_furnace", or "smoker".
+    pub tag: String,
+}
+
 /// The CraftingData packet containing all recipe definitions.
 pub struct CraftingData {
     pub shaped: Vec<ShapedRecipeEntry>,
     pub shapeless: Vec<ShapelessRecipeEntry>,
+    pub furnace: Vec<FurnaceRecipeEntry>,
     /// Whether to clear existing recipes first.
     pub clear_recipes: bool,
 }
 
 impl ProtoEncode for CraftingData {
     fn proto_encode(&self, buf: &mut impl BufMut) {
-        let total = self.shaped.len() + self.shapeless.len();
+        let total = self.shaped.len() + self.shapeless.len() + self.furnace.len();
         VarUInt32(total as u32).proto_encode(buf);
 
         // Shapeless recipes (type = 0)
@@ -128,6 +142,12 @@ impl ProtoEncode for CraftingData {
         for recipe in &self.shaped {
             VarInt(1).proto_encode(buf); // recipe type: shaped
             encode_shaped(buf, recipe);
+        }
+
+        // Furnace data recipes (type = 3)
+        for recipe in &self.furnace {
+            VarInt(3).proto_encode(buf); // recipe type: furnace_data
+            encode_furnace(buf, recipe);
         }
 
         // Potion mixes count = 0
@@ -199,6 +219,13 @@ fn encode_shaped(buf: &mut impl BufMut, recipe: &ShapedRecipeEntry) {
     VarUInt32(recipe.network_id).proto_encode(buf);
 }
 
+fn encode_furnace(buf: &mut impl BufMut, recipe: &FurnaceRecipeEntry) {
+    VarInt(recipe.input_id).proto_encode(buf);
+    VarInt(recipe.input_metadata).proto_encode(buf);
+    recipe.output.proto_encode(buf);
+    write_string_raw(buf, &recipe.tag);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -209,6 +236,7 @@ mod tests {
         let pkt = CraftingData {
             shaped: Vec::new(),
             shapeless: Vec::new(),
+            furnace: Vec::new(),
             clear_recipes: true,
         };
         let mut buf = BytesMut::new();
@@ -288,10 +316,36 @@ mod tests {
         let pkt = CraftingData {
             shaped: vec![entry],
             shapeless: Vec::new(),
+            furnace: Vec::new(),
             clear_recipes: true,
         };
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
         assert!(buf.len() > 30);
+    }
+
+    #[test]
+    fn encode_furnace_recipe() {
+        let entry = FurnaceRecipeEntry {
+            input_id: 10,
+            input_metadata: 0,
+            output: CraftingOutputItem {
+                network_id: 265,
+                count: 1,
+                metadata: 0,
+                block_runtime_id: 0,
+            },
+            tag: "furnace".to_string(),
+        };
+        let pkt = CraftingData {
+            shaped: Vec::new(),
+            shapeless: Vec::new(),
+            furnace: vec![entry],
+            clear_recipes: true,
+        };
+        let mut buf = BytesMut::new();
+        pkt.proto_encode(&mut buf);
+        // Should have: VarUInt32(1) + VarInt(3) + furnace data + trailing counts + flag
+        assert!(buf.len() > 10);
     }
 }

@@ -366,4 +366,311 @@ impl ConnectionHandler {
         }
         self.send_xp_attributes(addr).await;
     }
+
+    /// Tick all active furnaces: burn fuel, cook items, swap lit/unlit blocks.
+    pub(super) async fn tick_furnaces(&mut self) {
+        // Collect furnace positions that need ticking:
+        // - currently lit (burning fuel), OR
+        // - has smeltable input + available fuel (could ignite)
+        let positions: Vec<(i32, i32, i32)> = self
+            .block_entities
+            .iter()
+            .filter_map(|(&pos, be)| match be {
+                BlockEntityData::Furnace {
+                    lit_time,
+                    input,
+                    fuel,
+                    furnace_type,
+                    ..
+                } => {
+                    if *lit_time > 0 {
+                        return Some(pos);
+                    }
+                    // Check if we could start burning: non-empty input with a recipe + fuel
+                    if !input.is_empty() && !fuel.is_empty() {
+                        let input_name = self
+                            .item_registry
+                            .get_by_id(input.runtime_id as i16)
+                            .map(|i| i.name.as_str())
+                            .unwrap_or("");
+                        let fuel_name = self
+                            .item_registry
+                            .get_by_id(fuel.runtime_id as i16)
+                            .map(|i| i.name.as_str())
+                            .unwrap_or("");
+                        if self
+                            .smelting_registry
+                            .find_recipe(input_name, input.metadata as i16, *furnace_type)
+                            .is_some()
+                            && self.smelting_registry.fuel_burn_time(fuel_name).is_some()
+                        {
+                            return Some(pos);
+                        }
+                    }
+                    None
+                }
+                _ => None,
+            })
+            .collect();
+
+        for pos in positions {
+            self.tick_single_furnace(pos).await;
+        }
+    }
+
+    /// Tick a single furnace at the given position.
+    async fn tick_single_furnace(&mut self, pos: (i32, i32, i32)) {
+        // Extract current furnace state
+        let (
+            furnace_type,
+            mut input,
+            mut fuel,
+            mut output,
+            mut cook_time,
+            cook_time_total,
+            mut lit_time,
+            mut lit_duration,
+            mut stored_xp,
+        ) = match self.block_entities.get(&pos) {
+            Some(BlockEntityData::Furnace {
+                furnace_type,
+                input,
+                fuel,
+                output,
+                cook_time,
+                cook_time_total,
+                lit_time,
+                lit_duration,
+                stored_xp,
+            }) => (
+                *furnace_type,
+                input.clone(),
+                fuel.clone(),
+                output.clone(),
+                *cook_time,
+                *cook_time_total,
+                *lit_time,
+                *lit_duration,
+                *stored_xp,
+            ),
+            _ => return,
+        };
+
+        let was_lit = lit_time > 0;
+        let mut changed = false;
+
+        // Look up item names for recipe/fuel matching
+        let input_name = self
+            .item_registry
+            .get_by_id(input.runtime_id as i16)
+            .map(|i| i.name.clone())
+            .unwrap_or_default();
+        let fuel_name = self
+            .item_registry
+            .get_by_id(fuel.runtime_id as i16)
+            .map(|i| i.name.clone())
+            .unwrap_or_default();
+
+        // Find matching recipe for current input
+        let recipe = self
+            .smelting_registry
+            .find_recipe(&input_name, input.metadata as i16, furnace_type)
+            .cloned();
+
+        // --- Try to ignite if not burning and has recipe + fuel ---
+        if lit_time <= 0 && recipe.is_some() && !fuel.is_empty() {
+            if let Some(burn) = self.smelting_registry.fuel_burn_time(&fuel_name) {
+                lit_time = burn as i16;
+                lit_duration = burn as i16;
+                // Consume one fuel item
+                fuel.count -= 1;
+                if fuel.count == 0 {
+                    fuel = mc_rs_proto::item_stack::ItemStack::empty();
+                }
+                changed = true;
+            }
+        }
+
+        // --- Burn fuel ---
+        if lit_time > 0 {
+            lit_time -= 1;
+            changed = true;
+
+            // --- Cook progress ---
+            if let Some(ref rec) = recipe {
+                cook_time += 1;
+                if cook_time >= cook_time_total {
+                    // Cooking complete — produce output
+                    cook_time = 0;
+                    stored_xp += rec.xp;
+
+                    // Find output item info
+                    let out_info = self.item_registry.get_by_name(&rec.output_name);
+                    if let Some(info) = out_info {
+                        if output.is_empty() {
+                            output = mc_rs_proto::item_stack::ItemStack {
+                                runtime_id: info.numeric_id as i32,
+                                count: rec.output_count as u16,
+                                metadata: rec.output_metadata,
+                                block_runtime_id: 0,
+                                nbt_data: Vec::new(),
+                                can_place_on: Vec::new(),
+                                can_destroy: Vec::new(),
+                                stack_network_id: 0,
+                            };
+                        } else if output.runtime_id == info.numeric_id as i32
+                            && output.metadata == rec.output_metadata
+                        {
+                            let max_stack = self.item_registry.max_stack_size(info.numeric_id);
+                            if output.count + rec.output_count as u16 <= max_stack as u16 {
+                                output.count += rec.output_count as u16;
+                            }
+                            // If stack full, just don't produce (input stays)
+                        }
+                    }
+
+                    // Consume one input item
+                    input.count -= 1;
+                    if input.count == 0 {
+                        input = mc_rs_proto::item_stack::ItemStack::empty();
+                    }
+                }
+            } else {
+                // No valid recipe — reset cook progress
+                if cook_time > 0 {
+                    cook_time = 0;
+                }
+            }
+        } else {
+            // Not burning — reset cook progress
+            if cook_time > 0 {
+                cook_time = 0;
+                changed = true;
+            }
+        }
+
+        // --- Swap lit/unlit block ---
+        let is_now_lit = lit_time > 0;
+        if was_lit != is_now_lit {
+            let current_rid = self.get_block(pos.0, pos.1, pos.2);
+            if let Some(current_rid) = current_rid {
+                let new_rid = if is_now_lit {
+                    self.block_entity_hashes.lit_hash_for(current_rid)
+                } else {
+                    self.block_entity_hashes.unlit_hash_for(current_rid)
+                };
+                if let Some(new_rid) = new_rid {
+                    self.set_block_and_broadcast(pos.0, pos.1, pos.2, new_rid)
+                        .await;
+                }
+            }
+        }
+
+        // --- Write back furnace state ---
+        if changed {
+            if let Some(BlockEntityData::Furnace {
+                input: ref mut be_input,
+                fuel: ref mut be_fuel,
+                output: ref mut be_output,
+                cook_time: ref mut be_cook,
+                lit_time: ref mut be_lit,
+                lit_duration: ref mut be_dur,
+                stored_xp: ref mut be_xp,
+                ..
+            }) = self.block_entities.get_mut(&pos)
+            {
+                *be_input = input;
+                *be_fuel = fuel;
+                *be_output = output;
+                *be_cook = cook_time;
+                *be_lit = lit_time;
+                *be_dur = lit_duration;
+                *be_xp = stored_xp;
+            }
+
+            // --- Send ContainerSetData to players viewing this furnace ---
+            let viewers: Vec<(SocketAddr, u8)> = self
+                .connections
+                .iter()
+                .filter_map(|(&addr, conn)| {
+                    if let Some(ref oc) = conn.open_container {
+                        if oc.position.x == pos.0
+                            && oc.position.y == pos.1
+                            && oc.position.z == pos.2
+                        {
+                            return Some((addr, oc.window_id));
+                        }
+                    }
+                    None
+                })
+                .collect();
+
+            for (addr, window_id) in &viewers {
+                // Cook progress
+                self.send_packet(
+                    *addr,
+                    packets::id::CONTAINER_SET_DATA,
+                    &ContainerSetData {
+                        window_id: *window_id,
+                        property: 0,
+                        value: cook_time as i32,
+                    },
+                )
+                .await;
+                // Lit time remaining
+                self.send_packet(
+                    *addr,
+                    packets::id::CONTAINER_SET_DATA,
+                    &ContainerSetData {
+                        window_id: *window_id,
+                        property: 1,
+                        value: lit_time as i32,
+                    },
+                )
+                .await;
+                // Lit duration (total burn time)
+                self.send_packet(
+                    *addr,
+                    packets::id::CONTAINER_SET_DATA,
+                    &ContainerSetData {
+                        window_id: *window_id,
+                        property: 2,
+                        value: lit_duration as i32,
+                    },
+                )
+                .await;
+                // Cook time total
+                self.send_packet(
+                    *addr,
+                    packets::id::CONTAINER_SET_DATA,
+                    &ContainerSetData {
+                        window_id: *window_id,
+                        property: 3,
+                        value: cook_time_total as i32,
+                    },
+                )
+                .await;
+
+                // Also update inventory content for viewers
+                let items = match self.block_entities.get(&pos) {
+                    Some(BlockEntityData::Furnace {
+                        input,
+                        fuel,
+                        output,
+                        ..
+                    }) => vec![input.clone(), fuel.clone(), output.clone()],
+                    _ => continue,
+                };
+                self.send_packet(
+                    *addr,
+                    packets::id::INVENTORY_CONTENT,
+                    &InventoryContent {
+                        window_id: *window_id as u32,
+                        items,
+                    },
+                )
+                .await;
+            }
+        }
+    }
 }
