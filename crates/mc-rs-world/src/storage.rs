@@ -326,6 +326,24 @@ impl LevelDbProvider {
     pub fn flush(&mut self) -> Result<(), String> {
         self.db.flush().map_err(|e| format!("flush: {e}"))
     }
+
+    /// Raw get from LevelDB (for block entity data, etc.).
+    pub fn get_raw(&mut self, key: &[u8]) -> Option<Vec<u8>> {
+        self.db.get(key)
+    }
+
+    /// Raw put to LevelDB (for block entity data, etc.).
+    pub fn put_raw(&mut self, key: &[u8], value: &[u8]) -> Result<(), String> {
+        self.db.put(key, value).map_err(|e| format!("put_raw: {e}"))
+    }
+}
+
+/// Block entity LevelDB tag.
+const TAG_BLOCK_ENTITY: u8 = 0x31;
+
+/// Build a LevelDB key for block entity data in a chunk.
+pub fn block_entity_key(cx: i32, cz: i32) -> Vec<u8> {
+    chunk_key(cx, cz, TAG_BLOCK_ENTITY)
 }
 
 #[cfg(test)]

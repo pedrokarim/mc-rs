@@ -89,14 +89,55 @@ impl ConnectionHandler {
 
         let mut responses = Vec::new();
         for req in &request.requests {
-            // Need to borrow inventory mutably but also need item_registry immutably.
-            // Extract response using a helper that takes both.
-            let response = match self.connections.get_mut(&addr) {
-                Some(conn) => {
-                    conn.inventory
-                        .process_request(req, &self.item_registry, &self.recipe_registry)
+            // Check if player has an open container (chest)
+            let container_info = self
+                .connections
+                .get(&addr)
+                .and_then(|c| c.open_container.as_ref())
+                .map(|oc| (oc.window_id, oc.position));
+
+            let response = if let Some((window_id, pos)) = container_info {
+                // Clone chest items for processing
+                let mut chest_items = self
+                    .block_entities
+                    .get(&(pos.x, pos.y, pos.z))
+                    .and_then(|be| match be {
+                        BlockEntityData::Chest { items } => Some(items.clone()),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| {
+                        (0..27)
+                            .map(|_| mc_rs_proto::item_stack::ItemStack::empty())
+                            .collect()
+                    });
+
+                let resp = match self.connections.get_mut(&addr) {
+                    Some(conn) => conn.inventory.process_request_with_container(
+                        req,
+                        &self.item_registry,
+                        window_id,
+                        &mut chest_items,
+                    ),
+                    None => return,
+                };
+
+                // Write back modified chest items
+                if let Some(BlockEntityData::Chest { items }) =
+                    self.block_entities.get_mut(&(pos.x, pos.y, pos.z))
+                {
+                    *items = chest_items;
                 }
-                None => return,
+
+                resp
+            } else {
+                match self.connections.get_mut(&addr) {
+                    Some(conn) => conn.inventory.process_request(
+                        req,
+                        &self.item_registry,
+                        &self.recipe_registry,
+                    ),
+                    None => return,
+                }
             };
             responses.push(response);
         }
@@ -416,6 +457,11 @@ impl ConnectionHandler {
                 // Trigger redstone updates if broken near wire
                 self.update_redstone_from(pos.x, pos.y, pos.z).await;
 
+                // Remove block entity if any
+                self.block_entities.remove(&(pos.x, pos.y, pos.z));
+                // Close any open containers at this position
+                self.close_container_at(pos).await;
+
                 // Award XP for ore mining (survival only)
                 if gamemode == 0 {
                     if let Some(info) = self.block_registry.get(old_runtime_id) {
@@ -447,6 +493,11 @@ impl ConnectionHandler {
                     if let Some(cycled) = self.tick_blocks.cycle_repeater_delay(rid) {
                         self.set_block_and_broadcast(click_pos.x, click_pos.y, click_pos.z, cycled)
                             .await;
+                        return;
+                    }
+                    // Check if clicking on a chest → open it
+                    if self.block_entity_hashes.is_chest(rid) {
+                        self.open_chest(addr, click_pos).await;
                         return;
                     }
                 }
@@ -498,15 +549,58 @@ impl ConnectionHandler {
                     }
                 }
 
+                // Remap sign/chest block hashes to include correct state (direction)
+                let yaw = self.connections.get(&addr).map(|c| c.yaw).unwrap_or(0.0);
+                let final_rid = if self.block_entity_hashes.is_sign(block_runtime_id) {
+                    if use_item.face == 1 {
+                        // Standing sign: direction from player yaw
+                        let (hash, _) = self.block_entity_hashes.standing_sign_direction(yaw);
+                        hash
+                    } else if (2..=5).contains(&use_item.face) {
+                        // Wall sign: facing from clicked face
+                        self.block_entity_hashes
+                            .wall_sign_face(use_item.face)
+                            .unwrap_or(block_runtime_id)
+                    } else {
+                        block_runtime_id
+                    }
+                } else if self.block_entity_hashes.is_chest(block_runtime_id) {
+                    // Chest faces the player
+                    self.block_entity_hashes.chest_from_yaw(yaw)
+                } else {
+                    block_runtime_id
+                };
+
                 // Set the block
-                if !self.set_block(target.x, target.y, target.z, block_runtime_id) {
+                if !self.set_block(target.x, target.y, target.z, final_rid) {
                     return;
                 }
 
                 // Send UpdateBlock to all players
-                let update = UpdateBlock::new(target, block_runtime_id);
+                let update = UpdateBlock::new(target, final_rid);
                 self.broadcast_packet(packets::id::UPDATE_BLOCK, &update)
                     .await;
+
+                // Create block entity if sign or chest
+                if self.block_entity_hashes.is_sign(final_rid) {
+                    let be = BlockEntityData::new_sign();
+                    let nbt = be.to_network_nbt(target.x, target.y, target.z);
+                    self.block_entities
+                        .insert((target.x, target.y, target.z), be);
+                    // Send BlockActorData to open the sign editor
+                    self.send_packet(
+                        addr,
+                        packets::id::BLOCK_ACTOR_DATA,
+                        &BlockActorData {
+                            position: target,
+                            nbt_data: nbt,
+                        },
+                    )
+                    .await;
+                } else if self.block_entity_hashes.is_chest(final_rid) {
+                    self.block_entities
+                        .insert((target.x, target.y, target.z), BlockEntityData::new_chest());
+                }
 
                 // Trigger fluid updates: if placed block is fluid, schedule self;
                 // also schedule neighboring fluids that may be affected
@@ -583,5 +677,202 @@ impl ConnectionHandler {
                 }
             }
         }
+    }
+
+    /// Open a chest container for a player.
+    async fn open_chest(&mut self, addr: SocketAddr, pos: BlockPos) {
+        let window_id = match self.connections.get_mut(&addr) {
+            Some(conn) => {
+                let wid = conn.next_window_id;
+                conn.next_window_id = conn.next_window_id.wrapping_add(1);
+                if conn.next_window_id == 0 {
+                    conn.next_window_id = 1;
+                }
+                conn.open_container = Some(OpenContainer {
+                    window_id: wid,
+                    container_type: 0,
+                    position: pos,
+                });
+                wid
+            }
+            None => return,
+        };
+
+        // Send ContainerOpen
+        self.send_packet(
+            addr,
+            packets::id::CONTAINER_OPEN,
+            &ContainerOpen {
+                window_id,
+                container_type: 0, // Container
+                position: pos,
+                entity_unique_id: -1,
+            },
+        )
+        .await;
+
+        // Get chest items
+        let items = self
+            .block_entities
+            .get(&(pos.x, pos.y, pos.z))
+            .and_then(|be| match be {
+                BlockEntityData::Chest { items } => Some(items.clone()),
+                _ => None,
+            })
+            .unwrap_or_else(|| {
+                (0..27)
+                    .map(|_| mc_rs_proto::item_stack::ItemStack::empty())
+                    .collect()
+            });
+
+        // Send InventoryContent with the chest's items
+        self.send_packet(
+            addr,
+            packets::id::INVENTORY_CONTENT,
+            &InventoryContent {
+                window_id: window_id as u32,
+                items,
+            },
+        )
+        .await;
+
+        debug!("Opened chest at {pos} for {addr} (window_id={window_id})");
+    }
+
+    /// Close any open containers at the given position for all players.
+    async fn close_container_at(&mut self, pos: BlockPos) {
+        let to_close: Vec<(SocketAddr, u8)> = self
+            .connections
+            .iter()
+            .filter_map(|(&a, c)| {
+                c.open_container
+                    .as_ref()
+                    .filter(|oc| oc.position == pos)
+                    .map(|oc| (a, oc.window_id))
+            })
+            .collect();
+
+        for (a, wid) in to_close {
+            if let Some(conn) = self.connections.get_mut(&a) {
+                conn.open_container = None;
+            }
+            self.send_packet(
+                a,
+                packets::id::CONTAINER_CLOSE,
+                &ContainerClose {
+                    window_id: wid,
+                    server_initiated: true,
+                },
+            )
+            .await;
+        }
+    }
+
+    /// Handle a client-initiated container close.
+    pub(super) async fn handle_container_close(
+        &mut self,
+        addr: SocketAddr,
+        buf: &mut Cursor<&[u8]>,
+    ) {
+        let pkt = match ContainerClose::proto_decode(buf) {
+            Ok(p) => p,
+            Err(e) => {
+                debug!("Bad ContainerClose from {addr}: {e}");
+                return;
+            }
+        };
+
+        let matches = self
+            .connections
+            .get(&addr)
+            .and_then(|c| c.open_container.as_ref())
+            .map(|oc| oc.window_id == pkt.window_id)
+            .unwrap_or(false);
+
+        if matches {
+            if let Some(conn) = self.connections.get_mut(&addr) {
+                conn.open_container = None;
+            }
+        }
+
+        // Echo back ContainerClose
+        self.send_packet(
+            addr,
+            packets::id::CONTAINER_CLOSE,
+            &ContainerClose {
+                window_id: pkt.window_id,
+                server_initiated: false,
+            },
+        )
+        .await;
+    }
+
+    /// Handle a block actor data update from the client (sign text editing).
+    pub(super) async fn handle_block_actor_data(
+        &mut self,
+        addr: SocketAddr,
+        buf: &mut Cursor<&[u8]>,
+    ) {
+        let pkt = match BlockActorData::proto_decode(buf) {
+            Ok(p) => p,
+            Err(e) => {
+                debug!("Bad BlockActorData from {addr}: {e}");
+                return;
+            }
+        };
+
+        let pos = pkt.position;
+
+        // Only handle sign edits for editable signs
+        let is_editable_sign = self
+            .block_entities
+            .get(&(pos.x, pos.y, pos.z))
+            .map(|be| {
+                matches!(
+                    be,
+                    BlockEntityData::Sign {
+                        is_editable: true,
+                        ..
+                    }
+                )
+            })
+            .unwrap_or(false);
+
+        if !is_editable_sign {
+            return;
+        }
+
+        // Parse the sign text from the client's NBT
+        let (front, back) = match BlockEntityData::sign_from_network_nbt(&pkt.nbt_data) {
+            Some(t) => t,
+            None => return,
+        };
+
+        // Update the sign and mark as no longer editable
+        if let Some(BlockEntityData::Sign {
+            front_text,
+            back_text,
+            is_editable,
+        }) = self.block_entities.get_mut(&(pos.x, pos.y, pos.z))
+        {
+            *front_text = front;
+            *back_text = back;
+            *is_editable = false;
+        }
+
+        // Broadcast updated sign to all players
+        if let Some(be) = self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+            let nbt = be.to_network_nbt(pos.x, pos.y, pos.z);
+            self.broadcast_packet(
+                packets::id::BLOCK_ACTOR_DATA,
+                &BlockActorData {
+                    position: pos,
+                    nbt_data: nbt,
+                },
+            )
+            .await;
+        }
+
+        debug!("Sign edited at {pos} by {addr}");
     }
 }

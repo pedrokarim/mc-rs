@@ -43,6 +43,8 @@ impl ConnectionHandler {
                 xp_level: 0,
                 xp_total: 0,
                 pending_forms: HashMap::new(),
+                open_container: None,
+                next_window_id: 1,
             },
         );
 
@@ -235,6 +237,12 @@ impl ConnectionHandler {
                 }
                 packets::id::MODAL_FORM_RESPONSE => {
                     self.handle_modal_form_response(addr, &mut cursor).await;
+                }
+                packets::id::CONTAINER_CLOSE => {
+                    self.handle_container_close(addr, &mut cursor).await;
+                }
+                packets::id::BLOCK_ACTOR_DATA => {
+                    self.handle_block_actor_data(addr, &mut cursor).await;
                 }
                 other => {
                     debug!(

@@ -36,23 +36,25 @@ use mc_rs_proto::jwt;
 use mc_rs_proto::packets::add_player::default_player_metadata;
 use mc_rs_proto::packets::{
     self, ActorAttribute, AddActor, AddPlayer, Animate, AvailableCommands,
-    AvailableEntityIdentifiers, BiomeDefinitionList, ChunkRadiusUpdated, ClientToServerHandshake,
-    CommandOutput, CommandRequest, Disconnect, EntityEvent, EntityMetadataEntry, GameRule,
-    GameRuleValue, GameRulesChanged, InventoryContent, InventorySlot, InventoryTransaction,
-    ItemStackRequest, ItemStackResponse, LevelChunk, LevelEvent, MetadataValue, MobEffect,
-    MobEquipment, MoveActorAbsolute, MoveMode, MovePlayer, NetworkChunkPublisherUpdate,
-    NetworkSettings, PlayStatus, PlayStatusType, PlayerAction, PlayerActionType, PlayerAuthInput,
-    PlayerListAdd, PlayerListAddPacket, PlayerListRemove, RemoveEntity, RequestChunkRadius,
-    ResourcePackClientResponse, ResourcePackResponseStatus, ResourcePackStack, ResourcePacksInfo,
-    Respawn, ServerToClientHandshake, SetEntityMotion, SetLocalPlayerAsInitialized,
-    SetPlayerGameType, SetTime, StartGame, Text, UpdateAbilities, UpdateAttributes, UpdateBlock,
-    UseItemAction, UseItemOnEntityAction,
+    AvailableEntityIdentifiers, BiomeDefinitionList, BlockActorData, ChunkRadiusUpdated,
+    ClientToServerHandshake, CommandOutput, CommandRequest, ContainerClose, ContainerOpen,
+    Disconnect, EntityEvent, EntityMetadataEntry, GameRule, GameRuleValue, GameRulesChanged,
+    InventoryContent, InventorySlot, InventoryTransaction, ItemStackRequest, ItemStackResponse,
+    LevelChunk, LevelEvent, MetadataValue, MobEffect, MobEquipment, MoveActorAbsolute, MoveMode,
+    MovePlayer, NetworkChunkPublisherUpdate, NetworkSettings, PlayStatus, PlayStatusType,
+    PlayerAction, PlayerActionType, PlayerAuthInput, PlayerListAdd, PlayerListAddPacket,
+    PlayerListRemove, RemoveEntity, RequestChunkRadius, ResourcePackClientResponse,
+    ResourcePackResponseStatus, ResourcePackStack, ResourcePacksInfo, Respawn,
+    ServerToClientHandshake, SetEntityMotion, SetLocalPlayerAsInitialized, SetPlayerGameType,
+    SetTime, StartGame, Text, UpdateAbilities, UpdateAttributes, UpdateBlock, UseItemAction,
+    UseItemOnEntityAction,
 };
 use mc_rs_proto::types::{BlockPos, Uuid, VarUInt32, Vec2, Vec3};
 use mc_rs_raknet::{RakNetEvent, Reliability, ServerHandle};
 use rand::prelude::*;
 
-use mc_rs_world::block_hash::{FlatWorldBlocks, TickBlocks};
+use mc_rs_game::block_entity::{self, BlockEntityData};
+use mc_rs_world::block_hash::{BlockEntityHashes, FlatWorldBlocks, TickBlocks};
 use mc_rs_world::block_registry::BlockRegistry;
 use mc_rs_world::block_tick::{process_random_tick, process_scheduled_tick, TickScheduler};
 use mc_rs_world::chunk::{ChunkColumn, OVERWORLD_MIN_Y, OVERWORLD_SUB_CHUNK_COUNT};
@@ -64,7 +66,7 @@ use mc_rs_world::overworld_generator::OverworldGenerator;
 use mc_rs_world::physics::{PlayerAabb, MAX_AIRBORNE_TICKS, MAX_FALL_PER_TICK};
 use mc_rs_world::redstone;
 use mc_rs_world::serializer::serialize_chunk_column;
-use mc_rs_world::storage::LevelDbProvider;
+use mc_rs_world::storage::{block_entity_key, LevelDbProvider};
 use tokio::sync::watch;
 
 use mc_rs_behavior_pack::loader::LoadedBehaviorPack;
@@ -173,6 +175,22 @@ pub struct PlayerConnection {
     pub xp_total: i32,
     /// Pending forms awaiting response: form_id -> form_type ("simple"/"modal"/"custom").
     pub pending_forms: HashMap<u32, String>,
+    /// Currently open container (chest, etc.).
+    pub open_container: Option<OpenContainer>,
+    /// Next window ID to assign when opening a container.
+    pub next_window_id: u8,
+}
+
+/// State for a currently open container window.
+#[derive(Debug, Clone)]
+pub struct OpenContainer {
+    /// Window ID for this container session.
+    pub window_id: u8,
+    /// Container type (0=container/chest).
+    #[allow(dead_code)]
+    pub container_type: u8,
+    /// World position of the container block.
+    pub position: BlockPos,
 }
 
 /// An active status effect on a player.
@@ -255,6 +273,10 @@ pub struct ConnectionHandler {
     /// Merged loot tables from all loaded behavior packs.
     #[allow(dead_code)]
     loot_tables: HashMap<String, LootTableFile>,
+    /// Block entities (signs, chests) keyed by world position (x, y, z).
+    block_entities: HashMap<(i32, i32, i32), BlockEntityData>,
+    /// Pre-computed block entity hashes for detection.
+    block_entity_hashes: BlockEntityHashes,
 }
 
 impl ConnectionHandler {
@@ -529,6 +551,8 @@ impl ConnectionHandler {
             plugin_started: false,
             behavior_packs,
             loot_tables,
+            block_entities: HashMap::new(),
+            block_entity_hashes: BlockEntityHashes::compute(),
         }
     }
 
@@ -869,6 +893,26 @@ impl ConnectionHandler {
         for key in &dirty_keys {
             if let Some(col) = self.world_chunks.get_mut(key) {
                 col.dirty = false;
+            }
+        }
+
+        // Save block entities grouped by chunk
+        let mut be_by_chunk: HashMap<(i32, i32), Vec<u8>> = HashMap::new();
+        for (&(bx, by, bz), be) in &self.block_entities {
+            let cx = bx >> 4;
+            let cz = bz >> 4;
+            be_by_chunk
+                .entry((cx, cz))
+                .or_default()
+                .extend_from_slice(&be.to_le_nbt(bx, by, bz));
+        }
+        for ((cx, cz), data) in &be_by_chunk {
+            let key = block_entity_key(*cx, *cz);
+            if let Err(e) = self.chunk_storage.put_raw(&key, data) {
+                warn!(
+                    "Failed to save block entities for chunk ({},{}): {e}",
+                    cx, cz
+                );
             }
         }
 

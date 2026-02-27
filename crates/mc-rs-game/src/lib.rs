@@ -1,6 +1,7 @@
 //! Game logic: ECS, player management, entities, and physics.
 
 pub mod ai;
+pub mod block_entity;
 pub mod combat;
 pub mod components;
 pub mod food;

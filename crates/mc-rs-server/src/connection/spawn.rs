@@ -95,6 +95,15 @@ impl ConnectionHandler {
                         gen
                     };
                     self.world_chunks.insert((cx, cz), column);
+
+                    // Load block entities for this chunk from LevelDB
+                    let be_key = block_entity_key(cx, cz);
+                    if let Some(be_data) = self.chunk_storage.get_raw(&be_key) {
+                        let entries = block_entity::parse_block_entities(&be_data);
+                        for ((bx, by, bz), data) in entries {
+                            self.block_entities.insert((bx, by, bz), data);
+                        }
+                    }
                 }
 
                 let column = self.world_chunks.get(&(cx, cz)).unwrap();
@@ -112,6 +121,28 @@ impl ConnectionHandler {
                 self.send_packet(addr, packets::id::LEVEL_CHUNK, &level_chunk)
                     .await;
                 count += 1;
+
+                // Send block entity data for this chunk
+                let be_keys: Vec<(i32, i32, i32)> = self
+                    .block_entities
+                    .keys()
+                    .filter(|&&(bx, _, bz)| bx >> 4 == cx && bz >> 4 == cz)
+                    .cloned()
+                    .collect();
+                for (bx, by, bz) in be_keys {
+                    if let Some(be) = self.block_entities.get(&(bx, by, bz)) {
+                        let nbt = be.to_network_nbt(bx, by, bz);
+                        self.send_packet(
+                            addr,
+                            packets::id::BLOCK_ACTOR_DATA,
+                            &BlockActorData {
+                                position: BlockPos::new(bx, by, bz),
+                                nbt_data: nbt,
+                            },
+                        )
+                        .await;
+                    }
+                }
 
                 // Track sent chunk
                 if let Some(conn) = self.connections.get_mut(&addr) {
@@ -188,6 +219,15 @@ impl ConnectionHandler {
                     gen
                 };
                 self.world_chunks.insert((cx, cz), column);
+
+                // Load block entities for this chunk from LevelDB
+                let be_key = block_entity_key(cx, cz);
+                if let Some(be_data) = self.chunk_storage.get_raw(&be_key) {
+                    let entries = block_entity::parse_block_entities(&be_data);
+                    for ((bx, by, bz), data) in entries {
+                        self.block_entities.insert((bx, by, bz), data);
+                    }
+                }
             }
 
             let column = self.world_chunks.get(&(cx, cz)).unwrap();
@@ -204,6 +244,28 @@ impl ConnectionHandler {
 
             self.send_packet(addr, packets::id::LEVEL_CHUNK, &level_chunk)
                 .await;
+
+            // Send block entity data for this chunk
+            let be_keys: Vec<(i32, i32, i32)> = self
+                .block_entities
+                .keys()
+                .filter(|&&(bx, _, bz)| bx >> 4 == cx && bz >> 4 == cz)
+                .cloned()
+                .collect();
+            for (bx, by, bz) in be_keys {
+                if let Some(be) = self.block_entities.get(&(bx, by, bz)) {
+                    let nbt = be.to_network_nbt(bx, by, bz);
+                    self.send_packet(
+                        addr,
+                        packets::id::BLOCK_ACTOR_DATA,
+                        &BlockActorData {
+                            position: BlockPos::new(bx, by, bz),
+                            nbt_data: nbt,
+                        },
+                    )
+                    .await;
+                }
+            }
         }
 
         // Mark as sent

@@ -817,6 +817,101 @@ pub enum FluidType {
     Lava,
 }
 
+/// Pre-computed block runtime IDs for block entities (signs, chests).
+#[derive(Debug, Clone)]
+pub struct BlockEntityHashes {
+    /// Standing sign: `ground_sign_direction` 0-15.
+    pub standing_sign: [u32; 16],
+    /// Wall sign: `facing_direction` 2-5 (index 0-3 maps to face 2-5).
+    pub wall_sign: [u32; 4],
+    /// Chest: `facing_direction` 2-5 (index 0-3 maps to face 2-5).
+    pub chest: [u32; 4],
+}
+
+impl BlockEntityHashes {
+    /// Compute all block entity hashes.
+    pub fn compute() -> Self {
+        let mut standing_sign = [0u32; 16];
+        for (i, hash) in standing_sign.iter_mut().enumerate() {
+            *hash =
+                hash_block_state_with_int("minecraft:oak_sign", "ground_sign_direction", i as i32);
+        }
+
+        let mut wall_sign = [0u32; 4];
+        for (idx, face) in (2..=5).enumerate() {
+            wall_sign[idx] =
+                hash_block_state_with_int("minecraft:oak_wall_sign", "facing_direction", face);
+        }
+
+        let mut chest = [0u32; 4];
+        for (idx, face) in (2..=5).enumerate() {
+            chest[idx] = hash_block_state_with_int("minecraft:chest", "facing_direction", face);
+        }
+
+        Self {
+            standing_sign,
+            wall_sign,
+            chest,
+        }
+    }
+
+    /// Check if a block runtime ID is any sign variant.
+    pub fn is_sign(&self, rid: u32) -> bool {
+        self.standing_sign.contains(&rid) || self.wall_sign.contains(&rid)
+    }
+
+    /// Check if a block runtime ID is a chest.
+    pub fn is_chest(&self, rid: u32) -> bool {
+        self.chest.contains(&rid)
+    }
+
+    /// Get the standing sign hash for a given player yaw.
+    /// Returns `(hash, direction_index)`.
+    pub fn standing_sign_direction(&self, yaw: f32) -> (u32, i32) {
+        let dir = (((yaw + 180.0) * 16.0 / 360.0).floor() as i32).rem_euclid(16);
+        (self.standing_sign[dir as usize], dir)
+    }
+
+    /// Get the wall sign hash for a given face (2=north, 3=south, 4=west, 5=east).
+    /// Returns `None` for invalid faces (top/bottom).
+    pub fn wall_sign_face(&self, face: i32) -> Option<u32> {
+        if (2..=5).contains(&face) {
+            Some(self.wall_sign[(face - 2) as usize])
+        } else {
+            None
+        }
+    }
+
+    /// Get the chest hash for a given facing direction (2-5).
+    /// Returns `None` for invalid faces.
+    pub fn chest_face(&self, face: i32) -> Option<u32> {
+        if (2..=5).contains(&face) {
+            Some(self.chest[(face - 2) as usize])
+        } else {
+            None
+        }
+    }
+
+    /// Get the chest hash for a player yaw (used when placing from top).
+    /// The chest faces the player.
+    pub fn chest_from_yaw(&self, yaw: f32) -> u32 {
+        // Normalize yaw to 0-360
+        let y = yaw.rem_euclid(360.0);
+        // facing_direction: 2=north(z-), 3=south(z+), 4=west(x-), 5=east(x+)
+        // Chest faces the player, so we pick the direction the player is looking FROM
+        let face = if (315.0..360.0).contains(&y) || y < 45.0 {
+            2 // north
+        } else if (45.0..135.0).contains(&y) {
+            5 // east
+        } else if (135.0..225.0).contains(&y) {
+            3 // south
+        } else {
+            4 // west
+        };
+        self.chest[(face - 2) as usize]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1024,5 +1119,54 @@ mod tests {
         assert_eq!(tb.oak_log, wb.oak_log);
         assert_eq!(tb.oak_leaves, wb.oak_leaves);
         assert_eq!(tb.stone, wb.stone);
+    }
+
+    #[test]
+    fn block_entity_hashes_nonzero() {
+        let beh = BlockEntityHashes::compute();
+        for h in &beh.standing_sign {
+            assert_ne!(*h, 0);
+        }
+        for h in &beh.wall_sign {
+            assert_ne!(*h, 0);
+        }
+        for h in &beh.chest {
+            assert_ne!(*h, 0);
+        }
+    }
+
+    #[test]
+    fn block_entity_is_sign() {
+        let beh = BlockEntityHashes::compute();
+        assert!(beh.is_sign(beh.standing_sign[0]));
+        assert!(beh.is_sign(beh.wall_sign[0]));
+        assert!(!beh.is_sign(beh.chest[0]));
+        assert!(!beh.is_sign(0));
+    }
+
+    #[test]
+    fn block_entity_is_chest() {
+        let beh = BlockEntityHashes::compute();
+        assert!(beh.is_chest(beh.chest[0]));
+        assert!(!beh.is_chest(beh.standing_sign[0]));
+        assert!(!beh.is_chest(0));
+    }
+
+    #[test]
+    fn standing_sign_direction_from_yaw() {
+        let beh = BlockEntityHashes::compute();
+        // yaw=0 (looking south) → direction should be 8 ((0+180)*16/360 = 8)
+        let (hash, dir) = beh.standing_sign_direction(0.0);
+        assert_eq!(dir, 8);
+        assert_eq!(hash, beh.standing_sign[8]);
+    }
+
+    #[test]
+    fn wall_sign_face_valid() {
+        let beh = BlockEntityHashes::compute();
+        assert!(beh.wall_sign_face(2).is_some());
+        assert!(beh.wall_sign_face(5).is_some());
+        assert!(beh.wall_sign_face(0).is_none());
+        assert!(beh.wall_sign_face(1).is_none());
     }
 }

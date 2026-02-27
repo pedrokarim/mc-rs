@@ -461,6 +461,316 @@ impl PlayerInventory {
     fn process_destroy(&mut self, count: u8, src: &StackSlot) -> bool {
         self.process_drop(count, src) // Same logic
     }
+
+    /// Process a single ItemStackRequest with an external container (e.g., chest).
+    ///
+    /// Slots with `container_id == ext_container_id` are routed to `ext_items`
+    /// instead of the player's inventory.
+    pub fn process_request_with_container(
+        &mut self,
+        request: &StackRequest,
+        item_registry: &ItemRegistry,
+        ext_container_id: u8,
+        ext_items: &mut [ItemStack],
+    ) -> StackResponseEntry {
+        let mut changed_containers: std::collections::HashMap<u8, Vec<StackResponseSlot>> =
+            std::collections::HashMap::new();
+
+        for action in &request.actions {
+            match action {
+                StackAction::Take { count, src, dst } | StackAction::Place { count, src, dst } => {
+                    let src_item = match get_item_ext(
+                        self,
+                        src.container_id,
+                        src.slot,
+                        ext_container_id,
+                        ext_items,
+                    ) {
+                        Some(i) if !i.is_empty() => i,
+                        _ => return error_response(request.request_id),
+                    };
+                    let dst_item = match get_item_ext(
+                        self,
+                        dst.container_id,
+                        dst.slot,
+                        ext_container_id,
+                        ext_items,
+                    ) {
+                        Some(i) => i,
+                        None => return error_response(request.request_id),
+                    };
+                    let actual_count = (*count).min(src_item.count as u8);
+
+                    if dst_item.is_empty() {
+                        let mut new_dst = src_item.clone();
+                        new_dst.count = actual_count as u16;
+                        new_dst.stack_network_id = self.next_stack_network_id();
+                        set_item_ext(
+                            self,
+                            dst.container_id,
+                            dst.slot,
+                            new_dst,
+                            ext_container_id,
+                            ext_items,
+                        );
+                        let remaining = src_item.count - actual_count as u16;
+                        if remaining == 0 {
+                            set_item_ext(
+                                self,
+                                src.container_id,
+                                src.slot,
+                                ItemStack::empty(),
+                                ext_container_id,
+                                ext_items,
+                            );
+                        } else {
+                            let mut new_src = src_item;
+                            new_src.count = remaining;
+                            set_item_ext(
+                                self,
+                                src.container_id,
+                                src.slot,
+                                new_src,
+                                ext_container_id,
+                                ext_items,
+                            );
+                        }
+                    } else if dst_item.runtime_id == src_item.runtime_id
+                        && dst_item.metadata == src_item.metadata
+                    {
+                        let max_stack = item_registry.max_stack_size(src_item.runtime_id as i16);
+                        let space = max_stack as u16 - dst_item.count;
+                        let to_move = (actual_count as u16).min(space);
+                        if to_move == 0 {
+                            return error_response(request.request_id);
+                        }
+                        let mut new_dst = dst_item;
+                        new_dst.count += to_move;
+                        set_item_ext(
+                            self,
+                            dst.container_id,
+                            dst.slot,
+                            new_dst,
+                            ext_container_id,
+                            ext_items,
+                        );
+                        let remaining = src_item.count - to_move;
+                        if remaining == 0 {
+                            set_item_ext(
+                                self,
+                                src.container_id,
+                                src.slot,
+                                ItemStack::empty(),
+                                ext_container_id,
+                                ext_items,
+                            );
+                        } else {
+                            let mut new_src = src_item;
+                            new_src.count = remaining;
+                            set_item_ext(
+                                self,
+                                src.container_id,
+                                src.slot,
+                                new_src,
+                                ext_container_id,
+                                ext_items,
+                            );
+                        }
+                    } else {
+                        return error_response(request.request_id);
+                    }
+                    record_slot_change_ext(
+                        &mut changed_containers,
+                        src,
+                        self,
+                        ext_container_id,
+                        ext_items,
+                    );
+                    record_slot_change_ext(
+                        &mut changed_containers,
+                        dst,
+                        self,
+                        ext_container_id,
+                        ext_items,
+                    );
+                }
+                StackAction::Swap { src, dst } => {
+                    let src_item = match get_item_ext(
+                        self,
+                        src.container_id,
+                        src.slot,
+                        ext_container_id,
+                        ext_items,
+                    ) {
+                        Some(i) => i,
+                        None => return error_response(request.request_id),
+                    };
+                    let dst_item = match get_item_ext(
+                        self,
+                        dst.container_id,
+                        dst.slot,
+                        ext_container_id,
+                        ext_items,
+                    ) {
+                        Some(i) => i,
+                        None => return error_response(request.request_id),
+                    };
+                    set_item_ext(
+                        self,
+                        src.container_id,
+                        src.slot,
+                        dst_item,
+                        ext_container_id,
+                        ext_items,
+                    );
+                    set_item_ext(
+                        self,
+                        dst.container_id,
+                        dst.slot,
+                        src_item,
+                        ext_container_id,
+                        ext_items,
+                    );
+                    record_slot_change_ext(
+                        &mut changed_containers,
+                        src,
+                        self,
+                        ext_container_id,
+                        ext_items,
+                    );
+                    record_slot_change_ext(
+                        &mut changed_containers,
+                        dst,
+                        self,
+                        ext_container_id,
+                        ext_items,
+                    );
+                }
+                StackAction::Drop { count, src, .. }
+                | StackAction::Destroy { count, src }
+                | StackAction::Consume { count, src } => {
+                    let src_item = match get_item_ext(
+                        self,
+                        src.container_id,
+                        src.slot,
+                        ext_container_id,
+                        ext_items,
+                    ) {
+                        Some(i) if !i.is_empty() => i,
+                        _ => return error_response(request.request_id),
+                    };
+                    let actual_count = (*count).min(src_item.count as u8);
+                    let remaining = src_item.count - actual_count as u16;
+                    if remaining == 0 {
+                        set_item_ext(
+                            self,
+                            src.container_id,
+                            src.slot,
+                            ItemStack::empty(),
+                            ext_container_id,
+                            ext_items,
+                        );
+                    } else {
+                        let mut new_src = src_item;
+                        new_src.count = remaining;
+                        set_item_ext(
+                            self,
+                            src.container_id,
+                            src.slot,
+                            new_src,
+                            ext_container_id,
+                            ext_items,
+                        );
+                    }
+                    record_slot_change_ext(
+                        &mut changed_containers,
+                        src,
+                        self,
+                        ext_container_id,
+                        ext_items,
+                    );
+                }
+                _ => {
+                    debug!("Unexpected action in container request");
+                }
+            }
+        }
+
+        let containers: Vec<StackResponseContainer> = changed_containers
+            .into_iter()
+            .map(|(container_id, slots)| StackResponseContainer {
+                container_id,
+                slots,
+            })
+            .collect();
+
+        StackResponseEntry {
+            status: 0,
+            request_id: request.request_id,
+            containers,
+        }
+    }
+}
+
+/// Get an item from the player inventory or external container.
+fn get_item_ext(
+    inv: &PlayerInventory,
+    container_id: u8,
+    slot: u8,
+    ext_cid: u8,
+    ext_items: &[ItemStack],
+) -> Option<ItemStack> {
+    if container_id == ext_cid {
+        ext_items.get(slot as usize).cloned()
+    } else {
+        inv.get_slot(container_id, slot).cloned()
+    }
+}
+
+/// Set an item in the player inventory or external container.
+fn set_item_ext(
+    inv: &mut PlayerInventory,
+    container_id: u8,
+    slot: u8,
+    item: ItemStack,
+    ext_cid: u8,
+    ext_items: &mut [ItemStack],
+) {
+    if container_id == ext_cid {
+        if let Some(s) = ext_items.get_mut(slot as usize) {
+            *s = item;
+        }
+    } else {
+        inv.set_slot(container_id, slot, item);
+    }
+}
+
+/// Record slot change for response, with external container support.
+fn record_slot_change_ext(
+    containers: &mut std::collections::HashMap<u8, Vec<StackResponseSlot>>,
+    slot_ref: &StackSlot,
+    inv: &PlayerInventory,
+    ext_cid: u8,
+    ext_items: &[ItemStack],
+) {
+    let item = if slot_ref.container_id == ext_cid {
+        ext_items.get(slot_ref.slot as usize)
+    } else {
+        inv.get_slot(slot_ref.container_id, slot_ref.slot)
+    };
+    if let Some(item) = item {
+        let entry = containers.entry(slot_ref.container_id).or_default();
+        if !entry.iter().any(|s| s.slot == slot_ref.slot) {
+            entry.push(StackResponseSlot {
+                slot: slot_ref.slot,
+                hotbar_slot: slot_ref.slot,
+                count: if item.is_empty() { 0 } else { item.count as u8 },
+                stack_network_id: item.stack_network_id,
+                custom_name: String::new(),
+                durability_correction: 0,
+            });
+        }
+    }
 }
 
 /// Create an error response for a failed request.

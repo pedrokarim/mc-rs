@@ -101,7 +101,7 @@ Phase 5 : Polish             ██████████ (continu)
 - [x] UpdateBlock packet
 - [x] Block break → UpdateBlock(air) (via InventoryTransaction, creative mode)
 - [x] Block place (InventoryTransaction)
-- [ ] Block entities basiques (panneaux, coffres)
+- [x] Block entities basiques (panneaux, coffres)
 
 ### 1.3 — Inventaire basique
 - [x] Structure ItemStack
