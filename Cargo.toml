@@ -30,3 +30,6 @@ sha2 = "0.10"
 aes = "0.8"
 cfb8 = "0.8"
 rusty-leveldb = "3"
+wasmtime = "29"
+toml = "0.8"
+mlua = { version = "0.10", features = ["lua54", "serialize", "vendored"] }

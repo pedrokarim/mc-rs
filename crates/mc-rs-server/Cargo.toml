@@ -16,6 +16,8 @@ mc-rs-game = { path = "../mc-rs-game" }
 mc-rs-command = { path = "../mc-rs-command" }
 mc-rs-nbt = { path = "../mc-rs-nbt" }
 mc-rs-plugin-api = { path = "../mc-rs-plugin-api" }
+mc-rs-plugin-wasm = { path = "../mc-rs-plugin-wasm" }
+mc-rs-plugin-lua = { path = "../mc-rs-plugin-lua" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

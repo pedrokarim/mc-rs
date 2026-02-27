@@ -378,7 +378,23 @@ impl ConnectionHandler {
             weather_duration: initial_weather_duration,
             is_raining: initial_rain_level > 0.0,
             is_thundering: initial_lightning_level > 0.0,
-            plugin_manager: PluginManager::new(),
+            plugin_manager: {
+                let mut mgr = PluginManager::new();
+                // Load WASM plugins from plugins/ directory
+                let plugins_dir = std::path::PathBuf::from("plugins");
+                std::fs::create_dir_all(&plugins_dir).ok();
+                let engine = mc_rs_plugin_wasm::create_engine();
+                let wasm_plugins = mc_rs_plugin_wasm::load_wasm_plugins(&plugins_dir, &engine);
+                for plugin in wasm_plugins {
+                    mgr.register(plugin);
+                }
+                // Load Lua plugins from plugins/ directory
+                let lua_plugins = mc_rs_plugin_lua::load_lua_plugins(&plugins_dir);
+                for plugin in lua_plugins {
+                    mgr.register(plugin);
+                }
+                mgr
+            },
             plugin_started: false,
         }
     }

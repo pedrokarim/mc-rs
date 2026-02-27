@@ -6,7 +6,7 @@
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 /// Information about an online player, passed to plugins in events.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PluginPlayer {
     pub name: String,
     pub uuid: String,
@@ -17,7 +17,7 @@ pub struct PluginPlayer {
 }
 
 /// Block position for plugin events (decoupled from mc-rs-proto).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PluginBlockPos {
     pub x: i32,
     pub y: i32,
@@ -25,7 +25,7 @@ pub struct PluginBlockPos {
 }
 
 /// Cause of damage for PlayerDamage events.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum DamageCause {
     Attack,
     Fall,
@@ -39,7 +39,7 @@ pub enum DamageCause {
 }
 
 /// Log level for plugin logging.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum LogLevel {
     Info,
     Warn,
@@ -48,7 +48,7 @@ pub enum LogLevel {
 }
 
 /// Result of dispatching an event to a plugin.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum EventResult {
     /// Continue normal handling.
     Continue,
@@ -59,7 +59,7 @@ pub enum EventResult {
 // ─── Events ──────────────────────────────────────────────────────────────────
 
 /// All events that plugins can listen to.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum PluginEvent {
     // --- Player events (8) ---
     PlayerJoin {
@@ -160,7 +160,7 @@ impl PluginEvent {
 // ─── Plugin trait ────────────────────────────────────────────────────────────
 
 /// Metadata about a plugin.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PluginInfo {
     pub name: String,
     pub version: String,
