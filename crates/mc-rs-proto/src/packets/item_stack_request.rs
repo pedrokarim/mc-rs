@@ -94,6 +94,11 @@ pub enum StackAction {
     CraftCreative {
         creative_item_network_id: u32,
     },
+    /// Craft via enchanting table option selection (action type 15).
+    CraftRecipeOptional {
+        recipe_network_id: u32,
+        filter_string_index: i32,
+    },
     /// Any action type we don't handle yet.
     Unknown {
         action_type: u8,
@@ -288,6 +293,15 @@ fn decode_stack_action(buf: &mut impl Buf) -> Result<StackAction, ProtoError> {
             let creative_item_network_id = VarUInt32::proto_decode(buf)?.0;
             Ok(StackAction::CraftCreative {
                 creative_item_network_id,
+            })
+        }
+        15 => {
+            // CraftRecipeOptional (enchanting table selection)
+            let recipe_network_id = VarUInt32::proto_decode(buf)?.0;
+            let filter_string_index = VarInt::proto_decode(buf)?.0;
+            Ok(StackAction::CraftRecipeOptional {
+                recipe_network_id,
+                filter_string_index,
             })
         }
         _ => {

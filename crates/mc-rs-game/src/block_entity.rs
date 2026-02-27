@@ -33,6 +33,10 @@ pub enum BlockEntityData {
         lit_duration: i16,
         stored_xp: f32,
     },
+    EnchantingTable {
+        item: ItemStack,
+        lapis: ItemStack,
+    },
 }
 
 /// Number of slots in a single chest.
@@ -40,6 +44,9 @@ pub const CHEST_SLOTS: usize = 27;
 
 /// Number of slots in a furnace.
 pub const FURNACE_SLOTS: usize = 3;
+
+/// Number of slots in an enchanting table.
+pub const ENCHANTING_TABLE_SLOTS: usize = 2;
 
 impl BlockEntityData {
     /// Create a new empty sign (editable, no text).
@@ -55,6 +62,14 @@ impl BlockEntityData {
     pub fn new_chest() -> Self {
         BlockEntityData::Chest {
             items: (0..CHEST_SLOTS).map(|_| ItemStack::empty()).collect(),
+        }
+    }
+
+    /// Create a new empty enchanting table (2 slots: item + lapis).
+    pub fn new_enchanting_table() -> Self {
+        BlockEntityData::EnchantingTable {
+            item: ItemStack::empty(),
+            lapis: ItemStack::empty(),
         }
     }
 
@@ -210,6 +225,24 @@ impl BlockEntityData {
                 c.insert("BurnDuration".to_string(), NbtTag::Short(*lit_duration));
                 c.insert("StoredXPInt".to_string(), NbtTag::Int(*stored_xp as i32));
             }
+            BlockEntityData::EnchantingTable { item, lapis } => {
+                c.insert("id".to_string(), NbtTag::String("EnchantTable".to_string()));
+
+                let slots = [(0i8, item), (1, lapis)];
+                let item_list: Vec<NbtTag> = slots
+                    .iter()
+                    .filter(|(_, it)| !it.is_empty())
+                    .map(|(slot, it)| {
+                        let mut ic = NbtCompound::new();
+                        ic.insert("Slot".to_string(), NbtTag::Byte(*slot));
+                        ic.insert("id".to_string(), NbtTag::Short(it.runtime_id as i16));
+                        ic.insert("Count".to_string(), NbtTag::Byte(it.count as i8));
+                        ic.insert("Damage".to_string(), NbtTag::Short(it.metadata as i16));
+                        NbtTag::Compound(ic)
+                    })
+                    .collect();
+                c.insert("Items".to_string(), NbtTag::List(item_list));
+            }
         }
 
         c
@@ -274,6 +307,38 @@ impl BlockEntityData {
                     }
                 }
                 BlockEntityData::Chest { items }
+            }
+            "EnchantTable" => {
+                let mut item = ItemStack::empty();
+                let mut lapis = ItemStack::empty();
+                if let Some(NbtTag::List(item_list)) = c.get("Items") {
+                    for tag in item_list {
+                        if let NbtTag::Compound(ic) = tag {
+                            let slot = ic.get("Slot").and_then(|t| t.as_byte()).unwrap_or(-1);
+                            let rid = ic.get("id").and_then(|t| t.as_short()).unwrap_or(0);
+                            let count = ic.get("Count").and_then(|t| t.as_byte()).unwrap_or(0);
+                            let damage = ic.get("Damage").and_then(|t| t.as_short()).unwrap_or(0);
+                            if rid != 0 && count > 0 {
+                                let parsed = ItemStack {
+                                    runtime_id: rid as i32,
+                                    count: count as u16,
+                                    metadata: damage as u16,
+                                    block_runtime_id: 0,
+                                    nbt_data: Vec::new(),
+                                    can_place_on: Vec::new(),
+                                    can_destroy: Vec::new(),
+                                    stack_network_id: 0,
+                                };
+                                match slot {
+                                    0 => item = parsed,
+                                    1 => lapis = parsed,
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                }
+                BlockEntityData::EnchantingTable { item, lapis }
             }
             other => {
                 if let Some(ft) = FurnaceType::from_nbt_id(other) {
@@ -616,6 +681,61 @@ mod tests {
             root.compound.get("id").and_then(|t| t.as_string()),
             Some("Smoker")
         );
+    }
+
+    #[test]
+    fn new_enchanting_table_defaults() {
+        let be = BlockEntityData::new_enchanting_table();
+        match &be {
+            BlockEntityData::EnchantingTable { item, lapis } => {
+                assert!(item.is_empty());
+                assert!(lapis.is_empty());
+            }
+            _ => panic!("Expected EnchantingTable"),
+        }
+    }
+
+    #[test]
+    fn enchanting_table_le_nbt_roundtrip() {
+        let mut be = BlockEntityData::new_enchanting_table();
+        if let BlockEntityData::EnchantingTable {
+            ref mut item,
+            ref mut lapis,
+        } = be
+        {
+            *item = ItemStack {
+                runtime_id: 100,
+                count: 1,
+                metadata: 0,
+                block_runtime_id: 0,
+                nbt_data: Vec::new(),
+                can_place_on: Vec::new(),
+                can_destroy: Vec::new(),
+                stack_network_id: 0,
+            };
+            *lapis = ItemStack {
+                runtime_id: 200,
+                count: 3,
+                metadata: 0,
+                block_runtime_id: 0,
+                nbt_data: Vec::new(),
+                can_place_on: Vec::new(),
+                can_destroy: Vec::new(),
+                stack_network_id: 0,
+            };
+        }
+        let data = be.to_le_nbt(8, 70, -2);
+        let ((x, y, z), parsed) = BlockEntityData::from_le_nbt(&data).unwrap();
+        assert_eq!((x, y, z), (8, 70, -2));
+        match parsed {
+            BlockEntityData::EnchantingTable { item, lapis } => {
+                assert_eq!(item.runtime_id, 100);
+                assert_eq!(item.count, 1);
+                assert_eq!(lapis.runtime_id, 200);
+                assert_eq!(lapis.count, 3);
+            }
+            _ => panic!("Expected EnchantingTable"),
+        }
     }
 
     #[test]

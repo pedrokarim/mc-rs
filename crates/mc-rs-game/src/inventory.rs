@@ -215,6 +215,15 @@ impl PlayerInventory {
                     // Creative mode: create the item directly.
                     debug!("CraftCreative: network_id={}", creative_item_network_id);
                 }
+                StackAction::CraftRecipeOptional {
+                    recipe_network_id, ..
+                } => {
+                    // Enchanting table selection — handled server-side, not in inventory
+                    debug!(
+                        "CraftRecipeOptional: recipe_network_id={}",
+                        recipe_network_id
+                    );
+                }
                 StackAction::Create { result_slot } => {
                     debug!("Create: result_slot={}", result_slot);
                 }

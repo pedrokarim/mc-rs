@@ -844,6 +844,10 @@ pub struct BlockEntityHashes {
     pub lit_blast_furnace: [u32; 4],
     pub smoker: [u32; 4],
     pub lit_smoker: [u32; 4],
+    /// Enchanting table (no directional state).
+    pub enchanting_table: u32,
+    /// Bookshelf (no directional state).
+    pub bookshelf: u32,
 }
 
 impl BlockEntityHashes {
@@ -900,6 +904,9 @@ impl BlockEntityHashes {
             }
         }
 
+        let enchanting_table = hash_block_state("minecraft:enchanting_table");
+        let bookshelf = hash_block_state("minecraft:bookshelf");
+
         Self {
             standing_sign,
             wall_sign,
@@ -910,6 +917,8 @@ impl BlockEntityHashes {
             lit_blast_furnace,
             smoker,
             lit_smoker,
+            enchanting_table,
+            bookshelf,
         }
     }
 
@@ -931,6 +940,16 @@ impl BlockEntityHashes {
             || self.lit_blast_furnace.contains(&rid)
             || self.smoker.contains(&rid)
             || self.lit_smoker.contains(&rid)
+    }
+
+    /// Check if a block runtime ID is an enchanting table.
+    pub fn is_enchanting_table(&self, rid: u32) -> bool {
+        rid == self.enchanting_table
+    }
+
+    /// Check if a block runtime ID is a bookshelf.
+    pub fn is_bookshelf(&self, rid: u32) -> bool {
+        rid == self.bookshelf
     }
 
     /// Check if a block runtime ID is a lit furnace variant.
@@ -1374,5 +1393,23 @@ mod tests {
             assert_eq!(beh.unlit_hash_for(beh.lit_smoker[i]), Some(beh.smoker[i]));
         }
         assert_eq!(beh.lit_hash_for(beh.chest[0]), None);
+    }
+
+    #[test]
+    fn enchanting_table_hash_nonzero() {
+        let beh = BlockEntityHashes::compute();
+        assert_ne!(beh.enchanting_table, 0);
+        assert_ne!(beh.bookshelf, 0);
+        assert_ne!(beh.enchanting_table, beh.bookshelf);
+    }
+
+    #[test]
+    fn enchanting_table_detection() {
+        let beh = BlockEntityHashes::compute();
+        assert!(beh.is_enchanting_table(beh.enchanting_table));
+        assert!(!beh.is_enchanting_table(beh.bookshelf));
+        assert!(!beh.is_enchanting_table(beh.chest[0]));
+        assert!(beh.is_bookshelf(beh.bookshelf));
+        assert!(!beh.is_bookshelf(beh.enchanting_table));
     }
 }

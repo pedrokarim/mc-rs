@@ -18,6 +18,8 @@ pub fn create_behaviors(type_id: &str) -> Vec<Box<dyn Behavior>> {
         "minecraft:cow" | "minecraft:pig" | "minecraft:chicken" => vec![
             Box::new(Float::new()),
             Box::new(Panic::new()),
+            Box::new(TemptGoal::new()),
+            Box::new(BreedGoal::new()),
             Box::new(RandomStroll::new()),
             Box::new(LookAtPlayer::new(8.0)),
         ],
@@ -47,6 +49,13 @@ mod tests {
         assert!(!behaviors
             .iter()
             .any(|b| b.behavior_type() == BehaviorType::TargetSelector));
+    }
+
+    #[test]
+    fn cow_has_tempt_and_breed() {
+        let behaviors = create_behaviors("minecraft:cow");
+        // Float, Panic, TemptGoal, BreedGoal, RandomStroll, LookAtPlayer = 6
+        assert_eq!(behaviors.len(), 6);
     }
 
     #[test]

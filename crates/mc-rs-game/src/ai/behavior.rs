@@ -34,6 +34,16 @@ pub struct BehaviorContext {
     pub current_target: Option<(Entity, u64, f32, f32, f32)>,
     /// Nearest player info.
     pub nearest_player: Option<NearestPlayerInfo>,
+    /// Mob type identifier (e.g. "minecraft:cow").
+    pub mob_type: String,
+    /// Nearest player holding a valid tempt item for this mob type.
+    pub nearest_tempting_player: Option<NearestPlayerInfo>,
+    /// Nearest same-type mob that is also in love: (entity, runtime_id, x, y, z).
+    pub nearest_breed_partner: Option<(Entity, u64, f32, f32, f32)>,
+    /// Whether this mob is currently in love (fed by player).
+    pub in_love: bool,
+    /// Whether this mob is a baby.
+    pub is_baby: bool,
 }
 
 /// Output actions from a behavior tick.

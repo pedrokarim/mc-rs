@@ -67,6 +67,7 @@ pub struct MobSnapshot {
     pub max_health: f32,
     pub bb_width: f32,
     pub bb_height: f32,
+    pub is_baby: bool,
 }
 
 /// Events produced by the game world, consumed by the network layer.
@@ -82,6 +83,7 @@ pub enum GameEvent {
         max_health: f32,
         bb_width: f32,
         bb_height: f32,
+        is_baby: bool,
     },
     /// A mob moved — broadcast MoveActorAbsolute.
     MobMoved {
@@ -114,6 +116,8 @@ pub enum GameEvent {
         damage: f32,
         knockback: (f32, f32, f32),
     },
+    /// A mob shows love particles (breeding).
+    MobLoveParticles { runtime_id: u64 },
 }
 
 // ---------------------------------------------------------------------------
@@ -142,15 +146,135 @@ impl GameWorld {
         }
     }
 
-    /// Run one game tick: AI, gravity, movement collection, dead cleanup, spawning.
+    /// Run one game tick: AI, breeding, gravity, movement collection, dead cleanup, spawning.
     pub fn tick(&mut self) {
         self.world.resource_mut::<TickCounter>().0 += 1;
         system_ai_tick(&mut self.world);
+        self.system_breeding_tick();
         system_mob_gravity(&mut self.world);
         system_collect_mob_moves(&mut self.world);
         system_cleanup_dead(&mut self.world);
         spawning::system_natural_spawn(&mut self.world, &self.mob_registry, &self.spawn_config);
         spawning::system_despawn_far_mobs(&mut self.world, &self.spawn_config);
+    }
+
+    /// Breeding system: pair in-love mobs, spawn babies, expire timers.
+    fn system_breeding_tick(&mut self) {
+        let current_tick = self.world.resource::<TickCounter>().0;
+
+        // 1. Expire old InLove (> 600 ticks)
+        let expired_love: Vec<Entity> = {
+            let mut q = self.world.query_filtered::<(Entity, &InLove), With<Mob>>();
+            q.iter(&self.world)
+                .filter(|(_, love)| current_tick.saturating_sub(love.0) > 600)
+                .map(|(e, _)| e)
+                .collect()
+        };
+        for entity in expired_love {
+            self.world.entity_mut(entity).remove::<InLove>();
+        }
+
+        // 2. Expire old BreedCooldown
+        let expired_cd: Vec<Entity> = {
+            let mut q = self
+                .world
+                .query_filtered::<(Entity, &BreedCooldown), With<Mob>>();
+            q.iter(&self.world)
+                .filter(|(_, cd)| current_tick >= cd.0)
+                .map(|(e, _)| e)
+                .collect()
+        };
+        for entity in expired_cd {
+            self.world.entity_mut(entity).remove::<BreedCooldown>();
+        }
+
+        // 3. Baby → adult (> 24000 ticks)
+        let grown_up: Vec<Entity> = {
+            let mut q = self.world.query_filtered::<(Entity, &Baby), With<Mob>>();
+            q.iter(&self.world)
+                .filter(|(_, baby)| current_tick.saturating_sub(baby.0) > 24000)
+                .map(|(e, _)| e)
+                .collect()
+        };
+        for entity in grown_up {
+            self.world.entity_mut(entity).remove::<Baby>();
+        }
+
+        // 4. Find breeding pairs (same type, both InLove, not Baby, close enough)
+        let candidates: Vec<(Entity, u64, String, f32, f32, f32)> = {
+            let mut q = self.world.query_filtered::<(
+                Entity,
+                &EntityId,
+                &MobType,
+                &Position,
+                &InLove,
+            ), (With<Mob>, Without<Dead>, Without<Baby>)>();
+            q.iter(&self.world)
+                .map(|(e, eid, mt, pos, _)| (e, eid.runtime_id, mt.0.clone(), pos.x, pos.y, pos.z))
+                .collect()
+        };
+
+        let mut paired: Vec<Entity> = Vec::new();
+        let mut babies_to_spawn: Vec<(String, f32, f32, f32, u64, u64)> = Vec::new();
+
+        for i in 0..candidates.len() {
+            if paired.contains(&candidates[i].0) {
+                continue;
+            }
+            for j in (i + 1)..candidates.len() {
+                if paired.contains(&candidates[j].0) {
+                    continue;
+                }
+                if candidates[i].2 != candidates[j].2 {
+                    continue;
+                }
+                let dx = candidates[i].3 - candidates[j].3;
+                let dz = candidates[i].5 - candidates[j].5;
+                let dist_sq = dx * dx + dz * dz;
+                if dist_sq <= 1.5 * 1.5 {
+                    // Found a pair!
+                    paired.push(candidates[i].0);
+                    paired.push(candidates[j].0);
+                    let mid_x = (candidates[i].3 + candidates[j].3) / 2.0;
+                    let mid_y = (candidates[i].4 + candidates[j].4) / 2.0;
+                    let mid_z = (candidates[i].5 + candidates[j].5) / 2.0;
+                    babies_to_spawn.push((
+                        candidates[i].2.clone(),
+                        mid_x,
+                        mid_y,
+                        mid_z,
+                        candidates[i].1,
+                        candidates[j].1,
+                    ));
+                    break;
+                }
+            }
+        }
+
+        // Remove InLove + add BreedCooldown on paired entities
+        for entity in &paired {
+            self.world.entity_mut(*entity).remove::<InLove>();
+            self.world
+                .entity_mut(*entity)
+                .insert(BreedCooldown(current_tick + 6000));
+        }
+
+        // Spawn babies and emit love particles for parents
+        for (mob_type, x, y, z, parent1_rid, parent2_rid) in babies_to_spawn {
+            self.spawn_baby_mob(&mob_type, x, y, z);
+            self.world
+                .resource_mut::<OutgoingEvents>()
+                .events
+                .push(GameEvent::MobLoveParticles {
+                    runtime_id: parent1_rid,
+                });
+            self.world
+                .resource_mut::<OutgoingEvents>()
+                .events
+                .push(GameEvent::MobLoveParticles {
+                    runtime_id: parent2_rid,
+                });
+        }
     }
 
     /// Drain all pending outgoing events.
@@ -220,6 +344,67 @@ impl GameWorld {
                 max_health: def.max_health,
                 bb_width: def.bb_width,
                 bb_height: def.bb_height,
+                is_baby: false,
+            });
+
+        Some((entity_id, runtime_id))
+    }
+
+    /// Spawn a baby mob entity. Returns `(unique_id, runtime_id)` or `None` if type unknown.
+    pub fn spawn_baby_mob(&mut self, type_id: &str, x: f32, y: f32, z: f32) -> Option<(i64, u64)> {
+        let def = self.mob_registry.get(type_id)?.clone();
+        let entity_id = self.world.resource::<EntityIdAllocator>().allocate();
+        let runtime_id = entity_id as u64;
+        let current_tick = self.world.resource::<TickCounter>().0;
+
+        self.world.spawn((
+            EntityId {
+                unique_id: entity_id,
+                runtime_id,
+            },
+            Position { x, y, z },
+            Rotation {
+                pitch: 0.0,
+                yaw: 0.0,
+                head_yaw: 0.0,
+            },
+            Velocity {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            Health {
+                current: def.max_health,
+                max: def.max_health,
+            },
+            OnGround(false),
+            BoundingBox {
+                width: def.bb_width,
+                height: def.bb_height,
+            },
+            Mob,
+            MobType(type_id.to_string()),
+            AttackDamage(def.attack_damage),
+            LastDamageTick(None),
+            LastAttacker(None),
+            MovementSpeed(def.movement_speed),
+            BehaviorList::new(mob_behaviors::create_behaviors(type_id)),
+            Baby(current_tick),
+        ));
+
+        self.world
+            .resource_mut::<OutgoingEvents>()
+            .events
+            .push(GameEvent::MobSpawned {
+                runtime_id,
+                unique_id: entity_id,
+                mob_type: type_id.to_string(),
+                position: (x, y, z),
+                health: def.max_health,
+                max_health: def.max_health,
+                bb_width: def.bb_width,
+                bb_height: def.bb_height,
+                is_baby: true,
             });
 
         Some((entity_id, runtime_id))
@@ -354,8 +539,9 @@ impl GameWorld {
             &Health,
             &MobType,
             &BoundingBox,
+            Option<&Baby>,
         ), (With<Mob>, Without<Dead>)>();
-        for (eid, pos, rot, health, mob_type, bb) in query.iter(&self.world) {
+        for (eid, pos, rot, health, mob_type, bb, baby) in query.iter(&self.world) {
             result.push(MobSnapshot {
                 unique_id: eid.unique_id,
                 runtime_id: eid.runtime_id,
@@ -368,6 +554,7 @@ impl GameWorld {
                 max_health: health.max,
                 bb_width: bb.width,
                 bb_height: bb.height,
+                is_baby: baby.is_some(),
             });
         }
         result
@@ -430,6 +617,80 @@ impl GameWorld {
         if let Some(entity) = to_despawn {
             self.world.despawn(entity);
         }
+    }
+
+    /// Update the held item name for a player ECS mirror entity.
+    pub fn update_player_held_item(&mut self, unique_id: i64, item_name: String) {
+        let mut target = None;
+        {
+            let mut query = self
+                .world
+                .query_filtered::<(Entity, &EntityId), With<Player>>();
+            for (entity, eid) in query.iter(&self.world) {
+                if eid.unique_id == unique_id {
+                    target = Some(entity);
+                    break;
+                }
+            }
+        }
+        if let Some(entity) = target {
+            self.world
+                .entity_mut(entity)
+                .insert(HeldItemName(item_name));
+        }
+    }
+
+    /// Set a mob as "in love". Returns false if mob not found or on cooldown or baby.
+    pub fn set_mob_in_love(&mut self, runtime_id: u64) -> bool {
+        let entity = match self.find_mob_entity(runtime_id) {
+            Some(e) => e,
+            None => return false,
+        };
+        // Cannot breed if baby
+        if self.world.get::<Baby>(entity).is_some() {
+            return false;
+        }
+        // Cannot breed if on cooldown
+        let current_tick = self.world.resource::<TickCounter>().0;
+        if let Some(cd) = self.world.get::<BreedCooldown>(entity) {
+            if current_tick < cd.0 {
+                return false;
+            }
+        }
+        self.world.entity_mut(entity).insert(InLove(current_tick));
+        self.world
+            .resource_mut::<OutgoingEvents>()
+            .events
+            .push(GameEvent::MobLoveParticles { runtime_id });
+        true
+    }
+
+    /// Get a mob's type string by runtime_id.
+    pub fn mob_type(&mut self, runtime_id: u64) -> Option<String> {
+        let entity = self.find_mob_entity(runtime_id)?;
+        self.world.get::<MobType>(entity).map(|m| m.0.clone())
+    }
+
+    /// Check if a mob is on breeding cooldown.
+    pub fn is_mob_on_breed_cooldown(&mut self, runtime_id: u64) -> bool {
+        let entity = match self.find_mob_entity(runtime_id) {
+            Some(e) => e,
+            None => return false,
+        };
+        let current_tick = self.world.resource::<TickCounter>().0;
+        self.world
+            .get::<BreedCooldown>(entity)
+            .map(|cd| current_tick < cd.0)
+            .unwrap_or(false)
+    }
+
+    /// Check if a mob is a baby.
+    pub fn is_mob_baby(&mut self, runtime_id: u64) -> bool {
+        let entity = match self.find_mob_entity(runtime_id) {
+            Some(e) => e,
+            None => return false,
+        };
+        self.world.get::<Baby>(entity).is_some()
     }
 
     /// Find a mob entity by runtime_id.
@@ -656,5 +917,85 @@ mod tests {
             }
         }
         panic!("MovementSpeed component not found on spawned mob");
+    }
+
+    #[test]
+    fn set_mob_in_love() {
+        let mut gw = GameWorld::new(1);
+        // Advance tick so InLove(0) doesn't expire immediately
+        gw.world.resource_mut::<TickCounter>().0 = 10;
+        let (_, rid) = gw.spawn_mob("minecraft:cow", 0.0, 4.0, 0.0).unwrap();
+        gw.drain_events();
+
+        assert!(gw.set_mob_in_love(rid));
+
+        // Check love particles event was emitted
+        let events = gw.drain_events();
+        assert!(events.iter().any(
+            |e| matches!(e, GameEvent::MobLoveParticles { runtime_id } if *runtime_id == rid)
+        ));
+    }
+
+    #[test]
+    fn set_mob_in_love_baby_rejected() {
+        let mut gw = GameWorld::new(1);
+        let (_, rid) = gw.spawn_baby_mob("minecraft:cow", 0.0, 4.0, 0.0).unwrap();
+        gw.drain_events();
+
+        assert!(!gw.set_mob_in_love(rid));
+    }
+
+    #[test]
+    fn spawn_baby_mob_has_baby_component() {
+        let mut gw = GameWorld::new(1);
+        let (_, rid) = gw.spawn_baby_mob("minecraft:cow", 0.0, 4.0, 0.0).unwrap();
+
+        assert!(gw.is_mob_baby(rid));
+
+        let events = gw.drain_events();
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, GameEvent::MobSpawned { is_baby: true, .. })));
+    }
+
+    #[test]
+    fn breeding_pair_spawns_baby() {
+        let mut gw = GameWorld::new(1);
+        gw.world.resource_mut::<TickCounter>().0 = 10;
+
+        // Spawn two cows very close together
+        let (_, rid1) = gw.spawn_mob("minecraft:cow", 0.0, 4.0, 0.0).unwrap();
+        let (_, rid2) = gw.spawn_mob("minecraft:cow", 0.5, 4.0, 0.0).unwrap();
+        gw.drain_events();
+
+        // Make both in love
+        gw.set_mob_in_love(rid1);
+        gw.set_mob_in_love(rid2);
+        gw.drain_events();
+
+        // Tick to trigger breeding
+        gw.tick();
+
+        let events = gw.drain_events();
+        // Should have spawned a baby
+        let baby_spawned = events
+            .iter()
+            .any(|e| matches!(e, GameEvent::MobSpawned { is_baby: true, .. }));
+        assert!(baby_spawned, "Expected a baby cow to be spawned");
+    }
+
+    #[test]
+    fn baby_grows_up() {
+        let mut gw = GameWorld::new(1);
+        let (_, rid) = gw.spawn_baby_mob("minecraft:cow", 0.0, 4.0, 0.0).unwrap();
+        gw.drain_events();
+
+        assert!(gw.is_mob_baby(rid));
+
+        // Advance past growth time (24000 ticks)
+        gw.world.resource_mut::<TickCounter>().0 = 25000;
+        gw.tick();
+
+        assert!(!gw.is_mob_baby(rid));
     }
 }

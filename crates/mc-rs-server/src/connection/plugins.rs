@@ -157,6 +157,7 @@ impl ConnectionHandler {
                     max_health,
                     bb_width,
                     bb_height,
+                    is_baby,
                 } => {
                     // Plugin event: MobSpawn (cancellable)
                     {
@@ -173,6 +174,11 @@ impl ConnectionHandler {
                             continue;
                         }
                     }
+                    let metadata = if is_baby {
+                        baby_mob_metadata(bb_width, bb_height)
+                    } else {
+                        default_mob_metadata(bb_width, bb_height)
+                    };
                     let pkt = AddActor {
                         entity_unique_id: unique_id,
                         entity_runtime_id: runtime_id,
@@ -190,7 +196,7 @@ impl ConnectionHandler {
                             current: health,
                             default: max_health,
                         }],
-                        metadata: default_mob_metadata(bb_width, bb_height),
+                        metadata,
                     };
                     self.broadcast_packet(packets::id::ADD_ACTOR, &pkt).await;
                 }
@@ -280,6 +286,13 @@ impl ConnectionHandler {
                         &RemoveEntity {
                             entity_unique_id: unique_id,
                         },
+                    )
+                    .await;
+                }
+                GameEvent::MobLoveParticles { runtime_id } => {
+                    self.broadcast_packet(
+                        packets::id::ENTITY_EVENT,
+                        &EntityEvent::love_particles(runtime_id),
                     )
                     .await;
                 }

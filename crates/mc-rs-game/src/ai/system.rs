@@ -2,6 +2,7 @@
 
 use bevy_ecs::prelude::*;
 
+use crate::breeding;
 use crate::components::*;
 use crate::game_world::{GameEvent, OutgoingEvents, TickCounter};
 
@@ -16,6 +17,7 @@ struct PlayerSnapshot {
     x: f32,
     y: f32,
     z: f32,
+    held_item_name: String,
 }
 
 /// Mob snapshot for AI evaluation.
@@ -27,20 +29,26 @@ struct MobSnapshot {
     on_ground: bool,
     last_damage_tick: Option<u64>,
     target: Option<(Entity, u64)>,
+    mob_type: String,
+    in_love: bool,
+    is_baby: bool,
 }
 
 /// Runs AI behavior evaluation for all alive mobs with a BehaviorList.
 pub fn system_ai_tick(world: &mut World) {
-    // Step 1: Snapshot all player positions
+    // Step 1: Snapshot all player positions (including held item for tempt)
     let players: Vec<PlayerSnapshot> = {
-        let mut q = world.query_filtered::<(Entity, &EntityId, &Position), With<Player>>();
+        let mut q = world
+            .query_filtered::<(Entity, &EntityId, &Position, Option<&HeldItemName>), With<Player>>(
+            );
         q.iter(world)
-            .map(|(e, eid, pos)| PlayerSnapshot {
+            .map(|(e, eid, pos, held)| PlayerSnapshot {
                 entity: e,
                 runtime_id: eid.runtime_id,
                 x: pos.x,
                 y: pos.y,
                 z: pos.z,
+                held_item_name: held.map(|h| h.0.clone()).unwrap_or_default(),
             })
             .collect()
     };
@@ -57,17 +65,25 @@ pub fn system_ai_tick(world: &mut World) {
             &OnGround,
             &LastDamageTick,
             Option<&AiTarget>,
+            &MobType,
+            Option<&InLove>,
+            Option<&Baby>,
         ), (With<Mob>, With<BehaviorList>, Without<Dead>)>();
         q.iter(world)
             .map(
-                |(entity, pos, speed, dmg, on_ground, ldt, target)| MobSnapshot {
-                    entity,
-                    position: (pos.x, pos.y, pos.z),
-                    speed: speed.0,
-                    attack_damage: dmg.0,
-                    on_ground: on_ground.0,
-                    last_damage_tick: ldt.0,
-                    target: target.map(|t| (t.entity, t.runtime_id)),
+                |(entity, pos, speed, dmg, on_ground, ldt, target, mob_type, in_love, baby)| {
+                    MobSnapshot {
+                        entity,
+                        position: (pos.x, pos.y, pos.z),
+                        speed: speed.0,
+                        attack_damage: dmg.0,
+                        on_ground: on_ground.0,
+                        last_damage_tick: ldt.0,
+                        target: target.map(|t| (t.entity, t.runtime_id)),
+                        mob_type: mob_type.0.clone(),
+                        in_love: in_love.is_some(),
+                        is_baby: baby.is_some(),
+                    }
                 },
             )
             .collect()
@@ -88,6 +104,17 @@ pub fn system_ai_tick(world: &mut World) {
                 .map(|p| (tent, trid, p.x, p.y, p.z))
         });
 
+        // Find nearest player holding a valid tempt item for this mob type
+        let nearest_tempting_player =
+            find_nearest_tempting_player(&players, mob.position.0, mob.position.2, &mob.mob_type);
+
+        // Find nearest same-type in-love mob (for breeding)
+        let nearest_breed_partner = if mob.in_love && !mob.is_baby {
+            find_nearest_breed_partner(&mob_snapshots, mob.entity, &mob.mob_type, mob.position)
+        } else {
+            None
+        };
+
         let ctx = BehaviorContext {
             mob_position: mob.position,
             mob_speed: mob.speed,
@@ -97,6 +124,11 @@ pub fn system_ai_tick(world: &mut World) {
             last_damage_tick: mob.last_damage_tick,
             current_target,
             nearest_player,
+            mob_type: mob.mob_type.clone(),
+            nearest_tempting_player,
+            nearest_breed_partner,
+            in_love: mob.in_love,
+            is_baby: mob.is_baby,
         };
 
         // Get BehaviorList and evaluate
@@ -217,6 +249,48 @@ fn find_nearest_player(players: &[PlayerSnapshot], x: f32, z: f32) -> Option<Nea
             (p.entity, p.runtime_id, dist, (p.x, p.y, p.z))
         })
         .min_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
+}
+
+/// Find the nearest player holding a valid tempt item for this mob type.
+fn find_nearest_tempting_player(
+    players: &[PlayerSnapshot],
+    x: f32,
+    z: f32,
+    mob_type: &str,
+) -> Option<NearestPlayerInfo> {
+    players
+        .iter()
+        .filter(|p| breeding::is_tempt_item(mob_type, &p.held_item_name))
+        .map(|p| {
+            let dist = pathfinding::distance_xz(x, z, p.x, p.z);
+            (p.entity, p.runtime_id, dist, (p.x, p.y, p.z))
+        })
+        .min_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
+}
+
+/// Find the nearest same-type in-love mob (as a breed partner).
+fn find_nearest_breed_partner(
+    mobs: &[MobSnapshot],
+    self_entity: Entity,
+    mob_type: &str,
+    self_pos: (f32, f32, f32),
+) -> Option<(Entity, u64, f32, f32, f32)> {
+    let mut best: Option<(Entity, u64, f32, f32, f32, f32)> = None; // + distance
+    for m in mobs {
+        if m.entity == self_entity || m.mob_type != mob_type || !m.in_love || m.is_baby {
+            continue;
+        }
+        let dist = pathfinding::distance_xz(self_pos.0, self_pos.2, m.position.0, m.position.2);
+        if best.as_ref().map(|b| dist < b.5).unwrap_or(true) {
+            let eid = m.entity;
+            // We need runtime_id but MobSnapshot doesn't have it directly.
+            // We use a sentinel 0 — the actual rid is looked up in the ECS by the system.
+            // Actually, let's store runtime_id. But MobSnapshot doesn't have it.
+            // For BreedGoal we only need position to walk toward, not the runtime_id.
+            best = Some((eid, 0, m.position.0, m.position.1, m.position.2, dist));
+        }
+    }
+    best.map(|(e, rid, x, y, z, _)| (e, rid, x, y, z))
 }
 
 /// Evaluate all behaviors in a BehaviorList and produce a combined output.

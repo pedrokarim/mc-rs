@@ -180,6 +180,10 @@ pub struct PlayerConnection {
     pub open_container: Option<OpenContainer>,
     /// Next window ID to assign when opening a container.
     pub next_window_id: u8,
+    /// Enchantment seed (used for deterministic option generation).
+    pub enchant_seed: i32,
+    /// Pending enchantment options offered to the player.
+    pub pending_enchant_options: Vec<mc_rs_game::enchanting::EnchantOption>,
 }
 
 /// State for a currently open container window.
@@ -1116,6 +1120,32 @@ pub(super) fn default_mob_metadata(bb_width: f32, bb_height: f32) -> Vec<EntityM
             key: 23,
             data_type: 3,
             value: MetadataValue::Float(1.0), // SCALE
+        },
+        EntityMetadataEntry {
+            key: 38,
+            data_type: 3,
+            value: MetadataValue::Float(bb_width), // BB_WIDTH
+        },
+        EntityMetadataEntry {
+            key: 39,
+            data_type: 3,
+            value: MetadataValue::Float(bb_height), // BB_HEIGHT
+        },
+    ]
+}
+
+/// Build metadata for a baby mob (half scale, BABY flag bit).
+pub(super) fn baby_mob_metadata(bb_width: f32, bb_height: f32) -> Vec<EntityMetadataEntry> {
+    vec![
+        EntityMetadataEntry {
+            key: 0,
+            data_type: 7,
+            value: MetadataValue::Long(1 << 8), // FLAGS: BABY bit
+        },
+        EntityMetadataEntry {
+            key: 23,
+            data_type: 3,
+            value: MetadataValue::Float(0.5), // SCALE: half size
         },
         EntityMetadataEntry {
             key: 38,

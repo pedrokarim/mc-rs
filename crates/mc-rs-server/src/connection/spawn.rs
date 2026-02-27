@@ -521,6 +521,11 @@ impl ConnectionHandler {
     async fn send_existing_mobs_to(&mut self, addr: SocketAddr) {
         let mobs = self.game_world.all_mobs();
         for mob in mobs {
+            let metadata = if mob.is_baby {
+                baby_mob_metadata(mob.bb_width, mob.bb_height)
+            } else {
+                default_mob_metadata(mob.bb_width, mob.bb_height)
+            };
             let pkt = AddActor {
                 entity_unique_id: mob.unique_id,
                 entity_runtime_id: mob.runtime_id,
@@ -538,7 +543,7 @@ impl ConnectionHandler {
                     current: mob.health,
                     default: mob.max_health,
                 }],
-                metadata: default_mob_metadata(mob.bb_width, mob.bb_height),
+                metadata,
             };
             self.send_packet(addr, packets::id::ADD_ACTOR, &pkt).await;
         }

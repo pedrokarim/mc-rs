@@ -2,8 +2,10 @@
 
 pub mod ai;
 pub mod block_entity;
+pub mod breeding;
 pub mod combat;
 pub mod components;
+pub mod enchanting;
 pub mod food;
 pub mod game_world;
 pub mod inventory;

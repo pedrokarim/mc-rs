@@ -11,6 +11,8 @@ use crate::types::{VarInt, VarUInt64};
 pub const EVENT_HURT: u8 = 2;
 /// Death event.
 pub const EVENT_DEATH: u8 = 3;
+/// Love/breeding particles event.
+pub const EVENT_LOVE_PARTICLES: u8 = 18;
 
 /// EntityEvent packet.
 pub struct EntityEvent {
@@ -34,6 +36,15 @@ impl EntityEvent {
         Self {
             entity_runtime_id,
             event_id: EVENT_DEATH,
+            data: 0,
+        }
+    }
+
+    /// Create a love/breeding particles event for an entity.
+    pub fn love_particles(entity_runtime_id: u64) -> Self {
+        Self {
+            entity_runtime_id,
+            event_id: EVENT_LOVE_PARTICLES,
             data: 0,
         }
     }
@@ -69,5 +80,14 @@ mod tests {
         pkt.proto_encode(&mut buf);
         assert!(buf.len() >= 3);
         assert_eq!(buf[1], EVENT_DEATH);
+    }
+
+    #[test]
+    fn encode_love_particles() {
+        let pkt = EntityEvent::love_particles(7);
+        let mut buf = BytesMut::new();
+        pkt.proto_encode(&mut buf);
+        assert!(buf.len() >= 3);
+        assert_eq!(buf[1], EVENT_LOVE_PARTICLES);
     }
 }

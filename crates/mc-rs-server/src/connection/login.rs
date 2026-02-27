@@ -45,6 +45,8 @@ impl ConnectionHandler {
                 pending_forms: HashMap::new(),
                 open_container: None,
                 next_window_id: 1,
+                enchant_seed: rand::thread_rng().gen(),
+                pending_enchant_options: Vec::new(),
             },
         );
 
@@ -818,6 +820,11 @@ impl ConnectionHandler {
         };
         let difficulty = difficulty_from_str(&config.server.difficulty);
         let generator = generator_from_str(&config.world.generator);
+        let enchant_seed = self
+            .connections
+            .get(&addr)
+            .map(|c| c.enchant_seed)
+            .unwrap_or(0);
 
         let start_game = StartGame {
             entity_unique_id,
@@ -874,6 +881,7 @@ impl ConnectionHandler {
                     is_component_based: e.is_component_based,
                 })
                 .collect(),
+            enchantment_seed: enchant_seed,
             ..StartGame::default()
         };
 

@@ -479,6 +479,107 @@ impl Behavior for Panic {
 }
 
 // ---------------------------------------------------------------------------
+// TemptGoal (Movement, priority 3) — follow player holding tempt food
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Default)]
+pub struct TemptGoal;
+
+impl TemptGoal {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Behavior for TemptGoal {
+    fn behavior_type(&self) -> BehaviorType {
+        BehaviorType::Movement
+    }
+
+    fn priority(&self) -> u32 {
+        3
+    }
+
+    fn can_start(&self, ctx: &BehaviorContext) -> bool {
+        ctx.nearest_tempting_player
+            .as_ref()
+            .map(|(_, _, d, _)| *d <= 10.0)
+            .unwrap_or(false)
+    }
+
+    fn should_continue(&self, ctx: &BehaviorContext) -> bool {
+        ctx.nearest_tempting_player
+            .as_ref()
+            .map(|(_, _, d, _)| *d <= 12.0)
+            .unwrap_or(false)
+    }
+
+    fn tick(&mut self, ctx: &BehaviorContext) -> BehaviorOutput {
+        if let Some((_, _, _, (px, py, pz))) = &ctx.nearest_tempting_player {
+            let yaw = pathfinding::yaw_toward(ctx.mob_position.0, ctx.mob_position.2, *px, *pz);
+            BehaviorOutput {
+                move_to: Some((*px, *py, *pz)),
+                look_at: Some((yaw, yaw)),
+                ..Default::default()
+            }
+        } else {
+            BehaviorOutput::default()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// BreedGoal (Movement, priority 4) — walk toward in-love partner
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Default)]
+pub struct BreedGoal;
+
+impl BreedGoal {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Behavior for BreedGoal {
+    fn behavior_type(&self) -> BehaviorType {
+        BehaviorType::Movement
+    }
+
+    fn priority(&self) -> u32 {
+        4
+    }
+
+    fn can_start(&self, ctx: &BehaviorContext) -> bool {
+        ctx.in_love && !ctx.is_baby && ctx.nearest_breed_partner.is_some()
+    }
+
+    fn should_continue(&self, ctx: &BehaviorContext) -> bool {
+        if !ctx.in_love || ctx.is_baby {
+            return false;
+        }
+        ctx.nearest_breed_partner
+            .map(|(_, _, px, _, pz)| {
+                pathfinding::distance_xz(ctx.mob_position.0, ctx.mob_position.2, px, pz) <= 16.0
+            })
+            .unwrap_or(false)
+    }
+
+    fn tick(&mut self, ctx: &BehaviorContext) -> BehaviorOutput {
+        if let Some((_, _, px, py, pz)) = ctx.nearest_breed_partner {
+            let yaw = pathfinding::yaw_toward(ctx.mob_position.0, ctx.mob_position.2, px, pz);
+            BehaviorOutput {
+                move_to: Some((px, py, pz)),
+                look_at: Some((yaw, yaw)),
+                ..Default::default()
+            }
+        } else {
+            BehaviorOutput::default()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -497,6 +598,11 @@ mod tests {
             last_damage_tick: None,
             current_target: None,
             nearest_player: None,
+            mob_type: "minecraft:cow".to_string(),
+            nearest_tempting_player: None,
+            nearest_breed_partner: None,
+            in_love: false,
+            is_baby: false,
         }
     }
 
@@ -648,5 +754,82 @@ mod tests {
         let mut ctx = base_ctx();
         ctx.current_tick = 200; // well past 60-tick duration
         assert!(!panic.should_continue(&ctx));
+    }
+
+    // TemptGoal tests
+
+    #[test]
+    fn tempt_can_start_with_tempting_player() {
+        let tempt = TemptGoal::new();
+        let mut ctx = base_ctx();
+        ctx.nearest_tempting_player = Some((dummy_entity(), 1, 5.0, (5.0, 4.0, 0.0)));
+        assert!(tempt.can_start(&ctx));
+    }
+
+    #[test]
+    fn tempt_cant_start_without_tempting_player() {
+        let tempt = TemptGoal::new();
+        let ctx = base_ctx();
+        assert!(!tempt.can_start(&ctx));
+    }
+
+    #[test]
+    fn tempt_cant_start_too_far() {
+        let tempt = TemptGoal::new();
+        let mut ctx = base_ctx();
+        ctx.nearest_tempting_player = Some((dummy_entity(), 1, 15.0, (15.0, 4.0, 0.0)));
+        assert!(!tempt.can_start(&ctx));
+    }
+
+    #[test]
+    fn tempt_tick_moves_toward_player() {
+        let mut tempt = TemptGoal::new();
+        let mut ctx = base_ctx();
+        ctx.nearest_tempting_player = Some((dummy_entity(), 1, 5.0, (5.0, 4.0, 0.0)));
+        let output = tempt.tick(&ctx);
+        assert!(output.move_to.is_some());
+        assert!(output.look_at.is_some());
+    }
+
+    // BreedGoal tests
+
+    #[test]
+    fn breed_can_start_when_in_love_with_partner() {
+        let breed = BreedGoal::new();
+        let mut ctx = base_ctx();
+        ctx.in_love = true;
+        ctx.nearest_breed_partner = Some((dummy_entity(), 2, 5.0, 4.0, 0.0));
+        assert!(breed.can_start(&ctx));
+    }
+
+    #[test]
+    fn breed_cant_start_without_love() {
+        let breed = BreedGoal::new();
+        let mut ctx = base_ctx();
+        ctx.nearest_breed_partner = Some((dummy_entity(), 2, 5.0, 4.0, 0.0));
+        assert!(!breed.can_start(&ctx));
+    }
+
+    #[test]
+    fn breed_cant_start_if_baby() {
+        let breed = BreedGoal::new();
+        let mut ctx = base_ctx();
+        ctx.in_love = true;
+        ctx.is_baby = true;
+        ctx.nearest_breed_partner = Some((dummy_entity(), 2, 5.0, 4.0, 0.0));
+        assert!(!breed.can_start(&ctx));
+    }
+
+    #[test]
+    fn breed_tick_moves_toward_partner() {
+        let mut breed = BreedGoal::new();
+        let mut ctx = base_ctx();
+        ctx.in_love = true;
+        ctx.nearest_breed_partner = Some((dummy_entity(), 2, 5.0, 4.0, 3.0));
+        let output = breed.tick(&ctx);
+        assert!(output.move_to.is_some());
+        let (mx, _, mz) = output.move_to.unwrap();
+        assert!((mx - 5.0).abs() < 0.01);
+        assert!((mz - 3.0).abs() < 0.01);
     }
 }

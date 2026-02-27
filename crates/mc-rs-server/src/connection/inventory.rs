@@ -49,6 +49,17 @@ impl ConnectionHandler {
 
         if let Some(conn) = self.connections.get_mut(&addr) {
             conn.inventory.held_slot = equipment.hotbar_slot;
+
+            // Sync held item name to ECS for tempt behavior
+            let held_rid = conn.inventory.held_item().runtime_id;
+            let held_name = self
+                .item_registry
+                .get_by_id(held_rid as i16)
+                .map(|i| i.name.clone())
+                .unwrap_or_default();
+            let unique_id = conn.entity_unique_id;
+            self.game_world
+                .update_player_held_item(unique_id, held_name);
         }
 
         // Broadcast to other players
@@ -89,6 +100,19 @@ impl ConnectionHandler {
 
         let mut responses = Vec::new();
         for req in &request.requests {
+            // Check if this is an enchanting selection (CraftRecipeOptional)
+            let has_enchant_action = req.actions.iter().any(|a| {
+                matches!(
+                    a,
+                    mc_rs_proto::packets::item_stack_request::StackAction::CraftRecipeOptional { .. }
+                )
+            });
+            if has_enchant_action {
+                let resp = self.handle_enchant_selection(addr, req).await;
+                responses.push(resp);
+                continue;
+            }
+
             // Check if player has an open container (chest)
             let container_info = self
                 .connections
@@ -106,6 +130,9 @@ impl ConnectionHandler {
                         output,
                         ..
                     }) => vec![input.clone(), fuel.clone(), output.clone()],
+                    Some(BlockEntityData::EnchantingTable { item, lapis }) => {
+                        vec![item.clone(), lapis.clone()]
+                    }
                     _ => vec![mc_rs_proto::item_stack::ItemStack::empty(); 3],
                 };
 
@@ -136,7 +163,37 @@ impl ConnectionHandler {
                             *output = container_items[2].clone();
                         }
                     }
+                    Some(BlockEntityData::EnchantingTable { item, lapis }) => {
+                        if container_items.len() >= 2 {
+                            *item = container_items[0].clone();
+                            *lapis = container_items[1].clone();
+                        }
+                    }
                     _ => {}
+                }
+
+                // After slot changes, check if we should send enchant options
+                if let Some(BlockEntityData::EnchantingTable { item, .. }) =
+                    self.block_entities.get(&(pos.x, pos.y, pos.z))
+                {
+                    if !item.is_empty() {
+                        let item_rid = item.runtime_id;
+                        let item_name = self
+                            .item_registry
+                            .get_by_id(item_rid as i16)
+                            .map(|i| i.name.clone());
+                        if let Some(name) = item_name {
+                            if mc_rs_game::enchanting::is_enchantable(&name) {
+                                self.send_enchant_options(addr, pos).await;
+                            } else {
+                                self.send_empty_enchant_options(addr).await;
+                            }
+                        } else {
+                            self.send_empty_enchant_options(addr).await;
+                        }
+                    } else {
+                        self.send_empty_enchant_options(addr).await;
+                    }
                 }
 
                 resp
@@ -380,6 +437,9 @@ impl ConnectionHandler {
             if entity_data.action == UseItemOnEntityAction::Attack {
                 self.handle_attack(addr, entity_data.entity_runtime_id)
                     .await;
+            } else if entity_data.action == UseItemOnEntityAction::Interact {
+                self.handle_feed_mob(addr, entity_data.entity_runtime_id)
+                    .await;
             }
             return;
         }
@@ -557,6 +617,10 @@ impl ConnectionHandler {
                         self.open_furnace(addr, click_pos).await;
                         return;
                     }
+                    if self.block_entity_hashes.is_enchanting_table(rid) {
+                        self.open_enchanting_table(addr, click_pos).await;
+                        return;
+                    }
                 }
 
                 let target = Self::face_offset(use_item.block_position, use_item.face);
@@ -663,6 +727,11 @@ impl ConnectionHandler {
                 } else if self.block_entity_hashes.is_chest(final_rid) {
                     self.block_entities
                         .insert((target.x, target.y, target.z), BlockEntityData::new_chest());
+                } else if self.block_entity_hashes.is_enchanting_table(final_rid) {
+                    self.block_entities.insert(
+                        (target.x, target.y, target.z),
+                        BlockEntityData::new_enchanting_table(),
+                    );
                 } else if let Some(variant) = self.block_entity_hashes.furnace_variant(final_rid) {
                     use mc_rs_game::smelting::FurnaceType;
                     let ft = match variant {
@@ -937,6 +1006,359 @@ impl ConnectionHandler {
         );
     }
 
+    /// Open an enchanting table container UI for a player.
+    async fn open_enchanting_table(&mut self, addr: SocketAddr, pos: BlockPos) {
+        // Ensure there is a block entity
+        self.block_entities
+            .entry((pos.x, pos.y, pos.z))
+            .or_insert_with(BlockEntityData::new_enchanting_table);
+
+        let window_id = match self.connections.get_mut(&addr) {
+            Some(conn) => {
+                let wid = conn.next_window_id;
+                conn.next_window_id = conn.next_window_id.wrapping_add(1);
+                if conn.next_window_id == 0 {
+                    conn.next_window_id = 1;
+                }
+                conn.open_container = Some(OpenContainer {
+                    window_id: wid,
+                    container_type: 3, // ENCHANTMENT
+                    position: pos,
+                });
+                wid
+            }
+            None => return,
+        };
+
+        // Send ContainerOpen
+        self.send_packet(
+            addr,
+            packets::id::CONTAINER_OPEN,
+            &ContainerOpen {
+                window_id,
+                container_type: 3, // ENCHANTMENT
+                position: pos,
+                entity_unique_id: -1,
+            },
+        )
+        .await;
+
+        // Get enchanting table items
+        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+            Some(BlockEntityData::EnchantingTable { item, lapis }) => {
+                vec![item.clone(), lapis.clone()]
+            }
+            _ => vec![mc_rs_proto::item_stack::ItemStack::empty(); 2],
+        };
+
+        // Send InventoryContent with 2 slots
+        self.send_packet(
+            addr,
+            packets::id::INVENTORY_CONTENT,
+            &InventoryContent {
+                window_id: window_id as u32,
+                items: items.clone(),
+            },
+        )
+        .await;
+
+        // If there's already an item in the input slot, send enchant options
+        if !items[0].is_empty() {
+            let item_name = self
+                .item_registry
+                .get_by_id(items[0].runtime_id as i16)
+                .map(|i| i.name.clone());
+            if let Some(name) = item_name {
+                if mc_rs_game::enchanting::is_enchantable(&name) {
+                    self.send_enchant_options(addr, pos).await;
+                }
+            }
+        }
+
+        debug!("Opened enchanting table at {pos} for {addr} (window_id={window_id})");
+    }
+
+    /// Send enchantment options to a player based on their enchanting table state.
+    async fn send_enchant_options(&mut self, addr: SocketAddr, pos: BlockPos) {
+        use mc_rs_game::enchanting;
+        use mc_rs_proto::packets::player_enchant_options::{
+            EnchantData, EnchantOptionEntry, PlayerEnchantOptions,
+        };
+
+        // Get the item name from the enchanting table input slot
+        let item_name = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+            Some(BlockEntityData::EnchantingTable { item, .. }) if !item.is_empty() => self
+                .item_registry
+                .get_by_id(item.runtime_id as i16)
+                .map(|i| i.name.clone()),
+            _ => None,
+        };
+        let item_name = match item_name {
+            Some(n) => n,
+            None => {
+                self.send_empty_enchant_options(addr).await;
+                return;
+            }
+        };
+
+        // Count bookshelves around the enchanting table
+        let bookshelves = enchanting::count_bookshelves(
+            pos.x,
+            pos.y,
+            pos.z,
+            |x, y, z| self.get_block(x, y, z),
+            |rid| self.block_entity_hashes.is_bookshelf(rid),
+            |rid| rid == self.flat_world_blocks.air,
+        );
+
+        // Get the enchant seed
+        let seed = self
+            .connections
+            .get(&addr)
+            .map(|c| c.enchant_seed)
+            .unwrap_or(0);
+
+        // Generate 3 options
+        let options = enchanting::generate_options(seed, bookshelves, &item_name);
+
+        // Store pending options for later validation
+        if let Some(conn) = self.connections.get_mut(&addr) {
+            conn.pending_enchant_options = options.clone();
+        }
+
+        // Build and send the packet
+        let entries: Vec<EnchantOptionEntry> = options
+            .iter()
+            .map(|opt| {
+                let enchants: Vec<EnchantData> = opt
+                    .enchantments
+                    .iter()
+                    .map(|&(id, lvl)| EnchantData {
+                        id: id as u8,
+                        level: lvl as u8,
+                    })
+                    .collect();
+                EnchantOptionEntry {
+                    cost: opt.xp_cost as u32,
+                    slot_flags: 1u32 << opt.slot,
+                    equip_enchantments: enchants.clone(),
+                    held_enchantments: Vec::new(),
+                    self_enchantments: Vec::new(),
+                    name: String::new(),
+                    option_id: opt.option_id,
+                }
+            })
+            .collect();
+
+        self.send_packet(
+            addr,
+            packets::id::PLAYER_ENCHANT_OPTIONS,
+            &PlayerEnchantOptions { options: entries },
+        )
+        .await;
+    }
+
+    /// Send empty enchant options (clears any previously shown options).
+    async fn send_empty_enchant_options(&mut self, addr: SocketAddr) {
+        use mc_rs_proto::packets::player_enchant_options::PlayerEnchantOptions;
+
+        if let Some(conn) = self.connections.get_mut(&addr) {
+            conn.pending_enchant_options.clear();
+        }
+        self.send_packet(
+            addr,
+            packets::id::PLAYER_ENCHANT_OPTIONS,
+            &PlayerEnchantOptions {
+                options: Vec::new(),
+            },
+        )
+        .await;
+    }
+
+    /// Handle an enchanting table selection (CraftRecipeOptional action).
+    async fn handle_enchant_selection(
+        &mut self,
+        addr: SocketAddr,
+        req: &mc_rs_proto::packets::item_stack_request::StackRequest,
+    ) -> mc_rs_proto::packets::item_stack_response::StackResponseEntry {
+        use mc_rs_game::combat::{build_enchantment_nbt, Enchantment};
+        use mc_rs_proto::packets::item_stack_request::StackAction;
+        use mc_rs_proto::packets::item_stack_response::{
+            StackResponseContainer, StackResponseEntry, StackResponseSlot,
+        };
+
+        let reject = StackResponseEntry {
+            request_id: req.request_id,
+            status: 1, // error
+            containers: Vec::new(),
+        };
+
+        // Find the CraftRecipeOptional action to get the option_id
+        let option_id = match req.actions.iter().find_map(|a| match a {
+            StackAction::CraftRecipeOptional {
+                recipe_network_id, ..
+            } => Some(*recipe_network_id),
+            _ => None,
+        }) {
+            Some(id) => id,
+            None => return reject,
+        };
+
+        // Find matching option in pending_enchant_options
+        let (option, enchant_seed) = match self.connections.get(&addr) {
+            Some(conn) => {
+                let opt = conn
+                    .pending_enchant_options
+                    .iter()
+                    .find(|o| o.option_id == option_id)
+                    .cloned();
+                (opt, conn.enchant_seed)
+            }
+            None => return reject,
+        };
+        let _ = enchant_seed;
+
+        let option = match option {
+            Some(o) => o,
+            None => return reject,
+        };
+
+        let cost = option.xp_cost as i32;
+
+        // Validate XP level and lapis
+        let container_pos = match self
+            .connections
+            .get(&addr)
+            .and_then(|c| c.open_container.as_ref())
+        {
+            Some(oc) => oc.position,
+            None => return reject,
+        };
+
+        let (has_enough_xp, has_enough_lapis) = match self.connections.get(&addr) {
+            Some(conn) => {
+                let lapis_count = match self.block_entities.get(&(
+                    container_pos.x,
+                    container_pos.y,
+                    container_pos.z,
+                )) {
+                    Some(BlockEntityData::EnchantingTable { lapis, .. }) => lapis.count as i32,
+                    _ => 0,
+                };
+                (conn.xp_level >= cost, lapis_count >= cost)
+            }
+            None => return reject,
+        };
+
+        if !has_enough_xp || !has_enough_lapis {
+            return reject;
+        }
+
+        // Apply enchantments to the item
+        let enchantments: Vec<Enchantment> = option
+            .enchantments
+            .iter()
+            .map(|&(id, lvl)| Enchantment { id, level: lvl })
+            .collect();
+        let nbt_data = build_enchantment_nbt(&enchantments);
+
+        // Update the enchanting table block entity
+        let pos = container_pos;
+        if let Some(BlockEntityData::EnchantingTable { item, lapis }) =
+            self.block_entities.get_mut(&(pos.x, pos.y, pos.z))
+        {
+            item.nbt_data = nbt_data;
+            if lapis.count as i32 > cost {
+                lapis.count -= cost as u16;
+            } else {
+                *lapis = mc_rs_proto::item_stack::ItemStack::empty();
+            }
+        }
+
+        // Deduct XP levels
+        if let Some(conn) = self.connections.get_mut(&addr) {
+            conn.xp_level -= cost;
+            conn.xp_total = mc_rs_game::xp::total_xp_for_level(conn.xp_level);
+            // Re-roll enchant seed
+            conn.enchant_seed = rand::thread_rng().gen();
+            conn.pending_enchant_options.clear();
+        }
+
+        // Send updated XP attributes
+        let (rid, xp_level, xp_total, tick) = match self.connections.get(&addr) {
+            Some(c) => (c.entity_runtime_id, c.xp_level, c.xp_total, c.client_tick),
+            None => return reject,
+        };
+        let xp_progress = mc_rs_game::xp::xp_progress(xp_level, xp_total);
+        self.send_packet(
+            addr,
+            packets::id::UPDATE_ATTRIBUTES,
+            &UpdateAttributes::xp(rid, xp_level, xp_progress, tick),
+        )
+        .await;
+
+        // Get updated container items for response
+        let (item_resp, lapis_resp) = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+            Some(BlockEntityData::EnchantingTable { item, lapis }) => (item.clone(), lapis.clone()),
+            _ => (
+                mc_rs_proto::item_stack::ItemStack::empty(),
+                mc_rs_proto::item_stack::ItemStack::empty(),
+            ),
+        };
+
+        // Send updated container contents
+        let window_id = self
+            .connections
+            .get(&addr)
+            .and_then(|c| c.open_container.as_ref())
+            .map(|oc| oc.window_id)
+            .unwrap_or(1);
+        self.send_packet(
+            addr,
+            packets::id::INVENTORY_CONTENT,
+            &InventoryContent {
+                window_id: window_id as u32,
+                items: vec![item_resp.clone(), lapis_resp.clone()],
+            },
+        )
+        .await;
+
+        // Send empty enchant options (enchantment done)
+        self.send_empty_enchant_options(addr).await;
+
+        // Build response with updated slot info
+        let containers = vec![
+            StackResponseContainer {
+                container_id: 22, // ENCHANTING_INPUT
+                slots: vec![StackResponseSlot {
+                    slot: 0,
+                    hotbar_slot: 0,
+                    count: item_resp.count as u8,
+                    stack_network_id: item_resp.stack_network_id,
+                    custom_name: String::new(),
+                    durability_correction: 0,
+                }],
+            },
+            StackResponseContainer {
+                container_id: 23, // ENCHANTING_MATERIAL
+                slots: vec![StackResponseSlot {
+                    slot: 0,
+                    hotbar_slot: 0,
+                    count: lapis_resp.count as u8,
+                    stack_network_id: lapis_resp.stack_network_id,
+                    custom_name: String::new(),
+                    durability_correction: 0,
+                }],
+            },
+        ];
+
+        StackResponseEntry {
+            request_id: req.request_id,
+            status: 0, // OK
+            containers,
+        }
+    }
+
     /// Close any open containers at the given position for all players.
     async fn close_container_at(&mut self, pos: BlockPos) {
         let to_close: Vec<(SocketAddr, u8)> = self
@@ -1072,5 +1494,90 @@ impl ConnectionHandler {
         }
 
         debug!("Sign edited at {pos} by {addr}");
+    }
+
+    /// Handle right-click interact on a mob (feeding for breeding).
+    async fn handle_feed_mob(&mut self, addr: SocketAddr, mob_runtime_id: u64) {
+        // Get held item info
+        let (held_name, held_count, held_slot, unique_id) = match self.connections.get(&addr) {
+            Some(c) => {
+                let item = c.inventory.held_item();
+                let name = self
+                    .item_registry
+                    .get_by_id(item.runtime_id as i16)
+                    .map(|i| i.name.clone())
+                    .unwrap_or_default();
+                (name, item.count, c.inventory.held_slot, c.entity_unique_id)
+            }
+            None => return,
+        };
+
+        if held_name.is_empty() || held_count == 0 {
+            return;
+        }
+
+        // Get mob type from ECS
+        let mob_type = match self.game_world.mob_type(mob_runtime_id) {
+            Some(t) => t,
+            None => return,
+        };
+
+        // Check if this item is valid breeding food for this mob
+        if !mc_rs_game::breeding::is_tempt_item(&mob_type, &held_name) {
+            return;
+        }
+
+        // Check mob is not baby and not on cooldown
+        if self.game_world.is_mob_baby(mob_runtime_id)
+            || self.game_world.is_mob_on_breed_cooldown(mob_runtime_id)
+        {
+            return;
+        }
+
+        // Try to set mob in love
+        if !self.game_world.set_mob_in_love(mob_runtime_id) {
+            return;
+        }
+
+        // Consume 1 item from held stack
+        if let Some(conn) = self.connections.get_mut(&addr) {
+            let item = conn.inventory.held_item_mut();
+            item.count -= 1;
+            if item.count == 0 {
+                *item = mc_rs_proto::item_stack::ItemStack::empty();
+            }
+            let updated_item = conn.inventory.held_item().clone();
+            let slot = held_slot;
+
+            // Send inventory update to client
+            self.send_packet(
+                addr,
+                packets::id::INVENTORY_SLOT,
+                &InventorySlot {
+                    window_id: 0,
+                    slot: slot as u32,
+                    item: updated_item.clone(),
+                },
+            )
+            .await;
+
+            // Sync held item name to ECS
+            let updated_name = self
+                .item_registry
+                .get_by_id(updated_item.runtime_id as i16)
+                .map(|i| i.name.clone())
+                .unwrap_or_default();
+            self.game_world
+                .update_player_held_item(unique_id, updated_name);
+        }
+
+        // Broadcast love particles
+        self.broadcast_packet(
+            packets::id::ENTITY_EVENT,
+            &EntityEvent::love_particles(mob_runtime_id),
+        )
+        .await;
+
+        debug!("Player {addr} fed {mob_type} (rid={mob_runtime_id})");
     }
 }

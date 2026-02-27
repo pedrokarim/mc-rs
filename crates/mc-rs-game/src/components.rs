@@ -95,3 +95,22 @@ pub struct AiTarget {
     pub entity: Entity,
     pub runtime_id: u64,
 }
+
+/// Name of the item the player is currently holding (synced from MobEquipment).
+#[derive(Component, Debug, Clone)]
+pub struct HeldItemName(pub String);
+
+/// Mob is "in love" (fed by player). Value = tick when love started.
+/// Expires after 600 ticks (30 seconds).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct InLove(pub u64);
+
+/// Breeding cooldown. Value = tick when cooldown expires.
+/// Set to current_tick + 6000 (5 minutes) after breeding.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct BreedCooldown(pub u64);
+
+/// Baby mob. Value = tick when born.
+/// Grows into adult after 24000 ticks (20 minutes).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Baby(pub u64);

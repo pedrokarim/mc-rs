@@ -257,6 +257,7 @@ fn spawn_mob_internal(
             max_health: def.max_health,
             bb_width: def.bb_width,
             bb_height: def.bb_height,
+            is_baby: false,
         });
 }
 
