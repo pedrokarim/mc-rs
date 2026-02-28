@@ -56,6 +56,9 @@ impl ConnectionHandler {
             if horizontal_distance > Self::MAX_MOVE_DISTANCE_PER_TICK {
                 debug!("Movement too fast from {addr}: {horizontal_distance:.2} blocks/tick");
                 needs_correction = true;
+                if let Some(conn) = self.connections.get_mut(&addr) {
+                    conn.violations.speed += 1;
+                }
             }
         }
 
@@ -80,14 +83,22 @@ impl ConnectionHandler {
 
         // 5. No-clip detection (survival/adventure only)
         // Check that the player's AABB does not overlap any solid block.
+        let player_dim = self
+            .connections
+            .get(&addr)
+            .map(|c| c.dimension)
+            .unwrap_or(0);
         if !needs_correction && gamemode != 1 && gamemode != 3 {
             let aabb =
                 PlayerAabb::from_eye_position(input.position.x, input.position.y, input.position.z);
             for (bx, by, bz) in aabb.intersecting_blocks() {
-                if let Some(hash) = self.get_block(bx, by, bz) {
+                if let Some(hash) = self.get_block_in(player_dim, bx, by, bz) {
                     if self.block_registry.is_solid(hash) {
                         debug!("No-clip detected at ({bx},{by},{bz}) from {addr}");
                         needs_correction = true;
+                        if let Some(conn) = self.connections.get_mut(&addr) {
+                            conn.violations.noclip += 1;
+                        }
                         break;
                     }
                 }
@@ -152,7 +163,7 @@ impl ConnectionHandler {
         let check_x = input.position.x.floor() as i32;
         let check_z = input.position.z.floor() as i32;
         let on_ground = self
-            .get_block(check_x, check_y, check_z)
+            .get_block_in(player_dim, check_x, check_y, check_z)
             .map(|hash| self.block_registry.is_solid(hash))
             .unwrap_or(true); // Default true for unloaded chunks
 
@@ -192,6 +203,10 @@ impl ConnectionHandler {
                 conn.airborne_ticks = 0;
             } else {
                 conn.airborne_ticks = conn.airborne_ticks.saturating_add(1);
+                // Force fly violation if airborne far too long (10s)
+                if conn.airborne_ticks > MAX_AIRBORNE_KICK && gamemode == 0 {
+                    conn.violations.fly += 1;
+                }
             }
 
             // Sync position to ECS mirror entity
@@ -206,6 +221,9 @@ impl ConnectionHandler {
 
         if anti_fly_correction {
             debug!("Anti-fly: {addr} airborne too long without falling (gamemode=survival)");
+            if let Some(conn) = self.connections.get_mut(&addr) {
+                conn.violations.fly += 1;
+            }
             let conn = match self.connections.get(&addr) {
                 Some(c) => c,
                 None => return,
@@ -224,7 +242,7 @@ impl ConnectionHandler {
             return;
         }
 
-        // --- Broadcast position to other players ---
+        // --- Broadcast position to other players in same dimension ---
         let move_pkt = MovePlayer::normal(
             entity_runtime_id,
             input.position,
@@ -234,8 +252,18 @@ impl ConnectionHandler {
             on_ground,
             input.tick,
         );
-        self.broadcast_packet_except(addr, packets::id::MOVE_PLAYER, &move_pkt)
-            .await;
+        let player_dim = self
+            .connections
+            .get(&addr)
+            .map(|c| c.dimension)
+            .unwrap_or(0);
+        self.broadcast_packet_in_dimension_except(
+            player_dim,
+            addr,
+            packets::id::MOVE_PLAYER,
+            &move_pkt,
+        )
+        .await;
 
         // --- Fall distance tracking + fall damage (survival only) ---
         if gamemode == 0 {
@@ -338,5 +366,8 @@ impl ConnectionHandler {
             self.send_new_chunks(addr).await;
             self.cleanup_sent_chunks(addr);
         }
+
+        // --- Portal detection ---
+        self.check_portal_at_player(addr).await;
     }
 }

@@ -39,6 +39,21 @@ impl ConnectionHandler {
         attacker_addr: SocketAddr,
         victim_runtime_id: u64,
     ) {
+        // Rate limit: attacks
+        {
+            let last = self
+                .connections
+                .get(&attacker_addr)
+                .map(|c| c.last_attack_tick)
+                .unwrap_or(0);
+            if !self.check_rate_limit(attacker_addr, last, MIN_ATTACK_INTERVAL) {
+                return;
+            }
+            if let Some(conn) = self.connections.get_mut(&attacker_addr) {
+                conn.last_attack_tick = self.game_world.current_tick();
+            }
+        }
+
         let (
             attacker_gamemode,
             attacker_pos,

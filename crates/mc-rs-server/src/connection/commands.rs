@@ -57,6 +57,21 @@ impl ConnectionHandler {
             _ => return,
         }
 
+        // Rate limit: commands
+        {
+            let last = self
+                .connections
+                .get(&addr)
+                .map(|c| c.last_command_tick)
+                .unwrap_or(0);
+            if !self.check_rate_limit(addr, last, MIN_COMMAND_INTERVAL) {
+                return;
+            }
+            if let Some(conn) = self.connections.get_mut(&addr) {
+                conn.last_command_tick = self.game_world.current_tick();
+            }
+        }
+
         let request = match CommandRequest::proto_decode(buf) {
             Ok(r) => r,
             Err(e) => {

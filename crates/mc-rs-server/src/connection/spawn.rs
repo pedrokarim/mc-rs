@@ -82,20 +82,29 @@ impl ConnectionHandler {
             conn.chunk_radius = radius;
         }
 
+        let dim = self
+            .connections
+            .get(&addr)
+            .map(|c| c.dimension)
+            .unwrap_or(0);
+
         // Phase 1: Identify missing chunks, load from LevelDB, collect those needing generation
         let mut to_generate: Vec<(i32, i32)> = Vec::new();
         for cx in -radius..=radius {
             for cz in -radius..=radius {
-                if self.world_chunks.contains_key(&(cx, cz)) {
+                if self
+                    .dim_chunks(dim)
+                    .is_some_and(|m| m.contains_key(&(cx, cz)))
+                {
                     continue;
                 }
-                if let Some(loaded) = self.chunk_storage.load_chunk(cx, cz) {
-                    self.world_chunks.insert((cx, cz), loaded);
+                if let Some(loaded) = self.chunk_storage.load_chunk_dim(cx, cz, dim) {
+                    self.dim_chunks_mut(dim).insert((cx, cz), loaded);
                     let be_key = block_entity_key(cx, cz);
                     if let Some(be_data) = self.chunk_storage.get_raw(&be_key) {
                         let entries = block_entity::parse_block_entities(&be_data);
                         for ((bx, by, bz), data) in entries {
-                            self.insert_block_entity((bx, by, bz), data);
+                            self.insert_block_entity_dim((bx, by, bz), dim, data);
                         }
                     }
                 } else {
@@ -118,15 +127,30 @@ impl ConnectionHandler {
                     let neth = gen_nether.clone();
                     let end = gen_end.clone();
                     let fb = flat_blocks;
+                    let d = dim;
                     tokio::task::spawn_blocking(move || {
-                        let mut col = if let Some(ref g) = ow {
-                            g.generate_chunk(cx, cz)
-                        } else if let Some(ref g) = neth {
-                            g.generate_chunk(cx, cz)
-                        } else if let Some(ref g) = end {
-                            g.generate_chunk(cx, cz)
-                        } else {
-                            generate_flat_chunk(cx, cz, &fb)
+                        let mut col = match d {
+                            1 => {
+                                if let Some(ref g) = neth {
+                                    g.generate_chunk(cx, cz)
+                                } else {
+                                    generate_flat_chunk(cx, cz, &fb)
+                                }
+                            }
+                            2 => {
+                                if let Some(ref g) = end {
+                                    g.generate_chunk(cx, cz)
+                                } else {
+                                    generate_flat_chunk(cx, cz, &fb)
+                                }
+                            }
+                            _ => {
+                                if let Some(ref g) = ow {
+                                    g.generate_chunk(cx, cz)
+                                } else {
+                                    generate_flat_chunk(cx, cz, &fb)
+                                }
+                            }
                         };
                         col.dirty = true;
                         (cx, cz, col)
@@ -136,7 +160,7 @@ impl ConnectionHandler {
 
             for handle in handles {
                 if let Ok((cx, cz, column)) = handle.await {
-                    self.world_chunks.insert((cx, cz), column);
+                    self.dim_chunks_mut(dim).insert((cx, cz), column);
                 }
             }
         }
@@ -145,13 +169,13 @@ impl ConnectionHandler {
         let mut count = 0u32;
         for cx in -radius..=radius {
             for cz in -radius..=radius {
-                let column = self.world_chunks.get_mut(&(cx, cz)).unwrap();
+                let column = self.dim_chunks_mut(dim).get_mut(&(cx, cz)).unwrap();
                 let (sub_chunk_count, payload) = serialize_chunk_column_cached(column);
 
                 let level_chunk = LevelChunk {
                     chunk_x: cx,
                     chunk_z: cz,
-                    dimension_id: self.dimension_id,
+                    dimension_id: dim,
                     sub_chunk_count,
                     cache_enabled: false,
                     payload: Bytes::from(payload),
@@ -162,9 +186,9 @@ impl ConnectionHandler {
                 count += 1;
 
                 // Send block entity data for this chunk (O(1) via chunk index)
-                let be_keys = self.block_entities_in_chunk(cx, cz);
+                let be_keys = self.block_entities_in_chunk_dim(dim, cx, cz);
                 for (bx, by, bz) in be_keys {
-                    if let Some(be) = self.block_entities.get(&(bx, by, bz)) {
+                    if let Some(be) = self.block_entities.get(&(bx, by, bz, dim)) {
                         let nbt = be.to_network_nbt(bx, by, bz);
                         self.send_packet(
                             addr,
@@ -194,11 +218,11 @@ impl ConnectionHandler {
 
     /// Send new chunks around the player's current position that haven't been sent yet.
     pub(super) async fn send_new_chunks(&mut self, addr: SocketAddr) {
-        let (center_x, center_z, radius) = match self.connections.get(&addr) {
+        let (center_x, center_z, radius, dim) = match self.connections.get(&addr) {
             Some(c) => {
                 let cx = Self::chunk_coord(c.position.x);
                 let cz = Self::chunk_coord(c.position.z);
-                (cx, cz, c.chunk_radius)
+                (cx, cz, c.chunk_radius, c.dimension)
             }
             None => return,
         };
@@ -245,16 +269,19 @@ impl ConnectionHandler {
         // Phase 1: Load from LevelDB, collect those needing generation
         let mut to_generate: Vec<(i32, i32)> = Vec::new();
         for &(cx, cz) in &to_send {
-            if self.world_chunks.contains_key(&(cx, cz)) {
+            if self
+                .dim_chunks(dim)
+                .is_some_and(|m| m.contains_key(&(cx, cz)))
+            {
                 continue;
             }
-            if let Some(loaded) = self.chunk_storage.load_chunk(cx, cz) {
-                self.world_chunks.insert((cx, cz), loaded);
+            if let Some(loaded) = self.chunk_storage.load_chunk_dim(cx, cz, dim) {
+                self.dim_chunks_mut(dim).insert((cx, cz), loaded);
                 let be_key = block_entity_key(cx, cz);
                 if let Some(be_data) = self.chunk_storage.get_raw(&be_key) {
                     let entries = block_entity::parse_block_entities(&be_data);
                     for ((bx, by, bz), data) in entries {
-                        self.insert_block_entity((bx, by, bz), data);
+                        self.insert_block_entity_dim((bx, by, bz), dim, data);
                     }
                 }
             } else {
@@ -280,15 +307,30 @@ impl ConnectionHandler {
                     let neth = gen_nether.clone();
                     let end = gen_end.clone();
                     let fb = flat_blocks;
+                    let d = dim;
                     tokio::task::spawn_blocking(move || {
-                        let mut col = if let Some(ref g) = ow {
-                            g.generate_chunk(cx, cz)
-                        } else if let Some(ref g) = neth {
-                            g.generate_chunk(cx, cz)
-                        } else if let Some(ref g) = end {
-                            g.generate_chunk(cx, cz)
-                        } else {
-                            generate_flat_chunk(cx, cz, &fb)
+                        let mut col = match d {
+                            1 => {
+                                if let Some(ref g) = neth {
+                                    g.generate_chunk(cx, cz)
+                                } else {
+                                    generate_flat_chunk(cx, cz, &fb)
+                                }
+                            }
+                            2 => {
+                                if let Some(ref g) = end {
+                                    g.generate_chunk(cx, cz)
+                                } else {
+                                    generate_flat_chunk(cx, cz, &fb)
+                                }
+                            }
+                            _ => {
+                                if let Some(ref g) = ow {
+                                    g.generate_chunk(cx, cz)
+                                } else {
+                                    generate_flat_chunk(cx, cz, &fb)
+                                }
+                            }
                         };
                         col.dirty = true;
                         (cx, cz, col)
@@ -298,20 +340,20 @@ impl ConnectionHandler {
 
             for handle in handles {
                 if let Ok((cx, cz, column)) = handle.await {
-                    self.world_chunks.insert((cx, cz), column);
+                    self.dim_chunks_mut(dim).insert((cx, cz), column);
                 }
             }
         }
 
         // Phase 3: Send all ready chunks
         for &(cx, cz) in &to_send {
-            if let Some(column) = self.world_chunks.get_mut(&(cx, cz)) {
+            if let Some(column) = self.dim_chunks_mut(dim).get_mut(&(cx, cz)) {
                 let (sub_chunk_count, payload) = serialize_chunk_column_cached(column);
 
                 let level_chunk = LevelChunk {
                     chunk_x: cx,
                     chunk_z: cz,
-                    dimension_id: self.dimension_id,
+                    dimension_id: dim,
                     sub_chunk_count,
                     cache_enabled: false,
                     payload: Bytes::from(payload),
@@ -321,9 +363,9 @@ impl ConnectionHandler {
                     .await;
 
                 // Send block entity data for this chunk (O(1) via chunk index)
-                let be_keys = self.block_entities_in_chunk(cx, cz);
+                let be_keys = self.block_entities_in_chunk_dim(dim, cx, cz);
                 for (bx, by, bz) in be_keys {
-                    if let Some(be) = self.block_entities.get(&(bx, by, bz)) {
+                    if let Some(be) = self.block_entities.get(&(bx, by, bz, dim)) {
                         let nbt = be.to_network_nbt(bx, by, bz);
                         self.send_packet(
                             addr,
@@ -340,11 +382,14 @@ impl ConnectionHandler {
         }
 
         // Mark as sent
+        let loaded_keys: Vec<(i32, i32)> = to_send
+            .iter()
+            .filter(|key| self.dim_chunks(dim).is_some_and(|m| m.contains_key(key)))
+            .copied()
+            .collect();
         if let Some(conn) = self.connections.get_mut(&addr) {
-            for &key in &to_send {
-                if self.world_chunks.contains_key(&key) {
-                    conn.sent_chunks.insert(key);
-                }
+            for key in loaded_keys {
+                conn.sent_chunks.insert(key);
             }
         }
 

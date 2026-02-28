@@ -6,6 +6,7 @@ mod inventory;
 mod login;
 mod movement;
 mod plugins;
+mod portal;
 mod projectile;
 mod spawn;
 mod survival;
@@ -68,7 +69,11 @@ use mc_rs_world::gravity;
 use mc_rs_world::item_registry::ItemRegistry;
 use mc_rs_world::nether_generator::NetherGenerator;
 use mc_rs_world::overworld_generator::OverworldGenerator;
-use mc_rs_world::physics::{PlayerAabb, MAX_AIRBORNE_TICKS, MAX_FALL_PER_TICK};
+use mc_rs_world::physics::{
+    PlayerAabb, ViolationTracker, BLOCK_REACH, MAX_ACTIONS_PER_SECOND, MAX_AIRBORNE_KICK,
+    MAX_AIRBORNE_TICKS, MAX_FALL_PER_TICK, MIN_ATTACK_INTERVAL, MIN_BREAK_INTERVAL,
+    MIN_COMMAND_INTERVAL, MIN_PLACE_INTERVAL, VIOLATION_DECAY_INTERVAL,
+};
 use mc_rs_world::piston;
 use mc_rs_world::redstone;
 use mc_rs_world::serializer::serialize_chunk_column_cached;
@@ -141,6 +146,10 @@ pub struct PlayerConnection {
     pub sent_chunks: HashSet<(i32, i32)>,
     /// Accepted chunk radius for this player.
     pub chunk_radius: i32,
+    /// Current dimension: 0=overworld, 1=nether, 2=end.
+    pub dimension: i32,
+    /// Tick after which portal can be used again (cooldown).
+    pub portal_cooldown_until: u64,
     /// Player gamemode: 0=survival, 1=creative, 2=adventure, 3=spectator.
     pub gamemode: i32,
     /// Active block-breaking state: (position, start_time).
@@ -191,6 +200,21 @@ pub struct PlayerConnection {
     pub pending_enchant_options: Vec<mc_rs_game::enchanting::EnchantOption>,
     /// Entity tags assigned via /tag command.
     pub tags: HashSet<String>,
+    // ── Anti-cheat ──────────────────────────────────────────────────────
+    /// Violation tracker for anti-cheat kick thresholds.
+    pub violations: ViolationTracker,
+    /// Last tick a block was broken (rate limiting).
+    pub last_break_tick: u64,
+    /// Last tick a block was placed (rate limiting).
+    pub last_place_tick: u64,
+    /// Last tick an attack was performed (rate limiting).
+    pub last_attack_tick: u64,
+    /// Last tick a command was sent (rate limiting).
+    pub last_command_tick: u64,
+    /// Number of actions in the current 1-second window.
+    pub actions_this_second: u16,
+    /// Tick at which the current 1-second action window started.
+    pub action_second_start: u64,
 }
 
 /// State for a currently open container window.
@@ -216,8 +240,8 @@ pub struct ActiveEffect {
     pub remaining_ticks: i32,
 }
 
-/// Chunk coordinate → list of block-entity positions in that chunk.
-type ChunkBlockEntityIndex = HashMap<(i32, i32), Vec<(i32, i32, i32)>>;
+/// (dimension, chunk_x, chunk_z) → list of block-entity positions in that chunk.
+type ChunkBlockEntityIndex = HashMap<(i32, i32, i32), Vec<(i32, i32, i32)>>;
 
 /// Manages all player connections and their login state machines.
 pub struct ConnectionHandler {
@@ -241,8 +265,8 @@ pub struct ConnectionHandler {
     spawn_block: BlockPos,
     command_registry: CommandRegistry,
     shutdown_tx: Arc<watch::Sender<bool>>,
-    /// Cached world chunks — blocks persist across player interactions.
-    world_chunks: HashMap<(i32, i32), ChunkColumn>,
+    /// Cached world chunks — keyed by dimension → (chunk_x, chunk_z) → ChunkColumn.
+    world_chunks: HashMap<i32, HashMap<(i32, i32), ChunkColumn>>,
     /// Block property registry for all vanilla blocks.
     block_registry: BlockRegistry,
     /// Item registry for all vanilla items.
@@ -294,8 +318,8 @@ pub struct ConnectionHandler {
     /// Merged loot tables from all loaded behavior packs.
     #[allow(dead_code)]
     loot_tables: HashMap<String, LootTableFile>,
-    /// Block entities (signs, chests, furnaces) keyed by world position (x, y, z).
-    block_entities: HashMap<(i32, i32, i32), BlockEntityData>,
+    /// Block entities (signs, chests, furnaces) keyed by (x, y, z, dimension).
+    block_entities: HashMap<(i32, i32, i32, i32), BlockEntityData>,
     /// Pre-computed block entity hashes for detection.
     block_entity_hashes: BlockEntityHashes,
     /// Smelting recipes and fuel data.
@@ -385,21 +409,13 @@ impl ConnectionHandler {
         // Initialize world generator based on config
         let gen_name = server_config.world.generator.to_lowercase();
         let seed = server_config.world.seed as u64;
-        let overworld_generator = if gen_name == "default" || gen_name == "overworld" {
+        let overworld_generator = if gen_name != "flat" {
             Some(Arc::new(OverworldGenerator::new(seed)))
         } else {
             None
         };
-        let nether_generator = if gen_name == "nether" {
-            Some(Arc::new(NetherGenerator::new(seed)))
-        } else {
-            None
-        };
-        let end_generator = if gen_name == "end" {
-            Some(Arc::new(EndGenerator::new(seed)))
-        } else {
-            None
-        };
+        let nether_generator = Some(Arc::new(NetherGenerator::new(seed)));
+        let end_generator = Some(Arc::new(EndGenerator::new(seed)));
         let dimension_id = match gen_name.as_str() {
             "nether" => 1,
             "end" => 2,
@@ -673,22 +689,41 @@ impl ConnectionHandler {
         self.game_world.allocate_entity_id()
     }
 
-    /// Insert a block entity and update the chunk index.
+    /// Insert a block entity (overworld, dim=0) and update the chunk index.
     pub(super) fn insert_block_entity(&mut self, pos: (i32, i32, i32), data: BlockEntityData) {
-        self.block_entities.insert(pos, data);
+        self.insert_block_entity_dim(pos, 0, data);
+    }
+
+    /// Insert a block entity in a specific dimension and update the chunk index.
+    pub(super) fn insert_block_entity_dim(
+        &mut self,
+        pos: (i32, i32, i32),
+        dim: i32,
+        data: BlockEntityData,
+    ) {
+        self.block_entities.insert((pos.0, pos.1, pos.2, dim), data);
         self.block_entity_chunk_index
-            .entry((pos.0 >> 4, pos.2 >> 4))
+            .entry((dim, pos.0 >> 4, pos.2 >> 4))
             .or_default()
             .push(pos);
     }
 
-    /// Remove a block entity and update the chunk index.
+    /// Remove a block entity (overworld, dim=0) and update the chunk index.
     pub(super) fn remove_block_entity(&mut self, pos: (i32, i32, i32)) -> Option<BlockEntityData> {
-        let result = self.block_entities.remove(&pos);
+        self.remove_block_entity_dim(pos, 0)
+    }
+
+    /// Remove a block entity in a specific dimension and update the chunk index.
+    pub(super) fn remove_block_entity_dim(
+        &mut self,
+        pos: (i32, i32, i32),
+        dim: i32,
+    ) -> Option<BlockEntityData> {
+        let result = self.block_entities.remove(&(pos.0, pos.1, pos.2, dim));
         if result.is_some() {
-            if let Some(positions) = self
-                .block_entity_chunk_index
-                .get_mut(&(pos.0 >> 4, pos.2 >> 4))
+            if let Some(positions) =
+                self.block_entity_chunk_index
+                    .get_mut(&(dim, pos.0 >> 4, pos.2 >> 4))
             {
                 positions.retain(|p| *p != pos);
             }
@@ -696,10 +731,21 @@ impl ConnectionHandler {
         result
     }
 
-    /// Get block entities in a specific chunk (O(1) via index).
+    /// Get block entities in a specific chunk (overworld, dim=0) (O(1) via index).
+    #[allow(dead_code)]
     pub(super) fn block_entities_in_chunk(&self, cx: i32, cz: i32) -> Vec<(i32, i32, i32)> {
+        self.block_entities_in_chunk_dim(0, cx, cz)
+    }
+
+    /// Get block entities in a specific dimension chunk (O(1) via index).
+    pub(super) fn block_entities_in_chunk_dim(
+        &self,
+        dim: i32,
+        cx: i32,
+        cz: i32,
+    ) -> Vec<(i32, i32, i32)> {
         self.block_entity_chunk_index
-            .get(&(cx, cz))
+            .get(&(dim, cx, cz))
             .cloned()
             .unwrap_or_default()
     }
@@ -790,6 +836,25 @@ impl ConnectionHandler {
         };
         self.apply_plugin_actions(plugin_actions).await;
 
+        // Anti-cheat: decay violations and kick if threshold exceeded
+        let current_tick = self.game_world.current_tick();
+        if current_tick.is_multiple_of(VIOLATION_DECAY_INTERVAL) {
+            let mut kick_list: Vec<(SocketAddr, &'static str)> = Vec::new();
+            for (&addr, conn) in &mut self.connections {
+                if conn.state != LoginState::InGame {
+                    continue;
+                }
+                conn.violations.decay();
+                if let Some(reason) = conn.violations.should_kick() {
+                    kick_list.push((addr, reason));
+                }
+            }
+            for (addr, reason) in kick_list {
+                warn!("Kicking player {addr} for anti-cheat violation: {reason}");
+                self.disconnect_player(addr, reason).await;
+            }
+        }
+
         // Auto-save
         if self.auto_save_interval_ticks > 0 {
             self.save_tick_counter += 1;
@@ -860,6 +925,48 @@ impl ConnectionHandler {
         self.runtime_id_to_addr.get(&runtime_id).copied()
     }
 
+    /// Disconnect a player with a reason message.
+    pub(super) async fn disconnect_player(&mut self, addr: SocketAddr, reason: &str) {
+        let pkt = Disconnect::with_message(reason);
+        self.send_packet(addr, packets::id::DISCONNECT, &pkt).await;
+    }
+
+    /// Check rate limit for an action. Returns true if the action is allowed.
+    /// Increments the global action counter and checks the per-category interval.
+    pub(super) fn check_rate_limit(
+        &mut self,
+        addr: SocketAddr,
+        last_tick: u64,
+        min_interval: u64,
+    ) -> bool {
+        let current_tick = self.game_world.current_tick();
+        let conn = match self.connections.get_mut(&addr) {
+            Some(c) => c,
+            None => return false,
+        };
+
+        // Reset per-second counter every 20 ticks (1 second)
+        if current_tick.saturating_sub(conn.action_second_start) >= 20 {
+            conn.actions_this_second = 0;
+            conn.action_second_start = current_tick;
+        }
+        conn.actions_this_second += 1;
+
+        // Global action rate
+        if conn.actions_this_second > MAX_ACTIONS_PER_SECOND {
+            conn.violations.rate_limit += 1;
+            return false;
+        }
+
+        // Per-category interval
+        if current_tick.saturating_sub(last_tick) < min_interval {
+            conn.violations.rate_limit += 1;
+            return false;
+        }
+
+        true
+    }
+
     pub(super) async fn broadcast_packet(&mut self, packet_id: u32, packet: &impl ProtoEncode) {
         let addrs: Vec<SocketAddr> = self
             .connections
@@ -889,6 +996,44 @@ impl ConnectionHandler {
         }
     }
 
+    /// Broadcast a packet to all InGame players in the given dimension.
+    #[allow(dead_code)]
+    pub(super) async fn broadcast_packet_in_dimension(
+        &mut self,
+        dim: i32,
+        packet_id: u32,
+        packet: &impl ProtoEncode,
+    ) {
+        let addrs: Vec<SocketAddr> = self
+            .connections
+            .iter()
+            .filter(|(_, c)| c.state == LoginState::InGame && c.dimension == dim)
+            .map(|(&a, _)| a)
+            .collect();
+        for addr in addrs {
+            self.send_packet(addr, packet_id, packet).await;
+        }
+    }
+
+    /// Broadcast a packet to all InGame players in the given dimension except one.
+    pub(super) async fn broadcast_packet_in_dimension_except(
+        &mut self,
+        dim: i32,
+        except: SocketAddr,
+        packet_id: u32,
+        packet: &impl ProtoEncode,
+    ) {
+        let addrs: Vec<SocketAddr> = self
+            .connections
+            .iter()
+            .filter(|(&a, c)| a != except && c.state == LoginState::InGame && c.dimension == dim)
+            .map(|(&a, _)| a)
+            .collect();
+        for addr in addrs {
+            self.send_packet(addr, packet_id, packet).await;
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Phase 1.2: Block breaking & placing
     // -----------------------------------------------------------------------
@@ -896,11 +1041,27 @@ impl ConnectionHandler {
     /// Maximum Y coordinate in the Overworld.
     const MAX_Y: i32 = OVERWORLD_MIN_Y + (OVERWORLD_SUB_CHUNK_COUNT as i32) * 16 - 1; // 319
 
-    /// Get the block runtime ID at a world position.
+    /// Get an immutable reference to dimension chunks.
+    pub(super) fn dim_chunks(&self, dim: i32) -> Option<&HashMap<(i32, i32), ChunkColumn>> {
+        self.world_chunks.get(&dim)
+    }
+
+    /// Get a mutable reference to dimension chunks, creating if needed.
+    pub(super) fn dim_chunks_mut(&mut self, dim: i32) -> &mut HashMap<(i32, i32), ChunkColumn> {
+        self.world_chunks.entry(dim).or_default()
+    }
+
+    /// Get the block runtime ID at a world position (overworld, dim=0).
     pub(super) fn get_block(&self, x: i32, y: i32, z: i32) -> Option<u32> {
+        self.get_block_in(0, x, y, z)
+    }
+
+    /// Get the block runtime ID at a world position in a specific dimension.
+    pub(super) fn get_block_in(&self, dim: i32, x: i32, y: i32, z: i32) -> Option<u32> {
         let cx = x >> 4;
         let cz = z >> 4;
-        let column = self.world_chunks.get(&(cx, cz))?;
+        let dim_map = self.world_chunks.get(&dim)?;
+        let column = dim_map.get(&(cx, cz))?;
 
         let sub_index = (y - OVERWORLD_MIN_Y) / 16;
         if sub_index < 0 || sub_index >= OVERWORLD_SUB_CHUNK_COUNT as i32 {
@@ -913,11 +1074,27 @@ impl ConnectionHandler {
         Some(column.sub_chunks[sub_index as usize].get_block(local_x, local_y, local_z))
     }
 
-    /// Set a block at a world position. Returns false if the chunk is not loaded.
+    /// Set a block at a world position (overworld, dim=0). Returns false if the chunk is not loaded.
     pub(super) fn set_block(&mut self, x: i32, y: i32, z: i32, runtime_id: u32) -> bool {
+        self.set_block_in(0, x, y, z, runtime_id)
+    }
+
+    /// Set a block at a world position in a specific dimension. Returns false if the chunk is not loaded.
+    pub(super) fn set_block_in(
+        &mut self,
+        dim: i32,
+        x: i32,
+        y: i32,
+        z: i32,
+        runtime_id: u32,
+    ) -> bool {
         let cx = x >> 4;
         let cz = z >> 4;
-        let column = match self.world_chunks.get_mut(&(cx, cz)) {
+        let dim_map = match self.world_chunks.get_mut(&dim) {
+            Some(m) => m,
+            None => return false,
+        };
+        let column = match dim_map.get_mut(&(cx, cz)) {
             Some(c) => c,
             None => return false,
         };
@@ -1184,32 +1361,40 @@ impl ConnectionHandler {
         }
         self.plugin_manager.disable_all();
 
-        // Save dirty chunks
-        let dirty_keys: Vec<(i32, i32)> = self
-            .world_chunks
-            .iter()
-            .filter(|(_, col)| col.dirty)
-            .map(|(&k, _)| k)
-            .collect();
+        // Save dirty chunks across all dimensions
+        let mut chunk_count = 0usize;
+        let dim_keys: Vec<i32> = self.world_chunks.keys().copied().collect();
+        for dim in &dim_keys {
+            let dirty_keys: Vec<(i32, i32)> = self
+                .world_chunks
+                .get(dim)
+                .map(|m| {
+                    m.iter()
+                        .filter(|(_, col)| col.dirty)
+                        .map(|(&k, _)| k)
+                        .collect()
+                })
+                .unwrap_or_default();
 
-        let chunk_count = dirty_keys.len();
-        for key in &dirty_keys {
-            if let Some(col) = self.world_chunks.get(key) {
-                if let Err(e) = self.chunk_storage.save_chunk(col) {
-                    warn!("Failed to save chunk ({},{}): {e}", key.0, key.1);
+            chunk_count += dirty_keys.len();
+            for key in &dirty_keys {
+                if let Some(col) = self.world_chunks.get(dim).and_then(|m| m.get(key)) {
+                    if let Err(e) = self.chunk_storage.save_chunk(col) {
+                        warn!("Failed to save chunk dim={dim} ({},{}): {e}", key.0, key.1);
+                    }
                 }
             }
-        }
-        // Mark saved chunks as clean
-        for key in &dirty_keys {
-            if let Some(col) = self.world_chunks.get_mut(key) {
-                col.dirty = false;
+            // Mark saved chunks as clean
+            for key in &dirty_keys {
+                if let Some(col) = self.world_chunks.get_mut(dim).and_then(|m| m.get_mut(key)) {
+                    col.dirty = false;
+                }
             }
         }
 
         // Save block entities grouped by chunk
         let mut be_by_chunk: HashMap<(i32, i32), Vec<u8>> = HashMap::new();
-        for (&(bx, by, bz), be) in &self.block_entities {
+        for (&(bx, by, bz, _dim), be) in &self.block_entities {
             let cx = bx >> 4;
             let cz = bz >> 4;
             be_by_chunk

@@ -51,29 +51,33 @@ impl ConnectionHandler {
                 let mut rng = rand::thread_rng();
                 // ~1% chance per check (every 5 seconds) = roughly 1 strike per 500 seconds
                 if rng.gen_range(0..100) < 1 {
-                    let chunk_keys: Vec<(i32, i32)> = self.world_chunks.keys().copied().collect();
+                    let chunk_keys: Vec<(i32, i32)> = self
+                        .dim_chunks(0)
+                        .map(|m| m.keys().copied().collect())
+                        .unwrap_or_default();
                     if !chunk_keys.is_empty() {
                         let &(cx, cz) = chunk_keys.choose(&mut rng).unwrap();
                         let lx = rng.gen_range(0..16);
                         let lz = rng.gen_range(0..16);
                         let world_x = cx * 16 + lx;
                         let world_z = cz * 16 + lz;
-                        let world_y = if let Some(col) = self.world_chunks.get(&(cx, cz)) {
-                            let mut y = 319;
-                            while y > -64 {
-                                if col
-                                    .get_block_world(lx as usize, y, lz as usize)
-                                    .unwrap_or(0)
-                                    != 0
-                                {
-                                    break;
+                        let world_y =
+                            if let Some(col) = self.dim_chunks(0).and_then(|m| m.get(&(cx, cz))) {
+                                let mut y = 319;
+                                while y > -64 {
+                                    if col
+                                        .get_block_world(lx as usize, y, lz as usize)
+                                        .unwrap_or(0)
+                                        != 0
+                                    {
+                                        break;
+                                    }
+                                    y -= 1;
                                 }
-                                y -= 1;
-                            }
-                            y + 1
-                        } else {
-                            64
-                        };
+                                y + 1
+                            } else {
+                                64
+                            };
                         Some((world_x, world_y, world_z))
                     } else {
                         None
@@ -169,7 +173,7 @@ impl ConnectionHandler {
             let mut changes: Vec<(i32, i32, i32, u32)> = Vec::new();
 
             for (cx, cz) in &sim_chunks {
-                if let Some(column) = self.world_chunks.get(&(*cx, *cz)) {
+                if let Some(column) = self.dim_chunks(0).and_then(|m| m.get(&(*cx, *cz))) {
                     for sub_idx in 0..OVERWORLD_SUB_CHUNK_COUNT {
                         // Skip empty sub-chunks (palette = [air] only)
                         if column.sub_chunks[sub_idx].palette.len() <= 1 {
@@ -245,9 +249,11 @@ impl ConnectionHandler {
     }
 
     /// Get the set of chunk coordinates within simulation distance (4 chunks) of any player.
+    /// Only considers overworld (dim=0) chunks for tick processing.
     fn get_simulation_chunks(&self) -> HashSet<(i32, i32)> {
         let mut chunks = HashSet::new();
         let sim_radius = 4i32;
+        let ow_chunks = self.dim_chunks(0);
 
         for conn in self.connections.values() {
             if conn.state != LoginState::InGame {
@@ -259,7 +265,7 @@ impl ConnectionHandler {
             for dx in -sim_radius..=sim_radius {
                 for dz in -sim_radius..=sim_radius {
                     let key = (pcx + dx, pcz + dz);
-                    if self.world_chunks.contains_key(&key) {
+                    if ow_chunks.is_some_and(|m| m.contains_key(&key)) {
                         chunks.insert(key);
                     }
                 }
@@ -271,7 +277,7 @@ impl ConnectionHandler {
             for cx in area.from.0..=area.to.0 {
                 for cz in area.from.1..=area.to.1 {
                     let key = (cx, cz);
-                    if self.world_chunks.contains_key(&key) {
+                    if ow_chunks.is_some_and(|m| m.contains_key(&key)) {
                         chunks.insert(key);
                     }
                 }
@@ -423,7 +429,7 @@ impl ConnectionHandler {
         // Collect furnace positions that need ticking:
         // - currently lit (burning fuel), OR
         // - has smeltable input + available fuel (could ignite)
-        let positions: Vec<(i32, i32, i32)> = self
+        let positions: Vec<(i32, i32, i32, i32)> = self
             .block_entities
             .iter()
             .filter_map(|(&pos, be)| match be {
@@ -469,8 +475,8 @@ impl ConnectionHandler {
         }
     }
 
-    /// Tick a single furnace at the given position.
-    async fn tick_single_furnace(&mut self, pos: (i32, i32, i32)) {
+    /// Tick a single furnace at the given position (x, y, z, dim).
+    async fn tick_single_furnace(&mut self, pos: (i32, i32, i32, i32)) {
         // Extract current furnace state
         let (
             furnace_type,

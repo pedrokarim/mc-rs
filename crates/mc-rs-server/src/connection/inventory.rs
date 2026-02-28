@@ -132,7 +132,7 @@ impl ConnectionHandler {
 
             let response = if let Some((window_id, pos)) = container_info {
                 // Extract container items based on block entity type
-                let mut container_items = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+                let mut container_items = match self.block_entities.get(&(pos.x, pos.y, pos.z, 0)) {
                     Some(BlockEntityData::Chest { items }) => items.clone(),
                     Some(BlockEntityData::Furnace {
                         input,
@@ -173,7 +173,7 @@ impl ConnectionHandler {
                 };
 
                 // Write back modified items to the block entity
-                match self.block_entities.get_mut(&(pos.x, pos.y, pos.z)) {
+                match self.block_entities.get_mut(&(pos.x, pos.y, pos.z, 0)) {
                     Some(BlockEntityData::Chest { items }) => {
                         *items = container_items;
                     }
@@ -228,7 +228,7 @@ impl ConnectionHandler {
 
                 // After slot changes, check if we should send enchant options
                 if let Some(BlockEntityData::EnchantingTable { item, .. }) =
-                    self.block_entities.get(&(pos.x, pos.y, pos.z))
+                    self.block_entities.get(&(pos.x, pos.y, pos.z, 0))
                 {
                     if !item.is_empty() {
                         let item_rid = item.runtime_id;
@@ -542,8 +542,42 @@ impl ConnectionHandler {
                     }
                 }
 
+                // Rate limit: block breaking
+                {
+                    let last = self
+                        .connections
+                        .get(&addr)
+                        .map(|c| c.last_break_tick)
+                        .unwrap_or(0);
+                    if !self.check_rate_limit(addr, last, MIN_BREAK_INTERVAL) {
+                        return;
+                    }
+                    if let Some(conn) = self.connections.get_mut(&addr) {
+                        conn.last_break_tick = self.game_world.current_tick();
+                    }
+                }
+
                 // Mining time validation for survival mode
                 let gamemode = self.connections.get(&addr).map(|c| c.gamemode).unwrap_or(0);
+
+                // Reach validation (survival/adventure only)
+                if gamemode == 0 || gamemode == 2 {
+                    if let Some(conn) = self.connections.get(&addr) {
+                        let dx = pos.x as f32 + 0.5 - conn.position.x;
+                        let dy = pos.y as f32 + 0.5 - conn.position.y;
+                        let dz = pos.z as f32 + 0.5 - conn.position.z;
+                        let distance = (dx * dx + dy * dy + dz * dz).sqrt();
+                        if distance > BLOCK_REACH {
+                            debug!(
+                                "Block reach violation by {addr}: {distance:.1} > {BLOCK_REACH}"
+                            );
+                            if let Some(conn) = self.connections.get_mut(&addr) {
+                                conn.violations.reach += 1;
+                            }
+                            return;
+                        }
+                    }
+                }
 
                 if gamemode == 0 {
                     // Survival mode: validate mining time
@@ -651,8 +685,29 @@ impl ConnectionHandler {
                 debug!("Block broken at {pos} by {addr}");
             }
             UseItemAction::ClickBlock => {
-                // Check if the clicked block is interactive (lever, repeater)
                 let click_pos = use_item.block_position;
+
+                // Reach validation (survival/adventure only)
+                let gm = self.connections.get(&addr).map(|c| c.gamemode).unwrap_or(0);
+                if gm == 0 || gm == 2 {
+                    if let Some(conn) = self.connections.get(&addr) {
+                        let dx = click_pos.x as f32 + 0.5 - conn.position.x;
+                        let dy = click_pos.y as f32 + 0.5 - conn.position.y;
+                        let dz = click_pos.z as f32 + 0.5 - conn.position.z;
+                        let distance = (dx * dx + dy * dy + dz * dz).sqrt();
+                        if distance > BLOCK_REACH {
+                            debug!(
+                                "Click reach violation by {addr}: {distance:.1} > {BLOCK_REACH}"
+                            );
+                            if let Some(conn) = self.connections.get_mut(&addr) {
+                                conn.violations.reach += 1;
+                            }
+                            return;
+                        }
+                    }
+                }
+
+                // Check if the clicked block is interactive (lever, repeater)
                 if let Some(rid) = self.get_block(click_pos.x, click_pos.y, click_pos.z) {
                     if let Some(toggled) = self.tick_blocks.toggle_lever(rid) {
                         self.set_block_and_broadcast(
@@ -702,6 +757,45 @@ impl ConnectionHandler {
                     }
                 }
 
+                // --- Flint and steel: try to light a Nether portal ---
+                if self.is_holding_flint_and_steel(addr) {
+                    let target = Self::face_offset(use_item.block_position, use_item.face);
+                    let player_dim = self
+                        .connections
+                        .get(&addr)
+                        .map(|c| c.dimension)
+                        .unwrap_or(0);
+                    if let Some(frame) =
+                        self.detect_nether_portal_frame(player_dim, target.x, target.y, target.z)
+                    {
+                        self.fill_portal_interior(&frame).await;
+                        return;
+                    }
+                    // If no frame found, place fire block
+                    let fire_rid = self.tick_blocks.fire;
+                    if self.set_block(target.x, target.y, target.z, fire_rid) {
+                        let update = UpdateBlock::new(target, fire_rid);
+                        self.broadcast_packet(packets::id::UPDATE_BLOCK, &update)
+                            .await;
+                    }
+                    return;
+                }
+
+                // Rate limit: block placement
+                {
+                    let last = self
+                        .connections
+                        .get(&addr)
+                        .map(|c| c.last_place_tick)
+                        .unwrap_or(0);
+                    if !self.check_rate_limit(addr, last, MIN_PLACE_INTERVAL) {
+                        return;
+                    }
+                    if let Some(conn) = self.connections.get_mut(&addr) {
+                        conn.last_place_tick = self.game_world.current_tick();
+                    }
+                }
+
                 let target = Self::face_offset(use_item.block_position, use_item.face);
 
                 // Check bounds
@@ -725,7 +819,15 @@ impl ConnectionHandler {
                 // Check that target is in a loaded chunk
                 let cx = target.x >> 4;
                 let cz = target.z >> 4;
-                if !self.world_chunks.contains_key(&(cx, cz)) {
+                let player_dim = self
+                    .connections
+                    .get(&addr)
+                    .map(|c| c.dimension)
+                    .unwrap_or(0);
+                if !self
+                    .dim_chunks(player_dim)
+                    .is_some_and(|m| m.contains_key(&(cx, cz)))
+                {
                     return;
                 }
 
@@ -799,7 +901,7 @@ impl ConnectionHandler {
                     let be = BlockEntityData::new_sign();
                     let nbt = be.to_network_nbt(target.x, target.y, target.z);
                     self.block_entities
-                        .insert((target.x, target.y, target.z), be);
+                        .insert((target.x, target.y, target.z, 0), be);
                     // Send BlockActorData to open the sign editor
                     self.send_packet(
                         addr,
@@ -967,7 +1069,7 @@ impl ConnectionHandler {
         // Get chest items
         let items = self
             .block_entities
-            .get(&(pos.x, pos.y, pos.z))
+            .get(&(pos.x, pos.y, pos.z, 0))
             .and_then(|be| match be {
                 BlockEntityData::Chest { items } => Some(items.clone()),
                 _ => None,
@@ -995,7 +1097,7 @@ impl ConnectionHandler {
     /// Open a furnace container UI for a player.
     async fn open_furnace(&mut self, addr: SocketAddr, pos: BlockPos) {
         // Determine furnace type from block entity
-        let furnace_type = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+        let furnace_type = match self.block_entities.get(&(pos.x, pos.y, pos.z, 0)) {
             Some(BlockEntityData::Furnace { furnace_type, .. }) => *furnace_type,
             _ => return,
         };
@@ -1033,7 +1135,7 @@ impl ConnectionHandler {
         .await;
 
         // Get furnace items
-        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z, 0)) {
             Some(BlockEntityData::Furnace {
                 input,
                 fuel,
@@ -1055,7 +1157,7 @@ impl ConnectionHandler {
         .await;
 
         // Send ContainerSetData for furnace progress bars
-        let furnace_data = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+        let furnace_data = match self.block_entities.get(&(pos.x, pos.y, pos.z, 0)) {
             Some(BlockEntityData::Furnace {
                 cook_time,
                 cook_time_total,
@@ -1118,7 +1220,7 @@ impl ConnectionHandler {
     async fn open_enchanting_table(&mut self, addr: SocketAddr, pos: BlockPos) {
         // Ensure there is a block entity
         self.block_entities
-            .entry((pos.x, pos.y, pos.z))
+            .entry((pos.x, pos.y, pos.z, 0))
             .or_insert_with(BlockEntityData::new_enchanting_table);
 
         let window_id = match self.connections.get_mut(&addr) {
@@ -1152,7 +1254,7 @@ impl ConnectionHandler {
         .await;
 
         // Get enchanting table items
-        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z, 0)) {
             Some(BlockEntityData::EnchantingTable { item, lapis }) => {
                 vec![item.clone(), lapis.clone()]
             }
@@ -1189,7 +1291,7 @@ impl ConnectionHandler {
     /// Open a stonecutter container UI for a player.
     async fn open_stonecutter(&mut self, addr: SocketAddr, pos: BlockPos) {
         self.block_entities
-            .entry((pos.x, pos.y, pos.z))
+            .entry((pos.x, pos.y, pos.z, 0))
             .or_insert_with(BlockEntityData::new_stonecutter);
 
         let window_id = match self.connections.get_mut(&addr) {
@@ -1221,7 +1323,7 @@ impl ConnectionHandler {
         )
         .await;
 
-        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z, 0)) {
             Some(BlockEntityData::Stonecutter { input }) => vec![input.clone()],
             _ => vec![mc_rs_proto::item_stack::ItemStack::empty()],
         };
@@ -1242,7 +1344,7 @@ impl ConnectionHandler {
     /// Open a grindstone container UI for a player.
     async fn open_grindstone(&mut self, addr: SocketAddr, pos: BlockPos) {
         self.block_entities
-            .entry((pos.x, pos.y, pos.z))
+            .entry((pos.x, pos.y, pos.z, 0))
             .or_insert_with(BlockEntityData::new_grindstone);
 
         let window_id = match self.connections.get_mut(&addr) {
@@ -1274,7 +1376,7 @@ impl ConnectionHandler {
         )
         .await;
 
-        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z, 0)) {
             Some(BlockEntityData::Grindstone { input1, input2 }) => {
                 vec![input1.clone(), input2.clone()]
             }
@@ -1300,7 +1402,7 @@ impl ConnectionHandler {
     /// Open a loom container UI for a player.
     async fn open_loom(&mut self, addr: SocketAddr, pos: BlockPos) {
         self.block_entities
-            .entry((pos.x, pos.y, pos.z))
+            .entry((pos.x, pos.y, pos.z, 0))
             .or_insert_with(BlockEntityData::new_loom);
 
         let window_id = match self.connections.get_mut(&addr) {
@@ -1332,7 +1434,7 @@ impl ConnectionHandler {
         )
         .await;
 
-        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z, 0)) {
             Some(BlockEntityData::Loom {
                 banner,
                 dye,
@@ -1361,7 +1463,7 @@ impl ConnectionHandler {
     /// Open an anvil container for a player.
     async fn open_anvil(&mut self, addr: SocketAddr, pos: BlockPos) {
         self.block_entities
-            .entry((pos.x, pos.y, pos.z))
+            .entry((pos.x, pos.y, pos.z, 0))
             .or_insert_with(BlockEntityData::new_anvil);
 
         let window_id = match self.connections.get_mut(&addr) {
@@ -1393,7 +1495,7 @@ impl ConnectionHandler {
         )
         .await;
 
-        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+        let items = match self.block_entities.get(&(pos.x, pos.y, pos.z, 0)) {
             Some(BlockEntityData::Anvil { input, material }) => {
                 vec![input.clone(), material.clone()]
             }
@@ -1424,7 +1526,7 @@ impl ConnectionHandler {
         };
 
         // Get the item name from the enchanting table input slot
-        let item_name = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+        let item_name = match self.block_entities.get(&(pos.x, pos.y, pos.z, 0)) {
             Some(BlockEntityData::EnchantingTable { item, .. }) if !item.is_empty() => self
                 .item_registry
                 .get_by_id(item.runtime_id as i16)
@@ -1579,6 +1681,7 @@ impl ConnectionHandler {
                     container_pos.x,
                     container_pos.y,
                     container_pos.z,
+                    0,
                 )) {
                     Some(BlockEntityData::EnchantingTable { lapis, .. }) => lapis.count as i32,
                     _ => 0,
@@ -1603,7 +1706,7 @@ impl ConnectionHandler {
         // Update the enchanting table block entity
         let pos = container_pos;
         if let Some(BlockEntityData::EnchantingTable { item, lapis }) =
-            self.block_entities.get_mut(&(pos.x, pos.y, pos.z))
+            self.block_entities.get_mut(&(pos.x, pos.y, pos.z, 0))
         {
             item.nbt_data = nbt_data;
             if lapis.count as i32 > cost {
@@ -1636,7 +1739,7 @@ impl ConnectionHandler {
         .await;
 
         // Get updated container items for response
-        let (item_resp, lapis_resp) = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+        let (item_resp, lapis_resp) = match self.block_entities.get(&(pos.x, pos.y, pos.z, 0)) {
             Some(BlockEntityData::EnchantingTable { item, lapis }) => (item.clone(), lapis.clone()),
             _ => (
                 mc_rs_proto::item_stack::ItemStack::empty(),
@@ -1749,7 +1852,7 @@ impl ConnectionHandler {
         let (input, material) =
             match self
                 .block_entities
-                .get(&(container_pos.x, container_pos.y, container_pos.z))
+                .get(&(container_pos.x, container_pos.y, container_pos.z, 0))
             {
                 Some(BlockEntityData::Anvil { input, material }) => {
                     (input.clone(), material.clone())
@@ -1781,7 +1884,7 @@ impl ConnectionHandler {
         if let Some(BlockEntityData::Anvil {
             input: ref mut inp,
             material: ref mut mat,
-        }) = self.block_entities.get_mut(&(pos.x, pos.y, pos.z))
+        }) = self.block_entities.get_mut(&(pos.x, pos.y, pos.z, 0))
         {
             *inp = result.output.clone();
             *mat = mc_rs_proto::item_stack::ItemStack::empty();
@@ -1808,7 +1911,7 @@ impl ConnectionHandler {
         .await;
 
         // Get updated container items for response
-        let (input_resp, material_resp) = match self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+        let (input_resp, material_resp) = match self.block_entities.get(&(pos.x, pos.y, pos.z, 0)) {
             Some(BlockEntityData::Anvil { input, material }) => (input.clone(), material.clone()),
             _ => (
                 mc_rs_proto::item_stack::ItemStack::empty(),
@@ -1953,7 +2056,7 @@ impl ConnectionHandler {
         // Only handle sign edits for editable signs
         let is_editable_sign = self
             .block_entities
-            .get(&(pos.x, pos.y, pos.z))
+            .get(&(pos.x, pos.y, pos.z, 0))
             .map(|be| {
                 matches!(
                     be,
@@ -1980,7 +2083,7 @@ impl ConnectionHandler {
             front_text,
             back_text,
             is_editable,
-        }) = self.block_entities.get_mut(&(pos.x, pos.y, pos.z))
+        }) = self.block_entities.get_mut(&(pos.x, pos.y, pos.z, 0))
         {
             *front_text = front;
             *back_text = back;
@@ -1988,7 +2091,7 @@ impl ConnectionHandler {
         }
 
         // Broadcast updated sign to all players
-        if let Some(be) = self.block_entities.get(&(pos.x, pos.y, pos.z)) {
+        if let Some(be) = self.block_entities.get(&(pos.x, pos.y, pos.z, 0)) {
             let nbt = be.to_network_nbt(pos.x, pos.y, pos.z);
             self.broadcast_packet(
                 packets::id::BLOCK_ACTOR_DATA,

@@ -23,6 +23,8 @@ impl ConnectionHandler {
                 client_tick: 0,
                 sent_chunks: HashSet::new(),
                 chunk_radius: 0,
+                dimension: self.dimension_id,
+                portal_cooldown_until: 0,
                 gamemode: gamemode_from_str(&self.server_config.server.gamemode),
                 breaking_block: None,
                 airborne_ticks: 0,
@@ -48,6 +50,13 @@ impl ConnectionHandler {
                 enchant_seed: rand::thread_rng().gen(),
                 pending_enchant_options: Vec::new(),
                 tags: HashSet::new(),
+                violations: ViolationTracker::default(),
+                last_break_tick: 0,
+                last_place_tick: 0,
+                last_attack_tick: 0,
+                last_command_tick: 0,
+                actions_this_second: 0,
+                action_second_start: 0,
             },
         );
 

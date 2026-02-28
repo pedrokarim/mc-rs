@@ -44,12 +44,7 @@ impl SpatialGrid {
     /// Query the nearest player within `max_dist` of `(x, z)`.
     ///
     /// Returns `(entity_bits, runtime_id, distance, (px, py, pz))`.
-    pub fn query_nearest_player(
-        &self,
-        x: f32,
-        z: f32,
-        max_dist: f32,
-    ) -> Option<NearestResult> {
+    pub fn query_nearest_player(&self, x: f32, z: f32, max_dist: f32) -> Option<NearestResult> {
         let max_dist_sq = max_dist * max_dist;
         let radius = (max_dist / CELL_SIZE).ceil() as i32;
         let (cx, cz) = cell_key(x, z);

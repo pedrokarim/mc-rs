@@ -196,6 +196,8 @@ pub struct PlayerData {
     pub xp_total: i32,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub dimension: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -308,6 +310,7 @@ impl PlayerData {
             xp_level: conn.xp_level,
             xp_total: conn.xp_total,
             tags: conn.tags.iter().cloned().collect(),
+            dimension: conn.dimension,
         }
     }
 
@@ -359,6 +362,9 @@ impl PlayerData {
 
         // Restore tags
         conn.tags = self.tags.iter().cloned().collect();
+
+        // Restore dimension
+        conn.dimension = self.dimension;
     }
 
     /// Load player data from a JSON file.
@@ -512,6 +518,7 @@ mod tests {
             xp_level: 5,
             xp_total: 160,
             tags: vec!["vip".into(), "builder".into()],
+            dimension: 0,
         };
 
         data.save(&dir, "test-uuid-1234").unwrap();

@@ -468,6 +468,12 @@ pub struct TickBlocks {
     // Immovable blocks (for piston push rejection)
     pub bedrock: u32,
     pub enchanting_table_tick: u32,
+    // Portal blocks
+    pub nether_portal_x: u32,            // minecraft:portal, portal_axis="x"
+    pub nether_portal_z: u32,            // minecraft:portal, portal_axis="z"
+    pub end_portal: u32,                 // minecraft:end_portal
+    pub end_portal_frame: [[u32; 2]; 4], // [direction 0-3][end_portal_eye_bit 0/1]
+    pub fire: u32,                       // minecraft:fire
 }
 
 impl TickBlocks {
@@ -623,6 +629,31 @@ impl TickBlocks {
             sticky_piston_arm,
             bedrock: hash_block_state("minecraft:bedrock"),
             enchanting_table_tick: hash_block_state("minecraft:enchanting_table"),
+            nether_portal_x: hash_block_state_with_props(
+                "minecraft:portal",
+                &[("portal_axis", StateValue::Str("x"))],
+            ),
+            nether_portal_z: hash_block_state_with_props(
+                "minecraft:portal",
+                &[("portal_axis", StateValue::Str("z"))],
+            ),
+            end_portal: hash_block_state("minecraft:end_portal"),
+            end_portal_frame: {
+                let mut epf = [[0u32; 2]; 4];
+                for (dir, entry) in epf.iter_mut().enumerate() {
+                    for eye in 0..2i8 {
+                        entry[eye as usize] = hash_block_state_with_props(
+                            "minecraft:end_portal_frame",
+                            &[
+                                ("direction", StateValue::Int(dir as i32)),
+                                ("end_portal_eye_bit", StateValue::Byte(eye)),
+                            ],
+                        );
+                    }
+                }
+                epf
+            },
+            fire: hash_block_state("minecraft:fire"),
         }
     }
 
@@ -963,6 +994,23 @@ impl TickBlocks {
             || rid == self.bedrock
             || rid == self.enchanting_table_tick
             || self.is_piston_arm(rid)
+    }
+
+    /// Check if a runtime ID is a nether portal block (any axis).
+    pub fn is_nether_portal(&self, rid: u32) -> bool {
+        rid == self.nether_portal_x || rid == self.nether_portal_z
+    }
+
+    /// Check if a runtime ID is an end portal block.
+    pub fn is_end_portal(&self, rid: u32) -> bool {
+        rid == self.end_portal
+    }
+
+    /// Check if a runtime ID is any end portal frame (with or without eye).
+    pub fn is_end_portal_frame(&self, rid: u32) -> bool {
+        self.end_portal_frame
+            .iter()
+            .any(|pair| rid == pair[0] || rid == pair[1])
     }
 
     /// Get the piston hash for a player look direction.
@@ -1722,5 +1770,46 @@ mod tests {
             assert!(!beh.is_loom(h));
         }
         assert!(!beh.is_anvil(beh.enchanting_table));
+    }
+
+    #[test]
+    fn portal_hashes_nonzero_and_distinct() {
+        let tb = TickBlocks::compute();
+        assert_ne!(tb.nether_portal_x, 0);
+        assert_ne!(tb.nether_portal_z, 0);
+        assert_ne!(tb.end_portal, 0);
+        assert_ne!(tb.fire, 0);
+        assert_ne!(tb.nether_portal_x, tb.nether_portal_z);
+        assert_ne!(tb.nether_portal_x, tb.end_portal);
+        assert_ne!(tb.end_portal, tb.fire);
+    }
+
+    #[test]
+    fn portal_detection_helpers() {
+        let tb = TickBlocks::compute();
+        assert!(tb.is_nether_portal(tb.nether_portal_x));
+        assert!(tb.is_nether_portal(tb.nether_portal_z));
+        assert!(!tb.is_nether_portal(tb.end_portal));
+        assert!(!tb.is_nether_portal(tb.air));
+        assert!(tb.is_end_portal(tb.end_portal));
+        assert!(!tb.is_end_portal(tb.nether_portal_x));
+    }
+
+    #[test]
+    fn end_portal_frame_hashes() {
+        let tb = TickBlocks::compute();
+        for dir in 0..4 {
+            for eye in 0..2 {
+                assert_ne!(tb.end_portal_frame[dir][eye], 0);
+            }
+            // With eye and without eye should differ
+            assert_ne!(tb.end_portal_frame[dir][0], tb.end_portal_frame[dir][1]);
+        }
+        // Different directions should differ
+        assert_ne!(tb.end_portal_frame[0][0], tb.end_portal_frame[1][0]);
+        // Detection helper
+        assert!(tb.is_end_portal_frame(tb.end_portal_frame[0][0]));
+        assert!(tb.is_end_portal_frame(tb.end_portal_frame[2][1]));
+        assert!(!tb.is_end_portal_frame(tb.air));
     }
 }

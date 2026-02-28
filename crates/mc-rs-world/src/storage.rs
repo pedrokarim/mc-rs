@@ -22,20 +22,43 @@ const CHUNK_VERSION: u8 = 40;
 
 // ─── Key builders ───────────────────────────────────────────────────────────
 
-/// Build a LevelDB key: `[X:i32_le][Z:i32_le][tag]`.
+/// Build a LevelDB key: `[X:i32_le][Z:i32_le][tag]` (overworld, no dimension prefix).
 fn chunk_key(cx: i32, cz: i32, tag: u8) -> Vec<u8> {
-    let mut key = Vec::with_capacity(9);
+    chunk_key_dim(cx, cz, 0, tag)
+}
+
+/// Build a dimension-aware LevelDB key.
+///
+/// Overworld (dim=0): `[X:i32_le][Z:i32_le][tag]`
+/// Nether (dim=1): `[X:i32_le][Z:i32_le][01 00 00 00][tag]`
+/// End (dim=2): `[X:i32_le][Z:i32_le][02 00 00 00][tag]`
+fn chunk_key_dim(cx: i32, cz: i32, dim: i32, tag: u8) -> Vec<u8> {
+    let cap = if dim == 0 { 9 } else { 13 };
+    let mut key = Vec::with_capacity(cap);
     key.extend_from_slice(&cx.to_le_bytes());
     key.extend_from_slice(&cz.to_le_bytes());
+    if dim != 0 {
+        key.extend_from_slice(&dim.to_le_bytes());
+    }
     key.push(tag);
     key
 }
 
-/// Build a sub-chunk LevelDB key: `[X:i32_le][Z:i32_le][0x2F][y_index]`.
+/// Build a sub-chunk LevelDB key: `[X:i32_le][Z:i32_le][0x2F][y_index]` (overworld).
+#[cfg(test)]
 fn sub_chunk_key(cx: i32, cz: i32, y_index: i8) -> Vec<u8> {
-    let mut key = Vec::with_capacity(10);
+    sub_chunk_key_dim(cx, cz, 0, y_index)
+}
+
+/// Build a dimension-aware sub-chunk LevelDB key.
+fn sub_chunk_key_dim(cx: i32, cz: i32, dim: i32, y_index: i8) -> Vec<u8> {
+    let cap = if dim == 0 { 10 } else { 14 };
+    let mut key = Vec::with_capacity(cap);
     key.extend_from_slice(&cx.to_le_bytes());
     key.extend_from_slice(&cz.to_le_bytes());
+    if dim != 0 {
+        key.extend_from_slice(&dim.to_le_bytes());
+    }
     key.push(TAG_SUB_CHUNK_PREFIX);
     key.push(y_index as u8);
     key
@@ -245,14 +268,19 @@ impl LevelDbProvider {
         Ok(Self { db })
     }
 
-    /// Load a chunk from LevelDB. Returns `None` if the chunk doesn't exist.
+    /// Load a chunk from LevelDB (overworld). Returns `None` if the chunk doesn't exist.
     pub fn load_chunk(&mut self, cx: i32, cz: i32) -> Option<ChunkColumn> {
+        self.load_chunk_dim(cx, cz, 0)
+    }
+
+    /// Load a chunk from LevelDB for a specific dimension.
+    pub fn load_chunk_dim(&mut self, cx: i32, cz: i32, dim: i32) -> Option<ChunkColumn> {
         // Check if chunk version key exists
-        let version_key = chunk_key(cx, cz, TAG_CHUNK_VERSION);
+        let version_key = chunk_key_dim(cx, cz, dim, TAG_CHUNK_VERSION);
         self.db.get(&version_key)?;
 
         // Load biomes from Data2D
-        let data_2d_key = chunk_key(cx, cz, TAG_DATA_2D);
+        let data_2d_key = chunk_key_dim(cx, cz, dim, TAG_DATA_2D);
         let biomes = if let Some(data) = self.db.get(&data_2d_key) {
             deserialize_data_2d(&data).unwrap_or([0u8; 256])
         } else {
@@ -263,7 +291,7 @@ impl LevelDbProvider {
         let sub_chunks: Vec<SubChunk> = (0..OVERWORLD_SUB_CHUNK_COUNT)
             .map(|i| {
                 let y_index = i as i8 - 4; // 0 -> -4, 23 -> 19
-                let key = sub_chunk_key(cx, cz, y_index);
+                let key = sub_chunk_key_dim(cx, cz, dim, y_index);
                 if let Some(data) = self.db.get(&key) {
                     deserialize_sub_chunk_disk(&data).unwrap_or_else(|| SubChunk::new_single(0))
                 } else {
@@ -286,19 +314,24 @@ impl LevelDbProvider {
         })
     }
 
-    /// Save a chunk to LevelDB.
+    /// Save a chunk to LevelDB (overworld).
     pub fn save_chunk(&mut self, column: &ChunkColumn) -> Result<(), String> {
+        self.save_chunk_dim(column, 0)
+    }
+
+    /// Save a chunk to LevelDB for a specific dimension.
+    pub fn save_chunk_dim(&mut self, column: &ChunkColumn, dim: i32) -> Result<(), String> {
         let cx = column.x;
         let cz = column.z;
 
         // Write chunk version
-        let version_key = chunk_key(cx, cz, TAG_CHUNK_VERSION);
+        let version_key = chunk_key_dim(cx, cz, dim, TAG_CHUNK_VERSION);
         self.db
             .put(&version_key, &[CHUNK_VERSION])
             .map_err(|e| format!("put version: {e}"))?;
 
         // Write Data2D (heightmap + biomes)
-        let data_2d_key = chunk_key(cx, cz, TAG_DATA_2D);
+        let data_2d_key = chunk_key_dim(cx, cz, dim, TAG_DATA_2D);
         let data_2d = serialize_data_2d(&column.biomes);
         self.db
             .put(&data_2d_key, &data_2d)
@@ -307,7 +340,7 @@ impl LevelDbProvider {
         // Write 24 sub-chunks
         for (i, sub_chunk) in column.sub_chunks.iter().enumerate() {
             let y_index = i as i8 - 4;
-            let key = sub_chunk_key(cx, cz, y_index);
+            let key = sub_chunk_key_dim(cx, cz, dim, y_index);
             let data = serialize_sub_chunk_disk(sub_chunk);
             self.db
                 .put(&key, &data)
@@ -315,7 +348,7 @@ impl LevelDbProvider {
         }
 
         // Write finalized state = 2 (done)
-        let finalized_key = chunk_key(cx, cz, TAG_FINALIZED_STATE);
+        let finalized_key = chunk_key_dim(cx, cz, dim, TAG_FINALIZED_STATE);
         self.db
             .put(&finalized_key, &2i32.to_le_bytes())
             .map_err(|e| format!("put finalized: {e}"))?;
@@ -342,9 +375,14 @@ impl LevelDbProvider {
 /// Block entity LevelDB tag.
 const TAG_BLOCK_ENTITY: u8 = 0x31;
 
-/// Build a LevelDB key for block entity data in a chunk.
+/// Build a LevelDB key for block entity data in a chunk (overworld).
 pub fn block_entity_key(cx: i32, cz: i32) -> Vec<u8> {
     chunk_key(cx, cz, TAG_BLOCK_ENTITY)
+}
+
+/// Build a LevelDB key for block entity data in a chunk for a specific dimension.
+pub fn block_entity_key_dim(cx: i32, cz: i32, dim: i32) -> Vec<u8> {
+    chunk_key_dim(cx, cz, dim, TAG_BLOCK_ENTITY)
 }
 
 #[cfg(test)]
@@ -353,6 +391,44 @@ mod tests {
     use std::path::PathBuf;
 
     // ─── Key tests ──────────────────────────────────────────────────────
+
+    #[test]
+    fn chunk_key_dim_overworld_no_prefix() {
+        let key = chunk_key_dim(10, -5, 0, TAG_CHUNK_VERSION);
+        assert_eq!(key.len(), 9); // no dimension prefix for overworld
+        assert_eq!(&key[0..4], &10i32.to_le_bytes());
+        assert_eq!(&key[4..8], &(-5i32).to_le_bytes());
+        assert_eq!(key[8], TAG_CHUNK_VERSION);
+    }
+
+    #[test]
+    fn chunk_key_dim_nether_has_prefix() {
+        let key = chunk_key_dim(10, -5, 1, TAG_CHUNK_VERSION);
+        assert_eq!(key.len(), 13); // +4 bytes for dimension
+        assert_eq!(&key[0..4], &10i32.to_le_bytes());
+        assert_eq!(&key[4..8], &(-5i32).to_le_bytes());
+        assert_eq!(&key[8..12], &1i32.to_le_bytes());
+        assert_eq!(key[12], TAG_CHUNK_VERSION);
+    }
+
+    #[test]
+    fn chunk_key_dim_end_has_prefix() {
+        let key = chunk_key_dim(0, 0, 2, TAG_DATA_2D);
+        assert_eq!(key.len(), 13);
+        assert_eq!(&key[8..12], &2i32.to_le_bytes());
+        assert_eq!(key[12], TAG_DATA_2D);
+    }
+
+    #[test]
+    fn sub_chunk_key_dim_nether() {
+        let key = sub_chunk_key_dim(5, 3, 1, 2);
+        assert_eq!(key.len(), 14); // +4 for dimension
+        assert_eq!(&key[0..4], &5i32.to_le_bytes());
+        assert_eq!(&key[4..8], &3i32.to_le_bytes());
+        assert_eq!(&key[8..12], &1i32.to_le_bytes());
+        assert_eq!(key[12], TAG_SUB_CHUNK_PREFIX);
+        assert_eq!(key[13], 2);
+    }
 
     #[test]
     fn chunk_key_bytes() {
@@ -538,6 +614,55 @@ mod tests {
 
         // Non-existent chunk
         assert!(provider.load_chunk(99, 99).is_none());
+
+        std::fs::remove_dir_all(&path).ok();
+    }
+
+    #[test]
+    fn save_load_roundtrip_nether() {
+        let path = temp_db_path();
+        let mut provider = LevelDbProvider::open(&path).unwrap();
+
+        let mut column = ChunkColumn::new_air(3, 7, 10);
+        column.biomes[0] = 8; // nether wastes
+        column.sub_chunks[5].set_block(1, 1, 1, 99);
+        column.dirty = true;
+
+        provider.save_chunk_dim(&column, 1).unwrap();
+        provider.flush().unwrap();
+
+        // Loading as overworld should return None
+        assert!(provider.load_chunk_dim(3, 7, 0).is_none());
+
+        // Loading as nether should work
+        let loaded = provider.load_chunk_dim(3, 7, 1).unwrap();
+        assert_eq!(loaded.x, 3);
+        assert_eq!(loaded.z, 7);
+        assert_eq!(loaded.biomes[0], 8);
+        assert_eq!(loaded.sub_chunks[5].get_block(1, 1, 1), 99);
+
+        std::fs::remove_dir_all(&path).ok();
+    }
+
+    #[test]
+    fn save_load_roundtrip_end() {
+        let path = temp_db_path();
+        let mut provider = LevelDbProvider::open(&path).unwrap();
+
+        let mut column = ChunkColumn::new_air(-1, 2, 10);
+        column.sub_chunks[8].set_block(0, 0, 0, 200);
+        column.dirty = true;
+
+        provider.save_chunk_dim(&column, 2).unwrap();
+        provider.flush().unwrap();
+
+        // End dimension
+        let loaded = provider.load_chunk_dim(-1, 2, 2).unwrap();
+        assert_eq!(loaded.sub_chunks[8].get_block(0, 0, 0), 200);
+
+        // Same coords, different dimension = not found
+        assert!(provider.load_chunk_dim(-1, 2, 0).is_none());
+        assert!(provider.load_chunk_dim(-1, 2, 1).is_none());
 
         std::fs::remove_dir_all(&path).ok();
     }

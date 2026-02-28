@@ -350,18 +350,18 @@ Phase 5 : Polish             ██████████ (continu)
 - [x] RCON (Remote Console)
 - [x] Query protocol (pour les sites de monitoring)
 - [x] Serveur transfer (/transfer)
-- [ ] Multi-monde (Overworld + Nether + End avec portails)
+- [x] Multi-monde (Overworld + Nether + End avec portails)
 - [x] Ticking areas
 - [x] Console interactive (REPL)
 
 ### 5.4 — Anti-triche avancé
-- [ ] Mouvement server-authoritative complet
-- [ ] Detection de speed hack
-- [ ] Detection de fly
-- [ ] Detection de no-clip
-- [ ] Mining speed validation
-- [ ] Reach validation
-- [ ] Rate limiting des actions
+- [x] Mouvement server-authoritative complet
+- [x] Detection de speed hack
+- [x] Detection de fly
+- [x] Detection de no-clip
+- [x] Mining speed validation
+- [x] Reach validation
+- [x] Rate limiting des actions
 
 ### 5.5 — Compatibilité
 - [ ] Support multi-version protocole (dernières 2-3 versions)
