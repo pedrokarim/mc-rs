@@ -82,32 +82,71 @@ impl ConnectionHandler {
             conn.chunk_radius = radius;
         }
 
-        let mut count = 0u32;
+        // Phase 1: Identify missing chunks, load from LevelDB, collect those needing generation
+        let mut to_generate: Vec<(i32, i32)> = Vec::new();
         for cx in -radius..=radius {
             for cz in -radius..=radius {
-                // Load from disk or generate chunk if not already cached
-                if !self.world_chunks.contains_key(&(cx, cz)) {
-                    let column = if let Some(loaded) = self.chunk_storage.load_chunk(cx, cz) {
-                        loaded
-                    } else {
-                        let mut gen = self.generate_chunk(cx, cz);
-                        gen.dirty = true;
-                        gen
-                    };
-                    self.world_chunks.insert((cx, cz), column);
-
-                    // Load block entities for this chunk from LevelDB
+                if self.world_chunks.contains_key(&(cx, cz)) {
+                    continue;
+                }
+                if let Some(loaded) = self.chunk_storage.load_chunk(cx, cz) {
+                    self.world_chunks.insert((cx, cz), loaded);
                     let be_key = block_entity_key(cx, cz);
                     if let Some(be_data) = self.chunk_storage.get_raw(&be_key) {
                         let entries = block_entity::parse_block_entities(&be_data);
                         for ((bx, by, bz), data) in entries {
-                            self.block_entities.insert((bx, by, bz), data);
+                            self.insert_block_entity((bx, by, bz), data);
                         }
                     }
+                } else {
+                    to_generate.push((cx, cz));
                 }
+            }
+        }
 
-                let column = self.world_chunks.get(&(cx, cz)).unwrap();
-                let (sub_chunk_count, payload) = serialize_chunk_column(column);
+        // Phase 2: Generate missing chunks in parallel via spawn_blocking
+        if !to_generate.is_empty() {
+            let gen_overworld = self.overworld_generator.clone();
+            let gen_nether = self.nether_generator.clone();
+            let gen_end = self.end_generator.clone();
+            let flat_blocks = self.flat_world_blocks;
+
+            let handles: Vec<_> = to_generate
+                .iter()
+                .map(|&(cx, cz)| {
+                    let ow = gen_overworld.clone();
+                    let neth = gen_nether.clone();
+                    let end = gen_end.clone();
+                    let fb = flat_blocks;
+                    tokio::task::spawn_blocking(move || {
+                        let mut col = if let Some(ref g) = ow {
+                            g.generate_chunk(cx, cz)
+                        } else if let Some(ref g) = neth {
+                            g.generate_chunk(cx, cz)
+                        } else if let Some(ref g) = end {
+                            g.generate_chunk(cx, cz)
+                        } else {
+                            generate_flat_chunk(cx, cz, &fb)
+                        };
+                        col.dirty = true;
+                        (cx, cz, col)
+                    })
+                })
+                .collect();
+
+            for handle in handles {
+                if let Ok((cx, cz, column)) = handle.await {
+                    self.world_chunks.insert((cx, cz), column);
+                }
+            }
+        }
+
+        // Phase 3: Serialize and send all chunks
+        let mut count = 0u32;
+        for cx in -radius..=radius {
+            for cz in -radius..=radius {
+                let column = self.world_chunks.get_mut(&(cx, cz)).unwrap();
+                let (sub_chunk_count, payload) = serialize_chunk_column_cached(column);
 
                 let level_chunk = LevelChunk {
                     chunk_x: cx,
@@ -122,13 +161,8 @@ impl ConnectionHandler {
                     .await;
                 count += 1;
 
-                // Send block entity data for this chunk
-                let be_keys: Vec<(i32, i32, i32)> = self
-                    .block_entities
-                    .keys()
-                    .filter(|&&(bx, _, bz)| bx >> 4 == cx && bz >> 4 == cz)
-                    .cloned()
-                    .collect();
+                // Send block entity data for this chunk (O(1) via chunk index)
+                let be_keys = self.block_entities_in_chunk(cx, cz);
                 for (bx, by, bz) in be_keys {
                     if let Some(be) = self.block_entities.get(&(bx, by, bz)) {
                         let nbt = be.to_network_nbt(bx, by, bz);
@@ -208,70 +242,109 @@ impl ConnectionHandler {
             return;
         }
 
-        // Generate and send new chunks
+        // Phase 1: Load from LevelDB, collect those needing generation
+        let mut to_generate: Vec<(i32, i32)> = Vec::new();
         for &(cx, cz) in &to_send {
-            if !self.world_chunks.contains_key(&(cx, cz)) {
-                let column = if let Some(loaded) = self.chunk_storage.load_chunk(cx, cz) {
-                    loaded
-                } else {
-                    let mut gen = self.generate_chunk(cx, cz);
-                    gen.dirty = true;
-                    gen
-                };
-                self.world_chunks.insert((cx, cz), column);
-
-                // Load block entities for this chunk from LevelDB
+            if self.world_chunks.contains_key(&(cx, cz)) {
+                continue;
+            }
+            if let Some(loaded) = self.chunk_storage.load_chunk(cx, cz) {
+                self.world_chunks.insert((cx, cz), loaded);
                 let be_key = block_entity_key(cx, cz);
                 if let Some(be_data) = self.chunk_storage.get_raw(&be_key) {
                     let entries = block_entity::parse_block_entities(&be_data);
                     for ((bx, by, bz), data) in entries {
-                        self.block_entities.insert((bx, by, bz), data);
+                        self.insert_block_entity((bx, by, bz), data);
                     }
                 }
+            } else {
+                to_generate.push((cx, cz));
             }
+        }
 
-            let column = self.world_chunks.get(&(cx, cz)).unwrap();
-            let (sub_chunk_count, payload) = serialize_chunk_column(column);
+        // Phase 2: Generate missing chunks in parallel (limited to 4 concurrent)
+        if !to_generate.is_empty() {
+            let gen_overworld = self.overworld_generator.clone();
+            let gen_nether = self.nether_generator.clone();
+            let gen_end = self.end_generator.clone();
+            let flat_blocks = self.flat_world_blocks;
 
-            let level_chunk = LevelChunk {
-                chunk_x: cx,
-                chunk_z: cz,
-                dimension_id: self.dimension_id,
-                sub_chunk_count,
-                cache_enabled: false,
-                payload: Bytes::from(payload),
-            };
+            // Limit to 4 parallel generations per tick
+            let batch_size = to_generate.len().min(4);
+            let batch = &to_generate[..batch_size];
 
-            self.send_packet(addr, packets::id::LEVEL_CHUNK, &level_chunk)
-                .await;
-
-            // Send block entity data for this chunk
-            let be_keys: Vec<(i32, i32, i32)> = self
-                .block_entities
-                .keys()
-                .filter(|&&(bx, _, bz)| bx >> 4 == cx && bz >> 4 == cz)
-                .cloned()
+            let handles: Vec<_> = batch
+                .iter()
+                .map(|&(cx, cz)| {
+                    let ow = gen_overworld.clone();
+                    let neth = gen_nether.clone();
+                    let end = gen_end.clone();
+                    let fb = flat_blocks;
+                    tokio::task::spawn_blocking(move || {
+                        let mut col = if let Some(ref g) = ow {
+                            g.generate_chunk(cx, cz)
+                        } else if let Some(ref g) = neth {
+                            g.generate_chunk(cx, cz)
+                        } else if let Some(ref g) = end {
+                            g.generate_chunk(cx, cz)
+                        } else {
+                            generate_flat_chunk(cx, cz, &fb)
+                        };
+                        col.dirty = true;
+                        (cx, cz, col)
+                    })
+                })
                 .collect();
-            for (bx, by, bz) in be_keys {
-                if let Some(be) = self.block_entities.get(&(bx, by, bz)) {
-                    let nbt = be.to_network_nbt(bx, by, bz);
-                    self.send_packet(
-                        addr,
-                        packets::id::BLOCK_ACTOR_DATA,
-                        &BlockActorData {
-                            position: BlockPos::new(bx, by, bz),
-                            nbt_data: nbt,
-                        },
-                    )
+
+            for handle in handles {
+                if let Ok((cx, cz, column)) = handle.await {
+                    self.world_chunks.insert((cx, cz), column);
+                }
+            }
+        }
+
+        // Phase 3: Send all ready chunks
+        for &(cx, cz) in &to_send {
+            if let Some(column) = self.world_chunks.get_mut(&(cx, cz)) {
+                let (sub_chunk_count, payload) = serialize_chunk_column_cached(column);
+
+                let level_chunk = LevelChunk {
+                    chunk_x: cx,
+                    chunk_z: cz,
+                    dimension_id: self.dimension_id,
+                    sub_chunk_count,
+                    cache_enabled: false,
+                    payload: Bytes::from(payload),
+                };
+
+                self.send_packet(addr, packets::id::LEVEL_CHUNK, &level_chunk)
                     .await;
+
+                // Send block entity data for this chunk (O(1) via chunk index)
+                let be_keys = self.block_entities_in_chunk(cx, cz);
+                for (bx, by, bz) in be_keys {
+                    if let Some(be) = self.block_entities.get(&(bx, by, bz)) {
+                        let nbt = be.to_network_nbt(bx, by, bz);
+                        self.send_packet(
+                            addr,
+                            packets::id::BLOCK_ACTOR_DATA,
+                            &BlockActorData {
+                                position: BlockPos::new(bx, by, bz),
+                                nbt_data: nbt,
+                            },
+                        )
+                        .await;
+                    }
                 }
             }
         }
 
         // Mark as sent
         if let Some(conn) = self.connections.get_mut(&addr) {
-            for key in &to_send {
-                conn.sent_chunks.insert(*key);
+            for &key in &to_send {
+                if self.world_chunks.contains_key(&key) {
+                    conn.sent_chunks.insert(key);
+                }
             }
         }
 

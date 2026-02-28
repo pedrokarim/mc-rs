@@ -6,9 +6,10 @@ use crate::breeding;
 use crate::components::*;
 use crate::game_world::{GameEvent, OutgoingEvents, TickCounter};
 
-use super::behavior::{BehaviorContext, BehaviorOutput, BehaviorType, NearestPlayerInfo};
+use super::behavior::{BehaviorContext, BehaviorOutput, BehaviorType};
 use super::brain::BehaviorList;
 use super::pathfinding;
+use super::spatial::{SpatialEntry, SpatialGrid};
 
 /// Player snapshot for AI context.
 struct PlayerSnapshot {
@@ -89,12 +90,47 @@ pub fn system_ai_tick(world: &mut World) {
             .collect()
     };
 
-    // Step 3: Evaluate behaviors for each mob
+    // Step 3: Build spatial grid from snapshots
+    let mut grid = SpatialGrid::new();
+    for p in &players {
+        grid.insert(SpatialEntry {
+            runtime_id: p.runtime_id,
+            x: p.x,
+            y: p.y,
+            z: p.z,
+            mob_type: String::new(),
+            is_player: true,
+            held_item_name: p.held_item_name.clone(),
+            in_love: false,
+            is_baby: false,
+            entity_bits: p.entity.to_bits(),
+        });
+    }
+    for m in &mob_snapshots {
+        let eid = world.get::<EntityId>(m.entity);
+        let rid = eid.map(|e| e.runtime_id).unwrap_or(0);
+        grid.insert(SpatialEntry {
+            runtime_id: rid,
+            x: m.position.0,
+            y: m.position.1,
+            z: m.position.2,
+            mob_type: m.mob_type.clone(),
+            is_player: false,
+            held_item_name: String::new(),
+            in_love: m.in_love,
+            is_baby: m.is_baby,
+            entity_bits: m.entity.to_bits(),
+        });
+    }
+
+    // Step 4: Evaluate behaviors for each mob
     let mut actions: Vec<(Entity, BehaviorOutput, f32)> = Vec::new();
 
     for mob in &mob_snapshots {
-        // Find nearest player
-        let nearest_player = find_nearest_player(&players, mob.position.0, mob.position.2);
+        // Find nearest player via spatial grid
+        let nearest_player = grid
+            .query_nearest_player(mob.position.0, mob.position.2, 128.0)
+            .map(|(eb, rid, dist, pos)| (Entity::from_bits(eb), rid, dist, pos));
 
         // Resolve current target position
         let current_target = mob.target.and_then(|(tent, trid)| {
@@ -105,12 +141,26 @@ pub fn system_ai_tick(world: &mut World) {
         });
 
         // Find nearest player holding a valid tempt item for this mob type
-        let nearest_tempting_player =
-            find_nearest_tempting_player(&players, mob.position.0, mob.position.2, &mob.mob_type);
+        let nearest_tempting_player = grid
+            .query_nearest_tempting_player(
+                mob.position.0,
+                mob.position.2,
+                128.0,
+                &mob.mob_type,
+                &breeding::is_tempt_item,
+            )
+            .map(|(eb, rid, dist, pos)| (Entity::from_bits(eb), rid, dist, pos));
 
         // Find nearest same-type in-love mob (for breeding)
         let nearest_breed_partner = if mob.in_love && !mob.is_baby {
-            find_nearest_breed_partner(&mob_snapshots, mob.entity, &mob.mob_type, mob.position)
+            grid.query_nearest_breed_partner(
+                mob.position.0,
+                mob.position.2,
+                128.0,
+                &mob.mob_type,
+                mob.entity.to_bits(),
+            )
+            .map(|(eb, _rid, x, y, z)| (Entity::from_bits(eb), 0u64, x, y, z))
         } else {
             None
         };
@@ -238,59 +288,6 @@ pub fn system_ai_tick(world: &mut World) {
             }
         }
     }
-}
-
-/// Find the nearest player to a given XZ position.
-fn find_nearest_player(players: &[PlayerSnapshot], x: f32, z: f32) -> Option<NearestPlayerInfo> {
-    players
-        .iter()
-        .map(|p| {
-            let dist = pathfinding::distance_xz(x, z, p.x, p.z);
-            (p.entity, p.runtime_id, dist, (p.x, p.y, p.z))
-        })
-        .min_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
-}
-
-/// Find the nearest player holding a valid tempt item for this mob type.
-fn find_nearest_tempting_player(
-    players: &[PlayerSnapshot],
-    x: f32,
-    z: f32,
-    mob_type: &str,
-) -> Option<NearestPlayerInfo> {
-    players
-        .iter()
-        .filter(|p| breeding::is_tempt_item(mob_type, &p.held_item_name))
-        .map(|p| {
-            let dist = pathfinding::distance_xz(x, z, p.x, p.z);
-            (p.entity, p.runtime_id, dist, (p.x, p.y, p.z))
-        })
-        .min_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
-}
-
-/// Find the nearest same-type in-love mob (as a breed partner).
-fn find_nearest_breed_partner(
-    mobs: &[MobSnapshot],
-    self_entity: Entity,
-    mob_type: &str,
-    self_pos: (f32, f32, f32),
-) -> Option<(Entity, u64, f32, f32, f32)> {
-    let mut best: Option<(Entity, u64, f32, f32, f32, f32)> = None; // + distance
-    for m in mobs {
-        if m.entity == self_entity || m.mob_type != mob_type || !m.in_love || m.is_baby {
-            continue;
-        }
-        let dist = pathfinding::distance_xz(self_pos.0, self_pos.2, m.position.0, m.position.2);
-        if best.as_ref().map(|b| dist < b.5).unwrap_or(true) {
-            let eid = m.entity;
-            // We need runtime_id but MobSnapshot doesn't have it directly.
-            // We use a sentinel 0 — the actual rid is looked up in the ECS by the system.
-            // Actually, let's store runtime_id. But MobSnapshot doesn't have it.
-            // For BreedGoal we only need position to walk toward, not the runtime_id.
-            best = Some((eid, 0, m.position.0, m.position.1, m.position.2, dist));
-        }
-    }
-    best.map(|(e, rid, x, y, z, _)| (e, rid, x, y, z))
 }
 
 /// Evaluate all behaviors in a BehaviorList and produce a combined output.

@@ -130,29 +130,34 @@ pub fn system_despawn_far_mobs(world: &mut World, config: &SpawnConfig) {
         return;
     }
 
-    // Find mobs too far from all players
-    let mut to_despawn: Vec<(Entity, i64)> = Vec::new();
+    // Find mobs too far from all players (using distance-squared to avoid sqrt)
+    let despawn_dist_sq = config.despawn_distance * config.despawn_distance;
+    let mut to_despawn: Vec<(Entity, i64, u64)> = Vec::new();
     {
         let mut q =
             world.query_filtered::<(Entity, &EntityId, &Position), (With<Mob>, Without<Dead>)>();
         for (entity, eid, pos) in q.iter(world) {
-            let min_dist = player_positions
+            let min_dist_sq = player_positions
                 .iter()
                 .map(|(px, _, pz)| {
                     let dx = pos.x - px;
                     let dz = pos.z - pz;
-                    (dx * dx + dz * dz).sqrt()
+                    dx * dx + dz * dz
                 })
                 .fold(f32::MAX, f32::min);
 
-            if min_dist > config.despawn_distance {
-                to_despawn.push((entity, eid.unique_id));
+            if min_dist_sq > despawn_dist_sq {
+                to_despawn.push((entity, eid.unique_id, eid.runtime_id));
             }
         }
     }
 
     // Despawn and emit events
-    for (entity, unique_id) in to_despawn {
+    for (entity, unique_id, runtime_id) in to_despawn {
+        world
+            .resource_mut::<crate::game_world::MobIndex>()
+            .0
+            .remove(&runtime_id);
         world
             .resource_mut::<OutgoingEvents>()
             .events
@@ -212,38 +217,45 @@ fn spawn_mob_internal(
         .allocate();
     let runtime_id = entity_id as u64;
 
-    world.spawn((
-        EntityId {
-            unique_id: entity_id,
-            runtime_id,
-        },
-        Position { x, y, z },
-        Rotation {
-            pitch: 0.0,
-            yaw: 0.0,
-            head_yaw: 0.0,
-        },
-        Velocity {
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-        },
-        Health {
-            current: def.max_health,
-            max: def.max_health,
-        },
-        OnGround(false),
-        BoundingBox {
-            width: def.bb_width,
-            height: def.bb_height,
-        },
-        Mob,
-        MobType(type_id.to_string()),
-        AttackDamage(def.attack_damage),
-        LastDamageTick(None),
-        MovementSpeed(def.movement_speed),
-        BehaviorList::new(mob_behaviors::create_behaviors(type_id)),
-    ));
+    let entity = world
+        .spawn((
+            EntityId {
+                unique_id: entity_id,
+                runtime_id,
+            },
+            Position { x, y, z },
+            Rotation {
+                pitch: 0.0,
+                yaw: 0.0,
+                head_yaw: 0.0,
+            },
+            Velocity {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            Health {
+                current: def.max_health,
+                max: def.max_health,
+            },
+            OnGround(false),
+            BoundingBox {
+                width: def.bb_width,
+                height: def.bb_height,
+            },
+            Mob,
+            MobType(type_id.to_string()),
+            AttackDamage(def.attack_damage),
+            LastDamageTick(None),
+            MovementSpeed(def.movement_speed),
+            BehaviorList::new(mob_behaviors::create_behaviors(type_id)),
+        ))
+        .id();
+
+    world
+        .resource_mut::<crate::game_world::MobIndex>()
+        .0
+        .insert(runtime_id, entity);
 
     world
         .resource_mut::<OutgoingEvents>()

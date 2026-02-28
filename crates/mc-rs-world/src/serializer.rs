@@ -26,6 +26,19 @@ pub fn serialize_chunk_column(column: &ChunkColumn) -> (u32, Vec<u8>) {
     (OVERWORLD_SUB_CHUNK_COUNT as u32, buf.to_vec())
 }
 
+/// Serialize a chunk column, returning a cached result if available.
+///
+/// If the column has a cached payload, returns it directly.
+/// Otherwise, serializes, stores the result in the cache, and returns it.
+pub fn serialize_chunk_column_cached(column: &mut ChunkColumn) -> (u32, Vec<u8>) {
+    if let Some((count, ref payload)) = column.cached_payload {
+        return (count, payload.clone());
+    }
+    let result = serialize_chunk_column(column);
+    column.cached_payload = Some(result.clone());
+    result
+}
+
 /// Serialize a single sub-chunk to network format (Version 9).
 fn serialize_sub_chunk(buf: &mut BytesMut, sub_chunk: &SubChunk, y_index: i8) {
     buf.put_u8(9); // version
@@ -94,6 +107,7 @@ fn bits_per_block_for_palette(palette_size: usize) -> u8 {
 ///
 /// Each of 24 sections encodes biomes at 4x4x4 resolution (64 entries).
 /// Since our biome data is 2D, all 4 Y levels in a section share the same biome.
+/// All 24 sections are identical, so we compute the section data once and repeat it.
 fn serialize_biome_data(buf: &mut BytesMut, biomes: &[u8; 256]) {
     // Build a 4x4 biome grid (downsampled from 16x16 to 4x4 by taking every 4th column).
     // Indexed as [section_x * 4 + section_z] where section_x/z are in 0..4.
@@ -110,54 +124,59 @@ fn serialize_biome_data(buf: &mut BytesMut, biomes: &[u8; 256]) {
     // Check if all 16 entries are the same biome (common case)
     let all_same = biome_4x4.iter().all(|&b| b == biome_4x4[0]);
 
-    for _ in 0..OVERWORLD_SUB_CHUNK_COUNT {
-        if all_same {
-            // Single-biome section: header = 0x00 (0 bits = single value)
-            buf.put_u8(0x00);
-            write_zigzag_varint(buf, biome_4x4[0] as i32);
-        } else {
-            // Multi-biome section: palette-based encoding for 64 entries.
-            // Build palette from the 4x4 grid.
-            let mut palette: Vec<u8> = Vec::new();
-            for &b in &biome_4x4 {
-                if !palette.contains(&b) {
-                    palette.push(b);
-                }
-            }
+    // Build section data once (all 24 sections are identical since biomes are 2D)
+    let mut section_buf = BytesMut::new();
 
-            let bpe = bits_per_entry_for_biome_palette(palette.len());
-            // Biome storage header: (bpe << 1) — no runtime flag for biomes
-            buf.put_u8(bpe << 1);
-
-            // Pack 64 entries into u32 words (4x4x4, all 4 Y levels have same biome as XZ)
-            let entries_per_word = 32 / bpe as usize;
-            let word_count = 64_usize.div_ceil(entries_per_word);
-
-            for word_idx in 0..word_count {
-                let mut word: u32 = 0;
-                for slot in 0..entries_per_word {
-                    let entry_idx = word_idx * entries_per_word + slot;
-                    if entry_idx < 64 {
-                        // entry_idx maps to (y, z, x) in 4x4x4:
-                        // y = entry_idx / 16, z = (entry_idx / 4) % 4, x = entry_idx % 4
-                        let sx = entry_idx % 4;
-                        let sz = (entry_idx / 4) % 4;
-                        // y doesn't matter — same biome at all Y levels
-                        let biome_id = biome_4x4[sx * 4 + sz];
-                        let palette_idx =
-                            palette.iter().position(|&b| b == biome_id).unwrap() as u32;
-                        word |= palette_idx << (bpe as u32 * slot as u32);
-                    }
-                }
-                buf.put_u32_le(word);
-            }
-
-            // Palette
-            write_zigzag_varint(buf, palette.len() as i32);
-            for &biome_id in &palette {
-                write_zigzag_varint(buf, biome_id as i32);
+    if all_same {
+        // Single-biome section: header = 0x00 (0 bits = single value)
+        section_buf.put_u8(0x00);
+        write_zigzag_varint(&mut section_buf, biome_4x4[0] as i32);
+    } else {
+        // Multi-biome section: palette-based encoding for 64 entries.
+        // Build palette using O(1) lookup array instead of Vec::contains().
+        let mut biome_to_palette = [0xFFu8; 256];
+        let mut palette: Vec<u8> = Vec::new();
+        for &b in &biome_4x4 {
+            if biome_to_palette[b as usize] == 0xFF {
+                biome_to_palette[b as usize] = palette.len() as u8;
+                palette.push(b);
             }
         }
+
+        let bpe = bits_per_entry_for_biome_palette(palette.len());
+        // Biome storage header: (bpe << 1) — no runtime flag for biomes
+        section_buf.put_u8(bpe << 1);
+
+        // Pack 64 entries into u32 words (4x4x4, all 4 Y levels have same biome as XZ)
+        let entries_per_word = 32 / bpe as usize;
+        let word_count = 64_usize.div_ceil(entries_per_word);
+
+        for word_idx in 0..word_count {
+            let mut word: u32 = 0;
+            for slot in 0..entries_per_word {
+                let entry_idx = word_idx * entries_per_word + slot;
+                if entry_idx < 64 {
+                    let sx = entry_idx % 4;
+                    let sz = (entry_idx / 4) % 4;
+                    let biome_id = biome_4x4[sx * 4 + sz];
+                    let palette_idx = biome_to_palette[biome_id as usize] as u32;
+                    word |= palette_idx << (bpe as u32 * slot as u32);
+                }
+            }
+            section_buf.put_u32_le(word);
+        }
+
+        // Palette
+        write_zigzag_varint(&mut section_buf, palette.len() as i32);
+        for &biome_id in &palette {
+            write_zigzag_varint(&mut section_buf, biome_id as i32);
+        }
+    }
+
+    // Write the same section data 24 times
+    let section_bytes = section_buf.freeze();
+    for _ in 0..OVERWORLD_SUB_CHUNK_COUNT {
+        buf.extend_from_slice(&section_bytes);
     }
 }
 
@@ -313,10 +332,87 @@ mod tests {
     }
 
     #[test]
+    fn multi_biome_all_sections_identical() {
+        // All 24 sections should be byte-identical since biomes are 2D
+        let mut biomes = [1u8; 256];
+        for z in 0..16 {
+            for x in 8..16 {
+                biomes[x * 16 + z] = 2;
+            }
+        }
+        let mut buf = BytesMut::new();
+        serialize_biome_data(&mut buf, &biomes);
+        // Find section size (total / 24)
+        assert_eq!(buf.len() % 24, 0, "biome data should be 24 equal sections");
+        let section_size = buf.len() / 24;
+        let first_section = &buf[..section_size];
+        for i in 1..24 {
+            let section = &buf[i * section_size..(i + 1) * section_size];
+            assert_eq!(first_section, section, "section {i} should match section 0");
+        }
+    }
+
+    #[test]
     fn biome_palette_bits() {
         assert_eq!(bits_per_entry_for_biome_palette(1), 0);
         assert_eq!(bits_per_entry_for_biome_palette(2), 1);
         assert_eq!(bits_per_entry_for_biome_palette(4), 2);
         assert_eq!(bits_per_entry_for_biome_palette(8), 3);
+    }
+
+    #[test]
+    fn cached_payload_returns_same_result() {
+        use crate::block_hash::FlatWorldBlocks;
+        use crate::flat_generator::generate_flat_chunk;
+
+        let blocks = FlatWorldBlocks::compute();
+        let mut column = generate_flat_chunk(0, 0, &blocks);
+
+        // First call: no cache, computes and stores
+        assert!(column.cached_payload.is_none());
+        let (count1, payload1) = serialize_chunk_column_cached(&mut column);
+        assert!(column.cached_payload.is_some());
+
+        // Second call: returns cached result
+        let (count2, payload2) = serialize_chunk_column_cached(&mut column);
+        assert_eq!(count1, count2);
+        assert_eq!(payload1, payload2);
+    }
+
+    #[test]
+    fn cache_invalidated_on_block_change() {
+        use crate::block_hash::FlatWorldBlocks;
+        use crate::flat_generator::generate_flat_chunk;
+
+        let blocks = FlatWorldBlocks::compute();
+        let mut column = generate_flat_chunk(0, 0, &blocks);
+
+        // Populate cache
+        let (_count, payload_before) = serialize_chunk_column_cached(&mut column);
+        assert!(column.cached_payload.is_some());
+
+        // Modify block → invalidates cache
+        column.set_block_world(0, 0, 0, 999);
+        assert!(column.cached_payload.is_none());
+
+        // Re-serialize produces different payload
+        let (_count, payload_after) = serialize_chunk_column_cached(&mut column);
+        assert_ne!(payload_before, payload_after);
+        assert!(column.cached_payload.is_some());
+    }
+
+    #[test]
+    fn cached_matches_uncached() {
+        use crate::block_hash::FlatWorldBlocks;
+        use crate::flat_generator::generate_flat_chunk;
+
+        let blocks = FlatWorldBlocks::compute();
+        let mut column = generate_flat_chunk(0, 0, &blocks);
+
+        let (count_uncached, payload_uncached) = serialize_chunk_column(&column);
+        let (count_cached, payload_cached) = serialize_chunk_column_cached(&mut column);
+
+        assert_eq!(count_uncached, count_cached);
+        assert_eq!(payload_uncached, payload_cached);
     }
 }

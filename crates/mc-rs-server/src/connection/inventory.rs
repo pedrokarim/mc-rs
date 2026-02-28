@@ -634,7 +634,7 @@ impl ConnectionHandler {
                 self.update_redstone_from(pos.x, pos.y, pos.z).await;
 
                 // Remove block entity if any
-                self.block_entities.remove(&(pos.x, pos.y, pos.z));
+                self.remove_block_entity((pos.x, pos.y, pos.z));
                 // Close any open containers at this position
                 self.close_container_at(pos).await;
 
@@ -811,10 +811,12 @@ impl ConnectionHandler {
                     )
                     .await;
                 } else if self.block_entity_hashes.is_chest(final_rid) {
-                    self.block_entities
-                        .insert((target.x, target.y, target.z), BlockEntityData::new_chest());
+                    self.insert_block_entity(
+                        (target.x, target.y, target.z),
+                        BlockEntityData::new_chest(),
+                    );
                 } else if self.block_entity_hashes.is_enchanting_table(final_rid) {
-                    self.block_entities.insert(
+                    self.insert_block_entity(
                         (target.x, target.y, target.z),
                         BlockEntityData::new_enchanting_table(),
                     );
@@ -827,7 +829,7 @@ impl ConnectionHandler {
                         }
                         mc_rs_world::block_hash::FurnaceVariant::Smoker => FurnaceType::Smoker,
                     };
-                    self.block_entities.insert(
+                    self.insert_block_entity(
                         (target.x, target.y, target.z),
                         BlockEntityData::new_furnace(ft),
                     );

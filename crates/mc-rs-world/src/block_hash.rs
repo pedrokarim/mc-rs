@@ -172,7 +172,7 @@ fn serialize_block_state_nbt_with_props(name: &str, props: &[(&str, StateValue)]
 }
 
 /// Pre-computed block runtime IDs for the flat world.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct FlatWorldBlocks {
     pub air: u32,
     pub bedrock: u32,

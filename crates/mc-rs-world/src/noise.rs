@@ -93,6 +93,16 @@ impl PerlinNoise {
         lerp(v, x1, x2)
     }
 
+    /// Compute 2D Perlin noise for a batch of coordinates.
+    ///
+    /// Better cache locality for the permutation table compared to individual calls.
+    pub fn noise_2d_batch(&self, coords: &[(f64, f64)], results: &mut [f64]) {
+        debug_assert_eq!(coords.len(), results.len());
+        for (i, &(x, z)) in coords.iter().enumerate() {
+            results[i] = self.noise_2d(x, z);
+        }
+    }
+
     /// 3D Perlin noise at (x, y, z). Returns a value in approximately [-1, 1].
     pub fn noise_3d(&self, x: f64, y: f64, z: f64) -> f64 {
         let xi = x.floor() as i32;
@@ -184,6 +194,49 @@ impl OctaveNoise {
         value / max_amplitude
     }
 
+    /// Batch sample 2D octave noise for multiple coordinates.
+    ///
+    /// Iterates per-octave (better cache locality for perm table) rather than per-coordinate.
+    pub fn sample_2d_batch(&self, coords: &[(f64, f64)], results: &mut [f64]) {
+        debug_assert_eq!(coords.len(), results.len());
+        let n = coords.len();
+
+        // Zero out results
+        for r in results.iter_mut() {
+            *r = 0.0;
+        }
+
+        let mut amplitude = 1.0;
+        let mut frequency = 1.0;
+        let mut max_amplitude = 0.0;
+
+        // Temporary buffer for per-octave results
+        let mut octave_buf = vec![0.0f64; n];
+
+        for octave in &self.octaves {
+            // Build scaled coordinates for this octave
+            let scaled: Vec<(f64, f64)> = coords
+                .iter()
+                .map(|&(x, z)| (x * frequency, z * frequency))
+                .collect();
+
+            octave.noise_2d_batch(&scaled, &mut octave_buf);
+
+            for i in 0..n {
+                results[i] += octave_buf[i] * amplitude;
+            }
+
+            max_amplitude += amplitude;
+            amplitude *= self.persistence;
+            frequency *= self.lacunarity;
+        }
+
+        // Normalize
+        for r in results.iter_mut() {
+            *r /= max_amplitude;
+        }
+    }
+
     /// Sample 3D octave noise. Returns a value roughly in [-1, 1].
     pub fn sample_3d(&self, x: f64, y: f64, z: f64) -> f64 {
         let mut value = 0.0;
@@ -272,6 +325,52 @@ mod tests {
             let x = i as f64 * 0.1;
             let z = i as f64 * 0.2;
             assert_eq!(o1.sample_2d(x, z), o2.sample_2d(x, z));
+        }
+    }
+
+    #[test]
+    fn batch_matches_individual() {
+        let n = PerlinNoise::new(42);
+        let coords: Vec<(f64, f64)> = (0..256)
+            .map(|i| {
+                let x = (i % 16) as f64 * 0.01 + 3.5;
+                let z = (i / 16) as f64 * 0.01 + 7.2;
+                (x, z)
+            })
+            .collect();
+        let mut batch_results = vec![0.0; 256];
+        n.noise_2d_batch(&coords, &mut batch_results);
+
+        for (i, &(x, z)) in coords.iter().enumerate() {
+            let individual = n.noise_2d(x, z);
+            assert!(
+                (batch_results[i] - individual).abs() < 1e-12,
+                "Mismatch at {i}: batch={} individual={individual}",
+                batch_results[i]
+            );
+        }
+    }
+
+    #[test]
+    fn octave_batch_matches_individual() {
+        let o = OctaveNoise::new(42, 6, 2.0, 0.5);
+        let coords: Vec<(f64, f64)> = (0..256)
+            .map(|i| {
+                let x = (i % 16) as f64 * 0.01 + 3.5;
+                let z = (i / 16) as f64 * 0.01 + 7.2;
+                (x, z)
+            })
+            .collect();
+        let mut batch_results = vec![0.0; 256];
+        o.sample_2d_batch(&coords, &mut batch_results);
+
+        for (i, &(x, z)) in coords.iter().enumerate() {
+            let individual = o.sample_2d(x, z);
+            assert!(
+                (batch_results[i] - individual).abs() < 1e-10,
+                "Mismatch at {i}: batch={} individual={individual}",
+                batch_results[i]
+            );
         }
     }
 

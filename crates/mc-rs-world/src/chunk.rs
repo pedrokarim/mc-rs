@@ -23,6 +23,9 @@ pub struct ChunkColumn {
     pub biomes: [u8; 256],
     /// Whether this chunk has unsaved modifications.
     pub dirty: bool,
+    /// Cached serialized payload: `(sub_chunk_count, payload_bytes)`.
+    /// Set to `None` when the chunk is modified.
+    pub cached_payload: Option<(u32, Vec<u8>)>,
 }
 
 impl ChunkColumn {
@@ -34,6 +37,7 @@ impl ChunkColumn {
             sub_chunks: std::array::from_fn(|_| SubChunk::new_single(air_id)),
             biomes: [0; 256],
             dirty: false,
+            cached_payload: None,
         }
     }
 
@@ -53,6 +57,7 @@ impl ChunkColumn {
         let sub_index = shifted as usize / 16;
         let local_y = shifted as usize % 16;
         self.sub_chunks[sub_index].set_block(local_x, local_y, local_z, runtime_id);
+        self.cached_payload = None;
         true
     }
 

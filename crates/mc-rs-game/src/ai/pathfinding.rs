@@ -53,6 +53,14 @@ pub fn distance_xz(x1: f32, z1: f32, x2: f32, z2: f32) -> f32 {
     (dx * dx + dz * dz).sqrt()
 }
 
+/// Squared distance between two positions in the XZ plane.
+/// Use this instead of `distance_xz()` when only comparing distances (avoids sqrt).
+pub fn distance_xz_sq(x1: f32, z1: f32, x2: f32, z2: f32) -> f32 {
+    let dx = x2 - x1;
+    let dz = z2 - z1;
+    dx * dx + dz * dz
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -118,6 +126,14 @@ mod tests {
     fn distance_xz_basic() {
         assert!((distance_xz(0.0, 0.0, 3.0, 4.0) - 5.0).abs() < 0.001);
         assert!((distance_xz(1.0, 1.0, 1.0, 1.0) - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn distance_xz_sq_basic() {
+        assert!((distance_xz_sq(0.0, 0.0, 3.0, 4.0) - 25.0).abs() < 0.001);
+        assert!((distance_xz_sq(1.0, 1.0, 1.0, 1.0) - 0.0).abs() < 0.001);
+        // Ordering preserved: closer point has smaller distance_sq
+        assert!(distance_xz_sq(0.0, 0.0, 1.0, 0.0) < distance_xz_sq(0.0, 0.0, 2.0, 0.0));
     }
 
     #[test]

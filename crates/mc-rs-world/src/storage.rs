@@ -282,6 +282,7 @@ impl LevelDbProvider {
             sub_chunks,
             biomes,
             dirty: false,
+            cached_payload: None,
         })
     }
 

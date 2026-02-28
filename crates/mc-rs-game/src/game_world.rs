@@ -1,5 +1,6 @@
 //! ECS game world: bevy_ecs World, entity management, tick systems, and event bus.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use bevy_ecs::prelude::*;
@@ -24,6 +25,14 @@ pub struct OutgoingEvents {
 /// Global tick counter (incremented every 50 ms).
 #[derive(Resource, Default)]
 pub struct TickCounter(pub u64);
+
+/// O(1) mob lookup by runtime_id.
+#[derive(Resource, Default)]
+pub struct MobIndex(pub HashMap<u64, Entity>);
+
+/// O(1) player lookup by unique_id.
+#[derive(Resource, Default)]
+pub struct PlayerIndex(pub HashMap<i64, Entity>);
 
 /// Thread-safe entity ID allocator (shared by mobs and players).
 #[derive(Resource)]
@@ -138,6 +147,8 @@ impl GameWorld {
         world.insert_resource(OutgoingEvents::default());
         world.insert_resource(TickCounter::default());
         world.insert_resource(EntityIdAllocator::new(starting_entity_id));
+        world.insert_resource(MobIndex::default());
+        world.insert_resource(PlayerIndex::default());
 
         Self {
             world,
@@ -298,39 +309,47 @@ impl GameWorld {
         let entity_id = self.world.resource::<EntityIdAllocator>().allocate();
         let runtime_id = entity_id as u64;
 
-        self.world.spawn((
-            EntityId {
-                unique_id: entity_id,
-                runtime_id,
-            },
-            Position { x, y, z },
-            Rotation {
-                pitch: 0.0,
-                yaw: 0.0,
-                head_yaw: 0.0,
-            },
-            Velocity {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            Health {
-                current: def.max_health,
-                max: def.max_health,
-            },
-            OnGround(false),
-            BoundingBox {
-                width: def.bb_width,
-                height: def.bb_height,
-            },
-            Mob,
-            MobType(type_id.to_string()),
-            AttackDamage(def.attack_damage),
-            LastDamageTick(None),
-            LastAttacker(None),
-            MovementSpeed(def.movement_speed),
-            BehaviorList::new(mob_behaviors::create_behaviors(type_id)),
-        ));
+        let entity = self
+            .world
+            .spawn((
+                EntityId {
+                    unique_id: entity_id,
+                    runtime_id,
+                },
+                Position { x, y, z },
+                Rotation {
+                    pitch: 0.0,
+                    yaw: 0.0,
+                    head_yaw: 0.0,
+                },
+                Velocity {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+                Health {
+                    current: def.max_health,
+                    max: def.max_health,
+                },
+                OnGround(false),
+                BoundingBox {
+                    width: def.bb_width,
+                    height: def.bb_height,
+                },
+                Mob,
+                MobType(type_id.to_string()),
+                AttackDamage(def.attack_damage),
+                LastDamageTick(None),
+                LastAttacker(None),
+                MovementSpeed(def.movement_speed),
+                BehaviorList::new(mob_behaviors::create_behaviors(type_id)),
+            ))
+            .id();
+
+        self.world
+            .resource_mut::<MobIndex>()
+            .0
+            .insert(runtime_id, entity);
 
         self.world
             .resource_mut::<OutgoingEvents>()
@@ -357,40 +376,48 @@ impl GameWorld {
         let runtime_id = entity_id as u64;
         let current_tick = self.world.resource::<TickCounter>().0;
 
-        self.world.spawn((
-            EntityId {
-                unique_id: entity_id,
-                runtime_id,
-            },
-            Position { x, y, z },
-            Rotation {
-                pitch: 0.0,
-                yaw: 0.0,
-                head_yaw: 0.0,
-            },
-            Velocity {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            Health {
-                current: def.max_health,
-                max: def.max_health,
-            },
-            OnGround(false),
-            BoundingBox {
-                width: def.bb_width,
-                height: def.bb_height,
-            },
-            Mob,
-            MobType(type_id.to_string()),
-            AttackDamage(def.attack_damage),
-            LastDamageTick(None),
-            LastAttacker(None),
-            MovementSpeed(def.movement_speed),
-            BehaviorList::new(mob_behaviors::create_behaviors(type_id)),
-            Baby(current_tick),
-        ));
+        let entity = self
+            .world
+            .spawn((
+                EntityId {
+                    unique_id: entity_id,
+                    runtime_id,
+                },
+                Position { x, y, z },
+                Rotation {
+                    pitch: 0.0,
+                    yaw: 0.0,
+                    head_yaw: 0.0,
+                },
+                Velocity {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+                Health {
+                    current: def.max_health,
+                    max: def.max_health,
+                },
+                OnGround(false),
+                BoundingBox {
+                    width: def.bb_width,
+                    height: def.bb_height,
+                },
+                Mob,
+                MobType(type_id.to_string()),
+                AttackDamage(def.attack_damage),
+                LastDamageTick(None),
+                LastAttacker(None),
+                MovementSpeed(def.movement_speed),
+                BehaviorList::new(mob_behaviors::create_behaviors(type_id)),
+                Baby(current_tick),
+            ))
+            .id();
+
+        self.world
+            .resource_mut::<MobIndex>()
+            .0
+            .insert(runtime_id, entity);
 
         self.world
             .resource_mut::<OutgoingEvents>()
@@ -501,13 +528,9 @@ impl GameWorld {
 
     /// Get a mob's position by runtime_id.
     pub fn mob_position(&mut self, runtime_id: u64) -> Option<(f32, f32, f32)> {
-        let mut query = self.world.query::<(&EntityId, &Position)>();
-        for (eid, pos) in query.iter(&self.world) {
-            if eid.runtime_id == runtime_id {
-                return Some((pos.x, pos.y, pos.z));
-            }
-        }
-        None
+        let entity = self.find_mob_entity(runtime_id)?;
+        let pos = self.world.get::<Position>(entity)?;
+        Some((pos.x, pos.y, pos.z))
     }
 
     /// Remove a mob by runtime_id. Returns `true` if found and removed.
@@ -522,6 +545,7 @@ impl GameWorld {
                 .resource_mut::<OutgoingEvents>()
                 .events
                 .push(GameEvent::EntityRemoved { unique_id });
+            self.world.resource_mut::<MobIndex>().0.remove(&runtime_id);
             self.world.despawn(entity);
             true
         } else {
@@ -562,16 +586,20 @@ impl GameWorld {
 
     /// Update the ECS mirror position for a player.
     pub fn update_player_position(&mut self, unique_id: i64, x: f32, y: f32, z: f32) {
-        let mut query = self
+        let entity = match self
             .world
-            .query_filtered::<(&EntityId, &mut Position), With<Player>>();
-        for (eid, mut pos) in query.iter_mut(&mut self.world) {
-            if eid.unique_id == unique_id {
-                pos.x = x;
-                pos.y = y;
-                pos.z = z;
-                return;
-            }
+            .resource::<PlayerIndex>()
+            .0
+            .get(&unique_id)
+            .copied()
+        {
+            Some(e) => e,
+            None => return,
+        };
+        if let Some(mut pos) = self.world.get_mut::<Position>(entity) {
+            pos.x = x;
+            pos.y = y;
+            pos.z = z;
         }
     }
 
@@ -583,61 +611,59 @@ impl GameWorld {
         position: (f32, f32, f32),
         addr: std::net::SocketAddr,
     ) {
-        self.world.spawn((
-            EntityId {
-                unique_id,
-                runtime_id,
-            },
-            Position {
-                x: position.0,
-                y: position.1,
-                z: position.2,
-            },
-            Health {
-                current: 20.0,
-                max: 20.0,
-            },
-            Player,
-            NetworkAddr(addr),
-        ));
+        let entity = self
+            .world
+            .spawn((
+                EntityId {
+                    unique_id,
+                    runtime_id,
+                },
+                Position {
+                    x: position.0,
+                    y: position.1,
+                    z: position.2,
+                },
+                Health {
+                    current: 20.0,
+                    max: 20.0,
+                },
+                Player,
+                NetworkAddr(addr),
+            ))
+            .id();
+        self.world
+            .resource_mut::<PlayerIndex>()
+            .0
+            .insert(unique_id, entity);
     }
 
     /// Despawn the ECS mirror entity for a player by unique_id.
     pub fn despawn_player(&mut self, unique_id: i64) {
-        let mut to_despawn = None;
-        let mut query = self
+        if let Some(entity) = self
             .world
-            .query_filtered::<(Entity, &EntityId), With<Player>>();
-        for (entity, eid) in query.iter(&self.world) {
-            if eid.unique_id == unique_id {
-                to_despawn = Some(entity);
-                break;
-            }
-        }
-        if let Some(entity) = to_despawn {
+            .resource_mut::<PlayerIndex>()
+            .0
+            .remove(&unique_id)
+        {
             self.world.despawn(entity);
         }
     }
 
     /// Update the held item name for a player ECS mirror entity.
     pub fn update_player_held_item(&mut self, unique_id: i64, item_name: String) {
-        let mut target = None;
+        let entity = match self
+            .world
+            .resource::<PlayerIndex>()
+            .0
+            .get(&unique_id)
+            .copied()
         {
-            let mut query = self
-                .world
-                .query_filtered::<(Entity, &EntityId), With<Player>>();
-            for (entity, eid) in query.iter(&self.world) {
-                if eid.unique_id == unique_id {
-                    target = Some(entity);
-                    break;
-                }
-            }
-        }
-        if let Some(entity) = target {
-            self.world
-                .entity_mut(entity)
-                .insert(HeldItemName(item_name));
-        }
+            Some(e) => e,
+            None => return,
+        };
+        self.world
+            .entity_mut(entity)
+            .insert(HeldItemName(item_name));
     }
 
     /// Set a mob as "in love". Returns false if mob not found or on cooldown or baby.
@@ -693,17 +719,13 @@ impl GameWorld {
         self.world.get::<Baby>(entity).is_some()
     }
 
-    /// Find a mob entity by runtime_id.
+    /// Find a mob entity by runtime_id (O(1) via MobIndex).
     fn find_mob_entity(&mut self, runtime_id: u64) -> Option<Entity> {
-        let mut query = self
-            .world
-            .query_filtered::<(Entity, &EntityId), With<Mob>>();
-        for (entity, eid) in query.iter(&self.world) {
-            if eid.runtime_id == runtime_id {
-                return Some(entity);
-            }
-        }
-        None
+        self.world
+            .resource::<MobIndex>()
+            .0
+            .get(&runtime_id)
+            .copied()
     }
 }
 
@@ -768,12 +790,14 @@ fn system_collect_mob_moves(world: &mut World) {
 
 /// Remove dead entities after their death events have been emitted.
 fn system_cleanup_dead(world: &mut World) {
-    let dead_entities: Vec<Entity> = world
-        .query_filtered::<Entity, With<Dead>>()
+    let dead_entities: Vec<(Entity, u64)> = world
+        .query_filtered::<(Entity, &EntityId), With<Dead>>()
         .iter(world)
+        .map(|(e, eid)| (e, eid.runtime_id))
         .collect();
-    for entity in dead_entities {
-        world.despawn(entity);
+    for (entity, runtime_id) in &dead_entities {
+        world.resource_mut::<MobIndex>().0.remove(runtime_id);
+        world.despawn(*entity);
     }
 }
 
@@ -997,5 +1021,61 @@ mod tests {
         gw.tick();
 
         assert!(!gw.is_mob_baby(rid));
+    }
+
+    #[test]
+    fn mob_index_insert_and_lookup() {
+        let mut gw = GameWorld::new(1);
+        let (_, rid) = gw.spawn_mob("minecraft:zombie", 0.0, 4.0, 0.0).unwrap();
+
+        // MobIndex should contain the entity
+        assert!(gw.world.resource::<MobIndex>().0.contains_key(&rid));
+        assert!(gw.find_mob_entity(rid).is_some());
+    }
+
+    #[test]
+    fn mob_index_remove_on_death() {
+        let mut gw = GameWorld::new(1);
+        let (_, rid) = gw.spawn_mob("minecraft:chicken", 0.0, 4.0, 0.0).unwrap();
+        gw.drain_events();
+
+        // Kill it
+        gw.damage_mob(rid, 100.0, 0, None);
+        // Tick to trigger cleanup
+        gw.tick();
+
+        // MobIndex should no longer contain the entity
+        assert!(!gw.world.resource::<MobIndex>().0.contains_key(&rid));
+        assert!(gw.find_mob_entity(rid).is_none());
+    }
+
+    #[test]
+    fn player_index_insert_and_lookup() {
+        let mut gw = GameWorld::new(1);
+        let addr: std::net::SocketAddr = "127.0.0.1:19132".parse().unwrap();
+        gw.spawn_player(42, 42, (0.0, 5.0, 0.0), addr);
+
+        assert!(gw.world.resource::<PlayerIndex>().0.contains_key(&42));
+    }
+
+    #[test]
+    fn player_index_remove_on_despawn() {
+        let mut gw = GameWorld::new(1);
+        let addr: std::net::SocketAddr = "127.0.0.1:19132".parse().unwrap();
+        gw.spawn_player(42, 42, (0.0, 5.0, 0.0), addr);
+
+        gw.despawn_player(42);
+
+        assert!(!gw.world.resource::<PlayerIndex>().0.contains_key(&42));
+    }
+
+    #[test]
+    fn mob_index_remove_on_explicit_remove() {
+        let mut gw = GameWorld::new(1);
+        let (_, rid) = gw.spawn_mob("minecraft:zombie", 0.0, 4.0, 0.0).unwrap();
+        gw.drain_events();
+
+        assert!(gw.remove_mob(rid));
+        assert!(!gw.world.resource::<MobIndex>().0.contains_key(&rid));
     }
 }

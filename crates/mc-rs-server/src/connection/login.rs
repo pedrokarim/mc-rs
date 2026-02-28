@@ -47,6 +47,7 @@ impl ConnectionHandler {
                 next_window_id: 1,
                 enchant_seed: rand::thread_rng().gen(),
                 pending_enchant_options: Vec::new(),
+                tags: HashSet::new(),
             },
         );
 
@@ -61,6 +62,7 @@ impl ConnectionHandler {
             ),
             addr,
         );
+        self.runtime_id_to_addr.insert(entity_id as u64, addr);
     }
 
     pub(super) async fn handle_session_disconnected(&mut self, addr: SocketAddr) {
@@ -109,6 +111,7 @@ impl ConnectionHandler {
         self.cleanup_player_projectiles(addr).await;
 
         // Remove the connection
+        self.runtime_id_to_addr.remove(&(entity_unique_id as u64));
         self.connections.remove(&addr);
 
         // Despawn the ECS mirror entity for this player

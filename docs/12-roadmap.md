@@ -295,7 +295,7 @@ Phase 5 : Polish             ██████████ (continu)
 - [x] Guest exports (on_enable, on_event, on_task, on_command, get_info)
 - [x] Manifest plugin.toml (fuel limits, memory pages)
 - [x] Sandbox (fuel metering par event/command/task, memory limits)
-- [ ] Hot-reload (/reload command)
+- [x] Hot-reload (/reload command)
 
 ### 4.3 — Scripts Lua
 - [x] Runtime mlua (Lua 5.4 vendored)
@@ -303,7 +303,7 @@ Phase 5 : Polish             ██████████ (continu)
 - [x] Sandbox Lua (suppression os, io, debug, loadfile, dofile + memory limit)
 - [x] Commandes Lua (mc.register_command + on_command routing)
 - [x] Action queue pattern (LuaAction enum, flush via ServerApi)
-- [ ] Hot-reload
+- [x] Hot-reload
 
 ### 4.4 — Behavior Packs (Bedrock addons)
 - [x] New crate `mc-rs-behavior-pack`: JSON parsing for manifest, entity, item, block, recipe, loot_table, loader (17 tests)
@@ -330,29 +330,29 @@ Phase 5 : Polish             ██████████ (continu)
 ## Phase 5 : Polish et fonctionnalités avancées
 
 ### 5.1 — Performance
-- [ ] Profiling et optimisation des hot paths
-- [ ] SIMD pour la génération de monde
-- [ ] Chunk cache (blob protocol)
-- [ ] Spatial indexing pour les entités
-- [ ] Parallel chunk serialization
+- [x] Profiling et optimisation des hot paths (entity O(1) index, distance², biome palette, block entity index)
+- [x] Batch noise computation pour la génération de monde
+- [x] Chunk payload cache (serialize once, serve N players)
+- [x] Spatial indexing pour les entités (SpatialGrid hash map)
+- [x] Parallel chunk generation (tokio::spawn_blocking, Arc generators)
 
 ### 5.2 — Commandes avancées
-- [ ] /setblock, /fill, /clone
-- [ ] /execute (sous-commandes complexes)
-- [ ] /scoreboard
-- [ ] /tag
-- [ ] /title
-- [ ] /bossbar
-- [ ] /particle
-- [ ] /playsound
+- [x] /setblock, /fill, /clone
+- [x] /execute (sous-commandes complexes)
+- [x] /scoreboard
+- [x] /tag
+- [x] /title
+- [x] /bossbar
+- [x] /particle
+- [x] /playsound
 
 ### 5.3 — Fonctionnalités serveur
-- [ ] RCON (Remote Console)
-- [ ] Query protocol (pour les sites de monitoring)
-- [ ] Serveur transfer (/transfer)
+- [x] RCON (Remote Console)
+- [x] Query protocol (pour les sites de monitoring)
+- [x] Serveur transfer (/transfer)
 - [ ] Multi-monde (Overworld + Nether + End avec portails)
-- [ ] Ticking areas
-- [ ] Console interactive (REPL)
+- [x] Ticking areas
+- [x] Console interactive (REPL)
 
 ### 5.4 — Anti-triche avancé
 - [ ] Mouvement server-authoritative complet

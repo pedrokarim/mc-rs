@@ -113,23 +113,43 @@ impl OverworldGenerator {
         heightmap: &mut [[i32; 16]; 16],
         biome_map: &mut [[u8; 16]; 16],
     ) {
+        // Pre-compute all 256 noise coordinates (batch for better cache locality)
+        let mut terrain_coords = [(0.0f64, 0.0f64); 256];
+        let mut detail_coords = [(0.0f64, 0.0f64); 256];
+
         for lx in 0..16 {
             for lz in 0..16 {
+                let idx = lx * 16 + lz;
                 let world_x = chunk_x * 16 + lx as i32;
                 let world_z = chunk_z * 16 + lz as i32;
 
-                let biome = self.biome_selector.get_biome(world_x, world_z);
-                biome_map[lx][lz] = biome.id;
-
                 let nx = world_x as f64 / 128.0;
                 let nz = world_z as f64 / 128.0;
-                let base = self.terrain_noise.sample_2d(nx, nz);
-                let detail = self.detail_noise.sample_2d(nx * 4.0, nz * 4.0) * 0.1;
+                terrain_coords[idx] = (nx, nz);
+                detail_coords[idx] = (nx * 4.0, nz * 4.0);
 
+                let biome = self.biome_selector.get_biome(world_x, world_z);
+                biome_map[lx][lz] = biome.id;
+            }
+        }
+
+        // Batch noise computation (iterates per-octave for better L1 cache usage)
+        let mut terrain_results = [0.0f64; 256];
+        let mut detail_results = [0.0f64; 256];
+        self.terrain_noise
+            .sample_2d_batch(&terrain_coords, &mut terrain_results);
+        self.detail_noise
+            .sample_2d_batch(&detail_coords, &mut detail_results);
+
+        // Combine into heightmap
+        for lx in 0..16 {
+            for lz in 0..16 {
+                let idx = lx * 16 + lz;
+                let base = terrain_results[idx];
+                let detail = detail_results[idx] * 0.1;
+                let biome = self.biome_def(biome_map[lx][lz]);
                 let height =
                     64.0 + (base + detail) * 20.0 * biome.height_scale + biome.height_offset;
-
-                // Clamp to valid range
                 heightmap[lx][lz] = (height.round() as i32).clamp(OVERWORLD_MIN_Y + 5, 250);
             }
         }

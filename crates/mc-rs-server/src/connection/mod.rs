@@ -37,17 +37,18 @@ use mc_rs_proto::jwt;
 use mc_rs_proto::packets::add_player::default_player_metadata;
 use mc_rs_proto::packets::{
     self, ActorAttribute, AddActor, AddPlayer, Animate, AvailableCommands,
-    AvailableEntityIdentifiers, BiomeDefinitionList, BlockActorData, ChunkRadiusUpdated,
+    AvailableEntityIdentifiers, BiomeDefinitionList, BlockActorData, BossEvent, ChunkRadiusUpdated,
     ClientToServerHandshake, CommandOutput, CommandRequest, ContainerClose, ContainerOpen,
     ContainerSetData, Disconnect, EntityEvent, EntityMetadataEntry, GameRule, GameRuleValue,
     GameRulesChanged, InventoryContent, InventorySlot, InventoryTransaction, ItemStackRequest,
     ItemStackResponse, LevelChunk, LevelEvent, MetadataValue, MobEffect, MobEquipment,
     MoveActorAbsolute, MoveMode, MovePlayer, NetworkChunkPublisherUpdate, NetworkSettings,
-    PlayStatus, PlayStatusType, PlayerAction, PlayerActionType, PlayerAuthInput, PlayerListAdd,
-    PlayerListAddPacket, PlayerListRemove, RemoveEntity, RequestChunkRadius,
+    PlaySound, PlayStatus, PlayStatusType, PlayerAction, PlayerActionType, PlayerAuthInput,
+    PlayerListAdd, PlayerListAddPacket, PlayerListRemove, RemoveEntity, RequestChunkRadius,
     ResourcePackClientResponse, ResourcePackResponseStatus, ResourcePackStack, ResourcePacksInfo,
-    Respawn, ServerToClientHandshake, SetEntityMotion, SetLocalPlayerAsInitialized,
-    SetPlayerGameType, SetTime, StartGame, Text, UpdateAbilities, UpdateAttributes, UpdateBlock,
+    Respawn, ScoreEntry, ServerToClientHandshake, SetDisplayObjective, SetEntityMotion,
+    SetLocalPlayerAsInitialized, SetPlayerGameType, SetScore, SetTime, SetTitle,
+    SpawnParticleEffect, StartGame, Text, Transfer, UpdateAbilities, UpdateAttributes, UpdateBlock,
     UseItemAction, UseItemOnEntityAction,
 };
 use mc_rs_proto::types::{BlockPos, Uuid, VarUInt32, Vec2, Vec3};
@@ -56,7 +57,7 @@ use rand::prelude::*;
 
 use mc_rs_game::block_entity::{self, BlockEntityData};
 use mc_rs_game::smelting::SmeltingRegistry;
-use mc_rs_world::block_hash::{BlockEntityHashes, FlatWorldBlocks, TickBlocks};
+use mc_rs_world::block_hash::{hash_block_state, BlockEntityHashes, FlatWorldBlocks, TickBlocks};
 use mc_rs_world::block_registry::BlockRegistry;
 use mc_rs_world::block_tick::{process_random_tick, process_scheduled_tick, TickScheduler};
 use mc_rs_world::chunk::{ChunkColumn, OVERWORLD_MIN_Y, OVERWORLD_SUB_CHUNK_COUNT};
@@ -70,7 +71,7 @@ use mc_rs_world::overworld_generator::OverworldGenerator;
 use mc_rs_world::physics::{PlayerAabb, MAX_AIRBORNE_TICKS, MAX_FALL_PER_TICK};
 use mc_rs_world::piston;
 use mc_rs_world::redstone;
-use mc_rs_world::serializer::serialize_chunk_column;
+use mc_rs_world::serializer::serialize_chunk_column_cached;
 use mc_rs_world::storage::{block_entity_key, LevelDbProvider};
 use tokio::sync::watch;
 
@@ -188,6 +189,8 @@ pub struct PlayerConnection {
     pub enchant_seed: i32,
     /// Pending enchantment options offered to the player.
     pub pending_enchant_options: Vec<mc_rs_game::enchanting::EnchantOption>,
+    /// Entity tags assigned via /tag command.
+    pub tags: HashSet<String>,
 }
 
 /// State for a currently open container window.
@@ -213,6 +216,9 @@ pub struct ActiveEffect {
     pub remaining_ticks: i32,
 }
 
+/// Chunk coordinate → list of block-entity positions in that chunk.
+type ChunkBlockEntityIndex = HashMap<(i32, i32), Vec<(i32, i32, i32)>>;
+
 /// Manages all player connections and their login state machines.
 pub struct ConnectionHandler {
     connections: HashMap<SocketAddr, PlayerConnection>,
@@ -221,12 +227,12 @@ pub struct ConnectionHandler {
     game_world: GameWorld,
     server_config: Arc<ServerConfig>,
     flat_world_blocks: FlatWorldBlocks,
-    /// Overworld generator (None if using flat world).
-    overworld_generator: Option<OverworldGenerator>,
-    /// Nether generator (None unless generator="nether").
-    nether_generator: Option<NetherGenerator>,
-    /// End generator (None unless generator="end").
-    end_generator: Option<EndGenerator>,
+    /// Overworld generator (None if using flat world). Arc for parallel chunk generation.
+    overworld_generator: Option<Arc<OverworldGenerator>>,
+    /// Nether generator (None unless generator="nether"). Arc for parallel chunk generation.
+    nether_generator: Option<Arc<NetherGenerator>>,
+    /// End generator (None unless generator="end"). Arc for parallel chunk generation.
+    end_generator: Option<Arc<EndGenerator>>,
     /// Dimension ID for the current world (0=overworld, 1=nether, 2=end).
     dimension_id: i32,
     /// Pre-computed spawn position (eye position).
@@ -298,6 +304,41 @@ pub struct ConnectionHandler {
     active_projectiles: Vec<projectile::ActiveProjectile>,
     /// Bow charge start tick per player (for arrow velocity calculation).
     bow_charge_start: HashMap<SocketAddr, u64>,
+    /// Scoreboard objectives: name → (display_name, criteria).
+    scoreboard_objectives: HashMap<String, (String, String)>,
+    /// Scoreboard scores: objective_name → (entry_name → score).
+    scoreboard_scores: HashMap<String, HashMap<String, i32>>,
+    /// Active display slots: slot_name → objective_name.
+    scoreboard_displays: HashMap<String, String>,
+    /// Next score entry ID for SetScore packets.
+    next_score_entry_id: i64,
+    /// Custom boss bars: id → BossBarData.
+    boss_bars: HashMap<String, BossBarData>,
+    /// Ticking areas: always-loaded chunk regions.
+    ticking_areas: Vec<TickingArea>,
+    /// O(1) lookup: entity_runtime_id → SocketAddr.
+    runtime_id_to_addr: HashMap<u64, SocketAddr>,
+    /// Block entity positions indexed by chunk coordinate for O(1) per-chunk lookup.
+    block_entity_chunk_index: ChunkBlockEntityIndex,
+}
+
+/// Data for a custom boss bar.
+pub struct BossBarData {
+    pub title: String,
+    pub color: u32,
+    pub max: f32,
+    pub value: f32,
+    pub visible: bool,
+    pub players: HashSet<SocketAddr>,
+    /// Unique numeric ID for the BossEvent packet.
+    pub boss_id: i64,
+}
+
+/// A ticking area: chunk region that is always ticked.
+pub struct TickingArea {
+    pub name: String,
+    pub from: (i32, i32),
+    pub to: (i32, i32),
 }
 
 impl ConnectionHandler {
@@ -325,6 +366,19 @@ impl ConnectionHandler {
         command_registry.register_stub("time", "Set or query the world time");
         command_registry.register_stub("weather", "Set the weather");
         command_registry.register_stub("gamerule", "Set or query a game rule value");
+        command_registry.register_stub("reload", "Reload all plugins");
+        command_registry.register_stub("setblock", "Set a block at a position");
+        command_registry.register_stub("fill", "Fill a region with blocks");
+        command_registry.register_stub("clone", "Clone a region of blocks");
+        command_registry.register_stub("title", "Display a title to players");
+        command_registry.register_stub("particle", "Spawn particle effects");
+        command_registry.register_stub("playsound", "Play a sound");
+        command_registry.register_stub("scoreboard", "Manage scoreboards");
+        command_registry.register_stub("tag", "Manage entity tags");
+        command_registry.register_stub("bossbar", "Manage boss bars");
+        command_registry.register_stub("execute", "Execute a command with modifiers");
+        command_registry.register_stub("transfer", "Transfer players to another server");
+        command_registry.register_stub("tickingarea", "Manage ticking areas");
 
         let permissions = PermissionManager::load(server_config.permissions.whitelist_enabled);
 
@@ -332,17 +386,17 @@ impl ConnectionHandler {
         let gen_name = server_config.world.generator.to_lowercase();
         let seed = server_config.world.seed as u64;
         let overworld_generator = if gen_name == "default" || gen_name == "overworld" {
-            Some(OverworldGenerator::new(seed))
+            Some(Arc::new(OverworldGenerator::new(seed)))
         } else {
             None
         };
         let nether_generator = if gen_name == "nether" {
-            Some(NetherGenerator::new(seed))
+            Some(Arc::new(NetherGenerator::new(seed)))
         } else {
             None
         };
         let end_generator = if gen_name == "end" {
-            Some(EndGenerator::new(seed))
+            Some(Arc::new(EndGenerator::new(seed)))
         } else {
             None
         };
@@ -604,6 +658,14 @@ impl ConnectionHandler {
             smelting_registry: SmeltingRegistry::new(),
             active_projectiles: Vec::new(),
             bow_charge_start: HashMap::new(),
+            scoreboard_objectives: HashMap::new(),
+            scoreboard_scores: HashMap::new(),
+            scoreboard_displays: HashMap::new(),
+            next_score_entry_id: 1,
+            boss_bars: HashMap::new(),
+            ticking_areas: Vec::new(),
+            runtime_id_to_addr: HashMap::new(),
+            block_entity_chunk_index: HashMap::new(),
         }
     }
 
@@ -611,17 +673,35 @@ impl ConnectionHandler {
         self.game_world.allocate_entity_id()
     }
 
-    /// Generate a chunk using the appropriate generator.
-    pub(super) fn generate_chunk(&self, cx: i32, cz: i32) -> ChunkColumn {
-        if let Some(ref gen) = self.overworld_generator {
-            gen.generate_chunk(cx, cz)
-        } else if let Some(ref gen) = self.nether_generator {
-            gen.generate_chunk(cx, cz)
-        } else if let Some(ref gen) = self.end_generator {
-            gen.generate_chunk(cx, cz)
-        } else {
-            generate_flat_chunk(cx, cz, &self.flat_world_blocks)
+    /// Insert a block entity and update the chunk index.
+    pub(super) fn insert_block_entity(&mut self, pos: (i32, i32, i32), data: BlockEntityData) {
+        self.block_entities.insert(pos, data);
+        self.block_entity_chunk_index
+            .entry((pos.0 >> 4, pos.2 >> 4))
+            .or_default()
+            .push(pos);
+    }
+
+    /// Remove a block entity and update the chunk index.
+    pub(super) fn remove_block_entity(&mut self, pos: (i32, i32, i32)) -> Option<BlockEntityData> {
+        let result = self.block_entities.remove(&pos);
+        if result.is_some() {
+            if let Some(positions) = self
+                .block_entity_chunk_index
+                .get_mut(&(pos.0 >> 4, pos.2 >> 4))
+            {
+                positions.retain(|p| *p != pos);
+            }
         }
+        result
+    }
+
+    /// Get block entities in a specific chunk (O(1) via index).
+    pub(super) fn block_entities_in_chunk(&self, cx: i32, cz: i32) -> Vec<(i32, i32, i32)> {
+        self.block_entity_chunk_index
+            .get(&(cx, cz))
+            .cloned()
+            .unwrap_or_default()
     }
 
     // ─── Plugin helpers ────────────────────────────────────────────────────
@@ -777,13 +857,7 @@ impl ConnectionHandler {
 
     /// Find a player's address by their entity runtime ID.
     pub(super) fn find_addr_by_runtime_id(&self, runtime_id: u64) -> Option<SocketAddr> {
-        self.connections.iter().find_map(|(&a, conn)| {
-            if conn.entity_runtime_id == runtime_id && conn.state == LoginState::InGame {
-                Some(a)
-            } else {
-                None
-            }
-        })
+        self.runtime_id_to_addr.get(&runtime_id).copied()
     }
 
     pub(super) async fn broadcast_packet(&mut self, packet_id: u32, packet: &impl ProtoEncode) {
@@ -858,6 +932,7 @@ impl ConnectionHandler {
 
         column.sub_chunks[sub_index as usize].set_block(local_x, local_y, local_z, runtime_id);
         column.dirty = true;
+        column.cached_payload = None;
         true
     }
 
@@ -917,6 +992,185 @@ impl ConnectionHandler {
         self.server_handle
             .send_to(addr, out.freeze(), Reliability::ReliableOrdered, 0)
             .await;
+    }
+
+    /// Get the current game tick number.
+    pub fn current_tick(&mut self) -> u64 {
+        self.game_world.current_tick()
+    }
+
+    /// Build server stats for the Query protocol.
+    pub fn build_query_stats(&self) -> crate::query::ServerStats {
+        let player_names: Vec<String> = self
+            .connections
+            .values()
+            .filter(|c| c.state == LoginState::InGame)
+            .filter_map(|c| c.login_data.as_ref().map(|d| d.display_name.clone()))
+            .collect();
+        crate::query::ServerStats {
+            motd: self.server_config.server.motd.clone(),
+            game_type: "SMP".into(),
+            map_name: self.server_config.world.name.clone(),
+            num_players: player_names.len() as u32,
+            max_players: self.server_config.server.max_players,
+            host_port: self.server_config.server.port,
+            host_ip: self.server_config.server.address.clone(),
+            player_names,
+            version: "1.21.50".into(),
+        }
+    }
+
+    /// Handle a command from the console or RCON (no associated player connection).
+    pub async fn handle_console_command(&mut self, line: &str) -> String {
+        let line = line.strip_prefix('/').unwrap_or(line);
+        let mut parts = line.split_whitespace();
+        let cmd_name = match parts.next() {
+            Some(c) => c,
+            None => return "Empty command".into(),
+        };
+        let args: Vec<String> = parts.map(String::from).collect();
+
+        info!("[Console] /{cmd_name} {}", args.join(" "));
+
+        match cmd_name {
+            "stop" => {
+                info!("Stop command from console");
+                let _ = self.shutdown_tx.send(true);
+                "Stopping server...".into()
+            }
+            "say" => {
+                let msg = args.join(" ");
+                let text = mc_rs_proto::packets::Text::raw(format!("[Server] {msg}"));
+                self.broadcast_packet(mc_rs_proto::packets::id::TEXT, &text)
+                    .await;
+                format!("Said: {msg}")
+            }
+            "list" => {
+                let players: Vec<String> = self
+                    .connections
+                    .values()
+                    .filter(|c| c.state == LoginState::InGame)
+                    .filter_map(|c| c.login_data.as_ref().map(|d| d.display_name.clone()))
+                    .collect();
+                format!(
+                    "Online players ({}/{}): {}",
+                    players.len(),
+                    self.server_config.server.max_players,
+                    if players.is_empty() {
+                        "none".into()
+                    } else {
+                        players.join(", ")
+                    }
+                )
+            }
+            "time" => {
+                if args.is_empty() {
+                    return format!("Current time: {}", self.world_time);
+                }
+                if args[0] == "set" && args.len() >= 2 {
+                    let new_time: i64 = match args[1].as_str() {
+                        "day" => 1000,
+                        "noon" => 6000,
+                        "night" => 13000,
+                        "midnight" => 18000,
+                        v => v.parse().unwrap_or(0),
+                    };
+                    self.world_time = new_time;
+                    let pkt = mc_rs_proto::packets::SetTime {
+                        time: self.world_time as i32,
+                    };
+                    self.broadcast_packet(mc_rs_proto::packets::id::SET_TIME, &pkt)
+                        .await;
+                    format!("Set time to {new_time}")
+                } else if args[0] == "query" {
+                    format!("Current time: {}", self.world_time)
+                } else {
+                    "Usage: time <set|query> [value]".into()
+                }
+            }
+            "save-all" => {
+                self.save_all();
+                "World saved.".into()
+            }
+            "reload" => {
+                self.plugin_manager.reload();
+                info!("Plugins reloaded from console");
+                "Plugins reloaded.".into()
+            }
+            "kick" => {
+                if args.is_empty() {
+                    return "Usage: kick <player> [reason]".into();
+                }
+                let target = &args[0];
+                let reason = if args.len() > 1 {
+                    args[1..].join(" ")
+                } else {
+                    "Kicked by console".into()
+                };
+                if let Some(player_addr) = self.find_player_addr(target) {
+                    let pkt = mc_rs_proto::packets::Disconnect::with_message(&reason);
+                    self.send_packet(player_addr, mc_rs_proto::packets::id::DISCONNECT, &pkt)
+                        .await;
+                    format!("Kicked {target}: {reason}")
+                } else {
+                    format!("Player '{target}' not found")
+                }
+            }
+            "op" => {
+                if args.is_empty() {
+                    return "Usage: op <player>".into();
+                }
+                self.permissions.ops.insert(args[0].clone());
+                self.permissions.save_ops();
+                format!("Opped {}", args[0])
+            }
+            "deop" => {
+                if args.is_empty() {
+                    return "Usage: deop <player>".into();
+                }
+                self.permissions.ops.remove(&args[0]);
+                self.permissions.save_ops();
+                format!("De-opped {}", args[0])
+            }
+            "whitelist" => {
+                if args.is_empty() {
+                    return "Usage: whitelist <on|off|add|remove|list>".into();
+                }
+                match args[0].as_str() {
+                    "on" => {
+                        self.permissions.whitelist_enabled = true;
+                        "Whitelist enabled".into()
+                    }
+                    "off" => {
+                        self.permissions.whitelist_enabled = false;
+                        "Whitelist disabled".into()
+                    }
+                    "add" if args.len() >= 2 => {
+                        self.permissions.whitelist.insert(args[1].clone());
+                        self.permissions.save_whitelist();
+                        format!("Added {} to whitelist", args[1])
+                    }
+                    "remove" if args.len() >= 2 => {
+                        self.permissions.whitelist.remove(&args[1]);
+                        self.permissions.save_whitelist();
+                        format!("Removed {} from whitelist", args[1])
+                    }
+                    "list" => {
+                        let names: Vec<&String> = self.permissions.whitelist.iter().collect();
+                        format!(
+                            "Whitelisted: {}",
+                            names
+                                .iter()
+                                .map(|n| n.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    }
+                    _ => "Usage: whitelist <on|off|add|remove|list>".into(),
+                }
+            }
+            _ => format!("Unknown console command: {cmd_name}"),
+        }
     }
 
     /// Save all dirty chunks, online player data, and level.dat to disk.

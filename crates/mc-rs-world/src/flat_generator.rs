@@ -32,6 +32,7 @@ pub fn generate_flat_chunk(x: i32, z: i32, blocks: &FlatWorldBlocks) -> ChunkCol
             .unwrap_or_else(|_| panic!("expected {OVERWORLD_SUB_CHUNK_COUNT} sub-chunks")),
         biomes: [1u8; 256], // All plains
         dirty: false,
+        cached_payload: None,
     }
 }
 
