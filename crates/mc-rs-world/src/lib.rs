@@ -1,8 +1,10 @@
 //! World management: chunks, blocks, storage, and generation.
 
+pub mod bds_compat;
 pub mod biome;
 pub mod block_hash;
 pub mod block_registry;
+pub mod block_state_registry;
 pub mod block_tick;
 pub mod chunk;
 pub mod end_generator;

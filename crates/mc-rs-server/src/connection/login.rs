@@ -50,6 +50,7 @@ impl ConnectionHandler {
                 enchant_seed: rand::thread_rng().gen(),
                 pending_enchant_options: Vec::new(),
                 tags: HashSet::new(),
+                protocol_version: packets::PROTOCOL_VERSION,
                 violations: ViolationTracker::default(),
                 last_break_tick: 0,
                 last_place_tick: 0,
@@ -300,15 +301,16 @@ impl ConnectionHandler {
             request.protocol_version
         );
 
-        if request.protocol_version != packets::PROTOCOL_VERSION {
-            let status = if request.protocol_version < packets::PROTOCOL_VERSION {
+        if !packets::is_supported_version(request.protocol_version) {
+            let status = if request.protocol_version < packets::MIN_PROTOCOL_VERSION {
                 PlayStatusType::FailedClient
             } else {
                 PlayStatusType::FailedServer
             };
             info!(
-                "Protocol mismatch from {addr}: got {}, expected {} -> {:?}",
+                "Protocol mismatch from {addr}: got {}, supported {}-{} -> {:?}",
                 request.protocol_version,
+                packets::MIN_PROTOCOL_VERSION,
                 packets::PROTOCOL_VERSION,
                 status
             );
@@ -327,6 +329,7 @@ impl ConnectionHandler {
                 CompressionAlgorithm::from_u16(settings.compression_algorithm)
                     .unwrap_or(CompressionAlgorithm::Zlib);
             conn.batch_config.compression_threshold = settings.compression_threshold as usize;
+            conn.protocol_version = request.protocol_version;
             conn.state = LoginState::AwaitingLogin;
         }
 
@@ -795,17 +798,23 @@ impl ConnectionHandler {
     // -----------------------------------------------------------------------
 
     async fn send_start_game(&mut self, addr: SocketAddr) {
-        let (entity_unique_id, entity_runtime_id, player_uuid) = match self.connections.get(&addr) {
-            Some(c) => {
-                let uuid = c
-                    .login_data
-                    .as_ref()
-                    .map(|d| d.identity.clone())
-                    .unwrap_or_default();
-                (c.entity_unique_id, c.entity_runtime_id, uuid)
-            }
-            None => return,
-        };
+        let (entity_unique_id, entity_runtime_id, player_uuid, client_proto) =
+            match self.connections.get(&addr) {
+                Some(c) => {
+                    let uuid = c
+                        .login_data
+                        .as_ref()
+                        .map(|d| d.identity.clone())
+                        .unwrap_or_default();
+                    (
+                        c.entity_unique_id,
+                        c.entity_runtime_id,
+                        uuid,
+                        c.protocol_version,
+                    )
+                }
+                None => return,
+            };
 
         // Try to load saved player data
         let saved = if !player_uuid.is_empty() {
@@ -858,7 +867,7 @@ impl ConnectionHandler {
             spawn_position: self.spawn_block,
             level_id: "level".into(),
             world_name: config.world.name.clone(),
-            game_version: "1.21.50".into(),
+            game_version: packets::game_version_for_protocol(client_proto).into(),
             rain_level: self.rain_level,
             lightning_level: self.lightning_level,
             current_tick: self.world_time,

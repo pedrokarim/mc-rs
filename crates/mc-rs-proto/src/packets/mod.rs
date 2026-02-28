@@ -225,3 +225,56 @@ pub mod id {
 
 /// Target protocol version (Minecraft Bedrock 1.21.50).
 pub const PROTOCOL_VERSION: i32 = 766;
+
+/// Minimum supported protocol version (Minecraft Bedrock 1.21.40).
+pub const MIN_PROTOCOL_VERSION: i32 = 748;
+
+/// Check whether a client protocol version is supported.
+pub fn is_supported_version(v: i32) -> bool {
+    (MIN_PROTOCOL_VERSION..=PROTOCOL_VERSION).contains(&v)
+}
+
+/// Return the game version string for a supported protocol version.
+pub fn game_version_for_protocol(v: i32) -> &'static str {
+    match v {
+        748 => "1.21.40",
+        749..=765 => "1.21.40", // intermediate builds map to .40
+        766 => "1.21.50",
+        _ => "1.21.50", // fallback
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn supported_version_range() {
+        assert!(is_supported_version(748));
+        assert!(is_supported_version(750));
+        assert!(is_supported_version(766));
+        assert!(!is_supported_version(747));
+        assert!(!is_supported_version(767));
+        assert!(!is_supported_version(0));
+    }
+
+    #[test]
+    fn protocol_version_constants() {
+        assert_eq!(PROTOCOL_VERSION, 766);
+        assert_eq!(MIN_PROTOCOL_VERSION, 748);
+        assert!(MIN_PROTOCOL_VERSION < PROTOCOL_VERSION);
+    }
+
+    #[test]
+    fn game_version_mapping() {
+        assert_eq!(game_version_for_protocol(748), "1.21.40");
+        assert_eq!(game_version_for_protocol(766), "1.21.50");
+        assert_eq!(game_version_for_protocol(750), "1.21.40");
+    }
+
+    #[test]
+    fn game_version_current() {
+        let v = game_version_for_protocol(PROTOCOL_VERSION);
+        assert_eq!(v, "1.21.50");
+    }
+}

@@ -148,6 +148,8 @@ impl ConnectionHandler {
                 | "execute"
                 | "transfer"
                 | "tickingarea"
+                | "import"
+                | "export"
         );
         if needs_op && !self.permissions.ops.contains(&sender_name) {
             let result = CommandResult::err("You do not have permission to use this command");
@@ -194,6 +196,8 @@ impl ConnectionHandler {
             "execute" => Some(self.cmd_execute(addr, &sender_name, &raw_args).await),
             "transfer" => Some(self.cmd_transfer(addr, &sender_name, &raw_args).await),
             "tickingarea" => Some(self.cmd_tickingarea(&raw_args)),
+            "import" => Some(self.cmd_import(&raw_args)),
+            "export" => Some(self.cmd_export(&raw_args)),
             _ => None,
         };
 
@@ -2874,6 +2878,61 @@ impl ConnectionHandler {
                 CommandResult::ok(list.join("\n"))
             }
             _ => CommandResult::err("Subcommand must be add, remove, or list"),
+        }
+    }
+
+    // ─── /import ─────────────────────────────────────────────────────────
+
+    fn cmd_import(&mut self, args: &[String]) -> CommandResult {
+        if args.is_empty() {
+            return CommandResult::err("Usage: /import <bds_world_path>");
+        }
+
+        let bds_path = std::path::Path::new(&args[0]).join("db");
+        if !bds_path.exists() {
+            return CommandResult::err(format!("BDS world not found at: {}", bds_path.display()));
+        }
+
+        match mc_rs_world::bds_compat::import_bds_world(
+            &bds_path,
+            &mut self.chunk_storage,
+            self.dimension_id,
+        ) {
+            Ok(result) => CommandResult::ok(format!(
+                "Imported {} chunks, {} block entities from BDS world",
+                result.chunks, result.block_entities
+            )),
+            Err(e) => CommandResult::err(format!("Import failed: {e}")),
+        }
+    }
+
+    // ─── /export ─────────────────────────────────────────────────────────
+
+    fn cmd_export(&mut self, args: &[String]) -> CommandResult {
+        if args.is_empty() {
+            return CommandResult::err("Usage: /export <output_path>");
+        }
+
+        let export_path = std::path::Path::new(&args[0]).join("db");
+        if let Err(e) = std::fs::create_dir_all(&export_path) {
+            return CommandResult::err(format!("Cannot create export directory: {e}"));
+        }
+
+        let registry = mc_rs_world::block_state_registry::BlockStateRegistry::new();
+        let empty = HashMap::new();
+        let chunks = self.dim_chunks(self.dimension_id).unwrap_or(&empty);
+
+        match mc_rs_world::bds_compat::export_bds_world(
+            chunks,
+            self.dimension_id,
+            &export_path,
+            &registry,
+        ) {
+            Ok(result) => CommandResult::ok(format!(
+                "Exported {} chunks to BDS format at {}",
+                result.chunks, args[0]
+            )),
+            Err(e) => CommandResult::err(format!("Export failed: {e}")),
         }
     }
 }

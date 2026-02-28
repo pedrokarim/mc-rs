@@ -200,6 +200,9 @@ pub struct PlayerConnection {
     pub pending_enchant_options: Vec<mc_rs_game::enchanting::EnchantOption>,
     /// Entity tags assigned via /tag command.
     pub tags: HashSet<String>,
+    // ── Protocol ───────────────────────────────────────────────────────
+    /// Client's negotiated protocol version.
+    pub protocol_version: i32,
     // ── Anti-cheat ──────────────────────────────────────────────────────
     /// Violation tracker for anti-cheat kick thresholds.
     pub violations: ViolationTracker,
