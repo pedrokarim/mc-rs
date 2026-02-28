@@ -57,7 +57,7 @@ mod tests {
         let pkt = PlaySound::new("random.levelup", 10.0, 64.0, -5.0, 1.0, 1.0);
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
         assert_eq!(pkt.position.x, 80); // 10 * 8
         assert_eq!(pkt.position.y, 512); // 64 * 8
         assert_eq!(pkt.position.z, -40); // -5 * 8
@@ -68,7 +68,7 @@ mod tests {
         let pkt = PlaySound::new("mob.zombie.say", 0.0, 0.0, 0.0, 0.5, 1.5);
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
         assert_eq!(pkt.volume, 0.5);
         assert_eq!(pkt.pitch, 1.5);
     }

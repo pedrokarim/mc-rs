@@ -65,7 +65,7 @@ mod tests {
         let pkt = SetDisplayObjective::sidebar("kills", "Player Kills");
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
         assert_eq!(pkt.display_slot, "sidebar");
         assert_eq!(pkt.objective_name, "kills");
     }
@@ -75,7 +75,7 @@ mod tests {
         let pkt = SetDisplayObjective::clear("sidebar");
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
         assert!(pkt.objective_name.is_empty());
     }
 }

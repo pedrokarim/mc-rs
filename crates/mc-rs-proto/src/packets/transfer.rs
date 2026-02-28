@@ -41,7 +41,7 @@ mod tests {
         let pkt = Transfer::new("play.example.com", 19132);
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
         assert_eq!(pkt.server_address, "play.example.com");
         assert_eq!(pkt.port, 19132);
     }
@@ -51,7 +51,7 @@ mod tests {
         let pkt = Transfer::new("192.168.1.1", 25565);
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
         assert_eq!(pkt.port, 25565);
     }
 }

@@ -278,7 +278,7 @@ mod tests {
             let z = (i as f64 * 0.251) - 300.0;
             let v = n.noise_2d(x, z);
             assert!(
-                v >= -1.5 && v <= 1.5,
+                (-1.5..=1.5).contains(&v),
                 "noise_2d out of range: {v} at ({x}, {z})"
             );
         }
@@ -293,7 +293,7 @@ mod tests {
             let z = (i as f64 * 0.3) - 500.0;
             let v = n.noise_3d(x, y, z);
             assert!(
-                v >= -1.5 && v <= 1.5,
+                (-1.5..=1.5).contains(&v),
                 "noise_3d out of range: {v} at ({x}, {y}, {z})"
             );
         }

@@ -1202,7 +1202,7 @@ mod tests {
     #[test]
     fn village_only_in_valid_biomes() {
         // Mountains (biome 3) should never have village structures
-        let gen = OverworldGenerator::new(42);
+        let _gen = OverworldGenerator::new(42);
         // Check that stone_bricks (used in village floors) don't appear in mountain chunks
         // unless they are also valid biome chunks
         // This is a weaker test: we just verify village biome filtering works

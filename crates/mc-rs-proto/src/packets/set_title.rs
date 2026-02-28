@@ -135,7 +135,7 @@ mod tests {
         let pkt = SetTitle::title("Hello World");
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
         assert_eq!(pkt.title_type, TITLE_SET_TITLE);
         assert_eq!(pkt.text, "Hello World");
     }

@@ -838,7 +838,7 @@ mod tests {
     fn all_registered_roundtrip() {
         let reg = BlockStateRegistry::new();
         let mut failures = 0;
-        for (&hash, _info) in &reg.entries {
+        for &hash in reg.entries.keys() {
             let nbt_le = reg.hash_to_nbt_le(hash).unwrap();
             let recovered = BlockStateRegistry::nbt_le_to_hash(&nbt_le).unwrap();
             if recovered != hash {

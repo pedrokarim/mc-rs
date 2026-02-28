@@ -637,10 +637,8 @@ mod tests {
             |x, _y, z| {
                 let dx = x.abs();
                 let dz = z.abs();
-                if dx == 2 || dz == 2 {
-                    if dx <= 2 && dz <= 2 {
-                        return Some(1); // bookshelf
-                    }
+                if (dx == 2 || dz == 2) && dx <= 2 && dz <= 2 {
+                    return Some(1); // bookshelf
                 }
                 Some(0) // air
             },

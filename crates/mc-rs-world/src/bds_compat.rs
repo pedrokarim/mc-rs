@@ -756,7 +756,7 @@ mod tests {
 
         assert_eq!(restored.palette.len(), sub.palette.len());
         // Block at (0,0,0) should be stone
-        let idx = (0 * 16 + 0) * 16 + 0;
+        let idx = 0;
         let original_rid = sub.palette[sub.blocks[idx] as usize];
         let restored_rid = restored.palette[restored.blocks[idx] as usize];
         assert_eq!(original_rid, restored_rid);

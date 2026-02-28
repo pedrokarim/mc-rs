@@ -678,9 +678,7 @@ mod tests {
             |x, y, z| {
                 if x == 0 && y == 10 && z == 0 {
                     Some(tb.water[1])
-                } else if x == -1 && y == 10 && z == 0 {
-                    Some(tb.water[0])
-                } else if x == 1 && y == 10 && z == 0 {
+                } else if (x == -1 || x == 1) && y == 10 && z == 0 {
                     Some(tb.water[0])
                 } else if y == 9 {
                     Some(tb.stone)

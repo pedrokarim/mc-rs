@@ -362,7 +362,7 @@ mod tests {
     fn extract_client_data_basic() {
         let payload = serde_json::json!({
             "SkinId": "standard.steve",
-            "SkinData": base64::engine::general_purpose::STANDARD.encode(&[0u8; 64 * 32 * 4]),
+            "SkinData": base64::engine::general_purpose::STANDARD.encode([0u8; 64 * 32 * 4]),
             "SkinImageWidth": 64,
             "SkinImageHeight": 32,
             "CapeId": "",

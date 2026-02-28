@@ -89,7 +89,7 @@ mod tests {
         }]);
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
         assert_eq!(pkt.action_type, SCORE_ACTION_CHANGE);
         assert_eq!(pkt.entries.len(), 1);
     }
@@ -114,7 +114,7 @@ mod tests {
         ]);
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
         assert_eq!(pkt.action_type, SCORE_ACTION_REMOVE);
         assert_eq!(pkt.entries.len(), 2);
     }
@@ -139,7 +139,7 @@ mod tests {
         ]);
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
         assert_eq!(pkt.entries.len(), 2);
         assert_eq!(pkt.entries[0].score, 100);
         assert_eq!(pkt.entries[1].score, 200);

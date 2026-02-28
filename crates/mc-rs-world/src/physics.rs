@@ -273,36 +273,31 @@ mod tests {
 
     #[test]
     fn violation_tracker_should_kick_speed() {
-        let mut tracker = ViolationTracker::default();
-        tracker.speed = SPEED_KICK_THRESHOLD;
+        let tracker = ViolationTracker { speed: SPEED_KICK_THRESHOLD, ..Default::default() };
         assert_eq!(tracker.should_kick(), Some("Speed hack detected"));
     }
 
     #[test]
     fn violation_tracker_should_kick_fly() {
-        let mut tracker = ViolationTracker::default();
-        tracker.fly = FLY_KICK_THRESHOLD;
+        let tracker = ViolationTracker { fly: FLY_KICK_THRESHOLD, ..Default::default() };
         assert_eq!(tracker.should_kick(), Some("Fly hack detected"));
     }
 
     #[test]
     fn violation_tracker_should_kick_noclip() {
-        let mut tracker = ViolationTracker::default();
-        tracker.noclip = NOCLIP_KICK_THRESHOLD;
+        let tracker = ViolationTracker { noclip: NOCLIP_KICK_THRESHOLD, ..Default::default() };
         assert_eq!(tracker.should_kick(), Some("No-clip detected"));
     }
 
     #[test]
     fn violation_tracker_should_kick_reach() {
-        let mut tracker = ViolationTracker::default();
-        tracker.reach = REACH_KICK_THRESHOLD;
+        let tracker = ViolationTracker { reach: REACH_KICK_THRESHOLD, ..Default::default() };
         assert_eq!(tracker.should_kick(), Some("Reach hack detected"));
     }
 
     #[test]
     fn violation_tracker_should_kick_rate_limit() {
-        let mut tracker = ViolationTracker::default();
-        tracker.rate_limit = RATE_LIMIT_KICK_THRESHOLD;
+        let tracker = ViolationTracker { rate_limit: RATE_LIMIT_KICK_THRESHOLD, ..Default::default() };
         assert_eq!(tracker.should_kick(), Some("Too many actions"));
     }
 

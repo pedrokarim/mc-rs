@@ -274,7 +274,7 @@ mod tests {
     fn ore_xp_random_in_range() {
         for _ in 0..20 {
             let xp = ore_xp_random("minecraft:diamond_ore");
-            assert!(xp >= 3 && xp <= 7, "diamond xp {xp} out of range");
+            assert!((3..=7).contains(&xp), "diamond xp {xp} out of range");
         }
         assert_eq!(ore_xp_random("minecraft:stone"), 0);
     }

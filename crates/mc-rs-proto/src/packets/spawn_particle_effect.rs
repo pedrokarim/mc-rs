@@ -52,7 +52,7 @@ mod tests {
         let pkt = SpawnParticleEffect::at_position("minecraft:heart_particle", 5.0, 70.0, -3.0);
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
         assert_eq!(pkt.dimension_id, 0);
         assert_eq!(pkt.entity_unique_id, -1);
         assert_eq!(pkt.position.x, 5.0);
@@ -68,7 +68,7 @@ mod tests {
         };
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
         assert_eq!(pkt.dimension_id, 1);
         assert_eq!(pkt.entity_unique_id, 42);
     }

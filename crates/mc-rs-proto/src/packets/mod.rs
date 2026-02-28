@@ -262,7 +262,7 @@ mod tests {
     fn protocol_version_constants() {
         assert_eq!(PROTOCOL_VERSION, 766);
         assert_eq!(MIN_PROTOCOL_VERSION, 748);
-        assert!(MIN_PROTOCOL_VERSION < PROTOCOL_VERSION);
+        const { assert!(MIN_PROTOCOL_VERSION < PROTOCOL_VERSION) };
     }
 
     #[test]

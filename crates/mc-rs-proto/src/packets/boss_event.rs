@@ -168,7 +168,7 @@ mod tests {
         let pkt = BossEvent::show(1, "Ender Dragon", 1.0, 1);
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
         assert_eq!(pkt.event_type, EVENT_SHOW);
         assert_eq!(pkt.title, "Ender Dragon");
         assert_eq!(pkt.health_percent, 1.0);
@@ -179,7 +179,7 @@ mod tests {
         let pkt = BossEvent::hide(1);
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
         assert_eq!(pkt.event_type, EVENT_HIDE);
     }
 
@@ -188,7 +188,7 @@ mod tests {
         let pkt = BossEvent::update_health(1, 0.5);
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
         assert_eq!(pkt.event_type, EVENT_HEALTH_PERCENT);
         assert_eq!(pkt.health_percent, 0.5);
     }
@@ -198,7 +198,7 @@ mod tests {
         let pkt = BossEvent::register_player(1, 42);
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
         assert_eq!(pkt.event_type, EVENT_REGISTER_PLAYER);
         assert_eq!(pkt.player_unique_id, 42);
     }
