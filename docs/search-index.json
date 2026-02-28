@@ -1,0 +1,80 @@
+[
+  {
+    "title": "Home",
+    "url": "./",
+    "section": "Getting Started",
+    "content": "MC-RS is a high-performance Minecraft Bedrock Edition server written in Rust. Full survival gameplay, plugin system, and world generation. 924 tests, 12 crates, 50+ packets, 40+ commands. RakNet UDP transport with ECDH P-384 key exchange and AES-256-CFB8 encryption. Perlin noise terrain with 10 biomes, caves, ores, trees, villages, Nether and End dimensions. bevy_ecs powered entities with 5 mob types, 9 AI behaviors, pathfinding, spawn systems. Combat with armor and enchantments, hunger, crafting, furnaces, anvils, weather cycles. Rust API with 15 events, WASM runtime wasmtime, Lua scripting mlua, forms UI. Speed, fly, noclip, reach detection with violation tracking, rate limiting, auto-kick."
+  },
+  {
+    "title": "Overview",
+    "url": "pages/overview.html",
+    "section": "Getting Started",
+    "content": "MC-RS is a Minecraft Bedrock Edition server implementation written entirely in Rust. It targets protocol version 766 for Bedrock 1.21.50. Full survival gameplay experience including combat, crafting, hunger, world generation, and more. Why Rust: performance, memory safety without garbage collector, fearless concurrency with async/await and channels, strong type system catches bugs at compile time. Comparison with BDS official C++ server, PocketMine-MP PHP, Nukkit Java, Dragonfly Go. Project status: 5 phases completed covering networking, protocol, world, gameplay, plugins, and operations."
+  },
+  {
+    "title": "Architecture",
+    "url": "pages/architecture.html",
+    "section": "Getting Started",
+    "content": "12-crate workspace designed for modularity and clean separation of concerns. mc-rs-server entry point, tokio async runtime, ConnectionHandler state machine, game tick loop 20 TPS. mc-rs-proto 50+ packet types, VarInt VarLong codec, zlib compression, batch framing. mc-rs-raknet RakNet UDP transport, reliability layers, fragmentation, ordering. mc-rs-crypto ECDH P-384, AES-256-CFB8, JWT verification. mc-rs-nbt NBT little-endian and network variant. mc-rs-world chunk storage, block registry FNV-1a hashes, Perlin noise terrain, LevelDB. mc-rs-game bevy_ecs ECS, combat, food, recipes, enchantments, mob AI. mc-rs-command parsing, entity selectors. mc-rs-plugin-api plugin trait, events, ServerApi. mc-rs-plugin-lua mlua runtime. mc-rs-plugin-wasm wasmtime runtime. mc-rs-behavior-pack JSON loader. Data flow: Client RakNet Decrypt Decompress Decode ConnectionHandler GameWorld ECS Events Broadcast Encode Compress Encrypt RakNet Client."
+  },
+  {
+    "title": "Protocol",
+    "url": "pages/protocol.html",
+    "section": "Core Systems",
+    "content": "Minecraft Bedrock Edition protocol version 766, multi-version support 748-766. Login flow: RequestNetworkSettings, NetworkSettings compression, Login JWT chain client data, ServerToClientHandshake ECDH, ClientToServerHandshake, PlayStatus LoginSuccess, resource pack exchange, StartGame 60+ fields, chunk loading, PlayStatus PlayerSpawn. Packet structure: batch framing, compression header, zlib, sub-packets with VarUInt32 length and packet ID. Key packet IDs: Login 0x01, PlayStatus 0x02, StartGame 0x0B, AddPlayer 0x0C, AddActor 0x0D, MovePlayer 0x12, MobEffect 0x1C, InventoryTransaction 0x1E, PlayerAuthInput 0x27, LevelChunk 0x3A, CraftingData 0x34, ItemStackRequest 0x93. Block network IDs are hashes: FNV-1a of canonical NBT block states. Data types: VarInt zigzag, VarLong, VarUInt32, VarUInt64, Vec3, Vec2, BlockPos, Uuid, String."
+  },
+  {
+    "title": "Networking",
+    "url": "pages/networking.html",
+    "section": "Core Systems",
+    "content": "RakNet UDP transport on port 19132 with encryption, fragmentation, reliability. Connection handshake, reliability types unreliable reliable ordered sequenced, sequence numbers, ACK NACK, congestion control. Packet reliability: Unreliable, UnreliableSequenced, Reliable, ReliableOrdered, ReliableSequenced. Fragmentation: large packets split into fragments with compound_id, compound_size, compound_index, reassembly. Encryption: ECDH P-384 key exchange, server EC keypair, ServerToClientHandshake JWT, shared secret SHA-256, AES-256-CFB8 key IV. Compression: zlib deflate snappy, NetworkSettings, threshold. Connection lifecycle: unconnected ping pong, open connection MTU negotiation, encryption setup, game packets, disconnect."
+  },
+  {
+    "title": "World",
+    "url": "pages/world.html",
+    "section": "Core Systems",
+    "content": "Chunk-based world with procedural terrain generation, caves, biomes, LevelDB persistence. Chunks: 16x16 columns, sub-chunks 16x16x16, Y range -64 to 319, 24 sub-chunks. Block states: FNV-1a hash u32, BlockStateRegistry 350+ blocks. Terrain generation: OverworldGenerator, seed-based Perlin noise, OctaveNoise fBm, 8-phase pipeline: base terrain, biome assignment, surface blocks, caves spaghetti noise, ores 8 types deepslate, trees oak birch spruce acacia, vegetation, structures. 10 biomes: Ocean Plains Desert Mountains Forest Taiga River Ice Plains Birch Forest Savanna. Sea level Y=62. Dimensions: Overworld, Nether lava ceiling netherrack, End main island. Portal mechanics: coordinate scaling 8:1, portal frame detection, ChangeDimension packet. Persistence: LevelDB rusty-leveldb, chunk keys, sub-chunk format version 9 FNV-1a hash palette, level.dat 8-byte header LE NBT, player JSON per UUID, auto-save 300s, dirty tracking. Block ticks: TickScheduler BinaryHeap, random ticks, crop growth, fluid flow, gravity, redstone."
+  },
+  {
+    "title": "Entities",
+    "url": "pages/entities.html",
+    "section": "Core Systems",
+    "content": "ECS-based entity management with bevy_ecs 0.15, mob AI, spawn systems. GameWorld wraps bevy_ecs World, components Position Velocity Health MobType BehaviorList, systems gravity movement AI tick death spawn despawn, 20 TPS. 5 mob types: Zombie hostile 20hp melee, Skeleton hostile 20hp ranged, Cow passive 10hp breedable, Pig passive 10hp breedable, Chicken passive 4hp breedable. AI behaviors: priority-based, BehaviorList Vec<Box<dyn Behavior>>, BehaviorType Movement Passive TargetSelector. 9 behaviors: Float, NearestAttackableTarget, HurtByTarget, MeleeAttack, TemptGoal, BreedGoal, Panic, RandomStroll, LookAtPlayer. Spawn config: hostile_cap 20, passive_cap 10, spawn_interval 100 ticks, despawn_distance 128. Breeding: TemptGoal, BreedGoal, baby mobs, love particles, 5-minute cooldown. Player mirror entities: spawned on connect, position sync, despawned on disconnect. Network packets: AddActor 0x0D, MoveActorAbsolute 0x10, RemoveActor 0x0E."
+  },
+  {
+    "title": "Gameplay",
+    "url": "pages/gameplay.html",
+    "section": "Gameplay",
+    "content": "Complete survival experience with combat, hunger, crafting, enchantments, weather. Combat: DamageInput pipeline, armor reduction Bedrock formula damage*(1-min(20,defense)/25), enchantment protection, weapon damage lookup, critical hits 1.5x, PvP 10-tick invulnerability, knockback, projectiles arrows tridents. Armor and enchantments: 37 enchantment IDs, Protection Sharpness Fire Aspect Knockback, enchanting table seeded RNG bookshelf counting 3 slots lapis XP cost, anvil rename repair combine, grindstone strip. Hunger: food 0-20, saturation 0-20, exhaustion 0-5, sprint jump attack regen rates, natural regen at food>=18, starvation at food==0. Environmental damage: fall damage, drowning air_ticks 300, lava 4 dmg, suffocation. Crafting: RecipeRegistry ~50 recipes, shaped shapeless, CraftingData 0x34, 9-slot crafting grid, stonecutter grindstone loom furnace anvil. Weather: day/night 24000 ticks, SetTime, rain thunderstorm lightning, /time /weather commands. XP system: orbs, levels, enchanting anvil costs."
+  },
+  {
+    "title": "Commands",
+    "url": "pages/commands.html",
+    "section": "Gameplay",
+    "content": "~40 commands with entity selectors, tab completion, permission levels. Entity selectors: @a all players, @p nearest, @r random, @e all entities, @s self, arguments [type= r= name=]. Permission levels: 0 all players, 1 operators, 2 full operator. Basic commands: /help /list /say /msg /stop /op /deop /kick /ban /ban-ip /unban /whitelist. Player commands: /gamemode /tp /give /kill /effect /xp /enchant. World commands: /time set /time add /weather /gamerule /setblock /fill /clone /summon. UI commands: /title /particle /playsound. Advanced commands: /scoreboard /tag /bossbar /execute /tickingarea /transfer /reload /import /export. Server management: Console REPL stdin, RCON TCP Source protocol, Query UDP GameSpy4."
+  },
+  {
+    "title": "Plugins",
+    "url": "pages/plugins.html",
+    "section": "Gameplay",
+    "content": "Extensible plugin architecture with Rust API, WASM runtime, Lua scripting, Forms UI. PluginManager orchestrates 3 runtimes, PendingAction queue, ServerApiImpl. 15 event types: PlayerJoin PlayerLeave PlayerChat PlayerCommand PlayerMove PlayerBreakBlock PlayerPlaceBlock PlayerAttack PlayerDeath MobSpawn MobDeath BlockUpdate WeatherChange ServerTick FormResponse. Rust Plugin API: mc-rs-plugin-api, Plugin trait on_enable on_disable on_event, ServerApi. WASM plugins: mc-rs-plugin-wasm wasmtime, manifest.json, host functions, sandboxed. Lua scripts: mc-rs-plugin-lua mlua, simple scripting, host function bindings. Forms UI: ModalFormRequest 0x64, ModalFormResponse 0x65, SimpleForm buttons, ModalForm yes/no, CustomForm inputs dropdowns sliders toggles, builder pattern. Behavior packs: mc-rs-behavior-pack, JSON entity item block recipe loot_table definitions, [packs] config. Hot reload: /reload command unloads and reloads all plugins."
+  },
+  {
+    "title": "Configuration",
+    "url": "pages/configuration.html",
+    "section": "Operations",
+    "content": "Server configuration via server.toml with sensible defaults. [server] section: address 0.0.0.0, port 19132, motd, max_players 20, online_mode true, gamemode survival, difficulty normal, view_distance 10, tick_rate 20, operator_permission_level 2. [world] section: name world, generator default flat void, seed random, spawn position, auto_save_interval 300, max_build_height 319, enable_nether true, enable_end true. [logging] section: level info, file stdout, format pretty json compact. [permissions] section: enforce_whitelist false, ops.json, whitelist.json, banned-players.json, banned-ips.json. [rcon] section: enabled false, port 25575, password. [query] section: enabled false, port 19132. [packs] section: behavior_packs list. File locations: server.toml, worlds directory, LevelDB, player data JSON."
+  },
+  {
+    "title": "Security & Anti-Cheat",
+    "url": "pages/security.html",
+    "section": "Operations",
+    "content": "Multi-layered protection with violation tracking, rate limiting, permission management. Authentication: Xbox Live JWT verification, chain data validation, online_mode. Encryption: ECDH P-384, AES-256-CFB8, prevents packet sniffing injection. Anti-cheat ViolationTracker: tracks violations per player per category, configurable decay, auto-kick threshold. Categories: reach 7.0 blocks, speed, fly, noclip. Rate limiting: per-action limits block break place item use chat command, global rate limit, prevents DoS packet spam. Permission system: PermissionManager JSON persistence, ops.json operators, whitelist.json, banned-players.json, banned-ips.json. Permission levels: 0 normal player, 1 operator standard, 2 full operator /stop /op /deop. Security best practices: online_mode true, RCON password, whitelist, monitor violations, view distance."
+  },
+  {
+    "title": "Performance",
+    "url": "pages/performance.html",
+    "section": "Operations",
+    "content": "Optimized for throughput with spatial indexing, caching, batch processing, parallel generation. SpatialGrid: 2D spatial index for entity queries, O(1) cell lookup, mob AI nearest targets, mc-rs-game/src/ai/spatial.rs. Chunk caching: cached_payload on ChunkColumn, invalidated on block change dirty flag, avoids re-serialization. Batch noise generation: sample_2d_batch, entire chunk column in one pass, reduces function call overhead. Parallel chunk generation: Arc generators + tokio::spawn_blocking, concurrent on thread pool, non-blocking. ECS indexing: MobIndex PlayerIndex O(1) lookup, runtime_id_to_addr HashMap, block_entity_chunk_index. Memory optimizations: biome palette [u8;256], block states u32 FNV-1a hashes, distance squared no sqrt, pre-computed hash tables WorldBlocks TickBlocks. Network optimizations: batch compression zlib, block_network_ids_are_hashes, chunk radius negotiation, broadcast filtering. 20 TPS tick rate, ~50ms tick budget."
+  }
+]

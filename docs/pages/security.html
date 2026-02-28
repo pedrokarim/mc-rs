@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security — MC-RS Documentation</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<!-- Header -->
+<header class="site-header">
+  <button class="hamburger" aria-label="Menu">&#9776;</button>
+  <a href="../" class="header-logo">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="8" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.3"/>
+      <rect x="8" y="2" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.6"/>
+      <rect x="6" y="6" width="16" height="16" rx="2" fill="#4ecca3"/>
+      <rect x="10" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="18" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="12" y="16" width="8" height="3" rx="1" fill="#0f0f1a"/>
+    </svg>
+    <span>MC<span class="accent">-RS</span></span>
+  </a>
+  <div class="search-wrapper">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" class="search-input" placeholder="Search documentation...">
+    <span class="search-shortcut">/</span>
+    <div class="search-results"></div>
+  </div>
+</header>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Getting Started</div>
+    <a href="../" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </a>
+    <a href="overview.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+      Overview
+    </a>
+    <a href="architecture.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="6" rx="1"/><rect x="16" y="3" width="6" height="6" rx="1"/><rect x="16" y="15" width="6" height="6" rx="1"/><path d="M8 10h4m0 0v-4m0 4v4m0-4h4"/></svg>
+      Architecture
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Core Systems</div>
+    <a href="protocol.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      Protocol
+    </a>
+    <a href="networking.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg>
+      Networking
+    </a>
+    <a href="world.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      World
+    </a>
+    <a href="entities.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Entities
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Gameplay</div>
+    <a href="gameplay.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Gameplay
+    </a>
+    <a href="commands.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      Commands
+    </a>
+    <a href="plugins.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66 4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66 4.24-4.24"/></svg>
+      Plugins
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Operations</div>
+    <a href="configuration.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Configuration
+    </a>
+    <a href="security.html" class="sidebar-link active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Security
+    </a>
+    <a href="performance.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Performance
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Links</div>
+    <a href="https://github.com/pedrokarim/mc-rs" class="sidebar-link" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<div class="sidebar-overlay"></div>
+
+<!-- Main Content -->
+<main class="main-content">
+  <div class="content-inner">
+
+    <h1>Security &amp; Anti-Cheat</h1>
+    <p class="page-subtitle">Multi-layered protection with violation tracking, rate limiting, and permission management.</p>
+
+    <!-- Authentication -->
+    <h2>Authentication</h2>
+    <p>MC-RS verifies player identity through <strong>Xbox Live JWT authentication</strong> during the login sequence. The server validates the chain data JWT tokens sent by the client, ensuring they originate from Mojang's authentication servers. Client data JWTs are parsed for skin information and device details.</p>
+    <p>The <code>online_mode</code> configuration option controls whether authentication is enforced. When set to <code>true</code> (the default), only players authenticated through Xbox Live can connect. Setting it to <code>false</code> disables verification, allowing unauthenticated clients &mdash; this should only be used for local development or LAN play.</p>
+
+    <div class="alert alert-warn">
+      <strong>Warning:</strong> Disabling <code>online_mode</code> removes all identity verification. Players can connect with any username, making the server vulnerable to impersonation and unauthorized access.
+    </div>
+
+    <!-- Encryption -->
+    <h2>Encryption</h2>
+    <p>After the authentication handshake completes, all subsequent traffic between the client and server is encrypted. MC-RS implements the full Bedrock encryption handshake:</p>
+    <ul>
+      <li><strong>ECDH P-384 key exchange</strong> &mdash; The server and client generate ephemeral P-384 key pairs and derive a shared secret using Elliptic Curve Diffie-Hellman.</li>
+      <li><strong>AES-256-CFB8 stream cipher</strong> &mdash; The shared secret is used to initialize an AES-256 cipher in CFB8 mode, which encrypts all packets in both directions.</li>
+      <li><strong>Handshake JWT</strong> &mdash; The server sends a signed JWT containing its public key. The client uses this to complete the key exchange.</li>
+    </ul>
+    <p>This encryption layer prevents packet sniffing and injection attacks. All game data, including chat messages, movement, and inventory actions, is transmitted over the encrypted channel.</p>
+
+    <!-- Anti-Cheat: ViolationTracker -->
+    <h2>Anti-Cheat: ViolationTracker</h2>
+    <p>The core anti-cheat system tracks violations per player across multiple categories. Each violation increments a score that accumulates over time. Scores decay gradually, so occasional network glitches do not trigger false positives. When a player's violation score exceeds the configured threshold, they are automatically kicked.</p>
+
+    <table>
+      <thead>
+        <tr><th>Category</th><th>Validation</th><th>Threshold</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Reach</strong></td><td>7.0 blocks max</td><td>Auto-kick</td><td>Block interaction distance exceeds the maximum allowed range</td></tr>
+        <tr><td><strong>Speed</strong></td><td>Tick-based calculation</td><td>Auto-kick</td><td>Player moving faster than the expected speed for their movement state</td></tr>
+        <tr><td><strong>Fly</strong></td><td>Ground check</td><td>Auto-kick</td><td>Player airborne without creative mode or elytra flight</td></tr>
+        <tr><td><strong>NoClip</strong></td><td>Collision check</td><td>Auto-kick</td><td>Player position intersects with solid blocks</td></tr>
+      </tbody>
+    </table>
+
+    <p>The <code>ViolationTracker</code> is located in the anti-cheat module and is instantiated per player on connection. Violation scores decay over time, preventing accumulated minor infractions from triggering a kick after the player has been playing normally.</p>
+
+    <div class="alert alert-info">
+      <strong>Decay mechanism:</strong> Violation scores decrease by a fixed amount each tick. This means temporary network lag or brief desynchronization will not cause a player to be kicked, as the score will naturally fall back below the threshold.
+    </div>
+
+    <!-- Rate Limiting -->
+    <h2>Rate Limiting</h2>
+    <p>MC-RS enforces <strong>per-action rate limits</strong> and a <strong>global rate limit</strong> to prevent packet spam and denial-of-service attacks. Each action type has its own rate counter, tracked independently per player.</p>
+
+    <table>
+      <thead>
+        <tr><th>Action</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Block break</strong></td><td>Rate-limited to prevent speed-mining exploits</td></tr>
+        <tr><td><strong>Block place</strong></td><td>Rate-limited to prevent rapid block placement abuse</td></tr>
+        <tr><td><strong>Item use</strong></td><td>Rate-limited to prevent item duplication via rapid use</td></tr>
+        <tr><td><strong>Chat</strong></td><td>Rate-limited to prevent chat spam and flooding</td></tr>
+        <tr><td><strong>Command</strong></td><td>Rate-limited to prevent command spam and server overload</td></tr>
+      </tbody>
+    </table>
+
+    <p>In addition to per-action limits, a <strong>global packet rate limit</strong> is enforced across all packet types. If a client exceeds the global limit, a violation is recorded. This protects against custom clients that flood the server with rapid-fire packets of any type.</p>
+
+    <!-- Permission System -->
+    <h2>Permission System</h2>
+    <p>The <code>PermissionManager</code> in <code>mc-rs-server/src/permissions.rs</code> provides a JSON-backed permission system with four persistent files:</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6m3-3h-6"/></svg>
+        </div>
+        <h3>ops.json</h3>
+        <p>Operator list with player names, UUIDs, and permission levels. Managed via <code>/op</code> and <code>/deop</code> commands.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M12 11l7 7m0-7l-7 7"/></svg>
+        </div>
+        <h3>whitelist.json</h3>
+        <p>Allowed player list. When <code>enforce_whitelist</code> is enabled, only listed players may connect.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M4.93 4.93l14.14 14.14"/></svg>
+        </div>
+        <h3>banned-players.json</h3>
+        <p>Players banned by name or UUID. Banned players are rejected during login with the ban reason displayed.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/><path d="M2 2l20 20"/></svg>
+        </div>
+        <h3>banned-ips.json</h3>
+        <p>IP addresses banned from connecting. All connections from a banned IP are rejected before authentication.</p>
+      </div>
+    </div>
+
+    <p>Permission levels are checked on every command execution. The <code>AvailableCommands</code> packet sent at login is filtered per player, so non-operators only see commands they are authorized to use in tab completion.</p>
+
+    <!-- Permission Levels -->
+    <h2>Permission Levels</h2>
+    <table>
+      <thead>
+        <tr><th>Level</th><th>Role</th><th>Available Commands</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>0</strong></td>
+          <td>Normal player</td>
+          <td>Basic commands: <code>/help</code>, <code>/list</code>, <code>/msg</code>, <code>/say</code></td>
+        </tr>
+        <tr>
+          <td><strong>1</strong></td>
+          <td>Operator</td>
+          <td>Standard operator commands: <code>/gamemode</code>, <code>/tp</code>, <code>/give</code>, <code>/kick</code>, <code>/ban</code>, <code>/weather</code>, <code>/time</code>, etc.</td>
+        </tr>
+        <tr>
+          <td><strong>2</strong></td>
+          <td>Full operator</td>
+          <td>All commands including <code>/op</code>, <code>/deop</code>, <code>/stop</code>, <code>/reload</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>Operators are assigned <code>perm=2</code> and <code>cmd_perm=1</code> in the Bedrock protocol ability data. Non-operators receive <code>perm=1</code> and <code>cmd_perm=0</code>. Commands like <code>/stop</code>, <code>/op</code>, and <code>/deop</code> require permission level 2, which corresponds to the <code>operator_permission_level</code> setting in <code>server.toml</code>.</p>
+
+    <!-- Security Best Practices -->
+    <h2>Security Best Practices</h2>
+    <ul>
+      <li><strong>Keep <code>online_mode=true</code></strong> &mdash; Always enable Xbox Live authentication on public servers to verify player identity and prevent impersonation.</li>
+      <li><strong>Set a strong RCON password</strong> &mdash; If RCON is enabled, use a long, random password. RCON provides full operator access to the server and should be treated as a root credential.</li>
+      <li><strong>Use the whitelist for private servers</strong> &mdash; Enable <code>enforce_whitelist</code> and add only trusted players. This prevents unknown users from joining even if they have valid Xbox Live accounts.</li>
+      <li><strong>Monitor violation logs</strong> &mdash; Review anti-cheat violation logs regularly. Repeated violations from the same player may indicate a modified client, even if the auto-kick threshold is not reached.</li>
+      <li><strong>Set appropriate view distance</strong> &mdash; Lowering <code>view_distance</code> reduces the amount of data sent per player, limiting the impact of connection-based resource abuse and improving server performance under load.</li>
+      <li><strong>Restrict RCON to localhost</strong> &mdash; If RCON is only used from the same machine, bind it to <code>127.0.0.1</code> to prevent external access.</li>
+      <li><strong>Keep the server updated</strong> &mdash; Apply updates promptly to benefit from security patches and anti-cheat improvements.</li>
+    </ul>
+
+  </div>
+</main>
+
+<footer class="site-footer">
+  MC-RS &mdash; Minecraft Bedrock Edition Server in Rust &mdash; <a href="https://github.com/pedrokarim/mc-rs">GitHub</a> &mdash; MIT License
+</footer>
+
+<script src="../nav.js"></script>
+<script src="../search-data.js"></script>
+<script src="../search.js"></script>
+</body>
+</html>

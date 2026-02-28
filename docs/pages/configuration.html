@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configuration — MC-RS Documentation</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<!-- Header -->
+<header class="site-header">
+  <button class="hamburger" aria-label="Menu">&#9776;</button>
+  <a href="../" class="header-logo">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="8" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.3"/>
+      <rect x="8" y="2" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.6"/>
+      <rect x="6" y="6" width="16" height="16" rx="2" fill="#4ecca3"/>
+      <rect x="10" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="18" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="12" y="16" width="8" height="3" rx="1" fill="#0f0f1a"/>
+    </svg>
+    <span>MC<span class="accent">-RS</span></span>
+  </a>
+  <div class="search-wrapper">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" class="search-input" placeholder="Search documentation...">
+    <span class="search-shortcut">/</span>
+    <div class="search-results"></div>
+  </div>
+</header>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Getting Started</div>
+    <a href="../" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </a>
+    <a href="overview.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+      Overview
+    </a>
+    <a href="architecture.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="6" rx="1"/><rect x="16" y="3" width="6" height="6" rx="1"/><rect x="16" y="15" width="6" height="6" rx="1"/><path d="M8 10h4m0 0v-4m0 4v4m0-4h4"/></svg>
+      Architecture
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Core Systems</div>
+    <a href="protocol.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      Protocol
+    </a>
+    <a href="networking.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg>
+      Networking
+    </a>
+    <a href="world.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      World
+    </a>
+    <a href="entities.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Entities
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Gameplay</div>
+    <a href="gameplay.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Gameplay
+    </a>
+    <a href="commands.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      Commands
+    </a>
+    <a href="plugins.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66 4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66 4.24-4.24"/></svg>
+      Plugins
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Operations</div>
+    <a href="configuration.html" class="sidebar-link active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Configuration
+    </a>
+    <a href="security.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Security
+    </a>
+    <a href="performance.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Performance
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Links</div>
+    <a href="https://github.com/pedrokarim/mc-rs" class="sidebar-link" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<div class="sidebar-overlay"></div>
+
+<!-- Main Content -->
+<main class="main-content">
+  <div class="content-inner">
+
+    <h1>Configuration</h1>
+    <p class="page-subtitle">Server configuration via server.toml with sensible defaults.</p>
+
+    <div class="alert alert-info">
+      The server creates a default <code>server.toml</code> on first run. All settings are optional &mdash; defaults are applied for any missing value.
+    </div>
+
+    <!-- [server] Section -->
+    <h2>[server] Section</h2>
+    <table>
+      <thead>
+        <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>address</code></td><td>String</td><td><code>"0.0.0.0"</code></td><td>Bind address</td></tr>
+        <tr><td><code>port</code></td><td>u16</td><td><code>19132</code></td><td>UDP port</td></tr>
+        <tr><td><code>motd</code></td><td>String</td><td><code>"MC-RS Server"</code></td><td>Server message of the day (shown in server list)</td></tr>
+        <tr><td><code>max_players</code></td><td>u32</td><td><code>20</code></td><td>Maximum concurrent players</td></tr>
+        <tr><td><code>online_mode</code></td><td>bool</td><td><code>true</code></td><td>Verify Xbox Live authentication</td></tr>
+        <tr><td><code>gamemode</code></td><td>String</td><td><code>"survival"</code></td><td>Default gamemode (survival, creative, adventure)</td></tr>
+        <tr><td><code>difficulty</code></td><td>String</td><td><code>"normal"</code></td><td>Difficulty (peaceful, easy, normal, hard)</td></tr>
+        <tr><td><code>view_distance</code></td><td>u32</td><td><code>10</code></td><td>Maximum view distance in chunks</td></tr>
+        <tr><td><code>tick_rate</code></td><td>u32</td><td><code>20</code></td><td>Server tick rate (ticks per second)</td></tr>
+        <tr><td><code>operator_permission_level</code></td><td>u32</td><td><code>2</code></td><td>Default permission level for operators</td></tr>
+      </tbody>
+    </table>
+
+    <!-- [world] Section -->
+    <h2>[world] Section</h2>
+    <table>
+      <thead>
+        <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>name</code></td><td>String</td><td><code>"world"</code></td><td>World directory name</td></tr>
+        <tr><td><code>generator</code></td><td>String</td><td><code>"default"</code></td><td>World generator (default, flat, void)</td></tr>
+        <tr><td><code>seed</code></td><td>i64</td><td>random</td><td>World generation seed</td></tr>
+        <tr><td><code>spawn_x</code></td><td>i32</td><td><code>0</code></td><td>Default spawn X position</td></tr>
+        <tr><td><code>spawn_y</code></td><td>i32</td><td><code>70</code></td><td>Default spawn Y position</td></tr>
+        <tr><td><code>spawn_z</code></td><td>i32</td><td><code>0</code></td><td>Default spawn Z position</td></tr>
+        <tr><td><code>auto_save_interval</code></td><td>u64</td><td><code>300</code></td><td>Auto-save interval in seconds</td></tr>
+        <tr><td><code>max_build_height</code></td><td>i32</td><td><code>319</code></td><td>Maximum build height</td></tr>
+        <tr><td><code>enable_nether</code></td><td>bool</td><td><code>true</code></td><td>Enable Nether dimension</td></tr>
+        <tr><td><code>enable_end</code></td><td>bool</td><td><code>true</code></td><td>Enable End dimension</td></tr>
+      </tbody>
+    </table>
+
+    <!-- [logging] Section -->
+    <h2>[logging] Section</h2>
+    <table>
+      <thead>
+        <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>level</code></td><td>String</td><td><code>"info"</code></td><td>Log level (trace, debug, info, warn, error)</td></tr>
+        <tr><td><code>file</code></td><td>String</td><td><code>""</code></td><td>Log file path (empty = stdout only)</td></tr>
+        <tr><td><code>format</code></td><td>String</td><td><code>"pretty"</code></td><td>Log format (pretty, json, compact)</td></tr>
+      </tbody>
+    </table>
+
+    <!-- [permissions] Section -->
+    <h2>[permissions] Section</h2>
+    <table>
+      <thead>
+        <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>enforce_whitelist</code></td><td>bool</td><td><code>false</code></td><td>Only whitelisted players can join</td></tr>
+        <tr><td><code>ops_file</code></td><td>String</td><td><code>"ops.json"</code></td><td>Path to operators file</td></tr>
+        <tr><td><code>whitelist_file</code></td><td>String</td><td><code>"whitelist.json"</code></td><td>Path to whitelist file</td></tr>
+        <tr><td><code>banned_players_file</code></td><td>String</td><td><code>"banned-players.json"</code></td><td>Path to banned players file</td></tr>
+        <tr><td><code>banned_ips_file</code></td><td>String</td><td><code>"banned-ips.json"</code></td><td>Path to banned IPs file</td></tr>
+      </tbody>
+    </table>
+
+    <!-- [rcon] Section -->
+    <h2>[rcon] Section</h2>
+    <table>
+      <thead>
+        <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>enabled</code></td><td>bool</td><td><code>false</code></td><td>Enable RCON</td></tr>
+        <tr><td><code>port</code></td><td>u16</td><td><code>25575</code></td><td>RCON TCP port</td></tr>
+        <tr><td><code>password</code></td><td>String</td><td><code>""</code></td><td>RCON password (required if enabled)</td></tr>
+      </tbody>
+    </table>
+
+    <!-- [query] Section -->
+    <h2>[query] Section</h2>
+    <table>
+      <thead>
+        <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>enabled</code></td><td>bool</td><td><code>false</code></td><td>Enable GameSpy4 query</td></tr>
+        <tr><td><code>port</code></td><td>u16</td><td><code>19132</code></td><td>Query UDP port</td></tr>
+      </tbody>
+    </table>
+
+    <!-- [packs] Section -->
+    <h2>[packs] Section</h2>
+    <table>
+      <thead>
+        <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>behavior_packs</code></td><td>Vec&lt;String&gt;</td><td><code>[]</code></td><td>List of behavior pack paths to load</td></tr>
+      </tbody>
+    </table>
+
+    <!-- Example Configuration -->
+    <h2>Example Configuration</h2>
+    <pre><code><span class="cm"># MC-RS Server Configuration</span>
+
+<span class="kw">[server]</span>
+<span class="fn">address</span> = <span class="str">"0.0.0.0"</span>
+<span class="fn">port</span> = <span class="num">19132</span>
+<span class="fn">motd</span> = <span class="str">"My MC-RS Server"</span>
+<span class="fn">max_players</span> = <span class="num">20</span>
+<span class="fn">online_mode</span> = <span class="num">true</span>
+<span class="fn">gamemode</span> = <span class="str">"survival"</span>
+<span class="fn">difficulty</span> = <span class="str">"normal"</span>
+<span class="fn">view_distance</span> = <span class="num">10</span>
+<span class="fn">tick_rate</span> = <span class="num">20</span>
+<span class="fn">operator_permission_level</span> = <span class="num">2</span>
+
+<span class="kw">[world]</span>
+<span class="fn">name</span> = <span class="str">"world"</span>
+<span class="fn">generator</span> = <span class="str">"default"</span>
+<span class="cm"># seed = 12345  # omit for random seed</span>
+<span class="fn">spawn_x</span> = <span class="num">0</span>
+<span class="fn">spawn_y</span> = <span class="num">70</span>
+<span class="fn">spawn_z</span> = <span class="num">0</span>
+<span class="fn">auto_save_interval</span> = <span class="num">300</span>
+<span class="fn">max_build_height</span> = <span class="num">319</span>
+<span class="fn">enable_nether</span> = <span class="num">true</span>
+<span class="fn">enable_end</span> = <span class="num">true</span>
+
+<span class="kw">[logging]</span>
+<span class="fn">level</span> = <span class="str">"info"</span>
+<span class="fn">file</span> = <span class="str">""</span>
+<span class="fn">format</span> = <span class="str">"pretty"</span>
+
+<span class="kw">[permissions]</span>
+<span class="fn">enforce_whitelist</span> = <span class="num">false</span>
+<span class="fn">ops_file</span> = <span class="str">"ops.json"</span>
+<span class="fn">whitelist_file</span> = <span class="str">"whitelist.json"</span>
+<span class="fn">banned_players_file</span> = <span class="str">"banned-players.json"</span>
+<span class="fn">banned_ips_file</span> = <span class="str">"banned-ips.json"</span>
+
+<span class="kw">[rcon]</span>
+<span class="fn">enabled</span> = <span class="num">false</span>
+<span class="fn">port</span> = <span class="num">25575</span>
+<span class="fn">password</span> = <span class="str">""</span>
+
+<span class="kw">[query]</span>
+<span class="fn">enabled</span> = <span class="num">false</span>
+<span class="fn">port</span> = <span class="num">19132</span>
+
+<span class="kw">[packs]</span>
+<span class="fn">behavior_packs</span> = []</code></pre>
+
+    <!-- File Locations -->
+    <h2>File Locations</h2>
+    <table>
+      <thead>
+        <tr><th>File</th><th>Default Path</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>server.toml</code></td><td><code>./server.toml</code></td><td>Main server configuration file</td></tr>
+        <tr><td><code>ops.json</code></td><td><code>./ops.json</code></td><td>Operator list with permission levels</td></tr>
+        <tr><td><code>whitelist.json</code></td><td><code>./whitelist.json</code></td><td>Allowed players list</td></tr>
+        <tr><td><code>banned-players.json</code></td><td><code>./banned-players.json</code></td><td>Banned players by name/UUID</td></tr>
+        <tr><td><code>banned-ips.json</code></td><td><code>./banned-ips.json</code></td><td>Banned IP addresses</td></tr>
+        <tr><td><code>level.dat</code></td><td><code>./worlds/&lt;name&gt;/level.dat</code></td><td>World metadata (NBT little-endian format)</td></tr>
+        <tr><td>LevelDB</td><td><code>./worlds/&lt;name&gt;/db/</code></td><td>Chunk and block entity storage</td></tr>
+        <tr><td>Player data</td><td><code>./worlds/&lt;name&gt;/players/</code></td><td>Per-player JSON files (&lt;uuid&gt;.json)</td></tr>
+      </tbody>
+    </table>
+
+  </div>
+</main>
+
+<footer class="site-footer">
+  MC-RS &mdash; Minecraft Bedrock Edition Server in Rust &mdash; <a href="https://github.com/pedrokarim/mc-rs">GitHub</a> &mdash; MIT License
+</footer>
+
+<script src="../nav.js"></script>
+<script src="../search-data.js"></script>
+<script src="../search.js"></script>
+</body>
+</html>

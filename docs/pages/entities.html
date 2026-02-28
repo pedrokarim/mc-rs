@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Entities — MC-RS Documentation</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<!-- Header -->
+<header class="site-header">
+  <button class="hamburger" aria-label="Menu">&#9776;</button>
+  <a href="../" class="header-logo">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="8" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.3"/>
+      <rect x="8" y="2" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.6"/>
+      <rect x="6" y="6" width="16" height="16" rx="2" fill="#4ecca3"/>
+      <rect x="10" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="18" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="12" y="16" width="8" height="3" rx="1" fill="#0f0f1a"/>
+    </svg>
+    <span>MC<span class="accent">-RS</span></span>
+  </a>
+  <div class="search-wrapper">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" class="search-input" placeholder="Search documentation...">
+    <span class="search-shortcut">/</span>
+    <div class="search-results"></div>
+  </div>
+</header>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Getting Started</div>
+    <a href="../" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </a>
+    <a href="overview.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+      Overview
+    </a>
+    <a href="architecture.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="6" rx="1"/><rect x="16" y="3" width="6" height="6" rx="1"/><rect x="16" y="15" width="6" height="6" rx="1"/><path d="M8 10h4m0 0v-4m0 4v4m0-4h4"/></svg>
+      Architecture
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Core Systems</div>
+    <a href="protocol.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      Protocol
+    </a>
+    <a href="networking.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg>
+      Networking
+    </a>
+    <a href="world.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      World
+    </a>
+    <a href="entities.html" class="sidebar-link active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Entities
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Gameplay</div>
+    <a href="gameplay.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Gameplay
+    </a>
+    <a href="commands.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      Commands
+    </a>
+    <a href="plugins.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66 4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66 4.24-4.24"/></svg>
+      Plugins
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Operations</div>
+    <a href="configuration.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Configuration
+    </a>
+    <a href="security.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Security
+    </a>
+    <a href="performance.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Performance
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Links</div>
+    <a href="https://github.com/pedrokarim/mc-rs" class="sidebar-link" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<div class="sidebar-overlay"></div>
+
+<!-- Main Content -->
+<main class="main-content">
+  <div class="content-inner">
+
+    <h1>Entity System</h1>
+    <p class="page-subtitle">ECS-based entity management with bevy_ecs 0.15, mob AI, and spawn systems.</p>
+
+    <!-- ECS Architecture -->
+    <h2>ECS Architecture</h2>
+    <p>MC-RS uses <strong>bevy_ecs 0.15</strong> (the standalone ECS library, not the full Bevy game engine) as its entity-component-system foundation. The <code>GameWorld</code> struct wraps a <code>bevy_ecs::World</code> and provides a high-level interface for entity management, system execution, and game state queries.</p>
+
+    <h3>Components</h3>
+    <p>Entities are composed of lightweight data components that are added and removed dynamically:</p>
+
+    <ul>
+      <li><strong><code>Position</code></strong> &mdash; 3D world coordinates (Vec3: x, y, z)</li>
+      <li><strong><code>Velocity</code></strong> &mdash; Per-tick movement vector, affected by gravity and AI</li>
+      <li><strong><code>Health</code></strong> &mdash; Current and maximum hit points</li>
+      <li><strong><code>MobType</code></strong> &mdash; Enum identifying the mob species (Zombie, Skeleton, Cow, etc.)</li>
+      <li><strong><code>BehaviorList</code></strong> &mdash; <code>Vec&lt;Box&lt;dyn Behavior&gt;&gt;</code> defining the AI behavior stack</li>
+      <li><strong><code>Target</code></strong> &mdash; Currently targeted entity (for hostile mobs)</li>
+      <li><strong><code>SpawnedBy</code></strong> &mdash; Tracks which player or system spawned the entity</li>
+    </ul>
+
+    <h3>Systems</h3>
+    <p>ECS systems run in a defined order each game tick (20 TPS, every 50ms):</p>
+
+    <ol>
+      <li><strong>Gravity</strong> &mdash; Applies downward velocity to all entities not on ground</li>
+      <li><strong>AI tick</strong> &mdash; Evaluates and executes mob behaviors based on priority</li>
+      <li><strong>Movement</strong> &mdash; Applies velocity to position, performs collision detection</li>
+      <li><strong>Spawn/Despawn</strong> &mdash; Natural mob spawning and distance-based despawning</li>
+      <li><strong>Death</strong> &mdash; Removes entities at zero health, triggers death events</li>
+    </ol>
+
+    <pre><code><span class="cm">// GameWorld tick pipeline (simplified)</span>
+<span class="kw">impl</span> <span class="ty">GameWorld</span> {
+    <span class="kw">pub fn</span> <span class="fn">tick</span>(&amp;<span class="kw">mut</span> <span class="kw">self</span>, current_tick: <span class="ty">u64</span>) {
+        <span class="kw">self</span>.<span class="fn">system_gravity</span>();         <span class="cm">// Apply gravity to entities</span>
+        <span class="kw">self</span>.<span class="fn">system_ai_tick</span>();         <span class="cm">// Run AI behaviors</span>
+        <span class="kw">self</span>.<span class="fn">system_movement</span>();        <span class="cm">// Apply velocity, collisions</span>
+        <span class="kw">self</span>.<span class="fn">system_spawn_despawn</span>();   <span class="cm">// Natural mob lifecycle</span>
+        <span class="kw">self</span>.<span class="fn">system_death</span>();           <span class="cm">// Remove dead entities</span>
+    }
+}</code></pre>
+
+    <div class="alert alert-info">
+      <strong>bevy_ecs note:</strong> Since <code>World::query()</code> in bevy_ecs 0.15 requires <code>&amp;mut World</code>, all methods that use queries take <code>&amp;mut self</code>. This is a consequence of using the standalone ECS library outside the full Bevy scheduler.
+    </div>
+
+    <!-- Mob Types -->
+    <h2>Mob Types</h2>
+    <p>MC-RS implements 5 mob types through the <code>MobRegistry</code>, which provides static definitions for each species including health, damage, drops, and default behaviors.</p>
+
+    <table>
+      <thead>
+        <tr><th>Mob</th><th>Category</th><th>Health</th><th>Attack</th><th>Behaviors</th><th>Breedable</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Zombie</strong></td>
+          <td><span class="tag">Hostile</span></td>
+          <td>20 HP</td>
+          <td>Melee (3 dmg)</td>
+          <td>Float, NearestAttackableTarget, HurtByTarget, MeleeAttack, RandomStroll, LookAtPlayer</td>
+          <td>No</td>
+        </tr>
+        <tr>
+          <td><strong>Skeleton</strong></td>
+          <td><span class="tag">Hostile</span></td>
+          <td>20 HP</td>
+          <td>Ranged (bow)</td>
+          <td>Float, NearestAttackableTarget, HurtByTarget, MeleeAttack, RandomStroll, LookAtPlayer</td>
+          <td>No</td>
+        </tr>
+        <tr>
+          <td><strong>Cow</strong></td>
+          <td><span class="tag tag-accent">Passive</span></td>
+          <td>10 HP</td>
+          <td>None</td>
+          <td>Float, Panic, TemptGoal, BreedGoal, RandomStroll, LookAtPlayer</td>
+          <td>Yes (wheat)</td>
+        </tr>
+        <tr>
+          <td><strong>Pig</strong></td>
+          <td><span class="tag tag-accent">Passive</span></td>
+          <td>10 HP</td>
+          <td>None</td>
+          <td>Float, Panic, TemptGoal, BreedGoal, RandomStroll, LookAtPlayer</td>
+          <td>Yes (carrot)</td>
+        </tr>
+        <tr>
+          <td><strong>Chicken</strong></td>
+          <td><span class="tag tag-accent">Passive</span></td>
+          <td>4 HP</td>
+          <td>None</td>
+          <td>Float, Panic, TemptGoal, BreedGoal, RandomStroll, LookAtPlayer</td>
+          <td>Yes (seeds)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>Each mob is spawned as an ECS entity with its type-specific components. The <code>/summon</code> command can spawn any registered mob type at a specified position.</p>
+
+    <!-- AI Behaviors -->
+    <h2>AI Behaviors</h2>
+    <p>Mob AI uses a <strong>priority-based behavior system</strong>. Each mob has a <code>BehaviorList</code> component containing a <code>Vec&lt;Box&lt;dyn Behavior&gt;&gt;</code> sorted by priority (lower number = higher priority). Every tick, the AI system evaluates behaviors from highest to lowest priority.</p>
+
+    <h3>Behavior Types</h3>
+    <p>Behaviors are categorized into three types that determine execution rules:</p>
+    <ul>
+      <li><strong>Movement</strong> &mdash; Only one movement behavior can be active at a time. If a higher-priority movement behavior activates, the current one is interrupted.</li>
+      <li><strong>Passive</strong> &mdash; Multiple passive behaviors can run simultaneously alongside any active movement behavior.</li>
+      <li><strong>TargetSelector</strong> &mdash; Only one target selector can be active at a time. Determines which entity the mob targets for attacks.</li>
+    </ul>
+
+    <h3>Behavior Table</h3>
+    <table>
+      <thead>
+        <tr><th>Priority</th><th>Behavior</th><th>Type</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>0</code></td>
+          <td><strong>Float</strong></td>
+          <td>Passive</td>
+          <td>Keeps the mob at the water surface when in water. Applies upward velocity to prevent drowning. Always active when submerged.</td>
+        </tr>
+        <tr>
+          <td><code>1</code></td>
+          <td><strong>NearestAttackableTarget</strong></td>
+          <td>TargetSelector</td>
+          <td>Scans for the nearest player within detection range. Sets the mob's attack target. Used by hostile mobs (zombies, skeletons) to acquire targets.</td>
+        </tr>
+        <tr>
+          <td><code>1</code></td>
+          <td><strong>Panic</strong></td>
+          <td>Movement</td>
+          <td>Activated when a passive mob takes damage. The mob runs in a random direction at increased speed for several seconds, fleeing from the attacker.</td>
+        </tr>
+        <tr>
+          <td><code>2</code></td>
+          <td><strong>HurtByTarget</strong></td>
+          <td>TargetSelector</td>
+          <td>Retargets the mob's attack to whatever entity last dealt damage to it. Provides aggro response for hostile mobs.</td>
+        </tr>
+        <tr>
+          <td><code>2</code></td>
+          <td><strong>MeleeAttack</strong></td>
+          <td>Movement</td>
+          <td>Moves toward the current target and deals melee damage when within reach. Handles attack cooldown and pathfinding to the target position.</td>
+        </tr>
+        <tr>
+          <td><code>3</code></td>
+          <td><strong>TemptGoal</strong></td>
+          <td>Movement</td>
+          <td>The mob follows a nearby player who is holding a tempting item (wheat, carrot, or seeds depending on mob type). Used for leading animals.</td>
+        </tr>
+        <tr>
+          <td><code>4</code></td>
+          <td><strong>BreedGoal</strong></td>
+          <td>Movement</td>
+          <td>When in love mode, seeks another same-type mob also in love mode. Moves toward the partner and triggers breeding when close enough.</td>
+        </tr>
+        <tr>
+          <td><code>5</code></td>
+          <td><strong>RandomStroll</strong></td>
+          <td>Movement</td>
+          <td>Wanders randomly when idle. Selects a random nearby position and walks toward it. Uses flat pathfinding to navigate around obstacles.</td>
+        </tr>
+        <tr>
+          <td><code>6</code></td>
+          <td><strong>LookAtPlayer</strong></td>
+          <td>Passive</td>
+          <td>Rotates the mob's head to face the nearest player within a short range. Provides visual feedback that mobs are aware of players.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="alert alert-info">
+      <strong>SpatialGrid:</strong> AI queries like "find nearest player" use a <code>SpatialGrid</code> data structure for O(1) lookups instead of iterating all entities. This is critical for performance when many mobs are active simultaneously.
+    </div>
+
+    <!-- Spawn & Despawn -->
+    <h2>Spawn &amp; Despawn</h2>
+    <p>Mobs are naturally spawned and despawned according to configurable rules defined in <code>SpawnConfig</code>:</p>
+
+    <div class="stats-row">
+      <div class="stat">
+        <div class="stat-number">20</div>
+        <div class="stat-label">Hostile Cap</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">10</div>
+        <div class="stat-label">Passive Cap</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">100</div>
+        <div class="stat-label">Spawn Interval (ticks)</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">128</div>
+        <div class="stat-label">Despawn Distance</div>
+      </div>
+    </div>
+
+    <h3>Natural Spawning</h3>
+    <p>Every <strong>100 game ticks</strong> (5 seconds), the spawn system checks if the current mob count is below the cap for each category. If so, it selects random positions within a radius around each player and attempts to spawn appropriate mob types. The spawn position must be on a solid block with sufficient space above for the mob's hitbox.</p>
+
+    <h3>Despawning</h3>
+    <p>Mobs are removed when they are more than <strong>128 blocks</strong> from all connected players. This check runs each spawn cycle. Mobs spawned by the <code>/summon</code> command follow the same despawn rules as naturally spawned mobs.</p>
+
+    <!-- Breeding System -->
+    <h2>Breeding System</h2>
+    <p>Passive mobs (cow, pig, chicken) can be bred by players to produce baby mobs.</p>
+
+    <h3>TemptGoal</h3>
+    <p>Each breedable mob type is attracted to a specific item held by a nearby player:</p>
+    <ul>
+      <li><strong>Cow</strong> &mdash; Wheat</li>
+      <li><strong>Pig</strong> &mdash; Carrot</li>
+      <li><strong>Chicken</strong> &mdash; Seeds (wheat seeds, beetroot seeds, melon seeds, pumpkin seeds)</li>
+    </ul>
+    <p>When a player holds the tempting item, nearby mobs of the matching type will follow the player at walking speed. The <code>HeldItemName</code> is synced from the <code>PlayerConnection</code> to the ECS so behaviors can check it. Feeding a mob its tempt item (via <code>UseItemOnEntity</code> interaction) puts the mob into <strong>love mode</strong>.</p>
+
+    <h3>BreedGoal</h3>
+    <p>When two mobs of the same type are both in love mode and within proximity:</p>
+    <ol>
+      <li>They move toward each other using the BreedGoal movement behavior</li>
+      <li>When close enough, a <strong>baby mob</strong> is spawned at their midpoint</li>
+      <li>Both parents exit love mode and enter a <strong>5-minute breeding cooldown</strong></li>
+      <li><strong>Love particles</strong> are emitted via <code>LevelEvent</code> packets during love mode and at the moment of breeding</li>
+    </ol>
+    <p>Baby mobs have a smaller hitbox and grow into adults over time.</p>
+
+    <!-- Player Mirror Entities -->
+    <h2>Player Mirror Entities</h2>
+    <p>Each connected player has a corresponding <strong>mirror entity</strong> in the ECS world. This entity exists so that the ECS systems (AI targeting, spatial queries, collision) can interact with players uniformly alongside mobs.</p>
+
+    <ul>
+      <li><strong>Spawned on connect</strong> &mdash; When a player joins the server and enters the Playing state, a mirror entity with <code>Position</code> and <code>Health</code> components is created in the <code>GameWorld</code>.</li>
+      <li><strong>Position sync</strong> &mdash; The <code>update_player_position</code> function runs each tick, copying the authoritative position from <code>PlayerConnection.position</code> into the ECS <code>Position</code> component. This ensures AI behaviors (like NearestAttackableTarget) see accurate player positions.</li>
+      <li><strong>Despawned on disconnect</strong> &mdash; When a player disconnects, their mirror entity is removed from the ECS world.</li>
+      <li><strong>Not the source of truth</strong> &mdash; The <code>PlayerConnection</code> struct remains the authoritative source for all player state (position, health, inventory, effects). The mirror entity is a read-only projection used by ECS queries.</li>
+    </ul>
+
+    <div class="alert alert-warn">
+      <strong>Design note:</strong> Player mirror entities exist because the ECS needs to query players alongside mobs for AI targeting and spatial operations. Without them, every AI system would need special-case code to check both the ECS world and the separate PlayerConnection map.
+    </div>
+
+    <!-- Network Packets -->
+    <h2>Network Packets</h2>
+    <p>Entity state is synchronized to clients using three primary packets. All entity packets use a <code>runtime_id</code> (VarUInt64) to identify entities uniquely within the session.</p>
+
+    <h3>AddActor (0x0D)</h3>
+    <p>Sent when a new non-player entity spawns within a player's view distance. Contains all data needed for the client to create the entity.</p>
+
+    <pre><code><span class="ty">AddActor</span> {
+    unique_entity_id: <span class="ty">VarLong</span>,     <span class="cm">// Persistent entity ID (signed zigzag)</span>
+    runtime_entity_id: <span class="ty">VarUInt64</span>,  <span class="cm">// Session-unique runtime ID</span>
+    entity_type: <span class="ty">String</span>,           <span class="cm">// e.g., "minecraft:zombie"</span>
+    position: <span class="ty">Vec3</span>,                <span class="cm">// 3x f32_le (x, y, z)</span>
+    velocity: <span class="ty">Vec3</span>,                <span class="cm">// 3x f32_le (motion)</span>
+    pitch: <span class="ty">f32_le</span>,                 <span class="cm">// Vertical rotation</span>
+    yaw: <span class="ty">f32_le</span>,                   <span class="cm">// Horizontal rotation</span>
+    head_yaw: <span class="ty">f32_le</span>,              <span class="cm">// Head rotation</span>
+    body_yaw: <span class="ty">f32_le</span>,              <span class="cm">// Body rotation</span>
+    attributes: [<span class="ty">Attribute</span>],       <span class="cm">// Health, movement speed, etc.</span>
+    metadata: [<span class="ty">MetadataEntry</span>],     <span class="cm">// Entity flags, name, variant, etc.</span>
+    links: <span class="ty">VarUInt32</span>,              <span class="cm">// 0 (entity links, unused)</span>
+}</code></pre>
+
+    <h3>MoveActorAbsolute (0x10)</h3>
+    <p>Sent each tick for entities that have moved, providing their new absolute position and rotation.</p>
+
+    <pre><code><span class="ty">MoveActorAbsolute</span> {
+    runtime_entity_id: <span class="ty">VarUInt64</span>,  <span class="cm">// Which entity moved</span>
+    flags: <span class="ty">u16_le</span>,                  <span class="cm">// Bit flags (on_ground, teleport)</span>
+    position: <span class="ty">Vec3</span>,                 <span class="cm">// New absolute position</span>
+    pitch: <span class="ty">u8</span>,                      <span class="cm">// Compressed: angle * 256 / 360</span>
+    yaw: <span class="ty">u8</span>,                        <span class="cm">// Compressed rotation</span>
+    head_yaw: <span class="ty">u8</span>,                   <span class="cm">// Compressed head rotation</span>
+}</code></pre>
+
+    <div class="alert alert-info">
+      <strong>Angle compression:</strong> Rotation angles in <code>MoveActorAbsolute</code> are compressed from floating-point degrees to a single byte each. The formula is <code>(angle * 256.0 / 360.0) as u8</code>, giving approximately 1.4 degrees of precision per step. This reduces bandwidth by transmitting 3 bytes instead of 12 for rotations.
+    </div>
+
+    <h3>RemoveActor (0x0E)</h3>
+    <p>Sent when an entity is despawned, killed, or moves out of view distance. The client destroys the entity and frees its resources.</p>
+
+    <pre><code><span class="ty">RemoveActor</span> {
+    unique_entity_id: <span class="ty">VarLong</span>,  <span class="cm">// The entity to remove (signed zigzag)</span>
+}</code></pre>
+
+    <p>Entity visibility is managed per-player: when a mob moves into a player's loaded chunk area, an <code>AddActor</code> is sent. When it moves out, a <code>RemoveActor</code> is sent. This ensures clients only track entities they can actually see, keeping memory and rendering costs bounded.</p>
+
+  </div>
+</main>
+
+<footer class="site-footer">
+  MC-RS &mdash; Minecraft Bedrock Edition Server in Rust &mdash; <a href="https://github.com/pedrokarim/mc-rs">GitHub</a> &mdash; MIT License
+</footer>
+
+<script src="../nav.js"></script>
+<script src="../search-data.js"></script>
+<script src="../search.js"></script>
+</body>
+</html>

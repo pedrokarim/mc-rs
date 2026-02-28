@@ -364,9 +364,9 @@ Phase 5 : Polish             ██████████ (continu)
 - [x] Rate limiting des actions
 
 ### 5.5 — Compatibilité
-- [ ] Support multi-version protocole (dernières 2-3 versions)
-- [ ] Import de mondes BDS existants
-- [ ] Export de mondes compatible BDS
+- [x] Support multi-version protocole (dernières 2-3 versions)
+- [x] Import de mondes BDS existants
+- [x] Export de mondes compatible BDS
 
 ---
 

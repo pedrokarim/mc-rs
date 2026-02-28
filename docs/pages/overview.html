@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Overview — MC-RS Documentation</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<!-- Header -->
+<header class="site-header">
+  <button class="hamburger" aria-label="Menu">&#9776;</button>
+  <a href="../" class="header-logo">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="8" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.3"/>
+      <rect x="8" y="2" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.6"/>
+      <rect x="6" y="6" width="16" height="16" rx="2" fill="#4ecca3"/>
+      <rect x="10" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="18" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="12" y="16" width="8" height="3" rx="1" fill="#0f0f1a"/>
+    </svg>
+    <span>MC<span class="accent">-RS</span></span>
+  </a>
+  <div class="search-wrapper">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" class="search-input" placeholder="Search documentation...">
+    <span class="search-shortcut">/</span>
+    <div class="search-results"></div>
+  </div>
+</header>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Getting Started</div>
+    <a href="../" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </a>
+    <a href="overview.html" class="sidebar-link active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+      Overview
+    </a>
+    <a href="architecture.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="6" rx="1"/><rect x="16" y="3" width="6" height="6" rx="1"/><rect x="16" y="15" width="6" height="6" rx="1"/><path d="M8 10h4m0 0v-4m0 4v4m0-4h4"/></svg>
+      Architecture
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Core Systems</div>
+    <a href="protocol.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      Protocol
+    </a>
+    <a href="networking.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg>
+      Networking
+    </a>
+    <a href="world.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      World
+    </a>
+    <a href="entities.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Entities
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Gameplay</div>
+    <a href="gameplay.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Gameplay
+    </a>
+    <a href="commands.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      Commands
+    </a>
+    <a href="plugins.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66 4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66 4.24-4.24"/></svg>
+      Plugins
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Operations</div>
+    <a href="configuration.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Configuration
+    </a>
+    <a href="security.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Security
+    </a>
+    <a href="performance.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Performance
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Links</div>
+    <a href="https://github.com/pedrokarim/mc-rs" class="sidebar-link" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<div class="sidebar-overlay"></div>
+
+<!-- Main Content -->
+<main class="main-content">
+  <div class="content-inner">
+
+    <h1>Overview</h1>
+    <p class="page-subtitle">MC-RS is a from-scratch Minecraft Bedrock Edition server written entirely in Rust, targeting full survival gameplay with high performance and memory safety.</p>
+
+    <!-- What is MC-RS? -->
+    <h2>What is MC-RS?</h2>
+    <p>MC-RS is a complete <strong>Minecraft Bedrock Edition server implementation</strong> written in Rust. It targets protocol version <strong>766</strong> (Bedrock Edition <strong>1.21.50</strong>) and implements the full survival gameplay experience &mdash; not just a proxy or relay.</p>
+    <p>The server handles everything from the low-level RakNet UDP transport and ECDH encryption handshake through to world generation, mob AI, combat, crafting, enchantments, and a full plugin system. Players can connect with an unmodified Bedrock client (Windows 10, mobile, or console) and experience survival mode with:</p>
+    <ul>
+      <li>Procedurally generated terrain with 10 biomes, caves, ores, and structures</li>
+      <li>Full combat system with armor, enchantments, critical hits, and potion effects</li>
+      <li>Crafting tables, furnaces, anvils, enchanting tables, stonecutters, grindstones, and looms</li>
+      <li>Mob AI with pathfinding, breeding, and natural spawn/despawn cycles</li>
+      <li>Three dimensions: Overworld, Nether, and The End with portal mechanics</li>
+      <li>Plugin support via Rust API, WASM (wasmtime), and Lua (mlua)</li>
+    </ul>
+
+    <div class="alert alert-info">
+      <strong>Note:</strong> MC-RS is a clean-room implementation. It does not use or depend on Mojang's official server code (BDS). All protocol handling is implemented from public documentation and packet analysis.
+    </div>
+
+    <!-- Why Rust? -->
+    <h2>Why Rust?</h2>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <h3>Performance</h3>
+        <p>Compiled to native code with zero-cost abstractions. No garbage collector pauses, no JIT warmup. Chunk generation and packet processing run at full speed from the first tick.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <h3>Memory Safety</h3>
+        <p>Rust's ownership system eliminates use-after-free, double-free, buffer overflows, and data races at compile time. No null pointer exceptions, no segfaults in production.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>
+        </div>
+        <h3>Fearless Concurrency</h3>
+        <p>Send and Sync traits prevent data races. Combined with tokio's async runtime, MC-RS handles hundreds of concurrent connections without thread-safety bugs.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        </div>
+        <h3>Type System</h3>
+        <p>Rust's expressive type system catches protocol encoding bugs, invalid state transitions, and missing packet fields at compile time rather than in production.</p>
+      </div>
+    </div>
+
+    <!-- Comparison -->
+    <h2>Comparison</h2>
+    <p>How MC-RS stacks up against other Bedrock server implementations:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>MC-RS</th>
+          <th>BDS (Official)</th>
+          <th>PocketMine-MP</th>
+          <th>Nukkit</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Language</strong></td>
+          <td><span class="tag tag-accent">Rust</span></td>
+          <td><span class="tag">C++</span></td>
+          <td><span class="tag">PHP</span></td>
+          <td><span class="tag">Java</span></td>
+        </tr>
+        <tr>
+          <td><strong>Open Source</strong></td>
+          <td>Yes (MIT)</td>
+          <td>No (proprietary)</td>
+          <td>Yes (LGPL)</td>
+          <td>Yes (GPL)</td>
+        </tr>
+        <tr>
+          <td><strong>Plugin System</strong></td>
+          <td>Rust + WASM + Lua</td>
+          <td>None</td>
+          <td>PHP plugins</td>
+          <td>Java plugins</td>
+        </tr>
+        <tr>
+          <td><strong>Performance</strong></td>
+          <td>Native, no GC</td>
+          <td>Native, closed</td>
+          <td>Interpreted, GC</td>
+          <td>JIT, GC pauses</td>
+        </tr>
+        <tr>
+          <td><strong>Survival Mode</strong></td>
+          <td>Full (combat, crafting, mobs, world gen)</td>
+          <td>Full (reference)</td>
+          <td>Partial</td>
+          <td>Partial</td>
+        </tr>
+        <tr>
+          <td><strong>Protocol Version</strong></td>
+          <td>766 (1.21.50)</td>
+          <td>Latest</td>
+          <td>766</td>
+          <td>Varies</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Project Status -->
+    <h2>Project Status</h2>
+    <div class="stats-row">
+      <div class="stat">
+        <div class="stat-number">924</div>
+        <div class="stat-label">Tests</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">12</div>
+        <div class="stat-label">Crates</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">5</div>
+        <div class="stat-label">Phases</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">50+</div>
+        <div class="stat-label">Packets</div>
+      </div>
+    </div>
+
+    <p>MC-RS has been developed in 5 major phases, each building on the previous:</p>
+    <table>
+      <thead>
+        <tr><th>Phase</th><th>Scope</th><th>Highlights</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Phase 1</strong></td>
+          <td>Foundation</td>
+          <td>RakNet transport, protocol codec, login flow, encryption, world init, chunks, movement, blocks, inventory, chat, commands, dynamic chunk loading</td>
+        </tr>
+        <tr>
+          <td><strong>Phase 2</strong></td>
+          <td>Multiplayer</td>
+          <td>Multi-player sync, PvP combat, 40+ commands with entity selectors, permissions system (whitelist, ban, ops)</td>
+        </tr>
+        <tr>
+          <td><strong>Phase 3</strong></td>
+          <td>Gameplay</td>
+          <td>ECS entities, mob AI (9 behaviors), full combat (armor, enchantments, potions), survival (hunger, drowning, fall damage), crafting (50+ recipes), world generation (10 biomes, caves, ores, structures, Nether, End), persistence (LevelDB), block ticks (fluids, gravity, redstone, pistons), XP, weather, furnaces, enchanting tables, anvils</td>
+        </tr>
+        <tr>
+          <td><strong>Phase 4</strong></td>
+          <td>Extensibility</td>
+          <td>Rust plugin API (15 events), WASM runtime (wasmtime), Lua scripting (mlua), behavior pack loader, forms UI, hot-reload</td>
+        </tr>
+        <tr>
+          <td><strong>Phase 5</strong></td>
+          <td>Operations</td>
+          <td>Advanced commands (/setblock, /fill, /clone, /execute, /scoreboard), RCON, Query protocol, console REPL, ticking areas, multi-dimension portals, anti-cheat, performance optimizations</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Getting Started -->
+    <h2>Getting Started</h2>
+    <p>Ready to dive in? Here are the best places to start:</p>
+    <div class="card-grid">
+      <a href="architecture.html" class="card" style="text-decoration:none">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="6" rx="1"/><rect x="16" y="3" width="6" height="6" rx="1"/><rect x="16" y="15" width="6" height="6" rx="1"/><path d="M8 10h4m0 0v-4m0 4v4m0-4h4"/></svg>
+        </div>
+        <h3>Architecture</h3>
+        <p>Understand the 12-crate workspace, data flow, and threading model.</p>
+      </a>
+      <a href="configuration.html" class="card" style="text-decoration:none">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09"/></svg>
+        </div>
+        <h3>Configuration</h3>
+        <p>Set up server.toml with world, permissions, and logging options.</p>
+      </a>
+      <a href="https://github.com/pedrokarim/mc-rs" class="card" style="text-decoration:none" target="_blank" rel="noopener">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        </div>
+        <h3>GitHub Repository</h3>
+        <p>Browse the source code, open issues, and contribute.</p>
+      </a>
+    </div>
+
+  </div>
+</main>
+
+<footer class="site-footer">
+  MC-RS &mdash; Minecraft Bedrock Edition Server in Rust &mdash; <a href="https://github.com/pedrokarim/mc-rs">GitHub</a> &mdash; MIT License
+</footer>
+
+<script src="../nav.js"></script>
+<script src="../search-data.js"></script>
+<script src="../search.js"></script>
+</body>
+</html>

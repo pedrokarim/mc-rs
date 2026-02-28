@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Protocol — MC-RS Documentation</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<!-- Header -->
+<header class="site-header">
+  <button class="hamburger" aria-label="Menu">&#9776;</button>
+  <a href="../" class="header-logo">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="8" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.3"/>
+      <rect x="8" y="2" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.6"/>
+      <rect x="6" y="6" width="16" height="16" rx="2" fill="#4ecca3"/>
+      <rect x="10" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="18" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="12" y="16" width="8" height="3" rx="1" fill="#0f0f1a"/>
+    </svg>
+    <span>MC<span class="accent">-RS</span></span>
+  </a>
+  <div class="search-wrapper">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" class="search-input" placeholder="Search documentation...">
+    <span class="search-shortcut">/</span>
+    <div class="search-results"></div>
+  </div>
+</header>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Getting Started</div>
+    <a href="../" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </a>
+    <a href="overview.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+      Overview
+    </a>
+    <a href="architecture.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="6" rx="1"/><rect x="16" y="3" width="6" height="6" rx="1"/><rect x="16" y="15" width="6" height="6" rx="1"/><path d="M8 10h4m0 0v-4m0 4v4m0-4h4"/></svg>
+      Architecture
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Core Systems</div>
+    <a href="protocol.html" class="sidebar-link active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      Protocol
+    </a>
+    <a href="networking.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg>
+      Networking
+    </a>
+    <a href="world.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      World
+    </a>
+    <a href="entities.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Entities
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Gameplay</div>
+    <a href="gameplay.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Gameplay
+    </a>
+    <a href="commands.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      Commands
+    </a>
+    <a href="plugins.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66 4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66 4.24-4.24"/></svg>
+      Plugins
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Operations</div>
+    <a href="configuration.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Configuration
+    </a>
+    <a href="security.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Security
+    </a>
+    <a href="performance.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Performance
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Links</div>
+    <a href="https://github.com/pedrokarim/mc-rs" class="sidebar-link" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<div class="sidebar-overlay"></div>
+
+<!-- Main Content -->
+<main class="main-content">
+  <div class="content-inner">
+
+    <h1>Bedrock Protocol</h1>
+    <p class="page-subtitle">Minecraft Bedrock Edition protocol version 766, with multi-version support (748-766).</p>
+
+    <!-- Login Flow -->
+    <h2>Login Flow</h2>
+    <p>The Bedrock login sequence is a multi-step handshake that establishes compression, encryption, authentication, resource packs, and finally spawns the player into the world.</p>
+
+    <ol>
+      <li><strong>RequestNetworkSettings</strong> &mdash; Client sends its protocol version. Server responds with <code>NetworkSettings</code> specifying compression algorithm (zlib) and threshold.</li>
+      <li><strong>Login</strong> &mdash; Client sends a JWT chain (Xbox Live authentication) and client data (skin, device info). All subsequent packets are compressed.</li>
+      <li><strong>JWT Verification</strong> &mdash; Server validates the JWT chain: verifies signatures, checks the identity public key, and extracts the player's XUID, display name, and identity key.</li>
+      <li><strong>ServerToClientHandshake</strong> &mdash; Server generates an ECDH P-384 keypair, derives a shared secret, and sends a JWT containing its public key. Both sides derive the AES-256-CFB8 encryption key.</li>
+      <li><strong>ClientToServerHandshake</strong> &mdash; Client acknowledges encryption is active. All subsequent packets are encrypted.</li>
+      <li><strong>PlayStatus(LoginSuccess)</strong> &mdash; Server confirms the login was accepted.</li>
+      <li><strong>ResourcePacksInfo / ResourcePackStack</strong> &mdash; Server sends available resource packs. Client responds with <code>ResourcePackClientResponse</code> until all packs are accepted.</li>
+      <li><strong>StartGame</strong> &mdash; Server sends the massive StartGame packet (60+ fields): spawn position, game rules, world seed, dimension, player game mode, item registry, block properties, experiments, and more.</li>
+      <li><strong>Chunk Loading</strong> &mdash; Server sends <code>LevelChunk</code> packets for chunks around the spawn position, plus <code>NetworkChunkPublisherUpdate</code> to define the loaded area.</li>
+      <li><strong>PlayStatus(PlayerSpawn)</strong> &mdash; Server signals the client to dismiss the loading screen. The player is now in-game.</li>
+    </ol>
+
+    <div class="alert alert-info">
+      <strong>Timing:</strong> The entire login flow typically completes in under 500ms on a local connection. The bulk of the time is spent generating and sending the initial chunks around spawn.
+    </div>
+
+    <!-- Packet Structure -->
+    <h2>Packet Structure</h2>
+    <p>Bedrock uses a <strong>batch framing</strong> system where multiple logical packets are bundled into a single compressed payload:</p>
+
+    <pre><code><span class="cm">// Wire format (after RakNet reliability layer)</span>
+<span class="ty">BatchPacket</span> {
+    compression_header: <span class="ty">u8</span>,        <span class="cm">// 0x00 = raw, 0x01 = zlib, 0xFF = none</span>
+    compressed_payload: <span class="ty">[u8]</span>,      <span class="cm">// zlib-compressed sub-packets</span>
+}
+
+<span class="cm">// After decompression, the payload contains N sub-packets:</span>
+<span class="ty">SubPacket</span> {
+    length: <span class="ty">VarUInt32</span>,             <span class="cm">// total length of header + payload</span>
+    packet_id_and_flags: <span class="ty">VarUInt32</span>, <span class="cm">// lower 10 bits = packet ID</span>
+    payload: <span class="ty">[u8]</span>,                 <span class="cm">// packet-specific data</span>
+}
+</code></pre>
+
+    <p>The <strong>packet ID</strong> is extracted from the lower 10 bits of the <code>packet_id_and_flags</code> field. The upper bits contain sender/target sub-client IDs (used for split-screen, typically 0). MC-RS decodes each sub-packet independently, dispatching to the appropriate handler based on the packet ID and current connection state.</p>
+
+    <div class="alert alert-warn">
+      <strong>Important:</strong> Compression is negotiated during the <code>NetworkSettings</code> exchange. Before that point (the initial <code>Login</code> packet), data is sent uncompressed. After the encryption handshake, packets are first compressed, then encrypted.
+    </div>
+
+    <!-- Key Packet IDs -->
+    <h2>Key Packet IDs</h2>
+    <p>The following table lists the most important packets implemented in MC-RS. Direction indicates <strong>C&rarr;S</strong> (client to server), <strong>S&rarr;C</strong> (server to client), or <strong>Both</strong>.</p>
+
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Name</th><th>Dir</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>0x01</code></td><td>Login</td><td>C&rarr;S</td><td>JWT chain + client data (skin, device, identity)</td></tr>
+        <tr><td><code>0x02</code></td><td>PlayStatus</td><td>S&rarr;C</td><td>Login result: success, failed, or player spawn signal</td></tr>
+        <tr><td><code>0x03</code></td><td>ServerToClientHandshake</td><td>S&rarr;C</td><td>ECDH public key JWT for encryption setup</td></tr>
+        <tr><td><code>0x04</code></td><td>ClientToServerHandshake</td><td>C&rarr;S</td><td>Confirms encryption is active</td></tr>
+        <tr><td><code>0x06</code></td><td>ResourcePacksInfo</td><td>S&rarr;C</td><td>List of available resource/behavior packs</td></tr>
+        <tr><td><code>0x07</code></td><td>ResourcePackStack</td><td>S&rarr;C</td><td>Required pack stack order</td></tr>
+        <tr><td><code>0x08</code></td><td>ResourcePackClientResponse</td><td>C&rarr;S</td><td>Client's pack download status</td></tr>
+        <tr><td><code>0x09</code></td><td>Text</td><td>Both</td><td>Chat messages (chat, whisper, system, announcement)</td></tr>
+        <tr><td><code>0x0A</code></td><td>SetTime</td><td>S&rarr;C</td><td>Current world time (0-24000 tick cycle)</td></tr>
+        <tr><td><code>0x0B</code></td><td>StartGame</td><td>S&rarr;C</td><td>World init: spawn, game mode, rules, registries (60+ fields)</td></tr>
+        <tr><td><code>0x0C</code></td><td>AddPlayer</td><td>S&rarr;C</td><td>Spawn another player entity with skin and equipment</td></tr>
+        <tr><td><code>0x0D</code></td><td>AddActor</td><td>S&rarr;C</td><td>Spawn a non-player entity (mob, projectile, item)</td></tr>
+        <tr><td><code>0x0E</code></td><td>RemoveActor</td><td>S&rarr;C</td><td>Despawn an entity by unique ID</td></tr>
+        <tr><td><code>0x10</code></td><td>MoveActorAbsolute</td><td>S&rarr;C</td><td>Update entity position and rotation</td></tr>
+        <tr><td><code>0x12</code></td><td>MovePlayer</td><td>S&rarr;C</td><td>Authoritative player position correction</td></tr>
+        <tr><td><code>0x15</code></td><td>UpdateBlock</td><td>S&rarr;C</td><td>Single block change at a position</td></tr>
+        <tr><td><code>0x1C</code></td><td>MobEffect</td><td>S&rarr;C</td><td>Add, modify, or remove a potion effect</td></tr>
+        <tr><td><code>0x1D</code></td><td>UpdateAttributes</td><td>S&rarr;C</td><td>Health, hunger, absorption, movement speed, etc.</td></tr>
+        <tr><td><code>0x1E</code></td><td>InventoryTransaction</td><td>C&rarr;S</td><td>Block break/place, item use, attack</td></tr>
+        <tr><td><code>0x27</code></td><td>PlayerAuthInput</td><td>C&rarr;S</td><td>Movement, rotation, input flags (jump, sneak, sprint)</td></tr>
+        <tr><td><code>0x2E</code></td><td>ContainerOpen</td><td>S&rarr;C</td><td>Open a container UI (chest, furnace, anvil, etc.)</td></tr>
+        <tr><td><code>0x2F</code></td><td>ContainerClose</td><td>Both</td><td>Close an open container</td></tr>
+        <tr><td><code>0x31</code></td><td>InventoryContent</td><td>S&rarr;C</td><td>Full inventory contents for a container window</td></tr>
+        <tr><td><code>0x32</code></td><td>InventorySlot</td><td>S&rarr;C</td><td>Update a single inventory slot</td></tr>
+        <tr><td><code>0x33</code></td><td>ContainerSetData</td><td>S&rarr;C</td><td>Container properties (furnace progress, enchant costs)</td></tr>
+        <tr><td><code>0x34</code></td><td>CraftingData</td><td>S&rarr;C</td><td>All crafting/smelting/smithing recipes</td></tr>
+        <tr><td><code>0x38</code></td><td>BlockActorData</td><td>Both</td><td>Block entity NBT (signs, chests, furnaces)</td></tr>
+        <tr><td><code>0x3A</code></td><td>LevelChunk</td><td>S&rarr;C</td><td>Chunk sub-sections + biomes + block entities</td></tr>
+        <tr><td><code>0x48</code></td><td>GameRulesChanged</td><td>S&rarr;C</td><td>Updated game rules (doDaylightCycle, etc.)</td></tr>
+        <tr><td><code>0x4A</code></td><td>BossEvent</td><td>S&rarr;C</td><td>Boss bar display, update, or remove</td></tr>
+        <tr><td><code>0x4E</code></td><td>RequestChunkRadius</td><td>C&rarr;S</td><td>Client's desired chunk render distance</td></tr>
+        <tr><td><code>0x55</code></td><td>Transfer</td><td>S&rarr;C</td><td>Transfer player to another server</td></tr>
+        <tr><td><code>0x56</code></td><td>PlaySound</td><td>S&rarr;C</td><td>Play a named sound at a position</td></tr>
+        <tr><td><code>0x58</code></td><td>SetTitle</td><td>S&rarr;C</td><td>Title, subtitle, actionbar text</td></tr>
+        <tr><td><code>0x5D</code></td><td>PlayerSkin</td><td>Both</td><td>Skin change notification with full skin data</td></tr>
+        <tr><td><code>0x60</code></td><td>SetLocalPlayerAsInit</td><td>S&rarr;C</td><td>Marks local player as initialized (spawn complete)</td></tr>
+        <tr><td><code>0x6B</code></td><td>SetDisplayObjective</td><td>S&rarr;C</td><td>Scoreboard display objective (sidebar, list, belowname)</td></tr>
+        <tr><td><code>0x6C</code></td><td>SetScore</td><td>S&rarr;C</td><td>Scoreboard score entries (set or remove)</td></tr>
+        <tr><td><code>0x76</code></td><td>SpawnParticleEffect</td><td>S&rarr;C</td><td>Named particle at a world position</td></tr>
+        <tr><td><code>0x90</code></td><td>NetworkChunkPublisherUpdate</td><td>S&rarr;C</td><td>Center and radius of loaded chunk area</td></tr>
+        <tr><td><code>0x92</code></td><td>PlayerEnchantOptions</td><td>S&rarr;C</td><td>Enchanting table options (cost, enchantments)</td></tr>
+        <tr><td><code>0x93</code></td><td>ItemStackRequest</td><td>C&rarr;S</td><td>Inventory manipulation (move, craft, enchant, etc.)</td></tr>
+        <tr><td><code>0x94</code></td><td>ItemStackResponse</td><td>S&rarr;C</td><td>Server response to stack request (accept/reject)</td></tr>
+      </tbody>
+    </table>
+
+    <!-- Block Network IDs -->
+    <h2>Block Network IDs</h2>
+    <p>MC-RS sets <code>block_network_ids_are_hashes=true</code> in the <code>StartGame</code> packet. This is a critical optimization that avoids sending the full block palette (15,000+ entries) to each connecting client.</p>
+
+    <p>Instead of sequential runtime IDs, both client and server compute <strong>FNV-1a hashes</strong> of each block's canonical NBT state. The canonical form is:</p>
+
+    <pre><code><span class="cm">// Canonical block state NBT (little-endian)</span>
+<span class="ty">TAG_Compound</span>(<span class="str">""</span>) {
+    <span class="ty">TAG_String</span>(<span class="str">"name"</span>): <span class="str">"minecraft:stone"</span>,
+    <span class="ty">TAG_Compound</span>(<span class="str">"states"</span>) {
+        <span class="ty">TAG_String</span>(<span class="str">"stone_type"</span>): <span class="str">"stone"</span>,
+    }
+}
+</code></pre>
+
+    <p>The FNV-1a hash of this NBT bytes produces a deterministic <code>u32</code> that serves as the block's network ID. MC-RS pre-computes these hashes in <code>WorldBlocks</code> at startup for ~50 commonly used blocks and computes on-demand for others.</p>
+
+    <div class="alert alert-info">
+      <strong>Note:</strong> For stateful blocks (crops, redstone wire, fluids), each state value produces a different hash. For example, <code>wheat</code> with <code>growth=0</code> through <code>growth=7</code> are 8 distinct block network IDs.
+    </div>
+
+    <!-- Data Types -->
+    <h2>Data Types</h2>
+    <p>The Bedrock protocol uses several custom data types for compact encoding:</p>
+
+    <table>
+      <thead>
+        <tr><th>Type</th><th>Wire Format</th><th>Range</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>VarInt</code></td>
+          <td>Zigzag + variable-length</td>
+          <td>i32</td>
+          <td>Signed 32-bit integer. Zigzag-encoded (maps negatives to positives: 0, -1, 1, -2, ...) then written as variable-length unsigned bytes (7 bits per byte, MSB = continuation).</td>
+        </tr>
+        <tr>
+          <td><code>VarLong</code></td>
+          <td>Zigzag + variable-length</td>
+          <td>i64</td>
+          <td>Signed 64-bit integer. Same zigzag + variable-length encoding as VarInt but up to 10 bytes.</td>
+        </tr>
+        <tr>
+          <td><code>VarUInt32</code></td>
+          <td>Variable-length unsigned</td>
+          <td>u32</td>
+          <td>Unsigned 32-bit integer. No zigzag, just variable-length encoding. Used for lengths, counts, and non-negative fields.</td>
+        </tr>
+        <tr>
+          <td><code>VarUInt64</code></td>
+          <td>Variable-length unsigned</td>
+          <td>u64</td>
+          <td>Unsigned 64-bit integer. Used for runtime entity IDs and unique entity IDs.</td>
+        </tr>
+        <tr>
+          <td><code>Vec3</code></td>
+          <td>3 &times; f32_le</td>
+          <td>&mdash;</td>
+          <td>3D position or velocity vector. Three little-endian 32-bit floats (x, y, z). 12 bytes total.</td>
+        </tr>
+        <tr>
+          <td><code>Vec2</code></td>
+          <td>2 &times; f32_le</td>
+          <td>&mdash;</td>
+          <td>2D vector (pitch, yaw rotation). Two little-endian 32-bit floats. 8 bytes total.</td>
+        </tr>
+        <tr>
+          <td><code>BlockPos</code></td>
+          <td>3 &times; VarInt</td>
+          <td>&mdash;</td>
+          <td>Block coordinate (x, y, z). Three zigzag-encoded variable-length signed integers.</td>
+        </tr>
+        <tr>
+          <td><code>Uuid</code></td>
+          <td>2 &times; i64_le</td>
+          <td>&mdash;</td>
+          <td>128-bit UUID as two little-endian 64-bit integers (most significant first). 16 bytes total.</td>
+        </tr>
+        <tr>
+          <td><code>String</code></td>
+          <td>VarUInt32 + UTF-8</td>
+          <td>&mdash;</td>
+          <td>Length-prefixed UTF-8 string. Length is a VarUInt32 byte count followed by the raw UTF-8 bytes.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Encoding Examples</h3>
+    <pre><code><span class="cm">// VarInt zigzag encoding</span>
+<span class="cm">//   0 → 0x00          (1 byte)</span>
+<span class="cm">//  -1 → 0x01          (1 byte)</span>
+<span class="cm">//   1 → 0x02          (1 byte)</span>
+<span class="cm">// 300 → 0xD8 0x04     (2 bytes)</span>
+<span class="cm">// -300 → 0xD7 0x04    (2 bytes)</span>
+
+<span class="cm">// VarUInt32 encoding (no zigzag)</span>
+<span class="cm">//   0 → 0x00          (1 byte)</span>
+<span class="cm">// 127 → 0x7F          (1 byte)</span>
+<span class="cm">// 128 → 0x80 0x01     (2 bytes)</span>
+<span class="cm">// 300 → 0xAC 0x02     (2 bytes)</span>
+
+<span class="cm">// String "hello"</span>
+<span class="cm">// 0x05 0x68 0x65 0x6C 0x6C 0x6F</span>
+<span class="cm">// ^^^^  h     e     l     l     o</span>
+<span class="cm">// length (VarUInt32)</span></code></pre>
+
+  </div>
+</main>
+
+<footer class="site-footer">
+  MC-RS &mdash; Minecraft Bedrock Edition Server in Rust &mdash; <a href="https://github.com/pedrokarim/mc-rs">GitHub</a> &mdash; MIT License
+</footer>
+
+<script src="../nav.js"></script>
+<script src="../search-data.js"></script>
+<script src="../search.js"></script>
+</body>
+</html>

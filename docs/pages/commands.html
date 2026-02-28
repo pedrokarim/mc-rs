@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Commands — MC-RS Documentation</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<!-- Header -->
+<header class="site-header">
+  <button class="hamburger" aria-label="Menu">&#9776;</button>
+  <a href="../" class="header-logo">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="8" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.3"/>
+      <rect x="8" y="2" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.6"/>
+      <rect x="6" y="6" width="16" height="16" rx="2" fill="#4ecca3"/>
+      <rect x="10" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="18" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="12" y="16" width="8" height="3" rx="1" fill="#0f0f1a"/>
+    </svg>
+    <span>MC<span class="accent">-RS</span></span>
+  </a>
+  <div class="search-wrapper">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" class="search-input" placeholder="Search documentation...">
+    <span class="search-shortcut">/</span>
+    <div class="search-results"></div>
+  </div>
+</header>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Getting Started</div>
+    <a href="../" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </a>
+    <a href="overview.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+      Overview
+    </a>
+    <a href="architecture.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="6" rx="1"/><rect x="16" y="3" width="6" height="6" rx="1"/><rect x="16" y="15" width="6" height="6" rx="1"/><path d="M8 10h4m0 0v-4m0 4v4m0-4h4"/></svg>
+      Architecture
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Core Systems</div>
+    <a href="protocol.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      Protocol
+    </a>
+    <a href="networking.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg>
+      Networking
+    </a>
+    <a href="world.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      World
+    </a>
+    <a href="entities.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Entities
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Gameplay</div>
+    <a href="gameplay.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Gameplay
+    </a>
+    <a href="commands.html" class="sidebar-link active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      Commands
+    </a>
+    <a href="plugins.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66 4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66 4.24-4.24"/></svg>
+      Plugins
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Operations</div>
+    <a href="configuration.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Configuration
+    </a>
+    <a href="security.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Security
+    </a>
+    <a href="performance.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Performance
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Links</div>
+    <a href="https://github.com/pedrokarim/mc-rs" class="sidebar-link" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<div class="sidebar-overlay"></div>
+
+<!-- Main Content -->
+<main class="main-content">
+  <div class="content-inner">
+
+    <h1>Commands</h1>
+    <p class="page-subtitle">~40 commands with entity selectors, tab completion, and permission levels.</p>
+
+    <!-- Entity Selectors -->
+    <h2>Entity Selectors</h2>
+    <p>Entity selectors allow commands to target one or more entities dynamically. They are parsed in <code>mc-rs-command/src/selector.rs</code> using a decoupled <code>PlayerInfo</code> struct that does not depend on server internals.</p>
+
+    <table>
+      <thead>
+        <tr><th>Selector</th><th>Targets</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>@a</code></td><td>All players</td><td>Selects every connected player on the server</td></tr>
+        <tr><td><code>@p</code></td><td>Nearest player</td><td>Selects the player closest to the command's execution position</td></tr>
+        <tr><td><code>@r</code></td><td>Random player</td><td>Selects one random player from the connected player list</td></tr>
+        <tr><td><code>@e</code></td><td>All entities</td><td>Selects all entities (players and mobs) in the world</td></tr>
+        <tr><td><code>@s</code></td><td>Self</td><td>Selects the entity that executed the command</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Selector Arguments</h3>
+    <p>Selectors support optional filtering arguments in square brackets to narrow down the target set:</p>
+
+    <pre><code><span class="cm">// Target all zombies within 10 blocks</span>
+<span class="str">@e[type=zombie,r=10]</span>
+
+<span class="cm">// Target a specific player by name</span>
+<span class="str">@a[name=Steve]</span>
+
+<span class="cm">// Combined with commands</span>
+/kill <span class="str">@e[type=zombie]</span>
+/tp <span class="str">@a</span> <span class="num">0</span> <span class="num">100</span> <span class="num">0</span></code></pre>
+
+    <div class="alert alert-info">
+      <strong>Decoupled architecture:</strong> The selector module uses a <code>PlayerInfo</code> struct instead of directly accessing <code>PlayerConnection</code>. This keeps the <code>mc-rs-command</code> crate independent from the server crate and makes selectors testable in isolation.
+    </div>
+
+    <!-- Permission Levels -->
+    <h2>Permission Levels</h2>
+    <p>Commands are gated by a two-tier permission system managed by the <code>PermissionManager</code> in <code>mc-rs-server/src/permissions.rs</code>.</p>
+
+    <table>
+      <thead>
+        <tr><th>Level</th><th>Permission</th><th>Command Permission</th><th>Who</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>0</strong></td><td>perm=1</td><td>cmd_perm=0</td><td>All connected players &mdash; basic commands like /help, /list, /msg</td></tr>
+        <tr><td><strong>1</strong></td><td>perm=2</td><td>cmd_perm=1</td><td>Operators &mdash; admin commands like /gamemode, /tp, /give, /stop</td></tr>
+      </tbody>
+    </table>
+
+    <p>Operators are managed via <code>/op</code> and <code>/deop</code> commands and persisted in <code>ops.json</code>. Each command checks the sender's permission level before execution. The <code>AvailableCommands</code> packet filters the command list sent to each player based on their permission level, so non-operators do not see admin commands in tab completion.</p>
+
+    <!-- Basic Commands -->
+    <h2>Basic Commands</h2>
+    <p>Available to all connected players (permission level 0).</p>
+
+    <table>
+      <thead>
+        <tr><th>Command</th><th>Syntax</th><th>Permission</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="cmd-name">/help</span></td>
+          <td><span class="cmd-syntax">/help [command]</span></td>
+          <td>0</td>
+          <td>Lists available commands or shows help for a specific command</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/list</span></td>
+          <td><span class="cmd-syntax">/list</span></td>
+          <td>0</td>
+          <td>Shows all connected players and the current player count</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/say</span></td>
+          <td><span class="cmd-syntax">/say &lt;message&gt;</span></td>
+          <td>0</td>
+          <td>Broadcasts a message to all players in chat</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/msg</span></td>
+          <td><span class="cmd-syntax">/msg &lt;player&gt; &lt;message&gt;</span></td>
+          <td>0</td>
+          <td>Sends a private message to a specific player</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/stop</span></td>
+          <td><span class="cmd-syntax">/stop</span></td>
+          <td>1</td>
+          <td>Saves the world and gracefully stops the server</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/op</span></td>
+          <td><span class="cmd-syntax">/op &lt;player&gt;</span></td>
+          <td>1</td>
+          <td>Grants operator status to a player (persisted in ops.json)</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/deop</span></td>
+          <td><span class="cmd-syntax">/deop &lt;player&gt;</span></td>
+          <td>1</td>
+          <td>Revokes operator status from a player</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/kick</span></td>
+          <td><span class="cmd-syntax">/kick &lt;player&gt; [reason]</span></td>
+          <td>1</td>
+          <td>Disconnects a player from the server with an optional reason</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/ban</span></td>
+          <td><span class="cmd-syntax">/ban &lt;player&gt; [reason]</span></td>
+          <td>1</td>
+          <td>Bans a player by name (persisted in banned-players.json)</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/ban-ip</span></td>
+          <td><span class="cmd-syntax">/ban-ip &lt;ip&gt; [reason]</span></td>
+          <td>1</td>
+          <td>Bans an IP address (persisted in banned-ips.json)</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/unban</span></td>
+          <td><span class="cmd-syntax">/unban &lt;player&gt;</span></td>
+          <td>1</td>
+          <td>Removes a player or IP from the ban list</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/whitelist</span></td>
+          <td><span class="cmd-syntax">/whitelist &lt;on|off|add|remove|list&gt; [player]</span></td>
+          <td>1</td>
+          <td>Manages the server whitelist (persisted in whitelist.json)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Player Commands -->
+    <h2>Player Commands</h2>
+    <p>Commands that target or modify player state. Require operator permission (level 1).</p>
+
+    <table>
+      <thead>
+        <tr><th>Command</th><th>Syntax</th><th>Permission</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="cmd-name">/gamemode</span></td>
+          <td><span class="cmd-syntax">/gamemode &lt;mode&gt; [player]</span></td>
+          <td>1</td>
+          <td>Changes the game mode (survival, creative, adventure, spectator)</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/tp</span></td>
+          <td><span class="cmd-syntax">/tp &lt;target&gt; &lt;x&gt; &lt;y&gt; &lt;z&gt;</span></td>
+          <td>1</td>
+          <td>Teleports a player or entity to the specified coordinates</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/give</span></td>
+          <td><span class="cmd-syntax">/give &lt;player&gt; &lt;item&gt; [count]</span></td>
+          <td>1</td>
+          <td>Gives an item to a player's inventory</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/kill</span></td>
+          <td><span class="cmd-syntax">/kill [target]</span></td>
+          <td>1</td>
+          <td>Kills the target entity or self if no target is specified</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/effect</span></td>
+          <td><span class="cmd-syntax">/effect &lt;target&gt; &lt;effect&gt; [seconds] [amplifier]</span></td>
+          <td>1</td>
+          <td>Applies a potion effect (21 types) to the target entity</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/effect clear</span></td>
+          <td><span class="cmd-syntax">/effect &lt;target&gt; clear</span></td>
+          <td>1</td>
+          <td>Removes all active effects from the target entity</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/xp</span></td>
+          <td><span class="cmd-syntax">/xp &lt;amount&gt; [player]</span></td>
+          <td>1</td>
+          <td>Adds experience points to a player</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/enchant</span></td>
+          <td><span class="cmd-syntax">/enchant &lt;target&gt; &lt;enchantment&gt; [level]</span></td>
+          <td>1</td>
+          <td>Enchants the held item of the target player</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- World Commands -->
+    <h2>World Commands</h2>
+    <p>Commands that modify the world state, time, weather, and entities. Require operator permission (level 1).</p>
+
+    <table>
+      <thead>
+        <tr><th>Command</th><th>Syntax</th><th>Permission</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="cmd-name">/time set</span></td>
+          <td><span class="cmd-syntax">/time set &lt;value&gt;</span></td>
+          <td>1</td>
+          <td>Sets the world time (0-24000 or day/noon/night/midnight)</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/time add</span></td>
+          <td><span class="cmd-syntax">/time add &lt;value&gt;</span></td>
+          <td>1</td>
+          <td>Advances the world time by the specified number of ticks</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/weather</span></td>
+          <td><span class="cmd-syntax">/weather &lt;clear|rain|thunder&gt;</span></td>
+          <td>1</td>
+          <td>Changes the weather state with smooth transitions</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/gamerule</span></td>
+          <td><span class="cmd-syntax">/gamerule &lt;rule&gt; [value]</span></td>
+          <td>1</td>
+          <td>Gets or sets a game rule (e.g., doDaylightCycle, doMobSpawning)</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/setblock</span></td>
+          <td><span class="cmd-syntax">/setblock &lt;x&gt; &lt;y&gt; &lt;z&gt; &lt;block&gt;</span></td>
+          <td>1</td>
+          <td>Places a block at the specified coordinates</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/fill</span></td>
+          <td><span class="cmd-syntax">/fill &lt;x1&gt; &lt;y1&gt; &lt;z1&gt; &lt;x2&gt; &lt;y2&gt; &lt;z2&gt; &lt;block&gt;</span></td>
+          <td>1</td>
+          <td>Fills a region between two corners with the specified block</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/clone</span></td>
+          <td><span class="cmd-syntax">/clone &lt;x1&gt; &lt;y1&gt; &lt;z1&gt; &lt;x2&gt; &lt;y2&gt; &lt;z2&gt; &lt;x&gt; &lt;y&gt; &lt;z&gt;</span></td>
+          <td>1</td>
+          <td>Copies a region of blocks to a new destination</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/summon</span></td>
+          <td><span class="cmd-syntax">/summon &lt;entity&gt; [x] [y] [z]</span></td>
+          <td>1</td>
+          <td>Spawns an entity at the specified position (or the sender's position)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- UI Commands -->
+    <h2>UI Commands</h2>
+    <p>Commands that display visual elements to players (titles, particles, sounds). Require operator permission (level 1).</p>
+
+    <table>
+      <thead>
+        <tr><th>Command</th><th>Syntax</th><th>Permission</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="cmd-name">/title</span></td>
+          <td><span class="cmd-syntax">/title &lt;target&gt; &lt;title|subtitle|actionbar|clear&gt; [text]</span></td>
+          <td>1</td>
+          <td>Displays a title, subtitle, or action bar text to the target player. Uses SetTitle packet (0x58).</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/particle</span></td>
+          <td><span class="cmd-syntax">/particle &lt;effect&gt; &lt;x&gt; &lt;y&gt; &lt;z&gt;</span></td>
+          <td>1</td>
+          <td>Spawns a particle effect at the specified position. Uses SpawnParticleEffect packet (0x76).</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/playsound</span></td>
+          <td><span class="cmd-syntax">/playsound &lt;sound&gt; &lt;target&gt;</span></td>
+          <td>1</td>
+          <td>Plays a sound effect for the target player. Uses PlaySound packet (0x56).</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Advanced Commands -->
+    <h2>Advanced Commands</h2>
+    <p>Complex commands for scoreboard management, entity tagging, boss bars, command chaining, and server operations. Require operator permission (level 1).</p>
+
+    <table>
+      <thead>
+        <tr><th>Command</th><th>Syntax</th><th>Permission</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="cmd-name">/scoreboard</span></td>
+          <td><span class="cmd-syntax">/scoreboard &lt;objectives|players&gt; ...</span></td>
+          <td>1</td>
+          <td>Manages scoreboards: create/remove objectives, set/add/remove player scores. Uses SetDisplayObjective (0x6B) and SetScore (0x6C) packets.</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/tag</span></td>
+          <td><span class="cmd-syntax">/tag &lt;target&gt; &lt;add|remove|list&gt; [tag]</span></td>
+          <td>1</td>
+          <td>Adds, removes, or lists tags on entities for use with selectors and scripts</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/bossbar</span></td>
+          <td><span class="cmd-syntax">/bossbar &lt;create|remove|set&gt; ...</span></td>
+          <td>1</td>
+          <td>Creates and manages boss bars displayed at the top of the screen. Uses BossEvent packet (0x4A).</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/execute</span></td>
+          <td><span class="cmd-syntax">/execute &lt;subcommands&gt; run &lt;command&gt;</span></td>
+          <td>1</td>
+          <td>Runs a command as another entity or at a different position. Supports chained subcommands (as, at, positioned, if, unless).</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/tickingarea</span></td>
+          <td><span class="cmd-syntax">/tickingarea &lt;add|remove|list&gt; ...</span></td>
+          <td>1</td>
+          <td>Manages always-ticked chunk regions that stay loaded regardless of player proximity</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/transfer</span></td>
+          <td><span class="cmd-syntax">/transfer &lt;host&gt; &lt;port&gt;</span></td>
+          <td>1</td>
+          <td>Transfers the player to another server. Uses Transfer packet (0x55).</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/reload</span></td>
+          <td><span class="cmd-syntax">/reload</span></td>
+          <td>1</td>
+          <td>Hot-reloads all plugins (WASM and Lua) without restarting the server</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/import</span></td>
+          <td><span class="cmd-syntax">/import &lt;path&gt;</span></td>
+          <td>1</td>
+          <td>Imports world data or configuration from the specified file path</td>
+        </tr>
+        <tr>
+          <td><span class="cmd-name">/export</span></td>
+          <td><span class="cmd-syntax">/export &lt;path&gt;</span></td>
+          <td>1</td>
+          <td>Exports world data or configuration to the specified file path</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="alert alert-warn">
+      <strong>Server commands:</strong> Commands that need direct access to server state (e.g., /gamemode, /tp, /give) are dispatched directly in <code>handle_command_request</code> rather than through the <code>CommandRegistry</code>. Plugin-registered commands are routed through the plugin system.
+    </div>
+
+    <!-- Server Management -->
+    <h2>Server Management</h2>
+    <p>MC-RS provides three interfaces for server administration, all accepting the same command set. Commands entered through any interface are processed identically.</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        </div>
+        <h3>Console REPL</h3>
+        <p>Interactive stdin-based console running on a dedicated tokio task. Type commands directly in the server terminal. No authentication required &mdash; console always has operator permissions.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg>
+        </div>
+        <h3>RCON</h3>
+        <p>Remote console over TCP using the <strong>Source RCON protocol</strong>. Allows external tools and scripts to send commands to the server. Password-authenticated, configurable port in server.toml.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+        </div>
+        <h3>Query</h3>
+        <p>Read-only server status over UDP using the <strong>GameSpy4 protocol</strong>. Used by server list websites and monitoring tools to query player count, server name, and game mode.</p>
+      </div>
+    </div>
+
+    <pre><code><span class="cm">// RCON connection example (from external tool)</span>
+<span class="cm">// 1. Connect to TCP port (default: 25575)</span>
+<span class="cm">// 2. Send Auth packet with password</span>
+<span class="cm">// 3. Send Command packets</span>
+<span class="cm">// 4. Receive Response packets with command output</span>
+
+<span class="cm">// All three interfaces process commands through the same handler:</span>
+<span class="cm">//   Console  → handle_console_command()</span>
+<span class="cm">//   RCON     → handle_rcon_command()</span>
+<span class="cm">//   In-game  → handle_command_request() via CommandRequest packet</span></code></pre>
+
+    <div class="alert alert-info">
+      <strong>Tab completion:</strong> The server sends an <code>AvailableCommands</code> packet to each player at login, containing the full command tree with argument types and constraints. The client uses this for autocomplete. The packet is filtered per player based on permission level &mdash; non-operators only see commands they can execute.
+    </div>
+
+  </div>
+</main>
+
+<footer class="site-footer">
+  MC-RS &mdash; Minecraft Bedrock Edition Server in Rust &mdash; <a href="https://github.com/pedrokarim/mc-rs">GitHub</a> &mdash; MIT License
+</footer>
+
+<script src="../nav.js"></script>
+<script src="../search-data.js"></script>
+<script src="../search.js"></script>
+</body>
+</html>

@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Networking — MC-RS Documentation</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<!-- Header -->
+<header class="site-header">
+  <button class="hamburger" aria-label="Menu">&#9776;</button>
+  <a href="../" class="header-logo">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="8" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.3"/>
+      <rect x="8" y="2" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.6"/>
+      <rect x="6" y="6" width="16" height="16" rx="2" fill="#4ecca3"/>
+      <rect x="10" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="18" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="12" y="16" width="8" height="3" rx="1" fill="#0f0f1a"/>
+    </svg>
+    <span>MC<span class="accent">-RS</span></span>
+  </a>
+  <div class="search-wrapper">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" class="search-input" placeholder="Search documentation...">
+    <span class="search-shortcut">/</span>
+    <div class="search-results"></div>
+  </div>
+</header>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Getting Started</div>
+    <a href="../" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </a>
+    <a href="overview.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+      Overview
+    </a>
+    <a href="architecture.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="6" rx="1"/><rect x="16" y="3" width="6" height="6" rx="1"/><rect x="16" y="15" width="6" height="6" rx="1"/><path d="M8 10h4m0 0v-4m0 4v4m0-4h4"/></svg>
+      Architecture
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Core Systems</div>
+    <a href="protocol.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      Protocol
+    </a>
+    <a href="networking.html" class="sidebar-link active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg>
+      Networking
+    </a>
+    <a href="world.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      World
+    </a>
+    <a href="entities.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Entities
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Gameplay</div>
+    <a href="gameplay.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Gameplay
+    </a>
+    <a href="commands.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      Commands
+    </a>
+    <a href="plugins.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66 4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66 4.24-4.24"/></svg>
+      Plugins
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Operations</div>
+    <a href="configuration.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Configuration
+    </a>
+    <a href="security.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Security
+    </a>
+    <a href="performance.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Performance
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Links</div>
+    <a href="https://github.com/pedrokarim/mc-rs" class="sidebar-link" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<div class="sidebar-overlay"></div>
+
+<!-- Main Content -->
+<main class="main-content">
+  <div class="content-inner">
+
+    <h1>Networking</h1>
+    <p class="page-subtitle">RakNet UDP transport with encryption, fragmentation, and reliability.</p>
+
+    <!-- RakNet Protocol -->
+    <h2>RakNet Protocol</h2>
+    <p>Minecraft Bedrock Edition uses the <strong>RakNet</strong> protocol over <strong>UDP</strong> (default port <code>19132</code>) as its transport layer, rather than the TCP-based networking used by Java Edition. MC-RS implements the full RakNet layer in the <code>mc-rs-raknet</code> crate.</p>
+    <p>RakNet provides several critical features on top of raw UDP datagrams:</p>
+    <ul>
+      <li><strong>Connection handshake</strong> &mdash; Two-phase open connection request/reply exchange that negotiates the Maximum Transmission Unit (MTU) size and establishes the connection.</li>
+      <li><strong>Reliability types</strong> &mdash; Five reliability modes ranging from unreliable (fire-and-forget) to reliable-ordered (guaranteed delivery in sequence). Each packet specifies its required reliability level.</li>
+      <li><strong>Sequence numbers</strong> &mdash; Every reliable frame carries a monotonically increasing sequence number used for ordering and duplicate detection.</li>
+      <li><strong>Fragmentation</strong> &mdash; Large packets that exceed the negotiated MTU are automatically split into fragments, transmitted independently, and reassembled on the receiving side.</li>
+      <li><strong>ACK/NACK</strong> &mdash; The receiver sends acknowledgment (ACK) and negative acknowledgment (NACK) frames back to the sender, enabling retransmission of lost packets.</li>
+      <li><strong>Congestion control</strong> &mdash; Adaptive send rate based on round-trip time estimates and packet loss, preventing network saturation.</li>
+    </ul>
+
+    <div class="diagram">
+      <svg viewBox="0 0 820 200" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#4ecca3" opacity="0.6"/>
+          </marker>
+        </defs>
+
+        <!-- Boxes -->
+        <rect x="10" y="70" width="120" height="50" rx="6" fill="#4ecca3"/>
+        <text x="70" y="100" text-anchor="middle" fill="#0f0f1a" font-weight="700">UDP Socket</text>
+
+        <rect x="170" y="70" width="120" height="50" rx="6" fill="#4ecca3"/>
+        <text x="230" y="100" text-anchor="middle" fill="#0f0f1a" font-weight="700">RakNet</text>
+
+        <rect x="330" y="70" width="120" height="50" rx="6" fill="#4ecca3"/>
+        <text x="390" y="93" text-anchor="middle" fill="#0f0f1a" font-weight="600" font-size="11">Decrypt</text>
+        <text x="390" y="108" text-anchor="middle" fill="#0f0f1a" font-weight="600" font-size="11">AES-256-CFB8</text>
+
+        <rect x="490" y="70" width="120" height="50" rx="6" fill="#4ecca3"/>
+        <text x="550" y="93" text-anchor="middle" fill="#0f0f1a" font-weight="600" font-size="11">Decompress</text>
+        <text x="550" y="108" text-anchor="middle" fill="#0f0f1a" font-weight="600" font-size="11">zlib / snappy</text>
+
+        <rect x="650" y="70" width="150" height="50" rx="6" fill="#4ecca3"/>
+        <text x="725" y="93" text-anchor="middle" fill="#0f0f1a" font-weight="600" font-size="11">Batch Split</text>
+        <text x="725" y="108" text-anchor="middle" fill="#0f0f1a" font-weight="600" font-size="11">&amp; Packet Decode</text>
+
+        <!-- Arrows -->
+        <line x1="130" y1="95" x2="168" y2="95" stroke="#4ecca3" stroke-width="1.5" opacity="0.5" marker-end="url(#arr)"/>
+        <line x1="290" y1="95" x2="328" y2="95" stroke="#4ecca3" stroke-width="1.5" opacity="0.5" marker-end="url(#arr)"/>
+        <line x1="450" y1="95" x2="488" y2="95" stroke="#4ecca3" stroke-width="1.5" opacity="0.5" marker-end="url(#arr)"/>
+        <line x1="610" y1="95" x2="648" y2="95" stroke="#4ecca3" stroke-width="1.5" opacity="0.5" marker-end="url(#arr)"/>
+
+        <!-- Labels -->
+        <text x="70" y="50" text-anchor="middle" fill="#9a9ab0" font-size="11">Raw bytes</text>
+        <text x="230" y="50" text-anchor="middle" fill="#9a9ab0" font-size="11">Reassemble &amp; order</text>
+        <text x="550" y="50" text-anchor="middle" fill="#9a9ab0" font-size="11">Inflate payload</text>
+        <text x="725" y="50" text-anchor="middle" fill="#9a9ab0" font-size="11">Game packets</text>
+
+        <text x="410" y="170" text-anchor="middle" fill="#9a9ab0" font-size="12" font-style="italic">Inbound packet pipeline (Client &rarr; Server)</text>
+      </svg>
+    </div>
+
+    <!-- Packet Reliability -->
+    <h2>Packet Reliability</h2>
+    <p>RakNet defines five reliability types. Each outgoing packet specifies which reliability mode to use, which determines how the transport layer handles delivery guarantees and ordering.</p>
+
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Type</th><th>Guaranteed</th><th>Ordered</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>0</code></td>
+          <td><strong>Unreliable</strong></td>
+          <td>No</td>
+          <td>No</td>
+          <td>Fire-and-forget. No acknowledgment, no retransmission. Lowest overhead, suitable for data that is frequently updated (e.g., position updates where a newer packet supersedes older ones).</td>
+        </tr>
+        <tr>
+          <td><code>1</code></td>
+          <td><strong>UnreliableSequenced</strong></td>
+          <td>No</td>
+          <td>Sequenced</td>
+          <td>Unreliable but sequenced: the receiver discards packets that arrive out of order (older sequence numbers are dropped). Useful for real-time data where only the latest value matters.</td>
+        </tr>
+        <tr>
+          <td><code>2</code></td>
+          <td><strong>Reliable</strong></td>
+          <td>Yes</td>
+          <td>No</td>
+          <td>Guaranteed delivery via ACK/retransmission, but no ordering guarantee. Packets may arrive in any order. Suitable for independent events.</td>
+        </tr>
+        <tr>
+          <td><code>3</code></td>
+          <td><strong>ReliableOrdered</strong></td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>Guaranteed delivery and in-order processing. The receiver buffers out-of-order packets until the expected sequence arrives. This is the most common reliability type for game packets in Bedrock.</td>
+        </tr>
+        <tr>
+          <td><code>4</code></td>
+          <td><strong>ReliableSequenced</strong></td>
+          <td>Yes</td>
+          <td>Sequenced</td>
+          <td>Guaranteed delivery but sequenced: if a newer packet has already been processed, older packets are discarded on arrival rather than queued.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="alert alert-info">
+      <strong>Default:</strong> Bedrock game packets are sent with <strong>ReliableOrdered</strong> (type 3) reliability. This ensures every packet arrives and is processed in the correct order, which is critical for state-changing operations like block updates, inventory transactions, and chat messages.
+    </div>
+
+    <!-- Fragmentation -->
+    <h2>Fragmentation</h2>
+    <p>When a packet exceeds the negotiated <strong>MTU</strong> (Maximum Transmission Unit, typically ~1400 bytes after RakNet overhead), it must be split into smaller fragments that each fit within a single UDP datagram. RakNet handles this transparently.</p>
+
+    <h3>Fragment Header</h3>
+    <p>Each fragment carries three additional fields that enable reassembly:</p>
+
+    <pre><code><span class="cm">// Fragment metadata in the RakNet frame header</span>
+<span class="ty">FragmentInfo</span> {
+    compound_id: <span class="ty">u16</span>,    <span class="cm">// Unique ID grouping all fragments of the same packet</span>
+    compound_size: <span class="ty">u32</span>,  <span class="cm">// Total number of fragments in this packet</span>
+    compound_index: <span class="ty">u32</span>, <span class="cm">// This fragment's index (0-based) within the group</span>
+}</code></pre>
+
+    <h3>Reassembly Process</h3>
+    <ol>
+      <li>The sender splits the oversized packet into N fragments, each assigned the same <code>compound_id</code>, with <code>compound_size = N</code> and sequential <code>compound_index</code> values from 0 to N-1.</li>
+      <li>Each fragment is wrapped in a standard RakNet reliability frame and sent independently. Fragments may arrive in any order.</li>
+      <li>The receiver maintains a reassembly buffer keyed by <code>compound_id</code>. As each fragment arrives, it is stored at its <code>compound_index</code> position.</li>
+      <li>Once all <code>compound_size</code> fragments have been received, the receiver concatenates them in index order to reconstruct the original packet payload.</li>
+      <li>Incomplete fragment groups are kept in the buffer until completion or timeout (preventing memory exhaustion from abandoned transmissions).</li>
+    </ol>
+
+    <div class="alert alert-warn">
+      <strong>MTU negotiation:</strong> The MTU is negotiated during the Open Connection Request 1 phase. The client sends padding bytes to test the maximum datagram size the network path supports. The server responds with the agreed-upon MTU in Open Connection Reply 1. Typical values range from 1400 to 1492 bytes.
+    </div>
+
+    <!-- Encryption -->
+    <h2>Encryption</h2>
+    <p>After the initial login JWT exchange, all subsequent Bedrock packets are encrypted using <strong>AES-256-CFB8</strong> (Cipher Feedback mode with 8-bit shift). The key exchange uses <strong>ECDH (Elliptic Curve Diffie-Hellman)</strong> over the <strong>P-384 (secp384r1)</strong> curve. This is handled by the <code>mc-rs-crypto</code> crate.</p>
+
+    <h3>Key Exchange Flow</h3>
+    <ol>
+      <li><strong>Client Login</strong> &mdash; The client sends a <code>Login</code> packet containing a JWT chain with its identity public key (EC P-384).</li>
+      <li><strong>Server keypair generation</strong> &mdash; The server generates an ephemeral EC P-384 keypair for this session.</li>
+      <li><strong>ECDH shared secret</strong> &mdash; The server computes the ECDH shared secret using the client's public key and the server's private key.</li>
+      <li><strong>Key derivation</strong> &mdash; The shared secret is hashed with <strong>SHA-256</strong> to derive a 256-bit encryption key. The first 16 bytes of the key also serve as the initialization vector (IV).</li>
+      <li><strong>ServerToClientHandshake</strong> &mdash; The server sends a JWT containing its public key. The client performs the same ECDH computation to derive the identical key.</li>
+      <li><strong>ClientToServerHandshake</strong> &mdash; The client confirms encryption is active. From this point, every packet is encrypted.</li>
+    </ol>
+
+    <pre><code><span class="cm">// Encryption key derivation (simplified)</span>
+<span class="kw">let</span> shared_secret = <span class="fn">ecdh_p384</span>(server_private_key, client_public_key);
+<span class="kw">let</span> salt = <span class="cm">/* from JWT claim */</span>;
+<span class="kw">let</span> key_material = <span class="fn">sha256</span>(&amp;[salt, shared_secret].<span class="fn">concat</span>());
+
+<span class="cm">// AES-256-CFB8 cipher</span>
+<span class="kw">let</span> aes_key: [<span class="ty">u8</span>; <span class="num">32</span>] = key_material;
+<span class="kw">let</span> iv: [<span class="ty">u8</span>; <span class="num">16</span>] = key_material[..<span class="num">16</span>].<span class="fn">try_into</span>().<span class="fn">unwrap</span>();
+
+<span class="cm">// All packets after handshake: encrypt(compress(batch(packets)))</span></code></pre>
+
+    <div class="alert alert-info">
+      <strong>Packet format after encryption:</strong> The encrypted payload includes the compressed batch data followed by a SHA-256 checksum of the packet content. The receiver verifies this checksum after decryption to detect tampering or corruption.
+    </div>
+
+    <!-- Compression -->
+    <h2>Compression</h2>
+    <p>Before encryption, Bedrock packets are compressed to reduce bandwidth usage. The compression algorithm and threshold are negotiated early in the connection via the <code>NetworkSettings</code> packet.</p>
+
+    <h3>Compression Options</h3>
+    <table>
+      <thead>
+        <tr><th>Algorithm</th><th>ID</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Zlib (Deflate)</strong></td>
+          <td><code>0x00</code></td>
+          <td>Standard zlib deflate compression. Best compression ratio. Used by default in MC-RS and most servers.</td>
+        </tr>
+        <tr>
+          <td><strong>Snappy</strong></td>
+          <td><code>0x01</code></td>
+          <td>Google's Snappy compression. Faster than zlib with lower compression ratio. Good for high-throughput scenarios.</td>
+        </tr>
+        <tr>
+          <td><strong>None</strong></td>
+          <td><code>0xFF</code></td>
+          <td>No compression. Raw batch payload. Only useful for debugging or on local networks with no bandwidth constraints.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>The <strong>compression threshold</strong> determines the minimum batch payload size (in bytes) before compression is applied. MC-RS defaults to a threshold of <strong>1 byte</strong>, meaning virtually all packets are compressed. Batches smaller than the threshold are sent with a <code>0xFF</code> compression header byte (uncompressed).</p>
+
+    <p>Compression is applied <strong>per-batch</strong>, not per individual packet. Multiple game packets are first bundled into a single batch, the batch payload is compressed, and then (if encryption is active) the compressed bytes are encrypted.</p>
+
+    <pre><code><span class="cm">// Outbound pipeline order</span>
+<span class="cm">// 1. Encode individual packets</span>
+<span class="cm">// 2. Bundle into batch (length-prefixed sub-packets)</span>
+<span class="cm">// 3. Compress batch payload (zlib/snappy if above threshold)</span>
+<span class="cm">// 4. Encrypt compressed bytes (AES-256-CFB8 + SHA-256 checksum)</span>
+<span class="cm">// 5. Wrap in RakNet reliability frame</span>
+<span class="cm">// 6. Fragment if exceeds MTU</span>
+<span class="cm">// 7. Send via UDP socket</span></code></pre>
+
+    <!-- Connection Lifecycle -->
+    <h2>Connection Lifecycle</h2>
+    <p>A Bedrock client connection goes through a well-defined sequence of phases, from initial server discovery through active gameplay to disconnection.</p>
+
+    <ol>
+      <li>
+        <strong>Unconnected Ping/Pong (server list)</strong> &mdash; The client broadcasts an Unconnected Ping to discover servers on the LAN or to query a specific address. The server responds with an Unconnected Pong containing the MOTD, player count, max players, and server name. This is used by the server list UI.
+      </li>
+      <li>
+        <strong>Open Connection Request 1 / Reply 1 (MTU negotiation)</strong> &mdash; The client sends a request with padding bytes to probe the maximum MTU. The server responds with the agreed MTU size and its GUID. This is the first step of the RakNet handshake.
+      </li>
+      <li>
+        <strong>Open Connection Request 2 / Reply 2 (connection established)</strong> &mdash; The client confirms the MTU and provides its client address. The server responds with its address and the encryption public key. The RakNet connection is now established.
+      </li>
+      <li>
+        <strong>Connection Request / Connection Request Accepted</strong> &mdash; An internal RakNet handshake that timestamps the connection and exchanges system addresses.
+      </li>
+      <li>
+        <strong>Game packets begin</strong> &mdash; The protocol transitions to game-level packets: <code>RequestNetworkSettings</code>, <code>Login</code>, encryption handshake, resource packs, <code>StartGame</code>, chunk loading, and finally <code>PlayStatus(PlayerSpawn)</code>.
+      </li>
+      <li>
+        <strong>Disconnect or timeout</strong> &mdash; The connection ends via a <code>Disconnect</code> packet (graceful) or by RakNet timeout if no packets are received within the keepalive window (typically 10 seconds).
+      </li>
+    </ol>
+
+    <div class="alert alert-info">
+      <strong>Async I/O:</strong> MC-RS uses tokio for async UDP socket handling. Each client connection is processed in the main task with non-blocking I/O. The RakNet layer manages per-connection state (sequence counters, fragment buffers, ordering channels) without spawning separate tasks per client.
+    </div>
+
+  </div>
+</main>
+
+<footer class="site-footer">
+  MC-RS &mdash; Minecraft Bedrock Edition Server in Rust &mdash; <a href="https://github.com/pedrokarim/mc-rs">GitHub</a> &mdash; MIT License
+</footer>
+
+<script src="../nav.js"></script>
+<script src="../search-data.js"></script>
+<script src="../search.js"></script>
+</body>
+</html>

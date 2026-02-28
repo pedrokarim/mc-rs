@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gameplay — MC-RS Documentation</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<!-- Header -->
+<header class="site-header">
+  <button class="hamburger" aria-label="Menu">&#9776;</button>
+  <a href="../" class="header-logo">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="8" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.3"/>
+      <rect x="8" y="2" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.6"/>
+      <rect x="6" y="6" width="16" height="16" rx="2" fill="#4ecca3"/>
+      <rect x="10" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="18" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="12" y="16" width="8" height="3" rx="1" fill="#0f0f1a"/>
+    </svg>
+    <span>MC<span class="accent">-RS</span></span>
+  </a>
+  <div class="search-wrapper">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" class="search-input" placeholder="Search documentation...">
+    <span class="search-shortcut">/</span>
+    <div class="search-results"></div>
+  </div>
+</header>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Getting Started</div>
+    <a href="../" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </a>
+    <a href="overview.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+      Overview
+    </a>
+    <a href="architecture.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="6" rx="1"/><rect x="16" y="3" width="6" height="6" rx="1"/><rect x="16" y="15" width="6" height="6" rx="1"/><path d="M8 10h4m0 0v-4m0 4v4m0-4h4"/></svg>
+      Architecture
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Core Systems</div>
+    <a href="protocol.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      Protocol
+    </a>
+    <a href="networking.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg>
+      Networking
+    </a>
+    <a href="world.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      World
+    </a>
+    <a href="entities.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Entities
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Gameplay</div>
+    <a href="gameplay.html" class="sidebar-link active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Gameplay
+    </a>
+    <a href="commands.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      Commands
+    </a>
+    <a href="plugins.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66 4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66 4.24-4.24"/></svg>
+      Plugins
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Operations</div>
+    <a href="configuration.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Configuration
+    </a>
+    <a href="security.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Security
+    </a>
+    <a href="performance.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Performance
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Links</div>
+    <a href="https://github.com/pedrokarim/mc-rs" class="sidebar-link" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<div class="sidebar-overlay"></div>
+
+<!-- Main Content -->
+<main class="main-content">
+  <div class="content-inner">
+
+    <h1>Gameplay Systems</h1>
+    <p class="page-subtitle">Complete survival experience with combat, hunger, crafting, enchantments, and weather.</p>
+
+    <!-- Combat System -->
+    <h2>Combat System</h2>
+    <p>MC-RS implements a full damage pipeline through the <code>DamageInput</code> struct in <code>mc-rs-game/src/combat.rs</code>. Every hit flows through a multi-stage reduction chain before the final damage is applied to the target.</p>
+
+    <h3>Damage Pipeline</h3>
+    <p>The <code>calculate_damage()</code> function processes damage in the following order:</p>
+
+    <ol>
+      <li><strong>Base damage</strong> &mdash; Looked up from the weapon damage table (fist: 1, wooden sword: 4, stone: 5, iron: 6, diamond: 7, netherite: 8)</li>
+      <li><strong>Critical hit multiplier</strong> &mdash; If the attacker is airborne (<code>!on_ground</code>) and falling (<code>y_velocity &lt; 0</code>), damage is multiplied by <strong>1.5&times;</strong> and an <code>Animate</code> packet (action_type=4) is sent for the visual effect</li>
+      <li><strong>Enchantment bonus</strong> &mdash; Sharpness adds <code>1.0 + 0.5 * (level - 1)</code> extra damage</li>
+      <li><strong>Armor reduction</strong> &mdash; Uses the Bedrock formula: <code>damage * (1 - min(20, defense) / 25)</code></li>
+      <li><strong>Protection enchantment</strong> &mdash; Each level of Protection reduces damage by 4%, up to a cap</li>
+      <li><strong>Final damage</strong> &mdash; Applied to the target's health</li>
+    </ol>
+
+    <pre><code><span class="cm">// Bedrock armor reduction formula</span>
+<span class="kw">let</span> armor_factor = <span class="num">1.0</span> - (<span class="fn">min</span>(<span class="num">20</span>, defense) <span class="kw">as</span> <span class="ty">f32</span>) / <span class="num">25.0</span>;
+<span class="kw">let</span> reduced = base_damage * armor_factor;
+
+<span class="cm">// Critical hit check</span>
+<span class="kw">if</span> !attacker.on_ground &amp;&amp; attacker.velocity.y &lt; <span class="num">0.0</span> {
+    damage *= <span class="num">1.5</span>;
+    <span class="fn">send_animate</span>(target, <span class="num">4</span>); <span class="cm">// Critical hit particles</span>
+}</code></pre>
+
+    <h3>PvP Combat</h3>
+    <p>Player-versus-player combat includes a <strong>10-tick invulnerability window</strong> after each hit, preventing rapid damage stacking. Knockback pushes the target away from the attacker, with the Knockback enchantment adding extra force. Fire Aspect sets the target on fire for the configured number of ticks.</p>
+
+    <h3>Projectiles</h3>
+    <p>Two projectile types are implemented: <strong>arrows</strong> and <strong>tridents</strong>. Both follow arc physics with gravity, and deal damage on impact. Arrows are fired from bows with velocity scaling based on draw duration. Tridents can be thrown and retrieved.</p>
+
+    <div class="alert alert-info">
+      <strong>Invulnerability frames:</strong> After taking a hit, entities cannot be damaged again for 10 game ticks (0.5 seconds). This matches vanilla Bedrock behavior and prevents exploits with rapid-fire attacks.
+    </div>
+
+    <!-- Armor & Enchantments -->
+    <h2>Armor &amp; Enchantments</h2>
+    <p>MC-RS supports <strong>37 enchantment IDs</strong>, each with defined effects that modify combat, tool usage, and survival mechanics. Enchantments are stored in item NBT using the Bedrock format.</p>
+
+    <h3>Enchantment Storage</h3>
+    <p>Enchantments are serialized in the item's NBT data using the standard Bedrock format:</p>
+
+    <pre><code><span class="cm">// NBT enchantment format</span>
+{
+    <span class="str">"ench"</span>: [
+        { <span class="str">"id"</span>: <span class="ty">Short</span>(<span class="num">9</span>),  <span class="str">"lvl"</span>: <span class="ty">Short</span>(<span class="num">3</span>) }, <span class="cm">// Sharpness III</span>
+        { <span class="str">"id"</span>: <span class="ty">Short</span>(<span class="num">17</span>), <span class="str">"lvl"</span>: <span class="ty">Short</span>(<span class="num">2</span>) }  <span class="cm">// Fire Aspect II</span>
+    ]
+}</code></pre>
+
+    <h3>Key Enchantment Effects</h3>
+    <table>
+      <thead>
+        <tr><th>Enchantment</th><th>ID</th><th>Max Level</th><th>Effect</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Protection</strong></td><td><code>0</code></td><td>IV</td><td>Reduces incoming damage by 4% per level</td></tr>
+        <tr><td><strong>Fire Protection</strong></td><td><code>1</code></td><td>IV</td><td>Reduces fire damage, decreases burn time</td></tr>
+        <tr><td><strong>Feather Falling</strong></td><td><code>2</code></td><td>IV</td><td>Reduces fall damage</td></tr>
+        <tr><td><strong>Blast Protection</strong></td><td><code>3</code></td><td>IV</td><td>Reduces explosion damage and knockback</td></tr>
+        <tr><td><strong>Sharpness</strong></td><td><code>9</code></td><td>V</td><td>+1.0 + 0.5*(level-1) melee damage</td></tr>
+        <tr><td><strong>Knockback</strong></td><td><code>12</code></td><td>II</td><td>Increases knockback distance on hit</td></tr>
+        <tr><td><strong>Fire Aspect</strong></td><td><code>13</code></td><td>II</td><td>Sets target on fire (80 ticks per level)</td></tr>
+        <tr><td><strong>Efficiency</strong></td><td><code>15</code></td><td>V</td><td>Increases mining speed</td></tr>
+        <tr><td><strong>Unbreaking</strong></td><td><code>17</code></td><td>III</td><td>Chance to not consume durability</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Enchanting Table</h3>
+    <p>The enchanting table uses a <strong>seeded RNG</strong> system. The server generates an <code>enchantment_seed</code> sent in the <code>StartGame</code> packet. When a player opens the enchanting table, the server calculates 3 enchantment options based on the seed, nearby bookshelves (max 15), and the item being enchanted.</p>
+
+    <ul>
+      <li><strong>Bookshelf counting</strong> &mdash; Scans for bookshelves within 2 blocks of the table, up to 15</li>
+      <li><strong>Option generation</strong> &mdash; 3 slots with increasing cost (levels 1-3), sent via <code>PlayerEnchantOptions</code> (0x92)</li>
+      <li><strong>Cost</strong> &mdash; 1-3 lapis lazuli + 1-3 XP levels, validated server-side</li>
+      <li><strong>Seed re-roll</strong> &mdash; After each enchantment, the seed is re-rolled for fresh options</li>
+    </ul>
+
+    <h3>Anvil</h3>
+    <p>The anvil supports four operations: <strong>rename</strong> items, <strong>repair</strong> using materials, <strong>combine</strong> two items of the same type, and <strong>merge enchantments</strong> from a sacrifice item. Each operation costs XP levels, calculated based on the enchantments involved and prior work penalties.</p>
+
+    <h3>Grindstone</h3>
+    <p>The grindstone <strong>strips all enchantments</strong> from an item and returns a portion of the XP invested as experience orbs. This provides a way to recover value from unwanted enchantments.</p>
+
+    <!-- Hunger & Survival -->
+    <h2>Hunger &amp; Survival</h2>
+    <p>Survival mode tracks three interconnected attributes that govern health regeneration, sprint ability, and starvation.</p>
+
+    <div class="stats-row">
+      <div class="stat">
+        <div class="stat-number">20</div>
+        <div class="stat-label">Max Food</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">20</div>
+        <div class="stat-label">Max Saturation</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">5.0</div>
+        <div class="stat-label">Max Exhaustion</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">18+</div>
+        <div class="stat-label">Regen Threshold</div>
+      </div>
+    </div>
+
+    <h3>Hunger Attributes</h3>
+    <ul>
+      <li><strong><code>minecraft:player.hunger</code></strong> (0-20) &mdash; The visible food bar. Decreases when exhaustion drains saturation to zero.</li>
+      <li><strong><code>minecraft:player.saturation</code></strong> (0-20) &mdash; Hidden buffer consumed before food level drops. Restored by eating.</li>
+      <li><strong><code>minecraft:player.exhaustion</code></strong> (0-5) &mdash; Accumulated from actions. At 4.0 it drains: first -1 saturation, then -1 food if saturation is zero.</li>
+    </ul>
+
+    <h3>Exhaustion Rates</h3>
+    <table>
+      <thead>
+        <tr><th>Action</th><th>Exhaustion Cost</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Sprinting (per meter)</td><td><code>0.1</code></td></tr>
+        <tr><td>Swimming (per meter)</td><td><code>0.01</code></td></tr>
+        <tr><td>Jumping</td><td><code>0.05</code></td></tr>
+        <tr><td>Sprint-jumping</td><td><code>0.2</code></td></tr>
+        <tr><td>Attacking</td><td><code>0.1</code></td></tr>
+        <tr><td>Natural regeneration (per half-heart)</td><td><code>6.0</code></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Regeneration &amp; Starvation</h3>
+    <p>When food is at <strong>18 or above</strong>, the player naturally regenerates health (one half-heart every 4 seconds at food 20). Each regenerated half-heart costs 6.0 exhaustion, creating a feedback loop that consumes food. When food reaches <strong>0</strong>, the player takes starvation damage (1 HP every 4 seconds) until health reaches 1 HP on Easy or until death on Hard.</p>
+
+    <h3>Food Items</h3>
+    <p>Food data is defined in <code>mc-rs-game/src/food.rs</code>. The <code>food_data(item_name)</code> function returns a <code>FoodData</code> struct with hunger and saturation restoration values for each consumable item. Food is consumed via <code>UseItem</code> interaction with a held food item.</p>
+
+    <!-- Environmental Damage -->
+    <h2>Environmental Damage</h2>
+    <p>Beyond combat, players face several environmental hazards that the server tracks and applies in survival mode.</p>
+
+    <h3>Fall Damage</h3>
+    <p>When a player lands after falling, the server calculates fall damage as <code>(fall_distance - 3.0).ceil()</code>. Falls of 3 blocks or less are safe. The <code>fall_distance</code> field on <code>PlayerConnection</code> accumulates while the player is airborne and resets on landing. Feather Falling enchantment reduces fall damage.</p>
+
+    <h3>Drowning</h3>
+    <p>Players start with <strong>300 air ticks</strong> (15 seconds). While submerged, air decreases by 1 per tick. At 0 air ticks, the player takes <strong>2 damage every second</strong>. Air is restored instantly upon surfacing. The <strong>Water Breathing</strong> potion effect prevents air loss entirely. Bedrock uses <code>position.y</code> as the eye position (1.62 above feet) for the head-in-water check.</p>
+
+    <h3>Lava</h3>
+    <p>Contact with lava deals <strong>4 damage every 0.5 seconds</strong> and sets <code>fire_ticks</code> to 300 (15 seconds of burning). The <strong>Fire Resistance</strong> potion effect prevents all lava and fire damage.</p>
+
+    <h3>Suffocation</h3>
+    <p>When a player's head is inside a solid block (e.g., pushed by a piston or trapped by sand), they take suffocation damage at regular intervals until freed.</p>
+
+    <div class="alert alert-warn">
+      <strong>Eye position:</strong> Bedrock Edition uses the player's <code>position.y</code> as the eye position (1.62 blocks above the feet). This is critical for drowning checks &mdash; the head-in-water test uses this coordinate, not the feet position.
+    </div>
+
+    <!-- Crafting -->
+    <h2>Crafting</h2>
+    <p>The crafting system supports ~50 recipes across multiple crafting stations, all validated server-side through the <code>RecipeRegistry</code> in <code>mc-rs-game/src/recipe.rs</code>.</p>
+
+    <h3>Recipe Types</h3>
+    <ul>
+      <li><strong>Shaped recipes</strong> (type 1) &mdash; Pattern-based, where ingredient positions matter (e.g., swords, pickaxes, armor). Encoded with an <code>unlock_requirement</code> field.</li>
+      <li><strong>Shapeless recipes</strong> (type 0) &mdash; Order does not matter, only the ingredients (e.g., mushroom stew, dyes).</li>
+    </ul>
+
+    <h3>Crafting Flow</h3>
+    <ol>
+      <li>Client places items in the crafting grid (9 slots for workbench, 4 for inventory)</li>
+      <li>Client sends an <code>ItemStackRequest</code> with a <code>CraftRecipe</code> action (type 12) or <code>CraftRecipeAuto</code> (type 13)</li>
+      <li>Server validates the recipe via <code>process_craft_recipe</code> using the <code>RecipeRegistry</code></li>
+      <li>If valid, the server places the result in the crafting output slot and consumes ingredients</li>
+    </ol>
+
+    <h3>Crafting Stations</h3>
+    <table>
+      <thead>
+        <tr><th>Station</th><th>Window Type</th><th>Action Type</th><th>Features</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Workbench</strong></td><td>1</td><td>CraftRecipe (12)</td><td>3x3 grid, ~50 recipes</td></tr>
+        <tr><td><strong>Furnace</strong></td><td>2</td><td>CraftRecipe (12)</td><td>~35 smelting recipes, ~15 fuels, lit/unlit states</td></tr>
+        <tr><td><strong>Blast Furnace</strong></td><td>20</td><td>CraftRecipe (12)</td><td>2x speed for ores and metals</td></tr>
+        <tr><td><strong>Smoker</strong></td><td>21</td><td>CraftRecipe (12)</td><td>2x speed for food items</td></tr>
+        <tr><td><strong>Stonecutter</strong></td><td>29</td><td>CraftRecipe (12)</td><td>30+ recipes, single-item input</td></tr>
+        <tr><td><strong>Grindstone</strong></td><td>26</td><td>CraftGrindstone (16)</td><td>Strips enchantments, XP refund</td></tr>
+        <tr><td><strong>Loom</strong></td><td>24</td><td>CraftLoom (17)</td><td>Banner pattern application</td></tr>
+        <tr><td><strong>Enchanting Table</strong></td><td>3</td><td>CraftRecipeOptional (15)</td><td>Seeded enchantments, bookshelf scaling</td></tr>
+        <tr><td><strong>Anvil</strong></td><td>5</td><td>CraftRecipeOptional (15)</td><td>Rename, repair, combine, merge</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Network Protocol</h3>
+    <p>Recipes are sent to the client via the <code>CraftingData</code> packet (0x34), which encodes all available recipes at login. Each recipe includes its type, ingredients (encoded as <code>RecipeIngredient</code> with <code>network_id</code> and <code>metadata</code>), and the output item. The <code>build_crafting_data</code> function lives in the <code>ConnectionHandler</code> (not <code>mc-rs-proto</code>) due to the dependency graph.</p>
+
+    <div class="alert alert-info">
+      <strong>ItemInfo note:</strong> Items use <code>numeric_id</code> (i16), not <code>runtime_id</code>. Always use <code>numeric_id</code> for recipe ingredient lookups and network serialization.
+    </div>
+
+    <!-- Weather & Time -->
+    <h2>Weather &amp; Time</h2>
+    <p>MC-RS implements a full day/night cycle and weather system with smooth transitions, persistence, and player commands.</p>
+
+    <h3>Day/Night Cycle</h3>
+    <p>The game time runs on a <strong>24,000 tick cycle</strong>, synchronized to all clients via the <code>SetTime</code> packet (0x0A). Key time points:</p>
+
+    <table>
+      <thead>
+        <tr><th>Ticks</th><th>Phase</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>0</code></td><td>Sunrise</td><td>Dawn begins, sky brightens</td></tr>
+        <tr><td><code>1000</code></td><td>Day</td><td>Full daylight</td></tr>
+        <tr><td><code>6000</code></td><td>Noon</td><td>Sun at highest point</td></tr>
+        <tr><td><code>12000</code></td><td>Sunset</td><td>Dusk begins, sky darkens</td></tr>
+        <tr><td><code>13000</code></td><td>Night</td><td>Full darkness, hostile mob spawns increase</td></tr>
+        <tr><td><code>18000</code></td><td>Midnight</td><td>Darkest point</td></tr>
+        <tr><td><code>23000</code></td><td>Pre-dawn</td><td>Sky begins to lighten</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Weather States</h3>
+    <p>Three weather states are supported: <strong>clear</strong>, <strong>rain</strong>, and <strong>thunderstorm</strong>. Transitions are smooth rather than instant, using gradual rain intensity changes. Weather is communicated via <code>LevelEvent</code> packets (event IDs 3001-3004) and game rules via <code>GameRulesChanged</code> (0x48).</p>
+
+    <ul>
+      <li><strong>Rain</strong> &mdash; Smooth fade-in/fade-out transition, affects mob spawning rates</li>
+      <li><strong>Thunderstorm</strong> &mdash; Includes rain plus lightning strikes at random positions</li>
+      <li><strong>Lightning</strong> &mdash; Random strikes that deal damage to nearby entities and can set fires</li>
+    </ul>
+
+    <h3>Persistence</h3>
+    <p>Both the current game time and weather state are saved in <code>level.dat</code>, so they persist across server restarts. The <code>/time</code> and <code>/weather</code> commands allow operators to override the natural cycle.</p>
+
+    <!-- XP System -->
+    <h2>XP System</h2>
+    <p>Experience points (XP) serve as a currency for enchanting and anvil operations, with multiple sources of acquisition and a leveling formula.</p>
+
+    <h3>XP Sources</h3>
+    <ul>
+      <li><strong>Mob kills</strong> &mdash; Each mob type drops a configured amount of XP orbs on death</li>
+      <li><strong>Smelting</strong> &mdash; Furnaces accumulate XP per item smelted, paid out when products are collected</li>
+      <li><strong>Mining</strong> &mdash; Certain ores (coal, diamond, lapis, redstone, emerald) drop XP when mined</li>
+      <li><strong>Breeding</strong> &mdash; Breeding animals rewards a small amount of XP</li>
+      <li><strong>Grindstone</strong> &mdash; Stripping enchantments refunds a portion of the XP cost</li>
+    </ul>
+
+    <h3>Level Calculation</h3>
+    <p>XP is accumulated as raw points, which are converted to levels using a piecewise formula (different coefficients for levels 0-16, 17-31, and 32+). The <code>/xp</code> command allows operators to add or set XP for any player, and the <code>/enchant</code> command consumes XP levels when applying enchantments.</p>
+
+    <h3>XP Loss on Death</h3>
+    <p>When a player dies, they drop a percentage of their accumulated XP as orbs on the ground, which can be recovered. The remaining XP is lost. The exact drop amount follows vanilla Bedrock formulas.</p>
+
+    <div class="alert alert-info">
+      <strong>Potion effects:</strong> 21 effect types are supported via <code>MobEffect</code> (0x1C), including Speed, Strength, Regeneration, Water Breathing, Fire Resistance, and more. Effects are managed per-player in <code>PlayerConnection.effects</code> and ticked each game loop.
+    </div>
+
+  </div>
+</main>
+
+<footer class="site-footer">
+  MC-RS &mdash; Minecraft Bedrock Edition Server in Rust &mdash; <a href="https://github.com/pedrokarim/mc-rs">GitHub</a> &mdash; MIT License
+</footer>
+
+<script src="../nav.js"></script>
+<script src="../search-data.js"></script>
+<script src="../search.js"></script>
+</body>
+</html>

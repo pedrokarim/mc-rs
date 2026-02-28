@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Performance — MC-RS Documentation</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<!-- Header -->
+<header class="site-header">
+  <button class="hamburger" aria-label="Menu">&#9776;</button>
+  <a href="../" class="header-logo">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="8" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.3"/>
+      <rect x="8" y="2" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.6"/>
+      <rect x="6" y="6" width="16" height="16" rx="2" fill="#4ecca3"/>
+      <rect x="10" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="18" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="12" y="16" width="8" height="3" rx="1" fill="#0f0f1a"/>
+    </svg>
+    <span>MC<span class="accent">-RS</span></span>
+  </a>
+  <div class="search-wrapper">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" class="search-input" placeholder="Search documentation...">
+    <span class="search-shortcut">/</span>
+    <div class="search-results"></div>
+  </div>
+</header>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Getting Started</div>
+    <a href="../" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </a>
+    <a href="overview.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+      Overview
+    </a>
+    <a href="architecture.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="6" rx="1"/><rect x="16" y="3" width="6" height="6" rx="1"/><rect x="16" y="15" width="6" height="6" rx="1"/><path d="M8 10h4m0 0v-4m0 4v4m0-4h4"/></svg>
+      Architecture
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Core Systems</div>
+    <a href="protocol.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      Protocol
+    </a>
+    <a href="networking.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg>
+      Networking
+    </a>
+    <a href="world.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      World
+    </a>
+    <a href="entities.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Entities
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Gameplay</div>
+    <a href="gameplay.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Gameplay
+    </a>
+    <a href="commands.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      Commands
+    </a>
+    <a href="plugins.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66 4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66 4.24-4.24"/></svg>
+      Plugins
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Operations</div>
+    <a href="configuration.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Configuration
+    </a>
+    <a href="security.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Security
+    </a>
+    <a href="performance.html" class="sidebar-link active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Performance
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Links</div>
+    <a href="https://github.com/pedrokarim/mc-rs" class="sidebar-link" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<div class="sidebar-overlay"></div>
+
+<!-- Main Content -->
+<main class="main-content">
+  <div class="content-inner">
+
+    <h1>Performance</h1>
+    <p class="page-subtitle">Optimized for throughput with spatial indexing, caching, batch processing, and parallel generation.</p>
+
+    <!-- Benchmarks -->
+    <h2>Benchmarks</h2>
+    <div class="stats-row">
+      <div class="stat">
+        <div class="stat-number">20 TPS</div>
+        <div class="stat-label">Tick Rate</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">~50ms</div>
+        <div class="stat-label">Tick Budget</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">128</div>
+        <div class="stat-label">Max Entities/Chunk</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">4 threads</div>
+        <div class="stat-label">Chunk Gen Pool</div>
+      </div>
+    </div>
+    <p>Actual performance depends on hardware specifications, player count, loaded chunk count, and active entity count. The 50ms tick budget is the maximum time allowed per game tick before the server falls behind.</p>
+
+    <!-- SpatialGrid -->
+    <h2>SpatialGrid</h2>
+    <p>The <code>SpatialGrid</code> is a 2D spatial index used by mob AI to efficiently find nearby entities. Instead of scanning every entity in the world (O(n) per query), the grid divides the XZ plane into fixed-size cells. Finding entities near a position requires checking only the relevant cell and its neighbors, achieving <strong>O(1) cell lookup</strong> per query.</p>
+
+    <pre><code><span class="cm">// SpatialGrid: 2D grid for fast entity proximity queries</span>
+<span class="cm">// Located in mc-rs-game/src/ai/spatial.rs</span>
+
+<span class="kw">let</span> grid = <span class="ty">SpatialGrid</span>::<span class="fn">new</span>(cell_size);
+
+<span class="cm">// Insert entities by position</span>
+grid.<span class="fn">insert</span>(entity_id, position);
+
+<span class="cm">// Query: find all entities within radius</span>
+<span class="cm">// Only checks cells overlapping the search area</span>
+<span class="kw">let</span> nearby = grid.<span class="fn">query_radius</span>(center, radius);
+<span class="cm">// O(1) cell lookups instead of O(n) linear scan</span></code></pre>
+
+    <p>The grid is rebuilt every tick from the current entity positions in the ECS world. This approach is used by AI behaviors such as <code>NearestAttackableTarget</code>, <code>LookAtPlayer</code>, and <code>TemptGoal</code> to locate targets without iterating over every entity.</p>
+
+    <!-- Chunk Caching -->
+    <h2>Chunk Caching</h2>
+    <p>Each <code>ChunkColumn</code> has a <code>cached_payload</code> field that stores the serialized chunk data after the first serialization. When multiple players request the same chunk, the server reuses the cached bytes instead of re-serializing.</p>
+
+    <ul>
+      <li><strong>First access:</strong> Chunk is serialized to the Bedrock <code>LevelChunk</code> format and the result is stored in <code>cached_payload</code>.</li>
+      <li><strong>Subsequent accesses:</strong> The cached bytes are returned directly, avoiding the serialization overhead.</li>
+      <li><strong>Invalidation:</strong> When a block changes (via player action, tick, or command), the chunk's <code>dirty</code> flag is set to <code>true</code> and <code>cached_payload</code> is cleared. The next request triggers a fresh serialization.</li>
+    </ul>
+
+    <p>This optimization is especially impactful during player movement, when the server sends many chunks per tick. Chunks that have not been modified since the last serialization are served from cache with zero processing cost.</p>
+
+    <!-- Batch Noise Generation -->
+    <h2>Batch Noise Generation</h2>
+    <p>The <code>sample_2d_batch</code> function generates noise values for an entire chunk column (16x16 blocks) in a single pass. Instead of calling the noise function 256 times (once per block column), the batch function processes all positions together, reducing function call overhead and improving cache locality.</p>
+
+    <pre><code><span class="cm">// Per-block approach (slow): 256 individual function calls</span>
+<span class="kw">for</span> x <span class="kw">in</span> <span class="num">0</span>..<span class="num">16</span> {
+    <span class="kw">for</span> z <span class="kw">in</span> <span class="num">0</span>..<span class="num">16</span> {
+        heights[x][z] = noise.<span class="fn">sample_2d</span>(world_x + x, world_z + z);
+    }
+}
+
+<span class="cm">// Batch approach (fast): one call for all 256 positions</span>
+<span class="kw">let</span> heights = noise.<span class="fn">sample_2d_batch</span>(chunk_x, chunk_z, <span class="num">16</span>, <span class="num">16</span>);
+<span class="cm">// Processes all 256 positions with better cache behavior</span></code></pre>
+
+    <p>This technique is used during terrain generation for computing height maps, cave noise fields, biome selection values, and ore placement. The improvement is most noticeable during initial world generation when many chunks are generated in rapid succession.</p>
+
+    <!-- Parallel Chunk Generation -->
+    <h2>Parallel Chunk Generation</h2>
+    <p>Chunk generation is offloaded to a thread pool using <code>Arc</code>-wrapped generators and <code>tokio::spawn_blocking</code>. Multiple chunks can be generated concurrently without blocking the main game tick loop.</p>
+
+    <pre><code><span class="cm">// Parallel chunk generation flow</span>
+<span class="cm">// 1. Player moves into new chunk radius</span>
+<span class="cm">// 2. Server identifies chunks that need generation</span>
+<span class="cm">// 3. Each chunk is dispatched to the blocking thread pool</span>
+
+<span class="kw">let</span> generator = <span class="ty">Arc</span>::<span class="fn">clone</span>(&amp;<span class="kw">self</span>.overworld_generator);
+<span class="kw">let</span> handle = tokio::<span class="fn">spawn_blocking</span>(<span class="kw">move</span> || {
+    generator.<span class="fn">generate_chunk</span>(chunk_x, chunk_z)
+});
+
+<span class="cm">// Main tick continues while chunks generate in background</span>
+<span class="cm">// Completed chunks are sent back via channel and integrated</span></code></pre>
+
+    <ul>
+      <li><strong>Non-blocking:</strong> The main game loop continues processing player packets, entity ticks, and world updates while chunks generate in the background.</li>
+      <li><strong>Concurrent:</strong> Multiple chunks generate simultaneously across available CPU cores.</li>
+      <li><strong>Pre-generation:</strong> Chunks are queued for generation ahead of the player's movement direction, reducing perceived lag.</li>
+    </ul>
+
+    <!-- ECS Indexing -->
+    <h2>ECS Indexing</h2>
+    <p>The ECS (Entity Component System) uses dedicated index resources to avoid repeated world queries:</p>
+
+    <table>
+      <thead>
+        <tr><th>Index</th><th>Complexity</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>MobIndex</code></td><td>O(1)</td><td>Maps runtime entity IDs to ECS entity handles for instant mob lookup</td></tr>
+        <tr><td><code>PlayerIndex</code></td><td>O(1)</td><td>Maps player names/UUIDs to ECS entity handles for instant player lookup</td></tr>
+        <tr><td><code>runtime_id_to_addr</code></td><td>O(1)</td><td>HashMap mapping runtime IDs to network addresses for packet routing</td></tr>
+        <tr><td><code>block_entity_chunk_index</code></td><td>O(1)</td><td>Maps chunk positions to block entity lists, avoiding full-world scans</td></tr>
+      </tbody>
+    </table>
+
+    <p>These indices are maintained as ECS resources and updated whenever entities are spawned, despawned, or moved. The cost of maintaining the indices is amortized across many lookups per tick.</p>
+
+    <!-- Memory Optimizations -->
+    <h2>Memory Optimizations</h2>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
+        </div>
+        <h3>Biome Palette</h3>
+        <p><code>[u8; 256]</code> flat array indexed by <code>[x*16+z]</code>. A single byte per column instead of nested structures. 256 bytes total per chunk.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>
+        </div>
+        <h3>Block State Hashes</h3>
+        <p>FNV-1a <code>u32</code> hashes instead of string comparisons. Pre-computed in <code>WorldBlocks</code> and <code>TickBlocks</code> for constant-time block identification.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        </div>
+        <h3>Distance Squared</h3>
+        <p>All distance comparisons use <code>distance_squared()</code> instead of <code>distance()</code>, avoiding the expensive <code>sqrt()</code> operation on every check.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </div>
+        <h3>Pre-computed Tables</h3>
+        <p><code>WorldBlocks</code> and <code>TickBlocks</code> store pre-hashed block states for ores, crops, fluids, and redstone. Eliminates runtime hashing during tick processing.</p>
+      </div>
+    </div>
+
+    <!-- Network Optimizations -->
+    <h2>Network Optimizations</h2>
+    <p>Several techniques reduce bandwidth usage and packet processing overhead:</p>
+
+    <ul>
+      <li><strong>Batch packet compression</strong> &mdash; Multiple game packets are batched into a single RakNet frame and compressed with a single zlib stream, reducing per-packet compression overhead and network round-trips.</li>
+      <li><strong><code>block_network_ids_are_hashes</code></strong> &mdash; The <code>StartGame</code> packet sets this flag to <code>true</code>, telling the client to use FNV-1a hashes for block identification. This eliminates the need to transfer a 15,000+ entry block palette at login.</li>
+      <li><strong>Chunk radius negotiation</strong> &mdash; The server and client negotiate a chunk radius via <code>RequestChunkRadius</code>/<code>ChunkRadiusUpdated</code> packets, limiting the number of chunks sent to what the client can handle.</li>
+      <li><strong>Broadcast filtering</strong> &mdash; Movement updates, particle effects, sound events, and entity updates are only sent to players within the relevant range, not broadcast globally to all connected clients.</li>
+    </ul>
+
+    <div class="alert alert-info">
+      <strong>Hash-based block IDs:</strong> By using <code>block_network_ids_are_hashes=true</code>, MC-RS avoids sending a block palette that would typically be over 200KB. Instead, both server and client compute FNV-1a hashes from block state names, achieving agreement without any palette transfer.
+    </div>
+
+  </div>
+</main>
+
+<footer class="site-footer">
+  MC-RS &mdash; Minecraft Bedrock Edition Server in Rust &mdash; <a href="https://github.com/pedrokarim/mc-rs">GitHub</a> &mdash; MIT License
+</footer>
+
+<script src="../nav.js"></script>
+<script src="../search-data.js"></script>
+<script src="../search.js"></script>
+</body>
+</html>
