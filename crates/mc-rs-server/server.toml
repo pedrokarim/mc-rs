@@ -5,7 +5,7 @@ motd = "MC-RS Server"
 max_players = 20
 gamemode = "survival"
 difficulty = "normal"
-online_mode = true
+online_mode = false
 
 [world]
 name = "world"
