@@ -3,6 +3,8 @@ mod connection;
 mod permissions;
 mod persistence;
 mod plugin_manager;
+mod query;
+mod rcon;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -11,6 +13,7 @@ use std::time::Duration;
 use config::ServerConfig;
 use connection::ConnectionHandler;
 use mc_rs_raknet::{RakNetConfig, RakNetServer, ServerMotd};
+use tokio::io::AsyncBufReadExt;
 use tracing::info;
 
 fn gamemode_to_numeric(gamemode: &str) -> u8 {
@@ -101,11 +104,38 @@ async fn main() {
         let _ = shutdown_tx_ctrlc.send(true);
     });
 
+    // Console REPL: read lines from stdin
+    let (console_tx, mut console_rx) = tokio::sync::mpsc::channel::<String>(32);
+    tokio::spawn(async move {
+        let stdin = tokio::io::BufReader::new(tokio::io::stdin());
+        let mut lines = stdin.lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            let line = line.trim().to_string();
+            if !line.is_empty() && console_tx.send(line).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    // RCON server (if enabled)
+    let (rcon_tx, mut rcon_rx) = tokio::sync::mpsc::channel::<rcon::RconCommand>(32);
+    if config.rcon.enabled {
+        rcon::start(config.rcon.port, config.rcon.password.clone(), rcon_tx);
+    }
+
+    // Query server (if enabled)
+    let (query_stats_tx, query_stats_rx) =
+        tokio::sync::watch::channel(query::ServerStats::default());
+    if config.query.enabled {
+        query::start(config.query.port, query_stats_rx);
+    }
+
     // Process RakNet events through the connection handler
     let online_mode = config.server.online_mode;
     let server_config = config;
     let shutdown_tx_handler = shutdown_tx.clone();
     let mut shutdown_rx_handler = shutdown_rx.clone();
+    let query_enabled = server_config.query.enabled;
     tokio::spawn(async move {
         let mut handler = ConnectionHandler::new(
             server_handle,
@@ -124,6 +154,19 @@ async fn main() {
                 }
                 _ = tick_interval.tick() => {
                     handler.game_tick().await;
+
+                    // Update query stats periodically (every 100 ticks / 5 seconds)
+                    if query_enabled && handler.current_tick().is_multiple_of(100) {
+                        let stats = handler.build_query_stats();
+                        let _ = query_stats_tx.send(stats);
+                    }
+                }
+                Some(line) = console_rx.recv() => {
+                    handler.handle_console_command(&line).await;
+                }
+                Some(rcon_cmd) = rcon_rx.recv() => {
+                    let response = handler.handle_console_command(&rcon_cmd.command).await;
+                    let _ = rcon_cmd.response_tx.send(response);
                 }
                 _ = shutdown_rx_handler.changed() => {
                     if *shutdown_rx_handler.borrow() {

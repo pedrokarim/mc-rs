@@ -18,7 +18,7 @@ members = [
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
-tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "macros", "signal"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "macros", "signal", "io-util", "io-std"] }
 bytes = "1"
 tracing = "0.1"
 rand = "0.8"

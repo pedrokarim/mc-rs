@@ -321,6 +321,15 @@ impl PluginManager {
         }
     }
 
+    /// Unload all plugins: disable, then clear plugins, commands, and tasks.
+    pub fn reload(&mut self) {
+        self.disable_all();
+        self.plugins.clear();
+        self.plugin_commands.clear();
+        self.tasks.clear();
+        info!("All plugins unloaded for reload");
+    }
+
     /// Dispatch an event to all plugins. Returns the combined result and pending actions.
     pub fn dispatch(
         &mut self,
@@ -693,6 +702,38 @@ mod tests {
         let (response, actions) = mgr.handle_command("unknown", &[], "Alice", &empty_snapshot());
         assert!(response.is_none());
         assert!(actions.is_empty());
+    }
+
+    #[test]
+    fn reload_clears_all() {
+        let mut mgr = PluginManager::new();
+        mgr.register(Box::new(TestPlugin::new()));
+        mgr.enable_all(&empty_snapshot());
+        assert!(mgr.plugin_commands.contains_key("test"));
+
+        mgr.tasks.push(ScheduledTask {
+            plugin_name: "TestPlugin".into(),
+            task_id: 1,
+            remaining_ticks: 10,
+            interval: None,
+        });
+
+        mgr.reload();
+        assert!(mgr.plugin_commands.is_empty());
+        assert!(mgr.tasks.is_empty());
+    }
+
+    #[test]
+    fn reload_calls_disable() {
+        let mut mgr = PluginManager::new();
+        mgr.register(Box::new(TestPlugin::new()));
+        mgr.enable_all(&empty_snapshot());
+        // After reload, plugins vec is cleared (disable was called internally)
+        mgr.reload();
+        // Re-register and enable: commands should be re-populated
+        mgr.register(Box::new(TestPlugin::new()));
+        mgr.enable_all(&empty_snapshot());
+        assert!(mgr.plugin_commands.contains_key("test"));
     }
 
     #[test]

@@ -265,6 +265,19 @@ impl ConnectionHandler {
                 }
             }
         }
+
+        // Include ticking area chunks (always ticked regardless of player proximity)
+        for area in &self.ticking_areas {
+            for cx in area.from.0..=area.to.0 {
+                for cz in area.from.1..=area.to.1 {
+                    let key = (cx, cz);
+                    if self.world_chunks.contains_key(&key) {
+                        chunks.insert(key);
+                    }
+                }
+            }
+        }
+
         chunks
     }
 

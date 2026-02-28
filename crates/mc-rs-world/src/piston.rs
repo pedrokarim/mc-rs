@@ -212,9 +212,7 @@ pub fn process_piston_tick(
         if let Some(chain) = calculate_push_chain(x, y, z, facing, tb, &get_block, &is_solid) {
             // Move blocks from back to front (reverse) to avoid overwriting
             for &(bx, by, bz, block_rid) in chain.iter().rev() {
-                update
-                    .changes
-                    .push((bx + dx, by + dy, bz + dz, block_rid));
+                update.changes.push((bx + dx, by + dy, bz + dz, block_rid));
                 update.neighbor_updates.push((bx, by, bz));
                 update.neighbor_updates.push((bx + dx, by + dy, bz + dz));
             }

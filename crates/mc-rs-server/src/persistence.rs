@@ -194,6 +194,8 @@ pub struct PlayerData {
     pub xp_level: i32,
     #[serde(default)]
     pub xp_total: i32,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -305,6 +307,7 @@ impl PlayerData {
                 .collect(),
             xp_level: conn.xp_level,
             xp_total: conn.xp_total,
+            tags: conn.tags.iter().cloned().collect(),
         }
     }
 
@@ -353,6 +356,9 @@ impl PlayerData {
                 remaining_ticks: e.remaining_ticks,
             })
             .collect();
+
+        // Restore tags
+        conn.tags = self.tags.iter().cloned().collect();
     }
 
     /// Load player data from a JSON file.
@@ -505,6 +511,7 @@ mod tests {
             }],
             xp_level: 5,
             xp_total: 160,
+            tags: vec!["vip".into(), "builder".into()],
         };
 
         data.save(&dir, "test-uuid-1234").unwrap();
