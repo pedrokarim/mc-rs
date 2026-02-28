@@ -25,6 +25,7 @@ pub mod game_rules_changed;
 pub mod inventory_content;
 pub mod inventory_slot;
 pub mod inventory_transaction;
+pub mod item_registry;
 pub mod item_stack_request;
 pub mod item_stack_response;
 pub mod level_chunk;
@@ -99,6 +100,7 @@ pub use inventory_slot::InventorySlot;
 pub use inventory_transaction::{
     InventoryTransaction, UseItemAction, UseItemData, UseItemOnEntityAction, UseItemOnEntityData,
 };
+pub use item_registry::{ItemRegistry, ItemRegistryEntry};
 pub use item_stack_request::ItemStackRequest;
 pub use item_stack_response::{
     ItemStackResponse, StackResponseContainer, StackResponseEntry, StackResponseSlot,
@@ -221,13 +223,15 @@ pub mod id {
     pub const SPAWN_PARTICLE_EFFECT: u32 = 0x76;
     pub const UPDATE_ABILITIES: u32 = 0xBB;
     pub const REQUEST_NETWORK_SETTINGS: u32 = 0xC1;
+    pub const ITEM_REGISTRY: u32 = 0xA2;
+    pub const SERVERBOUND_LOADING_SCREEN: u32 = 0x138;
 }
 
-/// Target protocol version (Minecraft Bedrock 1.21.50).
-pub const PROTOCOL_VERSION: i32 = 766;
+/// Target protocol version (Minecraft Bedrock 1.26.0).
+pub const PROTOCOL_VERSION: i32 = 924;
 
-/// Minimum supported protocol version (Minecraft Bedrock 1.21.40).
-pub const MIN_PROTOCOL_VERSION: i32 = 748;
+/// Minimum supported protocol version (Minecraft Bedrock 1.26.0).
+pub const MIN_PROTOCOL_VERSION: i32 = 924;
 
 /// Check whether a client protocol version is supported.
 pub fn is_supported_version(v: i32) -> bool {
@@ -237,10 +241,8 @@ pub fn is_supported_version(v: i32) -> bool {
 /// Return the game version string for a supported protocol version.
 pub fn game_version_for_protocol(v: i32) -> &'static str {
     match v {
-        748 => "1.21.40",
-        749..=765 => "1.21.40", // intermediate builds map to .40
-        766 => "1.21.50",
-        _ => "1.21.50", // fallback
+        924 => "1.26.0",
+        _ => "1.26.0", // fallback
     }
 }
 
@@ -250,31 +252,27 @@ mod tests {
 
     #[test]
     fn supported_version_range() {
-        assert!(is_supported_version(748));
-        assert!(is_supported_version(750));
-        assert!(is_supported_version(766));
-        assert!(!is_supported_version(747));
-        assert!(!is_supported_version(767));
+        assert!(is_supported_version(924));
+        assert!(!is_supported_version(923));
+        assert!(!is_supported_version(925));
         assert!(!is_supported_version(0));
     }
 
     #[test]
     fn protocol_version_constants() {
-        assert_eq!(PROTOCOL_VERSION, 766);
-        assert_eq!(MIN_PROTOCOL_VERSION, 748);
-        const { assert!(MIN_PROTOCOL_VERSION < PROTOCOL_VERSION) };
+        assert_eq!(PROTOCOL_VERSION, 924);
+        assert_eq!(MIN_PROTOCOL_VERSION, 924);
+        const { assert!(MIN_PROTOCOL_VERSION <= PROTOCOL_VERSION) };
     }
 
     #[test]
     fn game_version_mapping() {
-        assert_eq!(game_version_for_protocol(748), "1.21.40");
-        assert_eq!(game_version_for_protocol(766), "1.21.50");
-        assert_eq!(game_version_for_protocol(750), "1.21.40");
+        assert_eq!(game_version_for_protocol(924), "1.26.0");
     }
 
     #[test]
     fn game_version_current() {
         let v = game_version_for_protocol(PROTOCOL_VERSION);
-        assert_eq!(v, "1.21.50");
+        assert_eq!(v, "1.26.0");
     }
 }

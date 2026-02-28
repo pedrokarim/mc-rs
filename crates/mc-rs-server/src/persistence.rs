@@ -135,7 +135,7 @@ impl LevelDat {
         compound.insert("LastPlayed".into(), NbtTag::Long(self.last_played));
         compound.insert("Generator".into(), NbtTag::Int(self.generator));
         compound.insert("StorageVersion".into(), NbtTag::Int(self.storage_version));
-        compound.insert("NetworkVersion".into(), NbtTag::Int(766));
+        compound.insert("NetworkVersion".into(), NbtTag::Int(924));
         compound.insert("rainLevel".into(), NbtTag::Float(self.rain_level));
         compound.insert("lightningLevel".into(), NbtTag::Float(self.lightning_level));
         compound.insert("rainTime".into(), NbtTag::Int(self.rain_time));

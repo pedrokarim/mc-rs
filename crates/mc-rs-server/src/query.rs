@@ -34,7 +34,7 @@ impl Default for ServerStats {
             host_port: 19132,
             host_ip: "0.0.0.0".into(),
             player_names: Vec::new(),
-            version: "1.21.50".into(),
+            version: "1.26.0".into(),
         }
     }
 }
@@ -207,7 +207,7 @@ mod tests {
             host_port: 19132,
             host_ip: "127.0.0.1".into(),
             player_names: vec![],
-            version: "1.21.50".into(),
+            version: "1.26.0".into(),
         };
         let resp = build_basic_stat(1, &stats);
         assert!(resp.len() > 5);
@@ -225,7 +225,7 @@ mod tests {
             host_port: 19132,
             host_ip: "127.0.0.1".into(),
             player_names: vec!["Alice".into()],
-            version: "1.21.50".into(),
+            version: "1.26.0".into(),
         };
         let resp = build_full_stat(1, &stats);
         assert!(resp.len() > 20);

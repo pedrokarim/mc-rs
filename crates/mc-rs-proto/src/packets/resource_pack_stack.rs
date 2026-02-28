@@ -38,7 +38,7 @@ impl Default for ResourcePackStack {
             must_accept: false,
             behavior_packs: Vec::new(),
             resource_packs: Vec::new(),
-            game_version: "1.21.50".into(),
+            game_version: "1.26.0".into(),
             experiments: Vec::new(),
             experiments_previously_used: false,
             use_vanilla_editor_packs: false,
@@ -87,8 +87,8 @@ mod tests {
         let pkt = ResourcePackStack::default();
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        // must_accept(1) + behavior(1) + resource(1) + game_version(1+7) + experiments(1) + 2 bools = 14
-        assert_eq!(buf.len(), 14);
+        // must_accept(1) + behavior(1) + resource(1) + game_version(1+6) + experiments(1) + 2 bools = 13
+        assert_eq!(buf.len(), 13);
     }
 
     #[test]
@@ -97,7 +97,7 @@ mod tests {
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
         let encoded = &buf[..];
-        // game_version "1.21.50" should appear in the output
-        assert!(encoded.windows(7).any(|w| w == b"1.21.50"));
+        // game_version "1.26.0" should appear in the output
+        assert!(encoded.windows(6).any(|w| w == b"1.26.0"));
     }
 }

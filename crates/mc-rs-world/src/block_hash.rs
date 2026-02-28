@@ -11,8 +11,8 @@ const FNV1_32_INIT: u32 = 0x811c_9dc5;
 /// FNV-1a 32-bit prime.
 const FNV1_32_PRIME: u32 = 0x0100_0193;
 
-/// Block state version for 1.21.50 protocol.
-const BLOCK_STATE_VERSION: i32 = 18_100_737;
+/// Block state version for 1.26.0 protocol.
+const BLOCK_STATE_VERSION: i32 = 18_168_865;
 
 /// Compute FNV-1a 32-bit hash of a byte slice.
 pub fn fnv1a_32(data: &[u8]) -> u32 {

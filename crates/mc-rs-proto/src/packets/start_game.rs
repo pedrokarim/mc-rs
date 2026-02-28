@@ -2,7 +2,9 @@
 //!
 //! The largest packet in the Bedrock protocol. Contains the full world
 //! configuration: game rules, spawn position, block palette settings,
-//! item table, movement settings, and much more.
+//! movement settings, and much more.
+//!
+//! Updated for protocol 924 (1.21.50+).
 
 use bytes::{BufMut, Bytes};
 
@@ -43,11 +45,9 @@ pub struct EduResourceUri {
     pub link_uri: String,
 }
 
-/// Player movement authority settings.
+/// Player movement authority settings (protocol 924+: no auth_type field).
 #[derive(Debug, Clone)]
 pub struct MovementSettings {
-    /// 0 = ClientAuthoritative, 1 = ServerAuthoritative, 2 = ServerAuthWithRewind
-    pub auth_type: i32,
     pub rewind_history_size: i32,
     pub server_auth_block_breaking: bool,
 }
@@ -55,14 +55,14 @@ pub struct MovementSettings {
 impl Default for MovementSettings {
     fn default() -> Self {
         Self {
-            auth_type: 2,
             rewind_history_size: 40,
             server_auth_block_breaking: false,
         }
     }
 }
 
-/// An entry in the item table sent with StartGame.
+/// An entry in the item table (used by ItemRegistryPacket since protocol 924).
+/// Kept here for backwards compatibility and shared use.
 #[derive(Debug, Clone)]
 pub struct ItemTableEntry {
     pub string_id: String,
@@ -82,19 +82,29 @@ pub struct BlockProperty {
 // ---------------------------------------------------------------------------
 
 /// The massive StartGame packet containing all world configuration.
+///
+/// Protocol 924: removed item_table (moved to ItemRegistryPacket),
+/// removed server_identifier/world_identifier/scenario_identifier (replaced
+/// by server_telemetry_* fields), removed auth_type from MovementSettings,
+/// added hardcore, network_permissions_disable_sounds, server_join_information,
+/// and server_telemetry_* fields.
 #[derive(Debug, Clone)]
 pub struct StartGame {
+    // -- Part 1: Actor info --
     pub entity_unique_id: i64,
     pub entity_runtime_id: u64,
     pub player_gamemode: i32,
     pub player_position: Vec3,
     pub rotation: Vec2,
+
+    // -- Part 2: LevelSettings (inline) --
     pub seed: u64,
     pub biome_type: i16,
     pub biome_name: String,
     pub dimension: i32,
     pub generator: i32,
     pub world_gamemode: i32,
+    pub hardcore: bool,
     pub difficulty: i32,
     pub spawn_position: BlockPos,
     pub achievements_disabled: bool,
@@ -110,8 +120,8 @@ pub struct StartGame {
     pub has_confirmed_platform_locked_content: bool,
     pub is_multiplayer: bool,
     pub broadcast_to_lan: bool,
-    pub xbox_live_broadcast_mode: u32,
-    pub platform_broadcast_mode: u32,
+    pub xbox_live_broadcast_mode: i32,
+    pub platform_broadcast_mode: i32,
     pub enable_commands: bool,
     pub are_texture_packs_required: bool,
     pub game_rules: Vec<GameRule>,
@@ -136,12 +146,13 @@ pub struct StartGame {
     pub limited_world_length: i32,
     pub is_new_nether: bool,
     pub edu_resource_uri: EduResourceUri,
-    pub experimental_gameplay_override: bool,
+    /// Optional<bool> — written as bool(has_value) + if true, bool(value).
+    pub experimental_gameplay_override: Option<bool>,
     pub chat_restriction_level: u8,
     pub disable_player_interactions: bool,
-    pub server_identifier: String,
-    pub world_identifier: String,
-    pub scenario_identifier: String,
+    // -- End of LevelSettings --
+
+    // -- Part 3: StartGame-specific fields --
     pub level_id: String,
     pub world_name: String,
     pub premium_world_template_id: String,
@@ -150,7 +161,6 @@ pub struct StartGame {
     pub current_tick: i64,
     pub enchantment_seed: i32,
     pub block_properties: Vec<BlockProperty>,
-    pub item_table: Vec<ItemTableEntry>,
     pub multiplayer_correlation_id: String,
     pub server_authoritative_inventory: bool,
     pub game_engine: String,
@@ -159,7 +169,13 @@ pub struct StartGame {
     pub world_template_id: Uuid,
     pub client_side_generation: bool,
     pub block_network_ids_are_hashes: bool,
-    pub server_controlled_sounds: bool,
+    pub network_permissions_disable_sounds: bool,
+    /// Always None for now (written as bool false prefix).
+    pub server_join_information: Option<()>,
+    pub server_telemetry_server_id: String,
+    pub server_telemetry_scenario_id: String,
+    pub server_telemetry_world_id: String,
+    pub server_telemetry_owner_id: String,
 }
 
 /// Pre-encoded empty NBT compound in network format.
@@ -180,7 +196,8 @@ impl Default for StartGame {
             dimension: 0,      // overworld
             generator: 2,      // flat
             world_gamemode: 1, // creative
-            difficulty: 1,     // easy
+            hardcore: false,
+            difficulty: 1, // easy
             spawn_position: BlockPos::new(0, 64, 0),
             achievements_disabled: true,
             editor_world_type: 0,
@@ -216,17 +233,14 @@ impl Default for StartGame {
             persona_disabled: false,
             custom_skins_disabled: false,
             emote_chat_muted: false,
-            game_version: "1.21.50".into(),
+            game_version: "1.26.0".into(),
             limited_world_width: 0,
             limited_world_length: 0,
             is_new_nether: true,
             edu_resource_uri: EduResourceUri::default(),
-            experimental_gameplay_override: false,
+            experimental_gameplay_override: None,
             chat_restriction_level: 0,
             disable_player_interactions: false,
-            server_identifier: String::new(),
-            world_identifier: String::new(),
-            scenario_identifier: String::new(),
             level_id: "level".into(),
             world_name: "MC-RS Server".into(),
             premium_world_template_id: String::new(),
@@ -235,7 +249,6 @@ impl Default for StartGame {
             current_tick: 0,
             enchantment_seed: 0,
             block_properties: Vec::new(),
-            item_table: Vec::new(),
             multiplayer_correlation_id: String::new(),
             server_authoritative_inventory: false,
             game_engine: "vanilla".into(),
@@ -244,7 +257,12 @@ impl Default for StartGame {
             world_template_id: Uuid::ZERO,
             client_side_generation: false,
             block_network_ids_are_hashes: true,
-            server_controlled_sounds: false,
+            network_permissions_disable_sounds: false,
+            server_join_information: None,
+            server_telemetry_server_id: String::new(),
+            server_telemetry_scenario_id: String::new(),
+            server_telemetry_world_id: String::new(),
+            server_telemetry_owner_id: String::new(),
         }
     }
 }
@@ -303,17 +321,21 @@ pub fn encode_game_rules(buf: &mut impl BufMut, rules: &[GameRule]) {
 
 impl ProtoEncode for StartGame {
     fn proto_encode(&self, buf: &mut impl BufMut) {
+        // -- Part 1: Actor info --
         VarLong(self.entity_unique_id).proto_encode(buf);
         VarUInt64(self.entity_runtime_id).proto_encode(buf);
         VarInt(self.player_gamemode).proto_encode(buf);
         self.player_position.proto_encode(buf);
         self.rotation.proto_encode(buf);
+
+        // -- Part 2: LevelSettings (inline) --
         buf.put_u64_le(self.seed);
         buf.put_i16_le(self.biome_type);
         codec::write_string(buf, &self.biome_name);
         VarInt(self.dimension).proto_encode(buf);
         VarInt(self.generator).proto_encode(buf);
         VarInt(self.world_gamemode).proto_encode(buf);
+        buf.put_u8(self.hardcore as u8);
         VarInt(self.difficulty).proto_encode(buf);
         self.spawn_position.proto_encode(buf);
         buf.put_u8(self.achievements_disabled as u8);
@@ -329,8 +351,8 @@ impl ProtoEncode for StartGame {
         buf.put_u8(self.has_confirmed_platform_locked_content as u8);
         buf.put_u8(self.is_multiplayer as u8);
         buf.put_u8(self.broadcast_to_lan as u8);
-        VarUInt32(self.xbox_live_broadcast_mode).proto_encode(buf);
-        VarUInt32(self.platform_broadcast_mode).proto_encode(buf);
+        VarInt(self.xbox_live_broadcast_mode).proto_encode(buf);
+        VarInt(self.platform_broadcast_mode).proto_encode(buf);
         buf.put_u8(self.enable_commands as u8);
         buf.put_u8(self.are_texture_packs_required as u8);
         encode_game_rules(buf, &self.game_rules);
@@ -360,33 +382,35 @@ impl ProtoEncode for StartGame {
         buf.put_u8(self.is_new_nether as u8);
         codec::write_string(buf, &self.edu_resource_uri.button_name);
         codec::write_string(buf, &self.edu_resource_uri.link_uri);
-        buf.put_u8(self.experimental_gameplay_override as u8);
+        // experimental_gameplay_override: Optional<bool>
+        match self.experimental_gameplay_override {
+            Some(value) => {
+                buf.put_u8(1); // has_value = true
+                buf.put_u8(value as u8);
+            }
+            None => {
+                buf.put_u8(0); // has_value = false
+            }
+        }
         buf.put_u8(self.chat_restriction_level);
         buf.put_u8(self.disable_player_interactions as u8);
-        codec::write_string(buf, &self.server_identifier);
-        codec::write_string(buf, &self.world_identifier);
-        codec::write_string(buf, &self.scenario_identifier);
+        // -- End of LevelSettings --
+
+        // -- Part 3: StartGame-specific fields --
         codec::write_string(buf, &self.level_id);
         codec::write_string(buf, &self.world_name);
         codec::write_string(buf, &self.premium_world_template_id);
         buf.put_u8(self.is_trial as u8);
-        VarInt(self.movement_settings.auth_type).proto_encode(buf);
+        // MovementSettings (protocol 924+: no auth_type)
         VarInt(self.movement_settings.rewind_history_size).proto_encode(buf);
         buf.put_u8(self.movement_settings.server_auth_block_breaking as u8);
         buf.put_i64_le(self.current_tick);
         VarInt(self.enchantment_seed).proto_encode(buf);
-        // Block properties
+        // Block palette (block_properties)
         VarUInt32(self.block_properties.len() as u32).proto_encode(buf);
         for bp in &self.block_properties {
             codec::write_string(buf, &bp.name);
             buf.put_slice(&bp.nbt);
-        }
-        // Item table
-        VarUInt32(self.item_table.len() as u32).proto_encode(buf);
-        for item in &self.item_table {
-            codec::write_string(buf, &item.string_id);
-            buf.put_i16_le(item.numeric_id);
-            buf.put_u8(item.is_component_based as u8);
         }
         codec::write_string(buf, &self.multiplayer_correlation_id);
         buf.put_u8(self.server_authoritative_inventory as u8);
@@ -396,7 +420,14 @@ impl ProtoEncode for StartGame {
         self.world_template_id.proto_encode(buf);
         buf.put_u8(self.client_side_generation as u8);
         buf.put_u8(self.block_network_ids_are_hashes as u8);
-        buf.put_u8(self.server_controlled_sounds as u8);
+        buf.put_u8(self.network_permissions_disable_sounds as u8);
+        // server_join_information: Optional<()> — always None for now
+        buf.put_u8(self.server_join_information.is_some() as u8);
+        // ServerTelemetryData
+        codec::write_string(buf, &self.server_telemetry_server_id);
+        codec::write_string(buf, &self.server_telemetry_scenario_id);
+        codec::write_string(buf, &self.server_telemetry_world_id);
+        codec::write_string(buf, &self.server_telemetry_owner_id);
     }
 }
 
@@ -440,5 +471,27 @@ mod tests {
         // VarUInt32(1) + String("pvp") + bool(false) + VarUInt32(1=bool type) + bool(true)
         // = 1 + (1+3) + 1 + 1 + 1 = 8
         assert_eq!(buf.len(), 8);
+    }
+
+    #[test]
+    fn experimental_gameplay_override_none() {
+        let pkt = StartGame::default();
+        assert!(pkt.experimental_gameplay_override.is_none());
+        let mut buf = BytesMut::new();
+        pkt.proto_encode(&mut buf);
+        // Should encode successfully with None (single 0x00 byte)
+        assert!(buf.len() > 100);
+    }
+
+    #[test]
+    fn new_fields_have_defaults() {
+        let pkt = StartGame::default();
+        assert!(!pkt.hardcore);
+        assert!(!pkt.network_permissions_disable_sounds);
+        assert!(pkt.server_join_information.is_none());
+        assert!(pkt.server_telemetry_server_id.is_empty());
+        assert!(pkt.server_telemetry_scenario_id.is_empty());
+        assert!(pkt.server_telemetry_world_id.is_empty());
+        assert!(pkt.server_telemetry_owner_id.is_empty());
     }
 }

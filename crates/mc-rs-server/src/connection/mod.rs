@@ -1196,7 +1196,7 @@ impl ConnectionHandler {
             host_port: self.server_config.server.port,
             host_ip: self.server_config.server.address.clone(),
             player_names,
-            version: "1.21.50".into(),
+            version: "1.26.0".into(),
         }
     }
 

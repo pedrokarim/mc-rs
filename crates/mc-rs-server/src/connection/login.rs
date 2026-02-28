@@ -265,6 +265,10 @@ impl ConnectionHandler {
                 packets::id::PLAYER_SKIN => {
                     self.handle_player_skin(addr, &mut cursor).await;
                 }
+                packets::id::SERVERBOUND_LOADING_SCREEN => {
+                    // No-op: client sends this during loading, we don't need to handle it
+                    debug!("ServerboundLoadingScreen from {addr}");
+                }
                 other => {
                     debug!(
                         "Game packet 0x{other:02X} from {addr}: {} bytes",
@@ -579,30 +583,33 @@ impl ConnectionHandler {
     // -----------------------------------------------------------------------
 
     async fn send_resource_packs_info(&mut self, addr: SocketAddr) {
-        use mc_rs_proto::packets::resource_packs_info::BehaviorPackEntry;
+        use mc_rs_proto::packets::resource_packs_info::ResourcePackInfoEntry;
+        use mc_rs_proto::types::Uuid;
 
-        let bp_entries: Vec<BehaviorPackEntry> = self
+        let pack_entries: Vec<ResourcePackInfoEntry> = self
             .behavior_packs
             .iter()
-            .map(|pack| BehaviorPackEntry {
-                uuid: pack.manifest.header.uuid.clone(),
+            .map(|pack| ResourcePackInfoEntry {
+                pack_id: Uuid::parse(&pack.manifest.header.uuid).unwrap_or(Uuid::ZERO),
                 version: pack.manifest.version_string(),
                 size: pack.pack_size,
-                content_key: String::new(),
+                encryption_key: String::new(),
                 sub_pack_name: String::new(),
-                content_identity: String::new(),
+                content_id: String::new(),
                 has_scripts: false,
+                is_addon_pack: true,
+                is_rtx_capable: false,
+                cdn_url: String::new(),
             })
             .collect();
 
         let pack_info = ResourcePacksInfo {
-            forcing_server_packs: self.server_config.packs.force_packs
-                && !self.behavior_packs.is_empty(),
-            behavior_packs: bp_entries,
+            must_accept: self.server_config.packs.force_packs && !self.behavior_packs.is_empty(),
+            resource_packs: pack_entries,
             ..ResourcePacksInfo::default()
         };
 
-        let pack_count = pack_info.behavior_packs.len();
+        let pack_count = pack_info.resource_packs.len();
         self.send_packet(addr, packets::id::RESOURCE_PACKS_INFO, &pack_info)
             .await;
 
@@ -611,7 +618,7 @@ impl ConnectionHandler {
         }
 
         if pack_count > 0 {
-            info!("Sent ResourcePacksInfo to {addr} ({pack_count} behavior pack(s))");
+            info!("Sent ResourcePacksInfo to {addr} ({pack_count} pack(s))");
         } else {
             info!("Sent ResourcePacksInfo to {addr} (no packs)");
         }
@@ -898,16 +905,6 @@ impl ConnectionHandler {
                     value: GameRuleValue::Bool(false),
                 },
             ],
-            item_table: self
-                .item_registry
-                .item_table_entries()
-                .into_iter()
-                .map(|e| mc_rs_proto::packets::start_game::ItemTableEntry {
-                    string_id: e.string_id,
-                    numeric_id: e.numeric_id,
-                    is_component_based: e.is_component_based,
-                })
-                .collect(),
             enchantment_seed: enchant_seed,
             ..StartGame::default()
         };
@@ -915,6 +912,26 @@ impl ConnectionHandler {
         self.send_packet(addr, packets::id::START_GAME, &start_game)
             .await;
         info!("Sent StartGame to {addr}");
+
+        // Send ItemRegistryPacket (0xA2) — required after StartGame in protocol 924+
+        let item_entries: Vec<packets::ItemRegistryEntry> = self
+            .item_registry
+            .item_table_entries()
+            .into_iter()
+            .map(|e| packets::ItemRegistryEntry {
+                string_id: e.string_id,
+                numeric_id: e.numeric_id,
+                is_component_based: e.is_component_based,
+                version: 0,
+                component_nbt: Vec::new(),
+            })
+            .collect();
+        let item_registry_pkt = packets::ItemRegistry {
+            entries: item_entries,
+        };
+        self.send_packet(addr, packets::id::ITEM_REGISTRY, &item_registry_pkt)
+            .await;
+        info!("Sent ItemRegistryPacket to {addr} ({} items)", self.item_registry.len());
 
         // Send creative content (items available in creative menu)
         let creative_items = mc_rs_proto::packets::creative_content::default_creative_items();

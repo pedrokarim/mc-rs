@@ -138,10 +138,10 @@ mod tests {
     fn decode_login_packet() {
         let chain_json = r#"{"chain":["jwt1.payload1.sig1","jwt2.payload2.sig2"]}"#;
         let client_data = "client.jwt.data";
-        let buf = build_login_bytes(766, chain_json, client_data);
+        let buf = build_login_bytes(924, chain_json, client_data);
 
         let pkt = LoginPacket::proto_decode(&mut buf.freeze()).unwrap();
-        assert_eq!(pkt.protocol_version, 766);
+        assert_eq!(pkt.protocol_version, 924);
         assert_eq!(pkt.chain_data.len(), 2);
         assert_eq!(pkt.chain_data[0], "jwt1.payload1.sig1");
         assert_eq!(pkt.chain_data[1], "jwt2.payload2.sig2");
@@ -151,7 +151,7 @@ mod tests {
     #[test]
     fn decode_login_packet_three_chain() {
         let chain_json = r#"{"chain":["jwt1.p.s","jwt2.p.s","jwt3.p.s"]}"#;
-        let buf = build_login_bytes(766, chain_json, "cd.p.s");
+        let buf = build_login_bytes(924, chain_json, "cd.p.s");
 
         let pkt = LoginPacket::proto_decode(&mut buf.freeze()).unwrap();
         assert_eq!(pkt.chain_data.len(), 3);
@@ -165,13 +165,13 @@ mod tests {
 
     #[test]
     fn decode_login_packet_invalid_chain_json() {
-        let buf = build_login_bytes(766, "not json", "cd");
+        let buf = build_login_bytes(924, "not json", "cd");
         assert!(LoginPacket::proto_decode(&mut buf.freeze()).is_err());
     }
 
     #[test]
     fn decode_login_packet_missing_chain_key() {
-        let buf = build_login_bytes(766, r#"{"notchain":[]}"#, "cd");
+        let buf = build_login_bytes(924, r#"{"notchain":[]}"#, "cd");
         assert!(LoginPacket::proto_decode(&mut buf.freeze()).is_err());
     }
 }

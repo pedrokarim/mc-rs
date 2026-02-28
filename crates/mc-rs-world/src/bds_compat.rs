@@ -640,7 +640,7 @@ mod tests {
         buf.push(0x03);
         buf.extend_from_slice(&7i16.to_le_bytes());
         buf.extend_from_slice(b"version");
-        buf.extend_from_slice(&18_100_737i32.to_le_bytes());
+        buf.extend_from_slice(&18_168_865i32.to_le_bytes());
 
         // TAG_End
         buf.push(0x00);

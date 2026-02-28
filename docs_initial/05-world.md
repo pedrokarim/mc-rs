@@ -151,7 +151,7 @@ Chaque entrée de palette est un tag NBT Compound :
     "states": {
         "stone_type": "stone"
     },
-    "version": 18100737
+    "version": 18168865
 }
 ```
 
@@ -163,7 +163,7 @@ Autre exemple :
         "weirdo_direction": 0,
         "upside_down_bit": 1
     },
-    "version": 18100737
+    "version": 18168865
 }
 ```
 
@@ -228,8 +228,8 @@ Pour chaque section verticale de 4 blocs :
     "Generator": 1,                   // 0=legacy, 1=default, 2=flat
     "FlatWorldLayers": "...",         // JSON pour monde plat
     "StorageVersion": 10,
-    "NetworkVersion": 766,            // Version protocole
-    "inventoryVersion": "1.21.50",
+    "NetworkVersion": 924,            // Version protocole
+    "inventoryVersion": "1.26.0",
     "commandblockoutput": 1,
     "commandsEnabled": 1,
     "dodaylightcycle": 1,

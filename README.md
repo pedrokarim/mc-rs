@@ -2,14 +2,14 @@
   <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/License-MIT-4ecca3?style=for-the-badge" alt="MIT License">
   <img src="https://img.shields.io/badge/Tests-924-blue?style=for-the-badge" alt="924 Tests">
-  <img src="https://img.shields.io/badge/Protocol-766_(1.21.50)-orange?style=for-the-badge" alt="Protocol 766">
+  <img src="https://img.shields.io/badge/Protocol-924_(1.26.0)-orange?style=for-the-badge" alt="Protocol 924">
 </p>
 
 # MC-RS
 
 A high-performance **Minecraft Bedrock Edition** server written entirely in Rust.
 
-MC-RS targets **protocol version 766** (Minecraft Bedrock 1.21.50) with multi-version support down to 748 (1.21.40). It implements the full server-authoritative gameplay loop — movement, combat, inventory, world generation, crafting, and more — with a modular plugin system supporting both WASM and Lua scripting.
+MC-RS targets **protocol version 924** (Minecraft Bedrock 1.26.0). It implements the full server-authoritative gameplay loop — movement, combat, inventory, world generation, crafting, and more — with a modular plugin system supporting both WASM and Lua scripting.
 
 ## Features
 

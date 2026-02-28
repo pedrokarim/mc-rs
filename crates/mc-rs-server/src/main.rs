@@ -70,8 +70,8 @@ async fn main() {
 
     let motd = ServerMotd {
         server_name: config.server.motd.clone(),
-        protocol_version: 766,
-        game_version: "1.21.50".into(),
+        protocol_version: 924,
+        game_version: "1.26.0".into(),
         online_players: 0,
         max_players: config.server.max_players,
         server_guid,

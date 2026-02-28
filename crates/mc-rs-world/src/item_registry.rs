@@ -12,9 +12,16 @@ const ITEM_LIST_JSON: &str = include_str!("../data/item_list.json");
 
 /// A single entry from the canonical item list JSON.
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct RawItemEntry {
     runtime_id: i16,
     component_based: bool,
+    /// Item version (0, 1, or 2). Added in newer BedrockData versions.
+    #[serde(default)]
+    version: u8,
+    /// Base64-encoded NBT component data for items with components.
+    #[serde(default)]
+    component_nbt: Option<String>,
 }
 
 /// Properties for a single item type.

@@ -33,11 +33,11 @@ mod tests {
     use bytes::Bytes;
 
     #[test]
-    fn decode_protocol_766() {
-        // 766 in big-endian = 0x00_00_02_FE
-        let data = Bytes::from_static(&[0x00, 0x00, 0x02, 0xFE]);
+    fn decode_protocol_924() {
+        // 924 in big-endian = 0x00_00_03_9C
+        let data = Bytes::from_static(&[0x00, 0x00, 0x03, 0x9C]);
         let pkt = RequestNetworkSettings::proto_decode(&mut data.clone()).unwrap();
-        assert_eq!(pkt.protocol_version, 766);
+        assert_eq!(pkt.protocol_version, 924);
     }
 
     #[test]

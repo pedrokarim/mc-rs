@@ -550,7 +550,7 @@ FilteredMessage  : String
 ### Fonctionnement
 
 Deux numéros de version coexistent :
-1. **Version du jeu** : Lisible (ex : `1.21.40`), visible par les joueurs
+1. **Version du jeu** : Lisible (ex : `1.26.0`), visible par les joueurs
 2. **Version du protocole** : Entier incrémental, utilisé par le réseau
 
 Le client envoie sa version protocole dans `RequestNetworkSettings`. Le serveur compare et rejette les incompatibilités.
@@ -572,6 +572,7 @@ Le client envoie sa version protocole dans `RequestNetworkSettings`. Le serveur 
 | 1.21.30 | 729 |
 | 1.21.40 | 748 |
 | 1.21.50 | 766 |
+| 1.26.0 | 924 |
 
 ### Compatibilité
 

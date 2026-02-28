@@ -180,6 +180,7 @@ Le protocole Bedrock change à chaque mise à jour majeure. Chaque version clien
 | 1.21.30 | 729 |
 | 1.21.40 | 748 |
 | 1.21.50 | 766 |
+| 1.26.0 | 924 |
 
 MC-RS ciblera d'abord la **dernière version stable** et maintiendra la compatibilité avec les 1-2 versions précédentes.
 

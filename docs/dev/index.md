@@ -6,7 +6,7 @@ nav_exclude: true
 
 # MC-RS Developer Documentation
 
-**MC-RS** is a Minecraft Bedrock Edition server written in Rust, targeting protocol v766 (1.21.50).
+**MC-RS** is a Minecraft Bedrock Edition server written in Rust, targeting protocol v924 (1.26.0).
 
 This documentation covers the **plugin and scripting system** for developers who want to extend the server with custom plugins.
 

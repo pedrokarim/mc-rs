@@ -188,8 +188,8 @@ mod tests {
     fn motd_format() {
         let motd = ServerMotd {
             server_name: "Test Server".into(),
-            protocol_version: 766,
-            game_version: "1.21.50".into(),
+            protocol_version: 924,
+            game_version: "1.26.0".into(),
             online_players: 3,
             max_players: 20,
             server_guid: 12345,
@@ -200,7 +200,7 @@ mod tests {
             ipv6_port: 19133,
         };
         let s = motd.to_motd_string();
-        assert!(s.starts_with("MCPE;Test Server;766;1.21.50;3;20;12345;"));
+        assert!(s.starts_with("MCPE;Test Server;924;1.26.0;3;20;12345;"));
         assert!(s.ends_with(';'));
         assert_eq!(s.matches(';').count(), 12);
     }
@@ -210,7 +210,7 @@ mod tests {
         let pong = OfflinePacket::UnconnectedPong {
             send_timestamp: 1234567890,
             server_guid: 42,
-            motd: "MCPE;Test;766;1.21.50;0;20;42;world;Survival;1;19132;19133;".into(),
+            motd: "MCPE;Test;924;1.26.0;0;20;42;world;Survival;1;19132;19133;".into(),
         };
         let mut buf = BytesMut::new();
         pong.encode(&mut buf);

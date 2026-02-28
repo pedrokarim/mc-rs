@@ -50,7 +50,7 @@ MCPE;Nom du serveur;protocole;version_jeu;joueurs_online;joueurs_max;server_guid
 
 Exemple :
 ```
-MCPE;Mon Serveur MC-RS;766;1.21.50;0;20;12345678;MC-RS;Survival;1;19132;19133;
+MCPE;Mon Serveur MC-RS;924;1.26.0;0;20;12345678;MC-RS;Survival;1;19132;19133;
 ```
 
 ### OpenConnectionRequest1 (0x05)

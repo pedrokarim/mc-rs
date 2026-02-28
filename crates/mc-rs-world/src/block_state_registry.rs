@@ -10,8 +10,8 @@ use crate::block_hash::{
     LEVER_DIRS, TORCH_DIRS,
 };
 
-/// Block state version for 1.21.50 protocol (same as block_hash.rs).
-const BLOCK_STATE_VERSION: i32 = 18_100_737;
+/// Block state version for 1.26.0 protocol (same as block_hash.rs).
+const BLOCK_STATE_VERSION: i32 = 18_168_865;
 
 /// Cardinal direction string values (alphabetical, same order as block_hash.rs).
 const CARDINAL_DIRS: [&str; 4] = ["east", "north", "south", "west"];

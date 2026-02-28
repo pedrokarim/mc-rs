@@ -7,7 +7,7 @@ parent: null
 
 # MC-RS Plugin Development
 
-MC-RS is a Minecraft Bedrock Edition server written in Rust, targeting **protocol v766** (1.21.50). It features a modular plugin system supporting both **Lua scripts** and **WASM modules**.
+MC-RS is a Minecraft Bedrock Edition server written in Rust, targeting **protocol v924** (1.26.0). It features a modular plugin system supporting both **Lua scripts** and **WASM modules**.
 
 ## Architecture at a Glance
 
