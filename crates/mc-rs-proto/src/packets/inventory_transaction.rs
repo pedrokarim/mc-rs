@@ -1,7 +1,7 @@
 //! InventoryTransaction (0x1E) — Client → Server.
 //!
 //! Sent when the player interacts with blocks or items.
-//! We only parse TransactionType == 2 (UseItem); all others are ignored.
+//! We parse TransactionType 2 (UseItem), 3 (UseItemOnEntity), and 4 (ReleaseItem).
 
 use bytes::Buf;
 
@@ -63,11 +63,29 @@ pub struct UseItemOnEntityData {
     pub click_position: Vec3,
 }
 
+/// Action type within a ReleaseItem transaction (type 4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReleaseItemAction {
+    /// Release a charged item (e.g., bow string released).
+    Release = 0,
+    /// Consume an item (e.g., eat food) — usually handled via ClickAir instead.
+    Consume = 1,
+}
+
+/// Data from a ReleaseItem transaction (type 4).
+#[derive(Debug, Clone)]
+pub struct ReleaseItemData {
+    pub action: ReleaseItemAction,
+    pub hotbar_slot: i32,
+    pub head_position: Vec3,
+}
+
 /// Parsed InventoryTransaction.
 #[derive(Debug, Clone)]
 pub struct InventoryTransaction {
     pub use_item: Option<UseItemData>,
     pub use_item_on_entity: Option<UseItemOnEntityData>,
+    pub release_item: Option<ReleaseItemData>,
 }
 
 // ---------------------------------------------------------------------------
@@ -368,6 +386,7 @@ impl ProtoDecode for InventoryTransaction {
                     return Ok(Self {
                         use_item: None,
                         use_item_on_entity: None,
+                        release_item: None,
                     })
                 }
             };
@@ -384,14 +403,44 @@ impl ProtoDecode for InventoryTransaction {
                     player_position,
                     click_position,
                 }),
+                release_item: None,
+            });
+        }
+
+        if transaction_type == 4 {
+            // ReleaseItem (e.g., bow release, consume)
+            let action_type_raw = VarUInt32::proto_decode(buf)?.0;
+            let action = match action_type_raw {
+                0 => ReleaseItemAction::Release,
+                1 => ReleaseItemAction::Consume,
+                _ => {
+                    return Ok(Self {
+                        use_item: None,
+                        use_item_on_entity: None,
+                        release_item: None,
+                    })
+                }
+            };
+            let hotbar_slot = VarInt::proto_decode(buf)?.0;
+            skip_item_stack_descriptor(buf)?; // held item
+            let head_position = Vec3::proto_decode(buf)?;
+            return Ok(Self {
+                use_item: None,
+                use_item_on_entity: None,
+                release_item: Some(ReleaseItemData {
+                    action,
+                    hotbar_slot,
+                    head_position,
+                }),
             });
         }
 
         if transaction_type != 2 {
-            // Not UseItem or UseItemOnEntity — ignore
+            // Not UseItem, UseItemOnEntity, or ReleaseItem — ignore
             return Ok(Self {
                 use_item: None,
                 use_item_on_entity: None,
+                release_item: None,
             });
         }
 
@@ -413,6 +462,7 @@ impl ProtoDecode for InventoryTransaction {
                 return Ok(Self {
                     use_item: None,
                     use_item_on_entity: None,
+                    release_item: None,
                 })
             }
         };
@@ -429,6 +479,7 @@ impl ProtoDecode for InventoryTransaction {
                 block_runtime_id,
             }),
             use_item_on_entity: None,
+            release_item: None,
         })
     }
 }
@@ -582,5 +633,37 @@ mod tests {
         let data = pkt.use_item_on_entity.expect("should be UseItemOnEntity");
         assert_eq!(data.entity_runtime_id, 10);
         assert_eq!(data.action, UseItemOnEntityAction::Interact);
+    }
+
+    fn encode_release_item(action: u32, head_pos: Vec3) -> BytesMut {
+        let mut buf = BytesMut::new();
+        VarInt(0).proto_encode(&mut buf); // LegacyRequestID
+        VarUInt32(4).proto_encode(&mut buf); // TransactionType = ReleaseItem
+        VarUInt32(0).proto_encode(&mut buf); // Actions count = 0
+        VarUInt32(action).proto_encode(&mut buf); // ActionType
+        VarInt(0).proto_encode(&mut buf); // HotbarSlot
+        encode_empty_item(&mut buf); // HeldItem
+        head_pos.proto_encode(&mut buf); // HeadPosition
+        buf
+    }
+
+    #[test]
+    fn decode_release_item() {
+        let buf = encode_release_item(0, Vec3::new(5.0, 66.62, 5.0));
+        let pkt = InventoryTransaction::proto_decode(&mut buf.freeze()).unwrap();
+        assert!(pkt.use_item.is_none());
+        assert!(pkt.use_item_on_entity.is_none());
+        let data = pkt.release_item.expect("should be ReleaseItem");
+        assert_eq!(data.action, ReleaseItemAction::Release);
+        assert_eq!(data.hotbar_slot, 0);
+        assert!((data.head_position.y - 66.62).abs() < 0.01);
+    }
+
+    #[test]
+    fn decode_release_consume() {
+        let buf = encode_release_item(1, Vec3::ZERO);
+        let pkt = InventoryTransaction::proto_decode(&mut buf.freeze()).unwrap();
+        let data = pkt.release_item.expect("should be ReleaseItem");
+        assert_eq!(data.action, ReleaseItemAction::Consume);
     }
 }

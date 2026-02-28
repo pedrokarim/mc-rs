@@ -135,6 +135,7 @@ pub fn default_creative_items() -> Vec<(i32, u16)> {
         (69, 1), // lever
         (77, 1), // stone_button
         (33, 1), // piston
+        (29, 1), // sticky_piston
         // === Misc ===
         (54, 1),  // chest
         (58, 1),  // crafting_table

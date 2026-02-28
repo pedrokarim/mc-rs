@@ -233,6 +233,14 @@ impl ConnectionHandler {
                 self.tick_scheduler
                     .schedule(x, y, z, delay, current_tick, prio);
             }
+            // Trigger neighbor updates for piston-moved blocks
+            for &(nx, ny, nz) in &result.neighbor_updates {
+                self.schedule_fluid_neighbors(nx, ny, nz);
+                self.schedule_piston_neighbors(nx, ny, nz);
+            }
+            for (nx, ny, nz) in result.neighbor_updates {
+                self.update_redstone_from(nx, ny, nz).await;
+            }
         }
     }
 
@@ -329,6 +337,36 @@ impl ConnectionHandler {
         for (sx, sy, sz, delay, prio) in result.schedule {
             self.tick_scheduler
                 .schedule(sx, sy, sz, delay, current_tick, prio);
+        }
+        // Check if any adjacent pistons need to update
+        self.schedule_piston_neighbors(x, y, z);
+    }
+
+    /// Schedule piston ticks for pistons adjacent to a changed position.
+    pub(super) fn schedule_piston_neighbors(&mut self, x: i32, y: i32, z: i32) {
+        let current_tick = self.game_world.current_tick();
+        let positions = [
+            (x, y, z),
+            (x - 1, y, z),
+            (x + 1, y, z),
+            (x, y - 1, z),
+            (x, y + 1, z),
+            (x, y, z - 1),
+            (x, y, z + 1),
+        ];
+        for (px, py, pz) in positions {
+            if let Some(rid) = self.get_block(px, py, pz) {
+                if self.tick_blocks.is_piston(rid) {
+                    self.tick_scheduler.schedule(
+                        px,
+                        py,
+                        pz,
+                        piston::PISTON_TICK_DELAY,
+                        current_tick,
+                        0,
+                    );
+                }
+            }
         }
     }
 

@@ -250,6 +250,14 @@ pub struct WorldBlocks {
     pub dandelion: u32,
     pub dead_bush: u32,
     pub cactus: u32,
+    // Structures
+    pub cobblestone: u32,
+    pub mossy_cobblestone: u32,
+    pub oak_planks: u32,
+    pub stone_bricks: u32,
+    pub mob_spawner: u32,
+    pub chest: u32,
+    pub coarse_dirt: u32,
 }
 
 impl WorldBlocks {
@@ -303,6 +311,13 @@ impl WorldBlocks {
             dandelion: hash_block_state("minecraft:yellow_flower"),
             dead_bush: hash_block_state("minecraft:deadbush"),
             cactus: hash_block_state("minecraft:cactus"),
+            cobblestone: hash_block_state("minecraft:cobblestone"),
+            mossy_cobblestone: hash_block_state("minecraft:mossy_cobblestone"),
+            oak_planks: hash_block_state("minecraft:planks"),
+            stone_bricks: hash_block_state("minecraft:stonebrick"),
+            mob_spawner: hash_block_state("minecraft:mob_spawner"),
+            chest: hash_block_state_with_int("minecraft:chest", "facing_direction", 2),
+            coarse_dirt: hash_block_state("minecraft:dirt"),
         }
     }
 
@@ -321,7 +336,66 @@ impl WorldBlocks {
             "minecraft:snow_layer" => self.snow_layer,
             "minecraft:ice" => self.ice,
             "minecraft:water" => self.water,
+            "minecraft:cobblestone" => self.cobblestone,
             _ => self.air,
+        }
+    }
+}
+
+/// Pre-computed block runtime IDs for Nether generation.
+#[derive(Debug, Clone)]
+pub struct NetherBlocks {
+    pub air: u32,
+    pub bedrock: u32,
+    pub netherrack: u32,
+    pub soul_sand: u32,
+    pub soul_soil: u32,
+    pub glowstone: u32,
+    pub lava: u32,
+    pub nether_bricks: u32,
+    pub nether_quartz_ore: u32,
+    pub nether_gold_ore: u32,
+    pub magma: u32,
+    pub gravel: u32,
+}
+
+impl NetherBlocks {
+    /// Compute all block hashes needed for Nether generation.
+    pub fn compute() -> Self {
+        Self {
+            air: hash_block_state("minecraft:air"),
+            bedrock: hash_block_state("minecraft:bedrock"),
+            netherrack: hash_block_state("minecraft:netherrack"),
+            soul_sand: hash_block_state("minecraft:soul_sand"),
+            soul_soil: hash_block_state("minecraft:soul_soil"),
+            glowstone: hash_block_state("minecraft:glowstone"),
+            lava: hash_block_state_with_int("minecraft:lava", "liquid_depth", 0),
+            nether_bricks: hash_block_state("minecraft:nether_brick"),
+            nether_quartz_ore: hash_block_state("minecraft:quartz_ore"),
+            nether_gold_ore: hash_block_state("minecraft:nether_gold_ore"),
+            magma: hash_block_state("minecraft:magma"),
+            gravel: hash_block_state("minecraft:gravel"),
+        }
+    }
+}
+
+/// Pre-computed block runtime IDs for End generation.
+#[derive(Debug, Clone)]
+pub struct EndBlocks {
+    pub air: u32,
+    pub end_stone: u32,
+    pub obsidian: u32,
+    pub bedrock: u32,
+}
+
+impl EndBlocks {
+    /// Compute all block hashes needed for End generation.
+    pub fn compute() -> Self {
+        Self {
+            air: hash_block_state("minecraft:air"),
+            end_stone: hash_block_state("minecraft:end_stone"),
+            obsidian: hash_block_state("minecraft:obsidian"),
+            bedrock: hash_block_state("minecraft:bedrock"),
         }
     }
 }
@@ -386,6 +460,14 @@ pub struct TickBlocks {
     pub repeater_on: [[u32; 4]; 4],
     // Redstone block (constant power source)
     pub redstone_block: u32,
+    // Piston: facing_direction (Int 0-5): 0=down, 1=up, 2=south, 3=north, 4=east, 5=west
+    pub piston: [u32; 6],
+    pub sticky_piston: [u32; 6],
+    pub piston_arm: [u32; 6],
+    pub sticky_piston_arm: [u32; 6],
+    // Immovable blocks (for piston push rejection)
+    pub bedrock: u32,
+    pub enchanting_table_tick: u32,
 }
 
 impl TickBlocks {
@@ -478,6 +560,31 @@ impl TickBlocks {
             }
         }
 
+        // Piston: facing_direction (Int 0-5)
+        let mut piston = [0u32; 6];
+        let mut sticky_piston = [0u32; 6];
+        let mut piston_arm = [0u32; 6];
+        let mut sticky_piston_arm = [0u32; 6];
+        for dir in 0..6 {
+            piston[dir] =
+                hash_block_state_with_int("minecraft:piston", "facing_direction", dir as i32);
+            sticky_piston[dir] = hash_block_state_with_int(
+                "minecraft:sticky_piston",
+                "facing_direction",
+                dir as i32,
+            );
+            piston_arm[dir] = hash_block_state_with_int(
+                "minecraft:piston_arm_collision",
+                "facing_direction",
+                dir as i32,
+            );
+            sticky_piston_arm[dir] = hash_block_state_with_int(
+                "minecraft:sticky_piston_arm_collision",
+                "facing_direction",
+                dir as i32,
+            );
+        }
+
         Self {
             air: hash_block_state("minecraft:air"),
             dirt: hash_block_state("minecraft:dirt"),
@@ -510,6 +617,12 @@ impl TickBlocks {
             repeater_off,
             repeater_on,
             redstone_block: hash_block_state("minecraft:redstone_block"),
+            piston,
+            sticky_piston,
+            piston_arm,
+            sticky_piston_arm,
+            bedrock: hash_block_state("minecraft:bedrock"),
+            enchanting_table_tick: hash_block_state("minecraft:enchanting_table"),
         }
     }
 
@@ -798,6 +911,83 @@ impl TickBlocks {
     /// Check if a block is any redstone component (wire, torch, or repeater).
     pub fn is_redstone_component(&self, rid: u32) -> bool {
         self.is_wire(rid) || self.is_torch(rid) || self.is_repeater(rid)
+    }
+
+    // -----------------------------------------------------------------------
+    // Piston helpers
+    // -----------------------------------------------------------------------
+
+    /// Check if a runtime ID is any retracted piston (normal or sticky).
+    pub fn is_piston(&self, rid: u32) -> bool {
+        self.piston.contains(&rid) || self.sticky_piston.contains(&rid)
+    }
+
+    /// Check if a runtime ID is a sticky piston (retracted).
+    pub fn is_sticky_piston(&self, rid: u32) -> bool {
+        self.sticky_piston.contains(&rid)
+    }
+
+    /// Check if a runtime ID is any piston arm (normal or sticky).
+    pub fn is_piston_arm(&self, rid: u32) -> bool {
+        self.piston_arm.contains(&rid) || self.sticky_piston_arm.contains(&rid)
+    }
+
+    /// Get the facing_direction (0-5) of a piston or piston arm.
+    pub fn piston_facing(&self, rid: u32) -> Option<u8> {
+        for (i, &h) in self.piston.iter().enumerate() {
+            if h == rid {
+                return Some(i as u8);
+            }
+        }
+        for (i, &h) in self.sticky_piston.iter().enumerate() {
+            if h == rid {
+                return Some(i as u8);
+            }
+        }
+        for (i, &h) in self.piston_arm.iter().enumerate() {
+            if h == rid {
+                return Some(i as u8);
+            }
+        }
+        for (i, &h) in self.sticky_piston_arm.iter().enumerate() {
+            if h == rid {
+                return Some(i as u8);
+            }
+        }
+        None
+    }
+
+    /// Check if a block is immovable by pistons.
+    pub fn is_immovable(&self, rid: u32) -> bool {
+        rid == self.obsidian
+            || rid == self.bedrock
+            || rid == self.enchanting_table_tick
+            || self.is_piston_arm(rid)
+    }
+
+    /// Get the piston hash for a player look direction.
+    pub fn piston_from_look(&self, pitch: f32, yaw: f32, sticky: bool) -> u32 {
+        let facing = if pitch > 45.0 {
+            0 // down
+        } else if pitch < -45.0 {
+            1 // up
+        } else {
+            let y = yaw.rem_euclid(360.0);
+            if (315.0..360.0).contains(&y) || y < 45.0 {
+                2 // south
+            } else if (45.0..135.0).contains(&y) {
+                5 // west
+            } else if (135.0..225.0).contains(&y) {
+                3 // north
+            } else {
+                4 // east
+            }
+        };
+        if sticky {
+            self.sticky_piston[facing]
+        } else {
+            self.piston[facing]
+        }
     }
 }
 

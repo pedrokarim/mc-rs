@@ -112,7 +112,7 @@ impl ConnectionHandler {
                 let level_chunk = LevelChunk {
                     chunk_x: cx,
                     chunk_z: cz,
-                    dimension_id: 0,
+                    dimension_id: self.dimension_id,
                     sub_chunk_count,
                     cache_enabled: false,
                     payload: Bytes::from(payload),
@@ -236,7 +236,7 @@ impl ConnectionHandler {
             let level_chunk = LevelChunk {
                 chunk_x: cx,
                 chunk_z: cz,
-                dimension_id: 0,
+                dimension_id: self.dimension_id,
                 sub_chunk_count,
                 cache_enabled: false,
                 payload: Bytes::from(payload),
@@ -314,8 +314,10 @@ impl ConnectionHandler {
         self.broadcast_add_player(addr).await;
         // 5. Send AddActor for all existing mobs to the new player
         self.send_existing_mobs_to(addr).await;
+        // 6. Sync active projectiles (arrows, tridents) to the new player
+        self.sync_projectiles_to_player(addr).await;
 
-        // 6. Send initial health + hunger + XP attributes so the client HUD shows correctly
+        // 7. Send initial health + hunger + XP attributes so the client HUD shows correctly
         let (rid, hp, food, sat, exh, xl, xt) = match self.connections.get(&addr) {
             Some(c) => (
                 c.entity_runtime_id,

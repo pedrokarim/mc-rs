@@ -8,6 +8,7 @@ use rand::prelude::*;
 use crate::block_hash::TickBlocks;
 use crate::fluid;
 use crate::gravity;
+use crate::piston;
 use crate::redstone;
 
 // ---------------------------------------------------------------------------
@@ -117,6 +118,8 @@ pub struct ScheduledTickResult {
     pub changes: Vec<(i32, i32, i32, u32)>,
     /// New ticks to schedule: (x, y, z, delay, priority).
     pub schedule: Vec<(i32, i32, i32, u64, i32)>,
+    /// Positions that need fluid/redstone neighbor re-evaluation (e.g. after piston push).
+    pub neighbor_updates: Vec<(i32, i32, i32)>,
 }
 
 /// Process a scheduled tick at `(x, y, z)`. Dispatches to the appropriate
@@ -136,6 +139,7 @@ pub fn process_scheduled_tick(
             return ScheduledTickResult {
                 changes: fu.changes,
                 schedule: fu.schedule,
+                ..Default::default()
             };
         }
     }
@@ -147,6 +151,7 @@ pub fn process_scheduled_tick(
             return ScheduledTickResult {
                 changes: gu.changes,
                 schedule: gu.schedule,
+                ..Default::default()
             };
         }
     }
@@ -158,6 +163,19 @@ pub fn process_scheduled_tick(
             return ScheduledTickResult {
                 changes: ru.changes,
                 schedule: ru.schedule,
+                ..Default::default()
+            };
+        }
+    }
+
+    // Pistons (extend/retract)
+    if let Some(rid) = get_block(x, y, z) {
+        if tb.is_piston(rid) {
+            let pu = piston::process_piston_tick(x, y, z, tb, &get_block, &is_solid);
+            return ScheduledTickResult {
+                changes: pu.changes,
+                schedule: pu.schedule,
+                neighbor_updates: pu.neighbor_updates,
             };
         }
     }

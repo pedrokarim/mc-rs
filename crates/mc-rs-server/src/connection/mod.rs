@@ -6,6 +6,7 @@ mod inventory;
 mod login;
 mod movement;
 mod plugins;
+mod projectile;
 mod spawn;
 mod survival;
 mod world_tick;
@@ -59,12 +60,15 @@ use mc_rs_world::block_hash::{BlockEntityHashes, FlatWorldBlocks, TickBlocks};
 use mc_rs_world::block_registry::BlockRegistry;
 use mc_rs_world::block_tick::{process_random_tick, process_scheduled_tick, TickScheduler};
 use mc_rs_world::chunk::{ChunkColumn, OVERWORLD_MIN_Y, OVERWORLD_SUB_CHUNK_COUNT};
+use mc_rs_world::end_generator::EndGenerator;
 use mc_rs_world::flat_generator::generate_flat_chunk;
 use mc_rs_world::fluid;
 use mc_rs_world::gravity;
 use mc_rs_world::item_registry::ItemRegistry;
+use mc_rs_world::nether_generator::NetherGenerator;
 use mc_rs_world::overworld_generator::OverworldGenerator;
 use mc_rs_world::physics::{PlayerAabb, MAX_AIRBORNE_TICKS, MAX_FALL_PER_TICK};
+use mc_rs_world::piston;
 use mc_rs_world::redstone;
 use mc_rs_world::serializer::serialize_chunk_column;
 use mc_rs_world::storage::{block_entity_key, LevelDbProvider};
@@ -219,6 +223,12 @@ pub struct ConnectionHandler {
     flat_world_blocks: FlatWorldBlocks,
     /// Overworld generator (None if using flat world).
     overworld_generator: Option<OverworldGenerator>,
+    /// Nether generator (None unless generator="nether").
+    nether_generator: Option<NetherGenerator>,
+    /// End generator (None unless generator="end").
+    end_generator: Option<EndGenerator>,
+    /// Dimension ID for the current world (0=overworld, 1=nether, 2=end).
+    dimension_id: i32,
     /// Pre-computed spawn position (eye position).
     spawn_position: Vec3,
     /// Pre-computed spawn block position (feet).
@@ -284,6 +294,10 @@ pub struct ConnectionHandler {
     block_entity_hashes: BlockEntityHashes,
     /// Smelting recipes and fuel data.
     smelting_registry: SmeltingRegistry,
+    /// Active projectiles (arrows, tridents) in flight.
+    active_projectiles: Vec<projectile::ActiveProjectile>,
+    /// Bow charge start tick per player (for arrow velocity calculation).
+    bow_charge_start: HashMap<SocketAddr, u64>,
 }
 
 impl ConnectionHandler {
@@ -316,14 +330,38 @@ impl ConnectionHandler {
 
         // Initialize world generator based on config
         let gen_name = server_config.world.generator.to_lowercase();
+        let seed = server_config.world.seed as u64;
         let overworld_generator = if gen_name == "default" || gen_name == "overworld" {
-            Some(OverworldGenerator::new(server_config.world.seed as u64))
+            Some(OverworldGenerator::new(seed))
         } else {
             None
+        };
+        let nether_generator = if gen_name == "nether" {
+            Some(NetherGenerator::new(seed))
+        } else {
+            None
+        };
+        let end_generator = if gen_name == "end" {
+            Some(EndGenerator::new(seed))
+        } else {
+            None
+        };
+        let dimension_id = match gen_name.as_str() {
+            "nether" => 1,
+            "end" => 2,
+            _ => 0,
         };
 
         // Compute spawn position
         let (spawn_position, spawn_block) = if let Some(ref gen) = overworld_generator {
+            let feet_y = gen.find_spawn_y();
+            let eye_y = feet_y as f32 + 1.62;
+            (Vec3::new(8.5, eye_y, 8.5), BlockPos::new(8, feet_y, 8))
+        } else if let Some(ref gen) = nether_generator {
+            let feet_y = gen.find_spawn_y();
+            let eye_y = feet_y as f32 + 1.62;
+            (Vec3::new(8.5, eye_y, 8.5), BlockPos::new(8, feet_y, 8))
+        } else if let Some(ref gen) = end_generator {
             let feet_y = gen.find_spawn_y();
             let eye_y = feet_y as f32 + 1.62;
             (Vec3::new(8.5, eye_y, 8.5), BlockPos::new(8, feet_y, 8))
@@ -512,6 +550,9 @@ impl ConnectionHandler {
             server_config,
             flat_world_blocks: FlatWorldBlocks::compute(),
             overworld_generator,
+            nether_generator,
+            end_generator,
+            dimension_id,
             spawn_position,
             spawn_block,
             command_registry,
@@ -561,6 +602,8 @@ impl ConnectionHandler {
             block_entities: HashMap::new(),
             block_entity_hashes: BlockEntityHashes::compute(),
             smelting_registry: SmeltingRegistry::new(),
+            active_projectiles: Vec::new(),
+            bow_charge_start: HashMap::new(),
         }
     }
 
@@ -568,9 +611,13 @@ impl ConnectionHandler {
         self.game_world.allocate_entity_id()
     }
 
-    /// Generate a chunk using the appropriate generator (overworld or flat).
+    /// Generate a chunk using the appropriate generator.
     pub(super) fn generate_chunk(&self, cx: i32, cz: i32) -> ChunkColumn {
         if let Some(ref gen) = self.overworld_generator {
+            gen.generate_chunk(cx, cz)
+        } else if let Some(ref gen) = self.nether_generator {
+            gen.generate_chunk(cx, cz)
+        } else if let Some(ref gen) = self.end_generator {
             gen.generate_chunk(cx, cz)
         } else {
             generate_flat_chunk(cx, cz, &self.flat_world_blocks)
@@ -643,6 +690,7 @@ impl ConnectionHandler {
         self.tick_survival().await;
         self.tick_block_updates().await;
         self.tick_furnaces().await;
+        self.tick_projectiles().await;
         self.tick_time_and_weather().await;
 
         // Plugin: dispatch ServerStarted on first tick

@@ -13,6 +13,7 @@ pub mod grindstone;
 pub mod inventory;
 pub mod loom;
 pub mod mob_registry;
+pub mod projectile;
 pub mod recipe;
 pub mod smelting;
 pub mod xp;

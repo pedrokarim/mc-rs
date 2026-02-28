@@ -767,6 +767,8 @@ static BLOCK_DATA: &[BlockInfo] = &[
     ),
     block!("minecraft:piston", 1.5, solid, Pickaxe),
     block!("minecraft:sticky_piston", 1.5, solid, Pickaxe),
+    block!("minecraft:piston_arm_collision", 1.5, solid, Pickaxe),
+    block!("minecraft:sticky_piston_arm_collision", 1.5, solid, Pickaxe),
     block!("minecraft:observer", 3.5, solid, Pickaxe),
     block!("minecraft:daylight_detector", 0.2, solid, Axe),
     block!("minecraft:daylight_detector_inverted", 0.2, solid, Axe),

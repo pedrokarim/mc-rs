@@ -105,6 +105,9 @@ impl ConnectionHandler {
             }
         }
 
+        // Clean up projectiles belonging to this player
+        self.cleanup_player_projectiles(addr).await;
+
         // Remove the connection
         self.connections.remove(&addr);
 
@@ -836,7 +839,7 @@ impl ConnectionHandler {
             player_position,
             rotation: player_rotation,
             seed: config.world.seed as u64,
-            dimension: 0,
+            dimension: self.dimension_id,
             generator,
             world_gamemode: gamemode,
             difficulty,

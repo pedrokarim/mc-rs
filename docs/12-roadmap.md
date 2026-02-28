@@ -204,7 +204,7 @@ Phase 5 : Polish             ██████████ (continu)
 - [x] Fire Aspect (set target on fire, tick fire damage)
 - [x] Paquet MobEffect (0x1C) — add/modify/remove
 - [x] Commande /effect (apply, clear, entity selectors)
-- [ ] Projectiles (flèches, tridents)
+- [x] Projectiles (flèches, tridents)
 
 ### 3.4 — Survie
 - [x] Système de faim (food, saturation, exhaustion)
@@ -237,9 +237,9 @@ Phase 5 : Polish             ██████████ (continu)
 - [x] Minerais
 - [x] Arbres et végétation
 - [x] Eau et lave
-- [ ] Structures basiques (villages, donjons)
-- [ ] Générateur Nether
-- [ ] Générateur End
+- [x] Structures basiques (villages, donjons)
+- [x] Générateur Nether
+- [x] Générateur End
 
 ### 3.7 — Monde persistant
 - [x] LevelDB provider (rusty-leveldb, chunk keys, sub-chunk disk serialization)
@@ -254,7 +254,7 @@ Phase 5 : Polish             ██████████ (continu)
 - [x] Eau et lave (flow)
 - [x] Sable/gravier (gravité)
 - [x] Redstone basique (wire, torch, repeater, lever)
-- [ ] Pistons
+- [x] Pistons
 
 ### 3.9 — Expérience et enchantements
 - [x] Système XP (formules, gain mob kill/ore mining, perte à la mort, persistance, sync client)

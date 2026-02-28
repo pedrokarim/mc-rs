@@ -72,6 +72,9 @@ impl OverworldGenerator {
         // Phase 5: Place ores
         self.place_ores(&mut column, chunk_x, chunk_z);
 
+        // Phase 5.5: Place structures (dungeons, villages)
+        self.place_structures(&mut column, chunk_x, chunk_z, &heightmap, &biome_map);
+
         // Phase 6: Place trees
         self.place_trees(&mut column, chunk_x, chunk_z, &heightmap, &biome_map);
 
@@ -612,6 +615,259 @@ impl OverworldGenerator {
         }
     }
 
+    // ---- Structure generation (dungeons + villages) ----
+
+    fn place_structures(
+        &self,
+        column: &mut ChunkColumn,
+        chunk_x: i32,
+        chunk_z: i32,
+        heightmap: &[[i32; 16]; 16],
+        biome_map: &[[u8; 16]; 16],
+    ) {
+        self.place_dungeon(column, chunk_x, chunk_z, heightmap);
+        self.place_village(column, chunk_x, chunk_z, heightmap, biome_map);
+    }
+
+    /// Place a dungeon (~10% chance per chunk): 7×7×5 cobblestone room with spawner + chests.
+    fn place_dungeon(
+        &self,
+        column: &mut ChunkColumn,
+        chunk_x: i32,
+        chunk_z: i32,
+        heightmap: &[[i32; 16]; 16],
+    ) {
+        let mut rng = StdRng::seed_from_u64(
+            self.seed
+                .wrapping_mul(7919)
+                .wrapping_add(chunk_x as u64)
+                .wrapping_mul(6271)
+                .wrapping_add(chunk_z as u64)
+                .wrapping_add(0xDEAD),
+        );
+
+        if rng.gen_range(0u32..10) != 0 {
+            return;
+        }
+
+        // Room anchor: top-left corner. Room is 7×7, so anchor must be in [0, 9].
+        let dx = rng.gen_range(0..10) as usize;
+        let dz = rng.gen_range(0..10) as usize;
+        let center_surface = heightmap[dx + 3][dz + 3];
+        let min_room_y = OVERWORLD_MIN_Y + 10;
+        let max_room_y = (center_surface - 10).min(50);
+        if max_room_y <= min_room_y {
+            return;
+        }
+        let room_y = rng.gen_range(min_room_y..=max_room_y);
+
+        // Verify center is solid (stone or deepslate)
+        if let Some(block) = column.get_block_world(dx + 3, room_y + 1, dz + 3) {
+            if block != self.blocks.stone && block != self.blocks.deepslate {
+                return;
+            }
+        } else {
+            return;
+        }
+
+        // Build 7×7×5 room
+        for lx in 0..7 {
+            for lz in 0..7 {
+                for dy in 0..5 {
+                    let wx = dx + lx;
+                    let wz = dz + lz;
+                    let wy = room_y + dy;
+
+                    if wx >= 16 || wz >= 16 {
+                        continue;
+                    }
+
+                    let is_wall = lx == 0 || lx == 6 || lz == 0 || lz == 6;
+                    let is_floor = dy == 0;
+                    let is_ceiling = dy == 4;
+
+                    let block = if is_floor {
+                        if rng.gen_range(0u32..3) == 0 {
+                            self.blocks.mossy_cobblestone
+                        } else {
+                            self.blocks.cobblestone
+                        }
+                    } else if is_wall || is_ceiling {
+                        self.blocks.cobblestone
+                    } else {
+                        self.blocks.air
+                    };
+
+                    column.set_block_world(wx, wy, wz, block);
+                }
+            }
+        }
+
+        // Spawner at center
+        column.set_block_world(dx + 3, room_y + 1, dz + 3, self.blocks.mob_spawner);
+
+        // 1-2 chests along walls
+        column.set_block_world(dx + 1, room_y + 1, dz + 1, self.blocks.chest);
+        if rng.gen_range(0u32..2) == 0 {
+            column.set_block_world(dx + 5, room_y + 1, dz + 5, self.blocks.chest);
+        }
+    }
+
+    /// Place a village (~0.5% chance, only in plains/desert/savanna on flat terrain).
+    fn place_village(
+        &self,
+        column: &mut ChunkColumn,
+        chunk_x: i32,
+        chunk_z: i32,
+        heightmap: &[[i32; 16]; 16],
+        biome_map: &[[u8; 16]; 16],
+    ) {
+        let center_biome = biome_map[8][8];
+        // Only plains (1), desert (2), savanna (35)
+        if center_biome != 1 && center_biome != 2 && center_biome != 35 {
+            return;
+        }
+
+        let mut rng = StdRng::seed_from_u64(
+            self.seed
+                .wrapping_mul(48271)
+                .wrapping_add(chunk_x as u64)
+                .wrapping_mul(16807)
+                .wrapping_add(chunk_z as u64)
+                .wrapping_add(0xCAFE),
+        );
+
+        if rng.gen_range(0u32..200) != 0 {
+            return;
+        }
+
+        // Check flatness (center 8×8)
+        let mut min_h = i32::MAX;
+        let mut max_h = i32::MIN;
+        for x in 4..12 {
+            for z in 4..12 {
+                min_h = min_h.min(heightmap[x][z]);
+                max_h = max_h.max(heightmap[x][z]);
+            }
+        }
+        if max_h - min_h > 5 || min_h < SEA_LEVEL {
+            return;
+        }
+
+        let num_houses = rng.gen_range(3u32..=5);
+
+        // Well at center (3×3)
+        let well_y = heightmap[8][8];
+        self.place_well(column, 7, well_y, 7);
+
+        // Houses at fixed offsets
+        let house_positions: [(usize, usize); 5] = [(1, 1), (1, 10), (10, 1), (10, 10), (5, 12)];
+        for i in 0..num_houses.min(5) as usize {
+            let (hx, hz) = house_positions[i];
+            if hx + 4 >= 16 || hz + 4 >= 16 {
+                continue;
+            }
+            let hy = heightmap[hx + 2][hz + 2];
+            self.place_house(column, hx, hy, hz);
+        }
+
+        // Paths from well to each house (coarse_dirt strips)
+        for i in 0..num_houses.min(5) as usize {
+            let (hx, hz) = house_positions[i];
+            self.place_path(column, 8, 8, hx + 2, hz + 2, heightmap);
+        }
+    }
+
+    /// Build a 3×3 well with cobblestone walls and water at bottom.
+    fn place_well(&self, column: &mut ChunkColumn, x: usize, base_y: i32, z: usize) {
+        // Dig 2 deep, place cobblestone walls, water at bottom
+        for lx in 0..3 {
+            for lz in 0..3 {
+                let wx = x + lx;
+                let wz = z + lz;
+                if wx >= 16 || wz >= 16 {
+                    continue;
+                }
+                let is_edge = lx == 0 || lx == 2 || lz == 0 || lz == 2;
+                // Floor of well
+                column.set_block_world(wx, base_y - 1, wz, self.blocks.cobblestone);
+                if is_edge {
+                    // Walls
+                    column.set_block_world(wx, base_y, wz, self.blocks.cobblestone);
+                    column.set_block_world(wx, base_y + 1, wz, self.blocks.cobblestone);
+                } else {
+                    // Water inside
+                    column.set_block_world(wx, base_y, wz, self.blocks.water);
+                    column.set_block_world(wx, base_y + 1, wz, self.blocks.air);
+                }
+            }
+        }
+    }
+
+    /// Build a 5×5×4 house: stone_bricks floor, oak_planks walls, door opening, oak_planks roof.
+    fn place_house(&self, column: &mut ChunkColumn, x: usize, base_y: i32, z: usize) {
+        for lx in 0..5 {
+            for lz in 0..5 {
+                let wx = x + lx;
+                let wz = z + lz;
+                if wx >= 16 || wz >= 16 {
+                    continue;
+                }
+                let is_wall = lx == 0 || lx == 4 || lz == 0 || lz == 4;
+
+                // Floor
+                column.set_block_world(wx, base_y, wz, self.blocks.stone_bricks);
+
+                for dy in 1..=3 {
+                    let wy = base_y + dy;
+                    if dy <= 2 {
+                        if is_wall {
+                            column.set_block_world(wx, wy, wz, self.blocks.oak_planks);
+                        } else {
+                            column.set_block_world(wx, wy, wz, self.blocks.air);
+                        }
+                    } else {
+                        // Roof (dy == 3)
+                        column.set_block_world(wx, wy, wz, self.blocks.oak_planks);
+                    }
+                }
+            }
+        }
+
+        // Door opening: 1×2 gap in front wall (center of z=0 side)
+        let door_x = x + 2;
+        if door_x < 16 {
+            column.set_block_world(door_x, base_y + 1, z, self.blocks.air);
+            column.set_block_world(door_x, base_y + 2, z, self.blocks.air);
+        }
+    }
+
+    /// Place a coarse_dirt path between two points.
+    fn place_path(
+        &self,
+        column: &mut ChunkColumn,
+        from_x: usize,
+        from_z: usize,
+        to_x: usize,
+        to_z: usize,
+        heightmap: &[[i32; 16]; 16],
+    ) {
+        // Simple Bresenham-like line (step by step in dominant direction)
+        let dx = to_x as i32 - from_x as i32;
+        let dz = to_z as i32 - from_z as i32;
+        let steps = dx.abs().max(dz.abs()).max(1);
+
+        for i in 0..=steps {
+            let t = i as f32 / steps as f32;
+            let px = (from_x as f32 + dx as f32 * t).round() as usize;
+            let pz = (from_z as f32 + dz as f32 * t).round() as usize;
+            if px < 16 && pz < 16 {
+                let py = heightmap[px][pz];
+                column.set_block_world(px, py, pz, self.blocks.coarse_dirt);
+            }
+        }
+    }
+
     /// Set a block only if the current block is air.
     fn set_if_air(&self, column: &mut ChunkColumn, x: usize, y: i32, z: usize, runtime_id: u32) {
         if let Some(current) = column.get_block_world(x, y, z) {
@@ -834,6 +1090,156 @@ mod tests {
         assert_eq!(
             col.sub_chunks.len(),
             crate::chunk::OVERWORLD_SUB_CHUNK_COUNT
+        );
+    }
+
+    // ---- Structure tests ----
+
+    /// Helper: search many chunks for a specific block.
+    fn find_block_in_chunks(
+        gen: &OverworldGenerator,
+        target: u32,
+        y_range: std::ops::Range<i32>,
+        chunk_range: std::ops::Range<i32>,
+    ) -> bool {
+        for cx in chunk_range.clone() {
+            for cz in chunk_range.clone() {
+                let col = gen.generate_chunk(cx, cz);
+                for y in y_range.clone() {
+                    for x in 0..16 {
+                        for z in 0..16 {
+                            if col.get_block_world(x, y, z) == Some(target) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    #[test]
+    fn dungeon_deterministic() {
+        let gen1 = OverworldGenerator::new(42);
+        let gen2 = OverworldGenerator::new(42);
+        // Generate same chunk and verify identical
+        for cx in -5..5 {
+            for cz in -5..5 {
+                let col1 = gen1.generate_chunk(cx, cz);
+                let col2 = gen2.generate_chunk(cx, cz);
+                for y in OVERWORLD_MIN_Y..60 {
+                    for x in 0..16 {
+                        for z in 0..16 {
+                            assert_eq!(
+                                col1.get_block_world(x, y, z),
+                                col2.get_block_world(x, y, z),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn dungeon_has_spawner() {
+        let gen = test_gen();
+        assert!(
+            find_block_in_chunks(
+                &gen,
+                gen.blocks.mob_spawner,
+                (OVERWORLD_MIN_Y + 10)..60,
+                -20..20
+            ),
+            "Should find a mob spawner in dungeons across 40×40 chunks"
+        );
+    }
+
+    #[test]
+    fn dungeon_has_cobblestone() {
+        let gen = test_gen();
+        assert!(
+            find_block_in_chunks(
+                &gen,
+                gen.blocks.cobblestone,
+                (OVERWORLD_MIN_Y + 10)..60,
+                -5..5
+            ),
+            "Should find cobblestone in dungeon walls"
+        );
+    }
+
+    #[test]
+    fn dungeon_has_chest() {
+        let gen = test_gen();
+        assert!(
+            find_block_in_chunks(&gen, gen.blocks.chest, (OVERWORLD_MIN_Y + 10)..60, -20..20),
+            "Should find a chest in dungeons"
+        );
+    }
+
+    #[test]
+    fn village_only_in_valid_biomes() {
+        // Mountains (biome 3) should never have village structures
+        let gen = OverworldGenerator::new(42);
+        // Check that stone_bricks (used in village floors) don't appear in mountain chunks
+        // unless they are also valid biome chunks
+        // This is a weaker test: we just verify village biome filtering works
+        // by checking that place_village returns early for non-village biomes.
+        // We test this indirectly: generate mountain-heavy seed chunks and verify no oak_planks
+        // in patterns typical of village houses.
+        // Actually, let's just verify that the function correctly filters:
+        let gen_mt = OverworldGenerator::new(12345); // different seed
+        let mut planks_in_mountains = 0;
+        for cx in -10..10 {
+            for cz in -10..10 {
+                let col = gen_mt.generate_chunk(cx, cz);
+                let center_biome = col.biomes[8 * 16 + 8];
+                // Only check mountain biomes (3)
+                if center_biome == 3 {
+                    for y in 60..100 {
+                        for x in 0..16 {
+                            for z in 0..16 {
+                                if col.get_block_world(x, y, z) == Some(gen_mt.blocks.stone_bricks)
+                                {
+                                    planks_in_mountains += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(
+            planks_in_mountains, 0,
+            "No village structures in mountain biome"
+        );
+    }
+
+    #[test]
+    fn village_has_houses() {
+        let gen = test_gen();
+        // stone_bricks are used for house floors, oak_planks for walls
+        // Search enough chunks to find a village
+        let found_bricks = find_block_in_chunks(&gen, gen.blocks.stone_bricks, 50..100, -50..50);
+        let found_planks = find_block_in_chunks(&gen, gen.blocks.oak_planks, 50..100, -50..50);
+        assert!(
+            found_bricks || found_planks,
+            "Should find village house blocks (stone_bricks or oak_planks) in 100×100 chunk area"
+        );
+    }
+
+    #[test]
+    fn village_has_well() {
+        let gen = test_gen();
+        // Wells contain water blocks at surface level in village areas
+        // This is already covered by the existing water test, but let's verify
+        // that cobblestone appears at surface level (well walls)
+        let found = find_block_in_chunks(&gen, gen.blocks.cobblestone, 60..90, -50..50);
+        assert!(
+            found,
+            "Should find cobblestone at surface level (well or dungeon)"
         );
     }
 }

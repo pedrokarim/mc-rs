@@ -498,6 +498,15 @@ impl ConnectionHandler {
             return;
         }
 
+        // Handle ReleaseItem (transaction type 4): bow release
+        if let Some(release_data) = transaction.release_item {
+            use mc_rs_proto::packets::inventory_transaction::ReleaseItemAction;
+            if release_data.action == ReleaseItemAction::Release {
+                self.handle_bow_release(addr).await;
+            }
+            return;
+        }
+
         let use_item = match transaction.use_item {
             Some(data) => data,
             None => return,
@@ -764,6 +773,13 @@ impl ConnectionHandler {
                     // Furnace faces the player
                     self.block_entity_hashes
                         .furnace_from_yaw(variant, yaw, false)
+                } else if self.tick_blocks.piston.contains(&block_runtime_id) {
+                    // Piston faces the direction the player is looking
+                    let pitch = self.connections.get(&addr).map(|c| c.pitch).unwrap_or(0.0);
+                    self.tick_blocks.piston_from_look(pitch, yaw, false)
+                } else if self.tick_blocks.sticky_piston.contains(&block_runtime_id) {
+                    let pitch = self.connections.get(&addr).map(|c| c.pitch).unwrap_or(0.0);
+                    self.tick_blocks.piston_from_look(pitch, yaw, true)
                 } else {
                     block_runtime_id
                 };
@@ -825,10 +841,15 @@ impl ConnectionHandler {
                 self.update_redstone_from(target.x, target.y, target.z)
                     .await;
 
+                // If placed block is a piston, schedule immediate power check
+                if self.tick_blocks.is_piston(final_rid) {
+                    self.schedule_piston_neighbors(target.x, target.y, target.z);
+                }
+
                 debug!("Block placed at {target} by {addr}");
             }
             UseItemAction::ClickAir => {
-                // Food consumption
+                // Get held item info
                 let (item_rid, food_level) = match self.connections.get(&addr) {
                     Some(c) => (c.inventory.held_item().runtime_id, c.food),
                     None => return,
@@ -840,6 +861,21 @@ impl ConnectionHandler {
                     .item_registry
                     .get_by_id(item_rid as i16)
                     .map(|info| info.name.clone());
+
+                // Bow: start charging
+                if item_name.as_deref() == Some("minecraft:bow") {
+                    let tick = self.game_world.current_tick();
+                    self.bow_charge_start.insert(addr, tick);
+                    return;
+                }
+
+                // Trident: throw immediately
+                if item_name.as_deref() == Some("minecraft:trident") {
+                    self.throw_trident(addr).await;
+                    return;
+                }
+
+                // Food consumption
                 if let Some(name) = item_name {
                     if let Some(fd) = mc_rs_game::food::food_data(&name) {
                         if food_level < 20 {
