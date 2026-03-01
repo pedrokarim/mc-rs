@@ -39,7 +39,8 @@ impl ConnectionHandler {
         }
 
         if state == LoginState::Spawning {
-            // Spawn flow: send initial chunks around spawn
+            // Spawn flow: chunks first, then PlayStatus(PlayerSpawn) last
+            // (matching PMMP/dragonfly — client processes chunks during loading)
             self.send_packet(
                 addr,
                 packets::id::NETWORK_CHUNK_PUBLISHER_UPDATE,
@@ -52,7 +53,10 @@ impl ConnectionHandler {
 
             self.send_spawn_chunks(addr, accepted_radius).await;
 
-            // Tell the client it can spawn the player
+            // Send initial inventory contents
+            self.send_inventory(addr).await;
+
+            // Tell the client it can spawn (AFTER chunks, per PMMP/dragonfly)
             self.send_packet(
                 addr,
                 packets::id::PLAY_STATUS,
@@ -62,11 +66,8 @@ impl ConnectionHandler {
             )
             .await;
 
-            // Send initial inventory contents
-            self.send_inventory(addr).await;
-
             info!(
-                "Sent ChunkRadiusUpdated({accepted_radius}) + {} chunks + PlayStatus(PlayerSpawn) + inventory to {addr}",
+                "Sent ChunkRadiusUpdated({accepted_radius}) + {} chunks + inventory + PlayStatus(PlayerSpawn) to {addr}",
                 (accepted_radius * 2 + 1) * (accepted_radius * 2 + 1)
             );
         } else {
@@ -181,6 +182,9 @@ impl ConnectionHandler {
                     payload: Bytes::from(payload),
                 };
 
+                if count == 0 {
+                    info!("First LevelChunk ({cx},{cz}): sub_chunks={sub_chunk_count}, payload={} bytes", level_chunk.payload.len());
+                }
                 self.send_packet(addr, packets::id::LEVEL_CHUNK, &level_chunk)
                     .await;
                 count += 1;

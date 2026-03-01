@@ -158,13 +158,15 @@ pub struct ServerMotd {
     pub gamemode_numeric: u8,
     pub ipv4_port: u16,
     pub ipv6_port: u16,
+    /// Editor mode flag (0 = normal, 1 = editor). BDS always sends this.
+    pub is_editor_mode: u8,
 }
 
 impl ServerMotd {
     /// Format as the semicolon-delimited MOTD string for UnconnectedPong.
     pub fn to_motd_string(&self) -> String {
         format!(
-            "MCPE;{};{};{};{};{};{};{};{};{};{};{};",
+            "MCPE;{};{};{};{};{};{};{};{};{};{};{};{};",
             self.server_name,
             self.protocol_version,
             self.game_version,
@@ -176,6 +178,7 @@ impl ServerMotd {
             self.gamemode_numeric,
             self.ipv4_port,
             self.ipv6_port,
+            self.is_editor_mode,
         )
     }
 }
@@ -189,7 +192,7 @@ mod tests {
         let motd = ServerMotd {
             server_name: "Test Server".into(),
             protocol_version: 924,
-            game_version: "1.26.0".into(),
+            game_version: "1.26.2".into(),
             online_players: 3,
             max_players: 20,
             server_guid: 12345,
@@ -198,11 +201,12 @@ mod tests {
             gamemode_numeric: 1,
             ipv4_port: 19132,
             ipv6_port: 19133,
+            is_editor_mode: 0,
         };
         let s = motd.to_motd_string();
-        assert!(s.starts_with("MCPE;Test Server;924;1.26.0;3;20;12345;"));
+        assert!(s.starts_with("MCPE;Test Server;924;1.26.2;3;20;12345;"));
         assert!(s.ends_with(';'));
-        assert_eq!(s.matches(';').count(), 12);
+        assert_eq!(s.matches(';').count(), 13);
     }
 
     #[test]
@@ -210,7 +214,7 @@ mod tests {
         let pong = OfflinePacket::UnconnectedPong {
             send_timestamp: 1234567890,
             server_guid: 42,
-            motd: "MCPE;Test;924;1.26.0;0;20;42;world;Survival;1;19132;19133;".into(),
+            motd: "MCPE;Test;924;1.26.2;0;20;42;world;Survival;1;19132;19133;0;".into(),
         };
         let mut buf = BytesMut::new();
         pong.encode(&mut buf);

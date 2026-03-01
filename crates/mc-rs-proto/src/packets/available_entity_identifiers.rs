@@ -4,7 +4,7 @@ use bytes::BufMut;
 
 use crate::codec::ProtoEncode;
 
-/// Canonical entity identifiers extracted from pmmp/BedrockData (1.26.0).
+/// Canonical entity identifiers extracted from pmmp/BedrockData (1.26.2).
 const CANONICAL_ENTITY_IDENTIFIERS: &[u8] = include_bytes!("../../data/entity_identifiers.nbt");
 
 /// Sends available entity type identifiers as a raw network NBT blob.

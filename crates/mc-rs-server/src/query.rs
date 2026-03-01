@@ -34,7 +34,10 @@ impl Default for ServerStats {
             host_port: 19132,
             host_ip: "0.0.0.0".into(),
             player_names: Vec::new(),
-            version: "1.26.0".into(),
+            version: mc_rs_proto::packets::game_version_for_protocol(
+                mc_rs_proto::packets::PROTOCOL_VERSION,
+            )
+            .into(),
         }
     }
 }
@@ -207,7 +210,10 @@ mod tests {
             host_port: 19132,
             host_ip: "127.0.0.1".into(),
             player_names: vec![],
-            version: "1.26.0".into(),
+            version: mc_rs_proto::packets::game_version_for_protocol(
+                mc_rs_proto::packets::PROTOCOL_VERSION,
+            )
+            .into(),
         };
         let resp = build_basic_stat(1, &stats);
         assert!(resp.len() > 5);
@@ -225,7 +231,10 @@ mod tests {
             host_port: 19132,
             host_ip: "127.0.0.1".into(),
             player_names: vec!["Alice".into()],
-            version: "1.26.0".into(),
+            version: mc_rs_proto::packets::game_version_for_protocol(
+                mc_rs_proto::packets::PROTOCOL_VERSION,
+            )
+            .into(),
         };
         let resp = build_full_stat(1, &stats);
         assert!(resp.len() > 20);

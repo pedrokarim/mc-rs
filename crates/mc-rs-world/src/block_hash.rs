@@ -11,7 +11,8 @@ const FNV1_32_INIT: u32 = 0x811c_9dc5;
 /// FNV-1a 32-bit prime.
 const FNV1_32_PRIME: u32 = 0x0100_0193;
 
-/// Block state version for 1.26.0 protocol.
+/// Block state version for 1.26.0 protocol (PMMP WorldDataVersions::BLOCK_STATES = 18168865).
+/// Encodes as (1<<24)|(21<<16)|(60<<8)|33 = version 1.21.60.33.
 const BLOCK_STATE_VERSION: i32 = 18_168_865;
 
 /// Compute FNV-1a 32-bit hash of a byte slice.

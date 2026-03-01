@@ -89,12 +89,28 @@ impl ProtoDecode for LoginPacket {
     }
 }
 
-/// Parse the chain JSON: `{"chain": ["jwt1", "jwt2", "jwt3"]}`
+/// Parse the chain JSON.
+///
+/// Protocol 924+ wraps chain data in a `Certificate` field:
+/// ```json
+/// {"AuthenticationType": 0, "Certificate": "{\"chain\":[...]}"}
+/// ```
+/// Older protocols sent `{"chain": ["jwt1", "jwt2"]}` directly.
 fn parse_chain_json(data: &[u8]) -> Result<Vec<String>, ProtoError> {
     let value: serde_json::Value =
         serde_json::from_slice(data).map_err(|e| ProtoError::JsonParse(e.to_string()))?;
 
-    let chain_array = value
+    // Try new format first: {"Certificate": "{\"chain\":[...]}"}
+    let chain_value = if let Some(cert_str) = value.get("Certificate").and_then(|v| v.as_str()) {
+        let cert: serde_json::Value = serde_json::from_str(cert_str)
+            .map_err(|e| ProtoError::JsonParse(format!("Certificate inner JSON: {e}")))?;
+        cert
+    } else {
+        // Fallback to legacy format: {"chain": [...]}
+        value
+    };
+
+    let chain_array = chain_value
         .get("chain")
         .and_then(|v| v.as_array())
         .ok_or_else(|| ProtoError::InvalidLogin("missing 'chain' array in login data".into()))?;
@@ -155,6 +171,21 @@ mod tests {
 
         let pkt = LoginPacket::proto_decode(&mut buf.freeze()).unwrap();
         assert_eq!(pkt.chain_data.len(), 3);
+    }
+
+    #[test]
+    fn decode_login_packet_certificate_format() {
+        // Protocol 924+ wraps chain in Certificate field
+        let inner_chain = r#"{"chain":["jwt1.p.s","jwt2.p.s"]}"#;
+        let chain_json = format!(
+            r#"{{"AuthenticationType":0,"Certificate":{}}}"#,
+            serde_json::to_string(inner_chain).unwrap()
+        );
+        let buf = build_login_bytes(924, &chain_json, "cd.p.s");
+
+        let pkt = LoginPacket::proto_decode(&mut buf.freeze()).unwrap();
+        assert_eq!(pkt.chain_data.len(), 2);
+        assert_eq!(pkt.chain_data[0], "jwt1.p.s");
     }
 
     #[test]

@@ -233,7 +233,7 @@ impl Default for StartGame {
             persona_disabled: false,
             custom_skins_disabled: false,
             emote_chat_muted: false,
-            game_version: "1.26.0".into(),
+            game_version: super::game_version_for_protocol(super::PROTOCOL_VERSION).into(),
             limited_world_width: 0,
             limited_world_length: 0,
             is_new_nether: true,
@@ -356,7 +356,8 @@ impl ProtoEncode for StartGame {
         buf.put_u8(self.enable_commands as u8);
         buf.put_u8(self.are_texture_packs_required as u8);
         encode_game_rules(buf, &self.game_rules);
-        VarUInt32(self.experiments.len() as u32).proto_encode(buf);
+        // Experiments — count is u32_le (NOT VarUInt32), per PMMP Experiments::write
+        buf.put_u32_le(self.experiments.len() as u32);
         for exp in &self.experiments {
             codec::write_string(buf, &exp.name);
             buf.put_u8(exp.enabled as u8);

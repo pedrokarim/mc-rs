@@ -227,10 +227,10 @@ pub mod id {
     pub const SERVERBOUND_LOADING_SCREEN: u32 = 0x138;
 }
 
-/// Target protocol version (Minecraft Bedrock 1.26.0).
+/// Target protocol version (Minecraft Bedrock 1.26.2).
 pub const PROTOCOL_VERSION: i32 = 924;
 
-/// Minimum supported protocol version (Minecraft Bedrock 1.26.0).
+/// Minimum supported protocol version (Minecraft Bedrock 1.26.2).
 pub const MIN_PROTOCOL_VERSION: i32 = 924;
 
 /// Check whether a client protocol version is supported.
@@ -241,8 +241,8 @@ pub fn is_supported_version(v: i32) -> bool {
 /// Return the game version string for a supported protocol version.
 pub fn game_version_for_protocol(v: i32) -> &'static str {
     match v {
-        924 => "1.26.0",
-        _ => "1.26.0", // fallback
+        924 => "1.26.2",
+        _ => "1.26.2", // fallback
     }
 }
 
@@ -267,12 +267,12 @@ mod tests {
 
     #[test]
     fn game_version_mapping() {
-        assert_eq!(game_version_for_protocol(924), "1.26.0");
+        assert_eq!(game_version_for_protocol(924), "1.26.2");
     }
 
     #[test]
     fn game_version_current() {
         let v = game_version_for_protocol(PROTOCOL_VERSION);
-        assert_eq!(v, "1.26.0");
+        assert_eq!(v, "1.26.2");
     }
 }

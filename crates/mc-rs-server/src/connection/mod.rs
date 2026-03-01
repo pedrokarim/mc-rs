@@ -493,6 +493,13 @@ impl ConnectionHandler {
             server_config.world.auto_save_interval
         );
 
+        // Debug: log flat world block hashes for verification
+        let fb = FlatWorldBlocks::compute();
+        info!(
+            "Block hashes: air={:#010X}, bedrock={:#010X}, dirt={:#010X}, grass={:#010X}",
+            fb.air, fb.bedrock, fb.dirt, fb.grass_block
+        );
+
         // Load behavior packs
         let packs_dir = std::path::PathBuf::from(&server_config.packs.directory);
         std::fs::create_dir_all(&packs_dir).ok();
@@ -1196,7 +1203,10 @@ impl ConnectionHandler {
             host_port: self.server_config.server.port,
             host_ip: self.server_config.server.address.clone(),
             player_names,
-            version: "1.26.0".into(),
+            version: mc_rs_proto::packets::game_version_for_protocol(
+                mc_rs_proto::packets::PROTOCOL_VERSION,
+            )
+            .into(),
         }
     }
 

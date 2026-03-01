@@ -266,12 +266,16 @@ impl ConnectionHandler {
                     self.handle_player_skin(addr, &mut cursor).await;
                 }
                 packets::id::SERVERBOUND_LOADING_SCREEN => {
-                    // No-op: client sends this during loading, we don't need to handle it
-                    debug!("ServerboundLoadingScreen from {addr}");
+                    // Parse the loading screen type for debugging
+                    use mc_rs_proto::codec::ProtoDecode;
+                    let screen_type = mc_rs_proto::types::VarInt::proto_decode(&mut cursor)
+                        .map(|v| v.0)
+                        .unwrap_or(-1);
+                    info!("ServerboundLoadingScreen from {addr}: type={screen_type} (0=unknown, 1=start, 2=stop)");
                 }
                 other => {
-                    debug!(
-                        "Game packet 0x{other:02X} from {addr}: {} bytes",
+                    info!(
+                        "Unhandled packet 0x{other:02X} from {addr}: {} bytes",
                         sub_packet.len()
                     );
                 }
@@ -698,7 +702,7 @@ impl ConnectionHandler {
                 // Client has all packs (or none needed) — send stack
                 use mc_rs_proto::packets::resource_pack_stack::StackPackEntry;
 
-                let bp_stack: Vec<StackPackEntry> = self
+                let pack_stack: Vec<StackPackEntry> = self
                     .behavior_packs
                     .iter()
                     .map(|pack| StackPackEntry {
@@ -711,7 +715,7 @@ impl ConnectionHandler {
                 let stack = ResourcePackStack {
                     must_accept: self.server_config.packs.force_packs
                         && !self.behavior_packs.is_empty(),
-                    behavior_packs: bp_stack,
+                    resource_pack_stack: pack_stack,
                     ..ResourcePackStack::default()
                 };
 
@@ -931,7 +935,10 @@ impl ConnectionHandler {
         };
         self.send_packet(addr, packets::id::ITEM_REGISTRY, &item_registry_pkt)
             .await;
-        info!("Sent ItemRegistryPacket to {addr} ({} items)", self.item_registry.len());
+        info!(
+            "Sent ItemRegistryPacket to {addr} ({} items)",
+            self.item_registry.len()
+        );
 
         // Send creative content (items available in creative menu)
         let creative_items = mc_rs_proto::packets::creative_content::default_creative_items();
@@ -939,11 +946,13 @@ impl ConnectionHandler {
             mc_rs_proto::packets::creative_content::build_creative_content(&creative_items);
         self.send_packet(addr, packets::id::CREATIVE_CONTENT, &creative_content)
             .await;
+        info!("Sent CreativeContent to {addr}");
 
         // Send crafting recipes
         let crafting_data = self.build_crafting_data();
         self.send_packet(addr, packets::id::CRAFTING_DATA, &crafting_data)
             .await;
+        info!("Sent CraftingData to {addr}");
 
         self.send_packet(
             addr,
@@ -951,6 +960,7 @@ impl ConnectionHandler {
             &BiomeDefinitionList::canonical(),
         )
         .await;
+        info!("Sent BiomeDefinitionList to {addr}");
 
         self.send_packet(
             addr,
@@ -958,9 +968,11 @@ impl ConnectionHandler {
             &AvailableEntityIdentifiers::canonical(),
         )
         .await;
+        info!("Sent AvailableEntityIdentifiers to {addr}");
 
         self.send_packet(addr, packets::id::AVAILABLE_COMMANDS, &AvailableCommands)
             .await;
+        info!("Sent AvailableCommands to {addr}");
 
         if let Some(conn) = self.connections.get_mut(&addr) {
             conn.state = LoginState::Spawning;

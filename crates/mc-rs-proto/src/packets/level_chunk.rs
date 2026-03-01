@@ -24,7 +24,8 @@ impl ProtoEncode for LevelChunk {
         VarInt(self.dimension_id).proto_encode(buf);
         VarUInt32(self.sub_chunk_count).proto_encode(buf);
         buf.put_u8(self.cache_enabled as u8);
-        // RawPayload — remainder of packet, no length prefix
+        // Payload as string: VarUInt32(length) + bytes (protocol 924+, per PMMP LevelChunkPacket)
+        VarUInt32(self.payload.len() as u32).proto_encode(buf);
         buf.put_slice(&self.payload);
     }
 }
@@ -47,14 +48,15 @@ mod tests {
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
         // VarInt(0) = 0x00, VarInt(0) = 0x00, VarInt(0) = 0x00
-        // VarUInt32(24) = 24, cache=0x00, payload=[0x09, 0x01]
+        // VarUInt32(24) = 24, cache=0x00, VarUInt32(2)=payload_len, payload=[0x09, 0x01]
         assert_eq!(buf[0], 0x00); // chunk_x
         assert_eq!(buf[1], 0x00); // chunk_z
         assert_eq!(buf[2], 0x00); // dimension_id
         assert_eq!(buf[3], 24); // sub_chunk_count
         assert_eq!(buf[4], 0x00); // cache_enabled
-        assert_eq!(buf[5], 0x09); // payload start
-        assert_eq!(buf[6], 0x01);
+        assert_eq!(buf[5], 0x02); // payload length (VarUInt32 = 2)
+        assert_eq!(buf[6], 0x09); // payload start
+        assert_eq!(buf[7], 0x01);
     }
 
     #[test]

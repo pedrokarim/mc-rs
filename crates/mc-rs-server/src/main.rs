@@ -16,18 +16,40 @@ use mc_rs_raknet::{RakNetConfig, RakNetServer, ServerMotd};
 use tokio::io::AsyncBufReadExt;
 use tracing::info;
 
+/// Return the numeric gamemode for the MOTD (1-indexed to match BDS).
 fn gamemode_to_numeric(gamemode: &str) -> u8 {
     match gamemode.to_lowercase().as_str() {
-        "survival" => 0,
-        "creative" => 1,
-        "adventure" => 2,
-        "spectator" => 3,
-        _ => 0,
+        "survival" => 1,
+        "creative" => 2,
+        "adventure" => 3,
+        "spectator" => 4,
+        _ => 1,
     }
 }
 
-#[tokio::main]
-async fn main() {
+/// Capitalize the first letter of the gamemode string (BDS convention).
+fn capitalize_gamemode(gamemode: &str) -> String {
+    let lower = gamemode.to_lowercase();
+    let mut chars = lower.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(c) => c.to_uppercase().to_string() + chars.as_str(),
+    }
+}
+
+fn main() {
+    // Build runtime with 8MB worker stack (default 2MB is too small for
+    // the deeply nested async futures in our select! event loop).
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .thread_stack_size(8 * 1024 * 1024)
+        .enable_all()
+        .build()
+        .expect("failed to build tokio runtime");
+    runtime.block_on(async_main());
+}
+
+async fn async_main() {
     let config = Arc::new(match ServerConfig::load("server.toml") {
         Ok(c) => c,
         Err(e) => {
@@ -70,16 +92,20 @@ async fn main() {
 
     let motd = ServerMotd {
         server_name: config.server.motd.clone(),
-        protocol_version: 924,
-        game_version: "1.26.0".into(),
+        protocol_version: mc_rs_proto::packets::PROTOCOL_VERSION as u32,
+        game_version: mc_rs_proto::packets::game_version_for_protocol(
+            mc_rs_proto::packets::PROTOCOL_VERSION,
+        )
+        .into(),
         online_players: 0,
         max_players: config.server.max_players,
         server_guid,
         world_name: config.world.name.clone(),
-        gamemode: config.server.gamemode.clone(),
+        gamemode: capitalize_gamemode(&config.server.gamemode),
         gamemode_numeric: gamemode_to_numeric(&config.server.gamemode),
         ipv4_port: config.server.port,
         ipv6_port: config.server.port + 1,
+        is_editor_mode: 0,
     };
 
     let raknet_config = RakNetConfig {

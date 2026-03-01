@@ -21,14 +21,15 @@ pub struct StackExperiment {
 }
 
 /// Tells the client the order in which packs should be applied.
+///
+/// Protocol 924+: single merged `resource_pack_stack` list (no separate
+/// behavior/resource lists).
 #[derive(Debug, Clone)]
 pub struct ResourcePackStack {
     pub must_accept: bool,
-    pub behavior_packs: Vec<StackPackEntry>,
-    pub resource_packs: Vec<StackPackEntry>,
+    pub resource_pack_stack: Vec<StackPackEntry>,
     pub game_version: String,
     pub experiments: Vec<StackExperiment>,
-    pub experiments_previously_used: bool,
     pub use_vanilla_editor_packs: bool,
 }
 
@@ -36,11 +37,9 @@ impl Default for ResourcePackStack {
     fn default() -> Self {
         Self {
             must_accept: false,
-            behavior_packs: Vec::new(),
-            resource_packs: Vec::new(),
-            game_version: "1.26.0".into(),
+            resource_pack_stack: Vec::new(),
+            game_version: super::game_version_for_protocol(super::PROTOCOL_VERSION).into(),
             experiments: Vec::new(),
-            experiments_previously_used: false,
             use_vanilla_editor_packs: false,
         }
     }
@@ -50,29 +49,23 @@ impl ProtoEncode for ResourcePackStack {
     fn proto_encode(&self, buf: &mut impl BufMut) {
         buf.put_u8(self.must_accept as u8);
 
-        VarUInt32(self.behavior_packs.len() as u32).proto_encode(buf);
-        for bp in &self.behavior_packs {
-            codec::write_string(buf, &bp.uuid);
-            codec::write_string(buf, &bp.version);
-            codec::write_string(buf, &bp.sub_pack_name);
-        }
-
-        VarUInt32(self.resource_packs.len() as u32).proto_encode(buf);
-        for rp in &self.resource_packs {
-            codec::write_string(buf, &rp.uuid);
-            codec::write_string(buf, &rp.version);
-            codec::write_string(buf, &rp.sub_pack_name);
+        VarUInt32(self.resource_pack_stack.len() as u32).proto_encode(buf);
+        for entry in &self.resource_pack_stack {
+            codec::write_string(buf, &entry.uuid);
+            codec::write_string(buf, &entry.version);
+            codec::write_string(buf, &entry.sub_pack_name);
         }
 
         codec::write_string(buf, &self.game_version);
 
-        VarUInt32(self.experiments.len() as u32).proto_encode(buf);
+        // Experiments — count is u32_le (NOT VarUInt32), per PMMP Experiments::write
+        buf.put_u32_le(self.experiments.len() as u32);
         for exp in &self.experiments {
             codec::write_string(buf, &exp.name);
             buf.put_u8(exp.enabled as u8);
         }
+        buf.put_u8(0); // hasPreviouslyUsedExperiments = false
 
-        buf.put_u8(self.experiments_previously_used as u8);
         buf.put_u8(self.use_vanilla_editor_packs as u8);
     }
 }
@@ -87,8 +80,8 @@ mod tests {
         let pkt = ResourcePackStack::default();
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        // must_accept(1) + behavior(1) + resource(1) + game_version(1+6) + experiments(1) + 2 bools = 13
-        assert_eq!(buf.len(), 13);
+        // must_accept(1) + stack_count_varuint(1) + game_version(1+6) + experiments_u32le(4) + hasPrevUsed(1) + useVanilla(1) = 15
+        assert_eq!(buf.len(), 15);
     }
 
     #[test]
@@ -97,7 +90,7 @@ mod tests {
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
         let encoded = &buf[..];
-        // game_version "1.26.0" should appear in the output
-        assert!(encoded.windows(6).any(|w| w == b"1.26.0"));
+        // game_version "1.26.2" should appear in the output
+        assert!(encoded.windows(6).any(|w| w == b"1.26.2"));
     }
 }

@@ -52,11 +52,10 @@ fn serialize_sub_chunk(buf: &mut BytesMut, sub_chunk: &SubChunk, y_index: i8) {
         // storage_header = (0 << 1) | 1 = 1 (runtime flag set)
         buf.put_u8(0x01);
         // NO block data words for bits_per_block = 0
-        // Palette size as signed VarInt
-        write_zigzag_varint(buf, palette_size as i32);
-        // Palette entry
+        // NO palette count for bits=0 (gophertunnel: `if p.size != 0` skips count)
+        // Just write the single palette entry directly
         if palette_size == 1 {
-            write_zigzag_varint(buf, sub_chunk.palette[0] as i32);
+            write_signed_varint32(buf, sub_chunk.palette[0] as i32);
         }
     } else {
         let bpb = bits_per_block_for_palette(palette_size);
@@ -80,9 +79,9 @@ fn serialize_sub_chunk(buf: &mut BytesMut, sub_chunk: &SubChunk, y_index: i8) {
         }
 
         // Palette
-        write_zigzag_varint(buf, palette_size as i32);
+        write_signed_varint32(buf, palette_size as i32);
         for &runtime_id in &sub_chunk.palette {
-            write_zigzag_varint(buf, runtime_id as i32);
+            write_signed_varint32(buf, runtime_id as i32);
         }
     }
 }
@@ -128,9 +127,10 @@ fn serialize_biome_data(buf: &mut BytesMut, biomes: &[u8; 256]) {
     let mut section_buf = BytesMut::new();
 
     if all_same {
-        // Single-biome section: header = 0x00 (0 bits = single value)
-        section_buf.put_u8(0x00);
-        write_zigzag_varint(&mut section_buf, biome_4x4[0] as i32);
+        // Single-biome section: header = (0 << 1) | 1 = 0x01 (0 bits, runtime flag)
+        section_buf.put_u8(0x01);
+        // NO count for bits=0, just the single palette value
+        write_signed_varint32(&mut section_buf, biome_4x4[0] as i32);
     } else {
         // Multi-biome section: palette-based encoding for 64 entries.
         // Build palette using O(1) lookup array instead of Vec::contains().
@@ -144,8 +144,8 @@ fn serialize_biome_data(buf: &mut BytesMut, biomes: &[u8; 256]) {
         }
 
         let bpe = bits_per_entry_for_biome_palette(palette.len());
-        // Biome storage header: (bpe << 1) — no runtime flag for biomes
-        section_buf.put_u8(bpe << 1);
+        // Biome storage header: (bpe << 1) | 1 — runtime flag for network encoding
+        section_buf.put_u8((bpe << 1) | 1);
 
         // Pack 64 entries into u32 words (4x4x4, all 4 Y levels have same biome as XZ)
         let entries_per_word = 32 / bpe as usize;
@@ -167,9 +167,9 @@ fn serialize_biome_data(buf: &mut BytesMut, biomes: &[u8; 256]) {
         }
 
         // Palette
-        write_zigzag_varint(&mut section_buf, palette.len() as i32);
+        write_signed_varint32(&mut section_buf, palette.len() as i32);
         for &biome_id in &palette {
-            write_zigzag_varint(&mut section_buf, biome_id as i32);
+            write_signed_varint32(&mut section_buf, biome_id as i32);
         }
     }
 
@@ -194,9 +194,12 @@ fn bits_per_entry_for_biome_palette(palette_size: usize) -> u8 {
     }
 }
 
-fn write_zigzag_varint(buf: &mut BytesMut, value: i32) {
-    let encoded = ((value << 1) ^ (value >> 31)) as u32;
-    write_varuint32(buf, encoded);
+/// Write a signed i32 as a ZigZag-encoded VarInt32.
+/// Gophertunnel/dragonfly use zigzag encoding for ALL network palette entries
+/// (both block and biome): protocol.WriteVarint32 = zigzag then unsigned varint.
+fn write_signed_varint32(buf: &mut BytesMut, value: i32) {
+    let zigzag = ((value as u32) << 1) ^ ((value >> 31) as u32);
+    write_varuint32(buf, zigzag);
 }
 
 fn write_varuint32(buf: &mut BytesMut, mut value: u32) {
@@ -236,11 +239,10 @@ mod tests {
         assert_eq!(buf[1], 1, "num_layers");
         assert_eq!(buf[2], 0, "y_index");
         assert_eq!(buf[3], 0x01, "storage_header (bpb=0, runtime=1)");
-        // Palette size = 1 as zigzag VarInt = 2
-        assert_eq!(buf[4], 0x02, "palette_size zigzag(1) = 2");
-        // Palette entry = 42 as zigzag VarInt = 84
-        assert_eq!(buf[5], 84, "palette[0] zigzag(42) = 84");
-        assert_eq!(buf.len(), 6, "total bytes for single-block sub-chunk");
+        // NO palette count for bits=0 (gophertunnel skips count when p.size == 0)
+        // Palette entry = zigzag(42) = (42<<1)^0 = 84
+        assert_eq!(buf[4], 84, "palette[0] zigzag(42) = 84");
+        assert_eq!(buf.len(), 5, "total bytes for single-block sub-chunk");
     }
 
     #[test]
@@ -306,10 +308,10 @@ mod tests {
         let biomes = [1u8; 256]; // All plains
         let mut buf = BytesMut::new();
         serialize_biome_data(&mut buf, &biomes);
-        // 24 sections, each: 0x00 (header) + zigzag(1) = 0x02
+        // 24 sections, each: 0x01 (header: bpe=0, runtime=1) + zigzag(1) = 0x02
         assert_eq!(buf.len(), 24 * 2);
         for i in 0..24 {
-            assert_eq!(buf[i * 2], 0x00, "section {i} header");
+            assert_eq!(buf[i * 2], 0x01, "section {i} header (bpe=0, runtime=1)");
             assert_eq!(buf[i * 2 + 1], 0x02, "section {i} biome plains=zigzag(1)=2");
         }
     }
@@ -326,8 +328,9 @@ mod tests {
         let mut buf = BytesMut::new();
         serialize_biome_data(&mut buf, &biomes);
         // Should have palette-based encoding (not single-biome)
-        // First section header should NOT be 0x00 since we have 2 biomes
-        assert_ne!(buf[0], 0x00, "multi-biome should use palette encoding");
+        // First section header should NOT be 0x01 (single-biome) since we have 2 biomes
+        // With bpe=1: header = (1 << 1) | 1 = 3
+        assert_eq!(buf[0], 3, "multi-biome header (bpe=1, runtime=1)");
         assert!(buf.len() > 24 * 2, "multi-biome data should be larger");
     }
 
