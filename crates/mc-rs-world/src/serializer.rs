@@ -2,6 +2,7 @@
 
 use bytes::{BufMut, BytesMut};
 
+use crate::block_hash::hash_block_state;
 use crate::chunk::{ChunkColumn, SubChunk, OVERWORLD_SUB_CHUNK_COUNT};
 
 /// Serialize a full chunk column to the LevelChunk packet payload.
@@ -11,19 +12,21 @@ use crate::chunk::{ChunkColumn, SubChunk, OVERWORLD_SUB_CHUNK_COUNT};
 pub fn serialize_chunk_column(column: &ChunkColumn) -> (u32, Vec<u8>) {
     let mut buf = BytesMut::new();
 
-    // Sub-chunk Y indices: sub-chunk 0 maps to Y=-64 so y_index = -4
-    for (index, sub_chunk) in column.sub_chunks.iter().enumerate() {
-        let y_index = index as i8 - 4; // 0 -> -4, 4 -> 0, 23 -> 19
-        serialize_sub_chunk(&mut buf, sub_chunk, y_index);
+    // Match PMMP: only send sub-chunks up to the highest non-empty one.
+    let sub_chunk_count = highest_non_empty_subchunk_count(column);
+    for sub_chunk in column.sub_chunks.iter().take(sub_chunk_count as usize) {
+        serialize_sub_chunk(&mut buf, sub_chunk);
     }
 
     // Biome data from the chunk's biome array
     serialize_biome_data(&mut buf, &column.biomes);
 
-    // Border blocks: empty (not Education Edition)
+    // Border blocks: empty (not Education Edition).
     buf.put_u8(0x00);
+    // Tile entities byte array (VarUInt32 length + bytes): empty.
+    write_varuint32(&mut buf, 0);
 
-    (OVERWORLD_SUB_CHUNK_COUNT as u32, buf.to_vec())
+    (sub_chunk_count, buf.to_vec())
 }
 
 /// Serialize a chunk column, returning a cached result if available.
@@ -39,11 +42,11 @@ pub fn serialize_chunk_column_cached(column: &mut ChunkColumn) -> (u32, Vec<u8>)
     result
 }
 
-/// Serialize a single sub-chunk to network format (Version 9).
-fn serialize_sub_chunk(buf: &mut BytesMut, sub_chunk: &SubChunk, y_index: i8) {
-    buf.put_u8(9); // version
+/// Serialize a single sub-chunk to network format (Version 8).
+fn serialize_sub_chunk(buf: &mut BytesMut, sub_chunk: &SubChunk) {
+    // PMMP/Bedrock 1.26.x uses level chunk sub-chunk version 8.
+    buf.put_u8(8); // version
     buf.put_u8(1); // num_layers (no waterlogging)
-    buf.put_u8(y_index as u8); // y_index (i8 -> u8 for two's complement)
 
     let palette_size = sub_chunk.palette.len();
 
@@ -52,7 +55,7 @@ fn serialize_sub_chunk(buf: &mut BytesMut, sub_chunk: &SubChunk, y_index: i8) {
         // storage_header = (0 << 1) | 1 = 1 (runtime flag set)
         buf.put_u8(0x01);
         // NO block data words for bits_per_block = 0
-        // NO palette count for bits=0 (gophertunnel: `if p.size != 0` skips count)
+        // NO palette count for bits=0.
         // Just write the single palette entry directly
         if palette_size == 1 {
             write_signed_varint32(buf, sub_chunk.palette[0] as i32);
@@ -84,6 +87,22 @@ fn serialize_sub_chunk(buf: &mut BytesMut, sub_chunk: &SubChunk, y_index: i8) {
             write_signed_varint32(buf, runtime_id as i32);
         }
     }
+}
+
+/// Determine how many sub-chunks to send from bottom to top.
+///
+/// Mirrors PMMP behavior: find the highest non-empty sub-chunk and include all
+/// sub-chunks from the minimum index up to that one.
+fn highest_non_empty_subchunk_count(column: &ChunkColumn) -> u32 {
+    let air = hash_block_state("minecraft:air");
+    for y in (0..OVERWORLD_SUB_CHUNK_COUNT).rev() {
+        let sub = &column.sub_chunks[y];
+        let is_empty = sub.palette.len() == 1 && sub.palette[0] == air;
+        if !is_empty {
+            return (y + 1) as u32;
+        }
+    }
+    0
 }
 
 /// Determine minimum bits-per-block for a given palette size.
@@ -233,16 +252,15 @@ mod tests {
     fn single_block_subchunk_serialization() {
         let sub = SubChunk::new_single(42);
         let mut buf = BytesMut::new();
-        serialize_sub_chunk(&mut buf, &sub, 0);
+        serialize_sub_chunk(&mut buf, &sub);
 
-        assert_eq!(buf[0], 9, "version");
+        assert_eq!(buf[0], 8, "version");
         assert_eq!(buf[1], 1, "num_layers");
-        assert_eq!(buf[2], 0, "y_index");
-        assert_eq!(buf[3], 0x01, "storage_header (bpb=0, runtime=1)");
+        assert_eq!(buf[2], 0x01, "storage_header (bpb=0, runtime=1)");
         // NO palette count for bits=0 (gophertunnel skips count when p.size == 0)
         // Palette entry = zigzag(42) = (42<<1)^0 = 84
-        assert_eq!(buf[4], 84, "palette[0] zigzag(42) = 84");
-        assert_eq!(buf.len(), 5, "total bytes for single-block sub-chunk");
+        assert_eq!(buf[3], 84, "palette[0] zigzag(42) = 84");
+        assert_eq!(buf.len(), 4, "total bytes for single-block sub-chunk");
     }
 
     #[test]
@@ -253,16 +271,15 @@ mod tests {
         sub.set_block(0, 2, 0, 40); // grass
 
         let mut buf = BytesMut::new();
-        serialize_sub_chunk(&mut buf, &sub, 0);
+        serialize_sub_chunk(&mut buf, &sub);
 
-        assert_eq!(buf[0], 9, "version");
+        assert_eq!(buf[0], 8, "version");
         assert_eq!(buf[1], 1, "num_layers");
-        assert_eq!(buf[2], 0, "y_index");
         // 4 palette entries -> bits_per_block = 2, header = (2 << 1) | 1 = 5
-        assert_eq!(buf[3], 5, "storage_header (bpb=2, runtime=1)");
+        assert_eq!(buf[2], 5, "storage_header (bpb=2, runtime=1)");
         // With bpb=2: blocks_per_word=16, word_count=256
-        // After header: 256 * 4 = 1024 bytes of block data
-        // Total = 3 (header) + 1 (storage_header) + 1024 (data) + palette
+        // After header: 256 * 4 = 1024 bytes of block data.
+        // Total = 2 (version+layers) + 1 (storage_header) + 1024 (data) + palette.
         assert!(buf.len() > 1024, "should contain block data words");
     }
 
@@ -273,14 +290,14 @@ mod tests {
         sub.set_block(0, 1, 0, 200); // block index 1 -> palette index 1
 
         let mut buf = BytesMut::new();
-        serialize_sub_chunk(&mut buf, &sub, 0);
+        serialize_sub_chunk(&mut buf, &sub);
 
         // bpb=1, header = (1 << 1) | 1 = 3
-        assert_eq!(buf[3], 3, "storage_header (bpb=1, runtime=1)");
+        assert_eq!(buf[2], 3, "storage_header (bpb=1, runtime=1)");
 
-        // First u32 word (bytes 4-7): block indices 0-31
+        // First u32 word (bytes 3-6): block indices 0-31
         // Block 0 (palette idx 0) at bit 0, block 1 (palette idx 1) at bit 1
-        let word0 = u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]);
+        let word0 = u32::from_le_bytes([buf[3], buf[4], buf[5], buf[6]]);
         assert_eq!(word0 & 1, 0, "block 0 should be palette index 0");
         assert_eq!((word0 >> 1) & 1, 1, "block 1 should be palette index 1");
     }
@@ -294,12 +311,12 @@ mod tests {
         let column = generate_flat_chunk(0, 0, &blocks);
         let (count, payload) = serialize_chunk_column(&column);
 
-        assert_eq!(count, 24);
+        assert_eq!(count, 5);
         assert!(!payload.is_empty());
-        // First bytes should be the first sub-chunk: version=9, layers=1
-        assert_eq!(payload[0], 9);
+        // First bytes should be the first sub-chunk: version=8, layers=1
+        assert_eq!(payload[0], 8);
         assert_eq!(payload[1], 1);
-        // Payload should end with border_blocks=0x00
+        // Payload should end with empty tile-entity byte-array length (0x00).
         assert_eq!(*payload.last().unwrap(), 0x00);
     }
 

@@ -22,7 +22,7 @@ impl ConnectionHandler {
             }
         };
 
-        // Clamp to a reasonable server max (8 chunks)
+        // Cap to a conservative but playable radius during login.
         let accepted_radius = request.chunk_radius.clamp(1, 8);
 
         self.send_packet(
@@ -39,24 +39,11 @@ impl ConnectionHandler {
         }
 
         if state == LoginState::Spawning {
-            // Spawn flow: chunks first, then PlayStatus(PlayerSpawn) last
-            // (matching PMMP/dragonfly — client processes chunks during loading)
-            self.send_packet(
-                addr,
-                packets::id::NETWORK_CHUNK_PUBLISHER_UPDATE,
-                &NetworkChunkPublisherUpdate {
-                    position: self.spawn_block,
-                    radius: (accepted_radius * 16) as u32,
-                },
-            )
-            .await;
+            info!(
+                "### BUILD_MARKER spawn-r10-2026-03-02: entering Spawning sequence for {addr} ###"
+            );
 
             self.send_spawn_chunks(addr, accepted_radius).await;
-
-            // Send initial inventory contents
-            self.send_inventory(addr).await;
-
-            // Tell the client it can spawn (AFTER chunks, per PMMP/dragonfly)
             self.send_packet(
                 addr,
                 packets::id::PLAY_STATUS,
@@ -67,8 +54,7 @@ impl ConnectionHandler {
             .await;
 
             info!(
-                "Sent ChunkRadiusUpdated({accepted_radius}) + {} chunks + inventory + PlayStatus(PlayerSpawn) to {addr}",
-                (accepted_radius * 2 + 1) * (accepted_radius * 2 + 1)
+                "Sent spawn stream (PocketMine-like): ChunkRadiusUpdated({accepted_radius}) + NetworkChunkPublisherUpdate + initial chunks + PlayStatus(PlayerSpawn) to {addr}"
             );
         } else {
             // In-game render distance change: send new chunks around current position
@@ -81,18 +67,47 @@ impl ConnectionHandler {
         // Store chunk_radius on the connection
         if let Some(conn) = self.connections.get_mut(&addr) {
             conn.chunk_radius = radius;
+            conn.sent_chunks.clear();
         }
 
-        let dim = self
+        let (dim, center_x, center_z) = self
             .connections
             .get(&addr)
-            .map(|c| c.dimension)
-            .unwrap_or(0);
+            .map(|c| {
+                (
+                    c.dimension,
+                    Self::chunk_coord(c.position.x),
+                    Self::chunk_coord(c.position.z),
+                )
+            })
+            .unwrap_or((0, 0, 0));
+
+        // Tell the client which chunk area is publishable.
+        let player_block_pos = match self.connections.get(&addr) {
+            Some(c) => BlockPos::new(
+                c.position.x.floor() as i32,
+                c.position.y.floor() as i32,
+                c.position.z.floor() as i32,
+            ),
+            None => return,
+        };
+        self.send_packet(
+            addr,
+            packets::id::NETWORK_CHUNK_PUBLISHER_UPDATE,
+            &NetworkChunkPublisherUpdate {
+                position: player_block_pos.into(),
+                radius: (radius * 16) as u32,
+                saved_chunks: Vec::new(),
+            },
+        )
+        .await;
 
         // Phase 1: Identify missing chunks, load from LevelDB, collect those needing generation
         let mut to_generate: Vec<(i32, i32)> = Vec::new();
-        for cx in -radius..=radius {
-            for cz in -radius..=radius {
+        for dx in -radius..=radius {
+            for dz in -radius..=radius {
+                let cx = center_x + dx;
+                let cz = center_z + dz;
                 if self
                     .dim_chunks(dim)
                     .is_some_and(|m| m.contains_key(&(cx, cz)))
@@ -168,8 +183,10 @@ impl ConnectionHandler {
 
         // Phase 3: Serialize and send all chunks
         let mut count = 0u32;
-        for cx in -radius..=radius {
-            for cz in -radius..=radius {
+        for dx in -radius..=radius {
+            for dz in -radius..=radius {
+                let cx = center_x + dx;
+                let cz = center_z + dz;
                 let column = self.dim_chunks_mut(dim).get_mut(&(cx, cz)).unwrap();
                 let (sub_chunk_count, payload) = serialize_chunk_column_cached(column);
 
@@ -183,7 +200,10 @@ impl ConnectionHandler {
                 };
 
                 if count == 0 {
-                    info!("First LevelChunk ({cx},{cz}): sub_chunks={sub_chunk_count}, payload={} bytes", level_chunk.payload.len());
+                    info!(
+                        "First LevelChunk ({cx},{cz}) around center ({center_x},{center_z}): sub_chunks={sub_chunk_count}, payload={} bytes",
+                        level_chunk.payload.len()
+                    );
                 }
                 self.send_packet(addr, packets::id::LEVEL_CHUNK, &level_chunk)
                     .await;
@@ -244,8 +264,9 @@ impl ConnectionHandler {
             addr,
             packets::id::NETWORK_CHUNK_PUBLISHER_UPDATE,
             &NetworkChunkPublisherUpdate {
-                position: player_block_pos,
+                position: player_block_pos.into(),
                 radius: (radius * 16) as u32,
+                saved_chunks: Vec::new(),
             },
         )
         .await;
@@ -421,9 +442,20 @@ impl ConnectionHandler {
             }
         };
 
-        if let Some(conn) = self.connections.get_mut(&addr) {
+        let initial_radius = if let Some(conn) = self.connections.get_mut(&addr) {
+            let radius = conn.chunk_radius.clamp(1, 8);
             conn.state = LoginState::InGame;
-        }
+            radius
+        } else {
+            8
+        };
+
+        // spawn-r10: pre-init spawn already sends the initial chunk stream;
+        // post-init we only top up chunks around the current player position.
+        self.send_new_chunks(addr).await;
+        info!(
+            "### BUILD_MARKER spawn-r10-2026-03-02: post-init chunk sync sent to {addr} (radius={initial_radius}) ###"
+        );
 
         // --- Multi-player: send PlayerList + AddPlayer ---
         // 1. Send PlayerList(Add) with all existing InGame players to the new player

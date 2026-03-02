@@ -265,13 +265,36 @@ impl ConnectionHandler {
                 packets::id::PLAYER_SKIN => {
                     self.handle_player_skin(addr, &mut cursor).await;
                 }
+                packets::id::CLIENT_CACHE_STATUS => {
+                    // Optional client hint for blob cache support (0x81).
+                    // We currently always send full chunk payloads (cache_enabled=false).
+                    let enabled = cursor
+                        .get_ref()
+                        .get(cursor.position() as usize)
+                        .copied()
+                        .map(|v| v != 0);
+                    if let Some(enabled) = enabled {
+                        info!("ClientCacheStatus from {addr}: enabled={enabled}");
+                    } else {
+                        debug!("ClientCacheStatus from {addr}: empty payload");
+                    }
+                }
                 packets::id::SERVERBOUND_LOADING_SCREEN => {
-                    // Parse the loading screen type for debugging
-                    use mc_rs_proto::codec::ProtoDecode;
-                    let screen_type = mc_rs_proto::types::VarInt::proto_decode(&mut cursor)
-                        .map(|v| v.0)
-                        .unwrap_or(-1);
-                    info!("ServerboundLoadingScreen from {addr}: type={screen_type} (0=unknown, 1=start, 2=stop)");
+                    match packets::ServerboundLoadingScreen::proto_decode(&mut cursor) {
+                        Ok(pkt) => {
+                            info!(
+                                "### BUILD_MARKER spawn-r10-2026-03-02: received ServerboundLoadingScreen from {addr} ###"
+                            );
+                            info!(
+                                "ServerboundLoadingScreen from {addr}: type={} (0=unknown, 1=start, 2=stop), loading_screen_id={:?}",
+                                pkt.loading_screen_type,
+                                pkt.loading_screen_id
+                            );
+                        }
+                        Err(e) => {
+                            warn!("Bad ServerboundLoadingScreen from {addr}: {e}");
+                        }
+                    }
                 }
                 other => {
                     info!(
@@ -863,6 +886,8 @@ impl ConnectionHandler {
             .get(&addr)
             .map(|c| c.enchant_seed)
             .unwrap_or(0);
+        let start_game_game_version = packets::game_version_for_protocol(client_proto).to_string();
+        let server_engine = format!("mc-rs {}", env!("CARGO_PKG_VERSION"));
 
         let start_game = StartGame {
             entity_unique_id,
@@ -876,12 +901,12 @@ impl ConnectionHandler {
             world_gamemode: gamemode,
             difficulty,
             spawn_position: self.spawn_block,
-            level_id: "level".into(),
+            level_id: String::new(),
             world_name: config.world.name.clone(),
-            game_version: packets::game_version_for_protocol(client_proto).into(),
+            game_version: start_game_game_version.clone(),
             rain_level: self.rain_level,
             lightning_level: self.lightning_level,
-            current_tick: self.world_time,
+            current_tick: 0,
             day_cycle_stop_time: if self.do_daylight_cycle {
                 -1
             } else {
@@ -910,8 +935,26 @@ impl ConnectionHandler {
                 },
             ],
             enchantment_seed: enchant_seed,
+            movement_settings: packets::start_game::MovementSettings {
+                rewind_history_size: 0,
+                server_auth_block_breaking: true,
+            },
+            server_authoritative_inventory: true,
+            network_permissions_disable_sounds: true,
+            game_engine: server_engine.clone(),
             ..StartGame::default()
         };
+
+        info!(
+            "### BUILD_MARKER spawn-r10-2026-03-02: StartGame key fields for {addr} => engine='{server_engine}', game_version='{}', inv_server_auth={}, movement_rewind={}, movement_block_breaking={}, client_side_generation={}, block_hash_ids={}, network_permissions_disable_sounds={} ###",
+            start_game.game_version,
+            start_game.server_authoritative_inventory,
+            start_game.movement_settings.rewind_history_size,
+            start_game.movement_settings.server_auth_block_breaking,
+            start_game.client_side_generation,
+            start_game.block_network_ids_are_hashes,
+            start_game.network_permissions_disable_sounds
+        );
 
         self.send_packet(addr, packets::id::START_GAME, &start_game)
             .await;
@@ -940,28 +983,7 @@ impl ConnectionHandler {
             self.item_registry.len()
         );
 
-        // Send creative content (items available in creative menu)
-        let creative_items = mc_rs_proto::packets::creative_content::default_creative_items();
-        let creative_content =
-            mc_rs_proto::packets::creative_content::build_creative_content(&creative_items);
-        self.send_packet(addr, packets::id::CREATIVE_CONTENT, &creative_content)
-            .await;
-        info!("Sent CreativeContent to {addr}");
-
-        // Send crafting recipes
-        let crafting_data = self.build_crafting_data();
-        self.send_packet(addr, packets::id::CRAFTING_DATA, &crafting_data)
-            .await;
-        info!("Sent CraftingData to {addr}");
-
-        self.send_packet(
-            addr,
-            packets::id::BIOME_DEFINITION_LIST,
-            &BiomeDefinitionList::canonical(),
-        )
-        .await;
-        info!("Sent BiomeDefinitionList to {addr}");
-
+        // Phase 2: send actor identifiers before chunk-radius negotiation.
         self.send_packet(
             addr,
             packets::id::AVAILABLE_ENTITY_IDENTIFIERS,
@@ -970,15 +992,158 @@ impl ConnectionHandler {
         .await;
         info!("Sent AvailableEntityIdentifiers to {addr}");
 
+        // PocketMine-aligned pre-spawn phase: biomes + command tree + player sync.
+        self.send_packet(
+            addr,
+            packets::id::BIOME_DEFINITION_LIST,
+            &BiomeDefinitionList::canonical(),
+        )
+        .await;
+        info!("Sent BiomeDefinitionList(canonical) to {addr} (pre-spawn)");
+
         self.send_packet(addr, packets::id::AVAILABLE_COMMANDS, &AvailableCommands)
             .await;
-        info!("Sent AvailableCommands to {addr}");
+        info!("Sent AvailableCommands (empty stub) to {addr}");
+
+        let (
+            is_op,
+            conn_entity_unique_id,
+            conn_entity_runtime_id,
+            conn_gamemode,
+            hp,
+            food,
+            sat,
+            exh,
+            xl,
+            xt,
+        ) = match self.connections.get(&addr) {
+            Some(c) => {
+                let op = c
+                    .login_data
+                    .as_ref()
+                    .map(|d| self.permissions.ops.contains(&d.display_name))
+                    .unwrap_or(false);
+                (
+                    op,
+                    c.entity_unique_id,
+                    c.entity_runtime_id,
+                    c.gamemode,
+                    c.health,
+                    c.food as f32,
+                    c.saturation,
+                    c.exhaustion,
+                    c.xp_level,
+                    c.xp_total,
+                )
+            }
+            None => return,
+        };
+
+        self.send_packet(
+            addr,
+            packets::id::SET_PLAYER_GAME_TYPE,
+            &SetPlayerGameType {
+                gamemode: conn_gamemode,
+            },
+        )
+        .await;
+        self.send_packet(
+            addr,
+            packets::id::UPDATE_ABILITIES,
+            &UpdateAbilities {
+                command_permission_level: if is_op { 1 } else { 0 },
+                permission_level: if is_op { 2 } else { 1 },
+                entity_unique_id: conn_entity_unique_id,
+                gamemode: conn_gamemode,
+            },
+        )
+        .await;
+        self.send_packet(
+            addr,
+            packets::id::UPDATE_ADVENTURE_SETTINGS,
+            &UpdateAdventureSettings::default(),
+        )
+        .await;
+
+        let xp_progress = xp::xp_progress(xl, xt);
+        let attr_tick = self.game_world.current_tick();
+        self.send_packet(
+            addr,
+            packets::id::UPDATE_ATTRIBUTES,
+            &UpdateAttributes::all(
+                conn_entity_runtime_id,
+                hp,
+                food,
+                sat,
+                exh,
+                xl,
+                xp_progress,
+                attr_tick,
+            ),
+        )
+        .await;
+        info!(
+            "### BUILD_MARKER spawn-r10-2026-03-02: sent pre-spawn abilities/attributes for {addr} (op={is_op}, gamemode={conn_gamemode}) ###"
+        );
+
+        self.send_inventory(addr).await;
+        info!("Sent pre-spawn inventory content to {addr}");
+
+        // Keep creative menu descriptors in sync with ItemRegistry (PocketMine sends this pre-spawn too).
+        let mut creative_items: Vec<(i32, u16)> = self
+            .item_registry
+            .item_table_entries()
+            .into_iter()
+            .map(|e| (i32::from(e.numeric_id), 1))
+            .collect();
+        creative_items.sort_unstable_by_key(|(rid, _)| *rid);
+        let creative_content = packets::creative_content::build_creative_content(&creative_items);
+        self.send_packet(addr, packets::id::CREATIVE_CONTENT, &creative_content)
+            .await;
+        info!(
+            "Sent CreativeContent to {addr} ({} items)",
+            creative_items.len()
+        );
+
+        let crafting_data = self.build_crafting_data();
+        self.send_packet(addr, packets::id::CRAFTING_DATA, &crafting_data)
+            .await;
+        info!("Sent pre-spawn CraftingData to {addr}");
+
+        // Pre-populate tab-list with local player entry (PocketMine-aligned pre-spawn behavior).
+        if let Some(entry) = self.connections.get(&addr).and_then(|conn| {
+            let login = conn.login_data.as_ref()?;
+            let uuid = Uuid::parse(&login.identity).unwrap_or(Uuid::ZERO);
+            let client_data = conn.client_data.clone().unwrap_or_default();
+            Some(PlayerListAdd {
+                uuid,
+                entity_unique_id: conn.entity_unique_id,
+                username: login.display_name.clone(),
+                xuid: login.xuid.clone(),
+                platform_chat_id: String::new(),
+                device_os: client_data.device_os,
+                skin_data: client_data,
+                is_teacher: false,
+                is_host: false,
+                is_sub_client: false,
+            })
+        }) {
+            self.send_packet(
+                addr,
+                packets::id::PLAYER_LIST,
+                &PlayerListAddPacket {
+                    entries: vec![entry],
+                },
+            )
+            .await;
+            info!("Sent pre-spawn PlayerList(local) to {addr}");
+        }
 
         if let Some(conn) = self.connections.get_mut(&addr) {
             conn.state = LoginState::Spawning;
         }
 
-        info!("Sent world initialization packets to {addr}");
+        info!("Sent world initialization packets (PocketMine-aligned pre-spawn) to {addr}");
     }
 
     // -----------------------------------------------------------------------

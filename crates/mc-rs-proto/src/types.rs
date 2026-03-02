@@ -697,6 +697,63 @@ impl fmt::Display for BlockPos {
 }
 
 // ---------------------------------------------------------------------------
+// SignedBlockPos (i32 x, y, z)
+// ---------------------------------------------------------------------------
+
+/// Block position encoded with signed Y.
+///
+/// This is used by packets that require `x/y/z` all as signed VarInt32 on wire,
+/// such as `NetworkChunkPublisherUpdate`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SignedBlockPos {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+}
+
+impl SignedBlockPos {
+    pub fn new(x: i32, y: i32, z: i32) -> Self {
+        Self { x, y, z }
+    }
+}
+
+impl From<BlockPos> for SignedBlockPos {
+    fn from(value: BlockPos) -> Self {
+        Self::new(value.x, value.y, value.z)
+    }
+}
+
+impl From<SignedBlockPos> for BlockPos {
+    fn from(value: SignedBlockPos) -> Self {
+        BlockPos::new(value.x, value.y, value.z)
+    }
+}
+
+/// Wire format: VarInt32(x, zigzag) + VarInt32(y, zigzag) + VarInt32(z, zigzag).
+impl ProtoEncode for SignedBlockPos {
+    fn proto_encode(&self, buf: &mut impl BufMut) {
+        VarInt(self.x).proto_encode(buf);
+        VarInt(self.y).proto_encode(buf);
+        VarInt(self.z).proto_encode(buf);
+    }
+}
+
+impl ProtoDecode for SignedBlockPos {
+    fn proto_decode(buf: &mut impl Buf) -> Result<Self, ProtoError> {
+        let x = VarInt::proto_decode(buf)?.0;
+        let y = VarInt::proto_decode(buf)?.0;
+        let z = VarInt::proto_decode(buf)?.0;
+        Ok(Self { x, y, z })
+    }
+}
+
+impl fmt::Display for SignedBlockPos {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({}, {}, {})", self.x, self.y, self.z)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // ChunkPos (i32 x, z)
 // ---------------------------------------------------------------------------
 
@@ -727,6 +784,22 @@ impl ChunkPos {
 impl fmt::Display for ChunkPos {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({}, {})", self.x, self.z)
+    }
+}
+
+/// Wire format: VarInt32(x, zigzag) + VarInt32(z, zigzag).
+impl ProtoEncode for ChunkPos {
+    fn proto_encode(&self, buf: &mut impl BufMut) {
+        VarInt(self.x).proto_encode(buf);
+        VarInt(self.z).proto_encode(buf);
+    }
+}
+
+impl ProtoDecode for ChunkPos {
+    fn proto_decode(buf: &mut impl Buf) -> Result<Self, ProtoError> {
+        let x = VarInt::proto_decode(buf)?.0;
+        let z = VarInt::proto_decode(buf)?.0;
+        Ok(Self { x, z })
     }
 }
 
@@ -1079,6 +1152,15 @@ mod tests {
         assert_eq!(decoded, bp);
     }
 
+    #[test]
+    fn signed_blockpos_proto_roundtrip() {
+        let bp = SignedBlockPos::new(100, -64, -200);
+        let mut buf = BytesMut::new();
+        bp.proto_encode(&mut buf);
+        let decoded = SignedBlockPos::proto_decode(&mut buf.freeze()).unwrap();
+        assert_eq!(decoded, bp);
+    }
+
     // -- ChunkPos --
 
     #[test]
@@ -1090,5 +1172,14 @@ mod tests {
         let cp = ChunkPos::new(1, -1);
         assert_eq!(cp.block_x_range(), 16..32);
         assert_eq!(cp.block_z_range(), -16..0);
+    }
+
+    #[test]
+    fn chunkpos_proto_roundtrip() {
+        let cp = ChunkPos::new(-8, 13);
+        let mut buf = BytesMut::new();
+        cp.proto_encode(&mut buf);
+        let decoded = ChunkPos::proto_decode(&mut buf.freeze()).unwrap();
+        assert_eq!(decoded, cp);
     }
 }

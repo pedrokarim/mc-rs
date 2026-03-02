@@ -297,7 +297,7 @@ Client                          Serveur
 | `0x38` | BlockEntityData | S→C | Données bloc-entité (NBT) |
 | `0x3A` | LevelChunk | S→C | Données d'un chunk |
 | `0x19` | LevelEvent | S→C | Événement monde (particules, son) |
-| `0x7A` | NetworkChunkPublisherUpdate | S→C | Zone de chunks disponible |
+| `0x79` | NetworkChunkPublisherUpdate | S→C | Zone de chunks disponible |
 
 ### Paquets d'inventaire
 
@@ -367,8 +367,8 @@ Client                          Serveur
 | `0x57` | PlaySound | S→C | Jouer un son |
 | `0x5E` | PlayerSkin | Both | Changement de skin |
 | `0x74` | NetworkStackLatency | Both | Mesure de ping |
-| `0x78` | AvailableEntityIdentifiers | S→C | Types d'entités |
-| `0x7B` | BiomeDefinitionList | S→C | Définitions biomes |
+| `0x77` | AvailableEntityIdentifiers | S→C | Types d'entités |
+| `0x7A` | BiomeDefinitionList | S→C | Définitions biomes |
 | `0x91` | CreativeContent | S→C | Items mode créatif |
 | `0x9C` | PacketViolationWarning | C→S | Erreur de protocole |
 | `0xA3` | ItemComponent | S→C | Composants items custom |

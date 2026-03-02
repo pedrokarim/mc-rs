@@ -1,4 +1,4 @@
-//! BiomeDefinitionList (0x7B) -- Server -> Client.
+//! BiomeDefinitionList (0x7A) -- Server -> Client.
 //!
 //! Protocol 924+ uses a structured binary format instead of raw NBT.
 //! Layout:
@@ -208,6 +208,15 @@ pub struct BiomeDefinitionList {
 }
 
 impl BiomeDefinitionList {
+    /// Create with an empty biome/string table payload.
+    ///
+    /// Useful as a compatibility fallback when validating login/spawn flow.
+    pub fn empty() -> Self {
+        // VarUInt32(0 definitions) + VarUInt32(0 strings)
+        const EMPTY: &[u8] = &[0x00, 0x00];
+        Self { payload: EMPTY }
+    }
+
     /// Create with the embedded canonical biome definitions.
     pub fn canonical() -> Self {
         Self {

@@ -49,7 +49,8 @@ use mc_rs_proto::packets::{
     ResourcePackClientResponse, ResourcePackResponseStatus, ResourcePackStack, ResourcePacksInfo,
     Respawn, ScoreEntry, ServerToClientHandshake, SetDisplayObjective, SetEntityMotion,
     SetLocalPlayerAsInitialized, SetPlayerGameType, SetScore, SetTime, SetTitle,
-    SpawnParticleEffect, StartGame, Text, Transfer, UpdateAbilities, UpdateAttributes, UpdateBlock,
+    SpawnParticleEffect, StartGame, Text, Transfer, UpdateAbilities, UpdateAdventureSettings,
+    UpdateAttributes, UpdateBlock,
     UseItemAction, UseItemOnEntityAction,
 };
 use mc_rs_proto::types::{BlockPos, Uuid, VarUInt32, Vec2, Vec3};

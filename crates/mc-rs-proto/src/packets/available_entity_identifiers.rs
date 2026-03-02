@@ -1,8 +1,9 @@
-//! AvailableEntityIdentifiers (0x78) — Server → Client.
+//! AvailableEntityIdentifiers (0x77) — Server → Client.
 
 use bytes::BufMut;
 
 use crate::codec::ProtoEncode;
+use crate::types::VarUInt32;
 
 /// Canonical entity identifiers extracted from pmmp/BedrockData (1.26.2).
 const CANONICAL_ENTITY_IDENTIFIERS: &[u8] = include_bytes!("../../data/entity_identifiers.nbt");
@@ -30,6 +31,7 @@ impl Default for AvailableEntityIdentifiers {
 
 impl ProtoEncode for AvailableEntityIdentifiers {
     fn proto_encode(&self, buf: &mut impl BufMut) {
+        VarUInt32(self.nbt_data.len() as u32).proto_encode(buf);
         buf.put_slice(self.nbt_data);
     }
 }
@@ -52,6 +54,10 @@ mod tests {
         let pkt = AvailableEntityIdentifiers::canonical();
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert_eq!(buf.len(), CANONICAL_ENTITY_IDENTIFIERS.len());
+        assert!(buf.len() > CANONICAL_ENTITY_IDENTIFIERS.len());
+        assert_eq!(
+            &buf[buf.len() - CANONICAL_ENTITY_IDENTIFIERS.len()..],
+            CANONICAL_ENTITY_IDENTIFIERS
+        );
     }
 }
