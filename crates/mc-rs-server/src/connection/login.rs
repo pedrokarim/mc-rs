@@ -181,10 +181,15 @@ impl ConnectionHandler {
             None => return,
         };
 
+        let decrypted_len = decrypted.len();
+        let decrypted_head = hex_preview(&decrypted, 48);
         let sub_packets = match decode_batch(decrypted, &batch_config) {
             Ok(p) => p,
             Err(e) => {
-                warn!("Batch decode error from {addr}: {e}");
+                warn!(
+                    "Batch decode error from {addr}: {e} (batch_len={}, head={})",
+                    decrypted_len, decrypted_head
+                );
                 return;
             }
         };
@@ -194,10 +199,31 @@ impl ConnectionHandler {
             let packet_id = match VarUInt32::proto_decode(&mut cursor) {
                 Ok(id) => id.0,
                 Err(e) => {
-                    warn!("Bad packet ID from {addr}: {e}");
+                    warn!(
+                        "Bad packet ID from {addr}: {e} (sub_len={}, head={})",
+                        sub_packet.len(),
+                        hex_preview(&sub_packet, 48)
+                    );
                     continue;
                 }
             };
+            let state = self.connections.get(&addr).map(|c| c.state);
+            let body_offset = cursor.position() as usize;
+            if should_trace_packet(state, packet_id) {
+                let body = if body_offset <= sub_packet.len() {
+                    &sub_packet[body_offset..]
+                } else {
+                    &[]
+                };
+                info!(
+                    "TRACE RX {addr} state={state:?} id=0x{packet_id:02X} ({}) sub_len={} body_len={} id_prefix_len={} body_head={}",
+                    packet_name(packet_id),
+                    sub_packet.len(),
+                    body.len(),
+                    body_offset,
+                    hex_preview(body, 40)
+                );
+            }
 
             match packet_id {
                 packets::id::REQUEST_NETWORK_SETTINGS => {
@@ -286,20 +312,45 @@ impl ConnectionHandler {
                                 "### BUILD_MARKER spawn-r10-2026-03-02: received ServerboundLoadingScreen from {addr} ###"
                             );
                             info!(
-                                "ServerboundLoadingScreen from {addr}: type={} (0=unknown, 1=start, 2=stop), loading_screen_id={:?}",
+                                "ServerboundLoadingScreen from {addr}: type={} (0=unknown, 1=start, 2=stop), loading_screen_id={:?} (None is usually normal)",
                                 pkt.loading_screen_type,
                                 pkt.loading_screen_id
                             );
+
+                            // Some clients get stuck without ever sending SetLocalPlayerAsInitialized.
+                            // Fallback: treat loading-screen start as spawn-ready while in Spawning.
+                            if pkt.loading_screen_type == 1 {
+                                let runtime_id = self
+                                    .connections
+                                    .get(&addr)
+                                    .and_then(|c| (c.state == LoginState::Spawning).then_some(c.entity_runtime_id));
+                                if let Some(runtime_id) = runtime_id {
+                                    info!(
+                                        "### BUILD_MARKER spawn-r12-2026-03-03: using ServerboundLoadingScreen(type=1) fallback for {addr} ###"
+                                    );
+                                    self.finalize_spawn_ready(
+                                        addr,
+                                        runtime_id,
+                                        "ServerboundLoadingScreen(type=1)",
+                                    )
+                                    .await;
+                                }
+                            }
                         }
                         Err(e) => {
-                            warn!("Bad ServerboundLoadingScreen from {addr}: {e}");
+                            warn!(
+                                "Bad ServerboundLoadingScreen from {addr}: {e} (body_head={})",
+                                hex_preview(&sub_packet[body_offset.min(sub_packet.len())..], 48)
+                            );
                         }
                     }
                 }
                 other => {
                     info!(
-                        "Unhandled packet 0x{other:02X} from {addr}: {} bytes",
-                        sub_packet.len()
+                        "Unhandled packet 0x{other:02X} ({}) from {addr}: {} bytes, body_head={}",
+                        packet_name(other),
+                        sub_packet.len(),
+                        hex_preview(&sub_packet[body_offset.min(sub_packet.len())..], 48)
                     );
                 }
             }
@@ -940,13 +991,20 @@ impl ConnectionHandler {
                 server_auth_block_breaking: true,
             },
             server_authoritative_inventory: true,
+            block_network_ids_are_hashes: false,
             network_permissions_disable_sounds: true,
             game_engine: server_engine.clone(),
             ..StartGame::default()
         };
 
         info!(
-            "### BUILD_MARKER spawn-r10-2026-03-02: StartGame key fields for {addr} => engine='{server_engine}', game_version='{}', inv_server_auth={}, movement_rewind={}, movement_block_breaking={}, client_side_generation={}, block_hash_ids={}, network_permissions_disable_sounds={} ###",
+            "### BUILD_MARKER spawn-r10-2026-03-02: StartGame key fields for {addr} => pos=({:.2},{:.2},{:.2}), spawn_block=({}, {}, {}), engine='{server_engine}', game_version='{}', inv_server_auth={}, movement_rewind={}, movement_block_breaking={}, client_side_generation={}, block_hash_ids={}, network_permissions_disable_sounds={} ###",
+            start_game.player_position.x,
+            start_game.player_position.y,
+            start_game.player_position.z,
+            start_game.spawn_position.x,
+            start_game.spawn_position.y,
+            start_game.spawn_position.z,
             start_game.game_version,
             start_game.server_authoritative_inventory,
             start_game.movement_settings.rewind_history_size,
@@ -960,6 +1018,33 @@ impl ConnectionHandler {
             .await;
         info!("Sent StartGame to {addr}");
 
+        // PocketMine onEnterWorld parity: send time + difficulty + world spawn pre-spawn.
+        self.send_packet(
+            addr,
+            packets::id::SET_TIME,
+            &SetTime {
+                time: self.world_time as i32,
+            },
+        )
+        .await;
+        self.send_packet(
+            addr,
+            packets::id::SET_DIFFICULTY,
+            &SetDifficulty {
+                difficulty: difficulty as u32,
+            },
+        )
+        .await;
+        self.send_packet(
+            addr,
+            packets::id::SET_SPAWN_POSITION,
+            &SetSpawnPosition::world_spawn(self.spawn_block, self.dimension_id),
+        )
+        .await;
+        info!(
+            "### BUILD_MARKER spawn-r11-2026-03-03: sent pre-spawn SetTime/SetDifficulty/SetSpawnPosition(world) to {addr} ###"
+        );
+
         // Send ItemRegistryPacket (0xA2) — required after StartGame in protocol 924+
         let item_entries: Vec<packets::ItemRegistryEntry> = self
             .item_registry
@@ -969,8 +1054,8 @@ impl ConnectionHandler {
                 string_id: e.string_id,
                 numeric_id: e.numeric_id,
                 is_component_based: e.is_component_based,
-                version: 0,
-                component_nbt: Vec::new(),
+                version: e.version,
+                component_nbt: e.component_nbt,
             })
             .collect();
         let item_registry_pkt = packets::ItemRegistry {
@@ -1007,6 +1092,7 @@ impl ConnectionHandler {
 
         let (
             is_op,
+            conn_display_name,
             conn_entity_unique_id,
             conn_entity_runtime_id,
             conn_gamemode,
@@ -1025,6 +1111,10 @@ impl ConnectionHandler {
                     .unwrap_or(false);
                 (
                     op,
+                    c.login_data
+                        .as_ref()
+                        .map(|d| d.display_name.clone())
+                        .unwrap_or_default(),
                     c.entity_unique_id,
                     c.entity_runtime_id,
                     c.gamemode,
@@ -1064,6 +1154,17 @@ impl ConnectionHandler {
             &UpdateAdventureSettings::default(),
         )
         .await;
+        let actor_tick = self.game_world.current_tick();
+        self.send_packet(
+            addr,
+            packets::id::SET_ACTOR_DATA,
+            &SetActorData {
+                actor_runtime_id: conn_entity_runtime_id,
+                metadata: default_player_metadata(&conn_display_name),
+                tick: actor_tick,
+            },
+        )
+        .await;
 
         let xp_progress = xp::xp_progress(xl, xt);
         let attr_tick = self.game_world.current_tick();
@@ -1088,6 +1189,26 @@ impl ConnectionHandler {
 
         self.send_inventory(addr).await;
         info!("Sent pre-spawn inventory content to {addr}");
+
+        // Keep selected hotbar slot synchronized before the loading screen closes.
+        if let Some((rid, held_slot, held_item)) = self
+            .connections
+            .get(&addr)
+            .map(|c| (c.entity_runtime_id, c.inventory.held_slot, c.inventory.held_item().clone()))
+        {
+            self.send_packet(
+                addr,
+                packets::id::MOB_EQUIPMENT,
+                &MobEquipment {
+                    entity_runtime_id: rid,
+                    item: held_item,
+                    inventory_slot: held_slot,
+                    hotbar_slot: held_slot,
+                    window_id: 0,
+                },
+            )
+            .await;
+        }
 
         // Keep creative menu descriptors in sync with ItemRegistry (PocketMine sends this pre-spawn too).
         let mut creative_items: Vec<(i32, u16)> = self
@@ -1126,6 +1247,7 @@ impl ConnectionHandler {
                 is_teacher: false,
                 is_host: false,
                 is_sub_client: false,
+                color_argb: 0xFFFF_FFFF,
             })
         }) {
             self.send_packet(

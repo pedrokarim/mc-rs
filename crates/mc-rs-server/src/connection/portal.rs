@@ -570,6 +570,7 @@ impl ConnectionHandler {
                         is_teacher: false,
                         is_host: false,
                         is_sub_client: false,
+                        color_argb: 0xFFFF_FFFF,
                     }],
                 };
 

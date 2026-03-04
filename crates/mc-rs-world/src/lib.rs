@@ -13,6 +13,7 @@ pub mod fluid;
 pub mod gravity;
 pub mod item_registry;
 pub mod nether_generator;
+pub mod network_runtime_ids;
 pub mod noise;
 pub mod overworld_generator;
 pub mod physics;

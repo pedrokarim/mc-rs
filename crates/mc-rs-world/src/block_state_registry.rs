@@ -124,6 +124,16 @@ impl BlockStateRegistry {
             reg.register_simple(name);
         }
 
+        // Bedrock has an explicit default state in canonical Bedrock data.
+        reg.register_props(
+            "minecraft:bedrock",
+            &[("infiniburn_bit", StateValue::Byte(0))],
+        );
+        reg.register_props(
+            "minecraft:bedrock",
+            &[("infiniburn_bit", StateValue::Byte(1))],
+        );
+
         // --- Crops: growth 0..N ---
         for g in 0..8 {
             reg.register_int("minecraft:wheat", "growth", g);
@@ -678,7 +688,8 @@ fn skip_tag_value(tag_type: u8, data: &[u8], cursor: &mut usize) -> Option<()> {
 mod tests {
     use super::*;
     use crate::block_hash::{
-        hash_block_state, hash_block_state_with_int, hash_block_state_with_props, StateValue,
+        hash_block_state, hash_block_state_with_int, hash_block_state_with_props,
+        hash_default_bedrock, StateValue,
     };
 
     #[test]
@@ -703,6 +714,19 @@ mod tests {
         let info = reg.get(hash).expect("stone must be registered");
         assert_eq!(info.name, "minecraft:stone");
         assert!(info.properties.is_empty());
+    }
+
+    #[test]
+    fn lookup_bedrock_default_state() {
+        let reg = BlockStateRegistry::new();
+        let hash = hash_default_bedrock();
+        let info = reg
+            .get(hash)
+            .expect("bedrock default state must be registered");
+        assert_eq!(info.name, "minecraft:bedrock");
+        assert_eq!(info.properties.len(), 1);
+        assert_eq!(info.properties[0].0, "infiniburn_bit");
+        assert_eq!(info.properties[0].1, StateValueOwned::Byte(0));
     }
 
     #[test]

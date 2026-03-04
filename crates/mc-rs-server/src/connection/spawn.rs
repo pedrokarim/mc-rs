@@ -6,10 +6,15 @@ impl ConnectionHandler {
         addr: SocketAddr,
         buf: &mut Cursor<&[u8]>,
     ) {
+        let body_head = {
+            let raw = buf.get_ref();
+            let start = (buf.position() as usize).min(raw.len());
+            hex_preview(&raw[start..], 48)
+        };
         let state = match self.connections.get(&addr) {
             Some(c) if c.state == LoginState::Spawning || c.state == LoginState::InGame => c.state,
             _ => {
-                debug!("RequestChunkRadius from {addr} in unexpected state");
+                debug!("RequestChunkRadius from {addr} in unexpected state, body_head={body_head}");
                 return;
             }
         };
@@ -17,13 +22,24 @@ impl ConnectionHandler {
         let request = match RequestChunkRadius::proto_decode(buf) {
             Ok(r) => r,
             Err(e) => {
-                warn!("Bad RequestChunkRadius from {addr}: {e}");
+                warn!(
+                    "Bad RequestChunkRadius from {addr}: {e} (state={state:?}, body_head={body_head})"
+                );
                 return;
             }
         };
 
-        // Cap to a conservative but playable radius during login.
-        let accepted_radius = request.chunk_radius.clamp(1, 8);
+        // Keep initial spawn burst small to avoid client-side loading stalls.
+        // Once the player is already in-game, allow the normal runtime cap.
+        let accepted_radius = if state == LoginState::Spawning {
+            request.chunk_radius.clamp(1, 2)
+        } else {
+            request.chunk_radius.clamp(1, 8)
+        };
+        info!(
+            "RequestChunkRadius from {addr}: requested={}, max={}, accepted={}, state={state:?}",
+            request.chunk_radius, request.max_chunk_radius, accepted_radius
+        );
 
         self.send_packet(
             addr,
@@ -182,13 +198,38 @@ impl ConnectionHandler {
         }
 
         // Phase 3: Serialize and send all chunks
+        let sanitize_flat_chunks = dim == 0 && self.overworld_generator.is_none();
+        let flat_blocks = self.flat_world_blocks;
+        let mut suspicious_regen_count = 0u32;
+        let mut sub_chunk_count_hist: std::collections::BTreeMap<u32, u32> =
+            std::collections::BTreeMap::new();
         let mut count = 0u32;
         for dx in -radius..=radius {
             for dz in -radius..=radius {
                 let cx = center_x + dx;
                 let cz = center_z + dz;
-                let column = self.dim_chunks_mut(dim).get_mut(&(cx, cz)).unwrap();
-                let (sub_chunk_count, payload) = serialize_chunk_column_cached(column);
+                let (sub_chunk_count, payload) = {
+                    let column = self.dim_chunks_mut(dim).get_mut(&(cx, cz)).unwrap();
+                    let mut encoded = serialize_chunk_column_cached(column);
+
+                    // Flat-world safeguard: old persisted chunks from earlier serializers can look
+                    // like 24 all-air sections (small payload) and confuse client loading.
+                    if sanitize_flat_chunks && encoded.0 >= 20 && encoded.1.len() <= 256 {
+                        warn!(
+                            "Suspicious flat chunk payload at ({cx},{cz}) in dim={dim}: sub_chunks={}, payload={} bytes; regenerating chunk before send",
+                            encoded.0,
+                            encoded.1.len()
+                        );
+                        *column = generate_flat_chunk(cx, cz, &flat_blocks);
+                        column.dirty = true;
+                        column.cached_payload = None;
+                        encoded = serialize_chunk_column_cached(column);
+                        suspicious_regen_count += 1;
+                    }
+
+                    encoded
+                };
+                *sub_chunk_count_hist.entry(sub_chunk_count).or_insert(0) += 1;
 
                 let level_chunk = LevelChunk {
                     chunk_x: cx,
@@ -232,6 +273,14 @@ impl ConnectionHandler {
                 }
             }
         }
+        let hist = sub_chunk_count_hist
+            .iter()
+            .map(|(k, v)| format!("{k}:{v}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        info!(
+            "Spawn chunk summary for {addr}: total={count}, sub_chunk_count_hist=[{hist}], regenerated_suspicious={suspicious_regen_count}"
+        );
         debug!("Sent {count} LevelChunk packets to {addr}");
     }
 
@@ -371,9 +420,25 @@ impl ConnectionHandler {
         }
 
         // Phase 3: Send all ready chunks
+        let sanitize_flat_chunks = dim == 0 && self.overworld_generator.is_none();
+        let flat_blocks = self.flat_world_blocks;
         for &(cx, cz) in &to_send {
             if let Some(column) = self.dim_chunks_mut(dim).get_mut(&(cx, cz)) {
-                let (sub_chunk_count, payload) = serialize_chunk_column_cached(column);
+                let (sub_chunk_count, payload) = {
+                    let mut encoded = serialize_chunk_column_cached(column);
+                    if sanitize_flat_chunks && encoded.0 >= 20 && encoded.1.len() <= 256 {
+                        warn!(
+                            "Suspicious flat chunk payload at ({cx},{cz}) in dim={dim}: sub_chunks={}, payload={} bytes; regenerating chunk before send",
+                            encoded.0,
+                            encoded.1.len()
+                        );
+                        *column = generate_flat_chunk(cx, cz, &flat_blocks);
+                        column.dirty = true;
+                        column.cached_payload = None;
+                        encoded = serialize_chunk_column_cached(column);
+                    }
+                    encoded
+                };
 
                 let level_chunk = LevelChunk {
                     chunk_x: cx,
@@ -426,10 +491,18 @@ impl ConnectionHandler {
         addr: SocketAddr,
         buf: &mut Cursor<&[u8]>,
     ) {
-        match self.connections.get(&addr) {
-            Some(c) if c.state == LoginState::Spawning => {}
+        let body_head = {
+            let raw = buf.get_ref();
+            let start = (buf.position() as usize).min(raw.len());
+            hex_preview(&raw[start..], 48)
+        };
+        let state = self.connections.get(&addr).map(|c| c.state);
+        match state {
+            Some(LoginState::Spawning) => {}
             _ => {
-                debug!("SetLocalPlayerAsInitialized from {addr} in unexpected state");
+                debug!(
+                    "SetLocalPlayerAsInitialized from {addr} in unexpected state={state:?}, body_head={body_head}"
+                );
                 return;
             }
         }
@@ -437,10 +510,45 @@ impl ConnectionHandler {
         let packet = match SetLocalPlayerAsInitialized::proto_decode(buf) {
             Ok(p) => p,
             Err(e) => {
-                warn!("Bad SetLocalPlayerAsInitialized from {addr}: {e}");
+                warn!(
+                    "Bad SetLocalPlayerAsInitialized from {addr}: {e} (state={state:?}, body_head={body_head})"
+                );
                 return;
             }
         };
+
+        self.finalize_spawn_ready(
+            addr,
+            packet.entity_runtime_id,
+            "SetLocalPlayerAsInitialized",
+        )
+        .await;
+    }
+
+    pub(super) async fn finalize_spawn_ready(
+        &mut self,
+        addr: SocketAddr,
+        reported_runtime_id: u64,
+        trigger: &str,
+    ) {
+        let state = self.connections.get(&addr).map(|c| c.state);
+        if state != Some(LoginState::Spawning) {
+            debug!("finalize_spawn_ready ignored for {addr}: trigger={trigger}, state={state:?}");
+            return;
+        }
+
+        if let Some(conn) = self.connections.get(&addr) {
+            if conn.entity_runtime_id != reported_runtime_id {
+                warn!(
+                    "Spawn ready runtime mismatch from {addr} via {trigger}: reported={}, expected={}",
+                    reported_runtime_id, conn.entity_runtime_id
+                );
+            }
+        }
+
+        info!(
+            "### BUILD_MARKER spawn-r12-2026-03-03: finalize_spawn_ready for {addr} via {trigger} (runtime_id={reported_runtime_id}) ###"
+        );
 
         let initial_radius = if let Some(conn) = self.connections.get_mut(&addr) {
             let radius = conn.chunk_radius.clamp(1, 8);
@@ -449,6 +557,46 @@ impl ConnectionHandler {
         } else {
             8
         };
+
+        // PocketMine parity: once spawn is acknowledged, force a local position sync
+        // and explicit player spawnpoint to help clients exit loading UI.
+        if let Some(conn) = self.connections.get(&addr) {
+            let runtime_id = conn.entity_runtime_id;
+            let position = conn.position;
+            let pitch = conn.pitch;
+            let yaw = conn.yaw;
+            let head_yaw = conn.head_yaw;
+            let on_ground = conn.on_ground;
+            let dimension = conn.dimension;
+            let player_spawn = BlockPos::new(
+                position.x.floor() as i32,
+                position.y.floor() as i32,
+                position.z.floor() as i32,
+            );
+            let tick = self.game_world.current_tick();
+            self.send_packet(
+                addr,
+                packets::id::SET_SPAWN_POSITION,
+                &SetSpawnPosition {
+                    spawn_type: 0, // TYPE_PLAYER_SPAWN
+                    spawn_position: player_spawn,
+                    dimension,
+                    causing_block_position: player_spawn,
+                },
+            )
+            .await;
+            self.send_packet(
+                addr,
+                packets::id::MOVE_PLAYER,
+                &MovePlayer::reset(
+                    runtime_id, position, pitch, yaw, head_yaw, on_ground, tick,
+                ),
+            )
+            .await;
+            info!(
+                "### BUILD_MARKER spawn-r13-2026-03-03: sent post-ready SetSpawnPosition(player)+MovePlayer(reset) to {addr} ###"
+            );
+        }
 
         // spawn-r10: pre-init spawn already sends the initial chunk stream;
         // post-init we only top up chunks around the current player position.
@@ -534,7 +682,7 @@ impl ConnectionHandler {
 
         info!(
             "Player {name} is now in-game ({addr}, runtime_id={})",
-            packet.entity_runtime_id
+            reported_runtime_id
         );
     }
 
@@ -581,6 +729,7 @@ impl ConnectionHandler {
                     is_teacher: false,
                     is_host: false,
                     is_sub_client: false,
+                    color_argb: 0xFFFF_FFFF,
                 })
             })
             .collect();
@@ -619,6 +768,7 @@ impl ConnectionHandler {
                 is_teacher: false,
                 is_host: false,
                 is_sub_client: false,
+                color_argb: 0xFFFF_FFFF,
             }
         };
         let packet = PlayerListAddPacket {

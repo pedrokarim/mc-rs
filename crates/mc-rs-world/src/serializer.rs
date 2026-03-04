@@ -4,6 +4,7 @@ use bytes::{BufMut, BytesMut};
 
 use crate::block_hash::hash_block_state;
 use crate::chunk::{ChunkColumn, SubChunk, OVERWORLD_SUB_CHUNK_COUNT};
+use crate::network_runtime_ids::to_network_runtime_id;
 
 /// Serialize a full chunk column to the LevelChunk packet payload.
 ///
@@ -23,8 +24,7 @@ pub fn serialize_chunk_column(column: &ChunkColumn) -> (u32, Vec<u8>) {
 
     // Border blocks: empty (not Education Edition).
     buf.put_u8(0x00);
-    // Tile entities byte array (VarUInt32 length + bytes): empty.
-    write_varuint32(&mut buf, 0);
+    // No tiles are appended when none exist. PMMP writes only the border block count.
 
     (sub_chunk_count, buf.to_vec())
 }
@@ -58,7 +58,8 @@ fn serialize_sub_chunk(buf: &mut BytesMut, sub_chunk: &SubChunk) {
         // NO palette count for bits=0.
         // Just write the single palette entry directly
         if palette_size == 1 {
-            write_signed_varint32(buf, sub_chunk.palette[0] as i32);
+            let rid = to_network_runtime_id(sub_chunk.palette[0]);
+            write_signed_varint32(buf, rid as i32);
         }
     } else {
         let bpb = bits_per_block_for_palette(palette_size);
@@ -68,6 +69,7 @@ fn serialize_sub_chunk(buf: &mut BytesMut, sub_chunk: &SubChunk) {
         // Pack block indices into u32 words (LSB-first)
         let blocks_per_word = 32 / bpb as usize;
         let word_count = 4096_usize.div_ceil(blocks_per_word);
+        let mut words = BytesMut::with_capacity(word_count * 4);
 
         for word_idx in 0..word_count {
             let mut word: u32 = 0;
@@ -78,13 +80,16 @@ fn serialize_sub_chunk(buf: &mut BytesMut, sub_chunk: &SubChunk) {
                     word |= palette_index << (bpb as u32 * slot as u32);
                 }
             }
-            buf.put_u32_le(word);
+            words.put_u32_le(word);
         }
+        // PMMP writes raw word bytes here (no length prefix).
+        buf.extend_from_slice(&words);
 
         // Palette
         write_signed_varint32(buf, palette_size as i32);
         for &runtime_id in &sub_chunk.palette {
-            write_signed_varint32(buf, runtime_id as i32);
+            let rid = to_network_runtime_id(runtime_id);
+            write_signed_varint32(buf, rid as i32);
         }
     }
 }
@@ -169,6 +174,7 @@ fn serialize_biome_data(buf: &mut BytesMut, biomes: &[u8; 256]) {
         // Pack 64 entries into u32 words (4x4x4, all 4 Y levels have same biome as XZ)
         let entries_per_word = 32 / bpe as usize;
         let word_count = 64_usize.div_ceil(entries_per_word);
+        let mut words = BytesMut::with_capacity(word_count * 4);
 
         for word_idx in 0..word_count {
             let mut word: u32 = 0;
@@ -182,8 +188,10 @@ fn serialize_biome_data(buf: &mut BytesMut, biomes: &[u8; 256]) {
                     word |= palette_idx << (bpe as u32 * slot as u32);
                 }
             }
-            section_buf.put_u32_le(word);
+            words.put_u32_le(word);
         }
+        // PMMP writes raw word bytes here (no length prefix).
+        section_buf.extend_from_slice(&words);
 
         // Palette
         write_signed_varint32(&mut section_buf, palette.len() as i32);
@@ -235,6 +243,23 @@ fn write_varuint32(buf: &mut BytesMut, mut value: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::block_hash::hash_block_state;
+    use crate::block_hash::{hash_default_bedrock, LEGACY_BEDROCK_HASH_EMPTY_STATES};
+    use crate::network_runtime_ids::to_network_runtime_id;
+
+    fn decode_signed_varint32(bytes: &[u8]) -> (i32, usize) {
+        let mut shift = 0u32;
+        let mut value = 0u32;
+        for (i, &b) in bytes.iter().enumerate() {
+            value |= ((b & 0x7F) as u32) << shift;
+            if b & 0x80 == 0 {
+                let decoded = ((value >> 1) as i32) ^ (-((value & 1) as i32));
+                return (decoded, i + 1);
+            }
+            shift += 7;
+        }
+        panic!("unterminated varint");
+    }
 
     #[test]
     fn bits_per_block_selection() {
@@ -250,7 +275,8 @@ mod tests {
 
     #[test]
     fn single_block_subchunk_serialization() {
-        let sub = SubChunk::new_single(42);
+        let air = hash_block_state("minecraft:air");
+        let sub = SubChunk::new_single(air);
         let mut buf = BytesMut::new();
         serialize_sub_chunk(&mut buf, &sub);
 
@@ -258,17 +284,32 @@ mod tests {
         assert_eq!(buf[1], 1, "num_layers");
         assert_eq!(buf[2], 0x01, "storage_header (bpb=0, runtime=1)");
         // NO palette count for bits=0 (gophertunnel skips count when p.size == 0)
-        // Palette entry = zigzag(42) = (42<<1)^0 = 84
-        assert_eq!(buf[3], 84, "palette[0] zigzag(42) = 84");
-        assert_eq!(buf.len(), 4, "total bytes for single-block sub-chunk");
+        let (rid, used) = decode_signed_varint32(&buf[3..]);
+        assert_eq!(rid as u32, to_network_runtime_id(air));
+        assert_eq!(buf.len(), 3 + used);
+    }
+
+    #[test]
+    fn legacy_bedrock_hash_is_normalized_before_network_encode() {
+        let sub = SubChunk::new_single(LEGACY_BEDROCK_HASH_EMPTY_STATES);
+        let mut buf = BytesMut::new();
+        serialize_sub_chunk(&mut buf, &sub);
+
+        // [version=8][layers=1][header=0x01][palette_entry_varint...]
+        assert_eq!(buf[0], 8);
+        assert_eq!(buf[1], 1);
+        assert_eq!(buf[2], 0x01);
+
+        let (rid, _used) = decode_signed_varint32(&buf[3..]);
+        assert_eq!(rid as u32, to_network_runtime_id(hash_default_bedrock()));
     }
 
     #[test]
     fn mixed_subchunk_has_block_data() {
-        let mut sub = SubChunk::new_single(10); // air
-        sub.set_block(0, 0, 0, 20); // bedrock
-        sub.set_block(0, 1, 0, 30); // dirt
-        sub.set_block(0, 2, 0, 40); // grass
+        let mut sub = SubChunk::new_single(hash_block_state("minecraft:air"));
+        sub.set_block(0, 0, 0, hash_default_bedrock());
+        sub.set_block(0, 1, 0, hash_block_state("minecraft:dirt"));
+        sub.set_block(0, 2, 0, hash_block_state("minecraft:grass_block"));
 
         let mut buf = BytesMut::new();
         serialize_sub_chunk(&mut buf, &sub);
@@ -286,8 +327,8 @@ mod tests {
     #[test]
     fn packed_array_correctness() {
         // Create a sub-chunk with 2 block types to get bpb=1
-        let mut sub = SubChunk::new_single(100);
-        sub.set_block(0, 1, 0, 200); // block index 1 -> palette index 1
+        let mut sub = SubChunk::new_single(hash_block_state("minecraft:air"));
+        sub.set_block(0, 1, 0, hash_block_state("minecraft:dirt")); // block index 1 -> palette index 1
 
         let mut buf = BytesMut::new();
         serialize_sub_chunk(&mut buf, &sub);
@@ -316,7 +357,7 @@ mod tests {
         // First bytes should be the first sub-chunk: version=8, layers=1
         assert_eq!(payload[0], 8);
         assert_eq!(payload[1], 1);
-        // Payload should end with empty tile-entity byte-array length (0x00).
+        // Payload should end with border block count (0x00).
         assert_eq!(*payload.last().unwrap(), 0x00);
     }
 
@@ -330,6 +371,52 @@ mod tests {
         for i in 0..24 {
             assert_eq!(buf[i * 2], 0x01, "section {i} header (bpe=0, runtime=1)");
             assert_eq!(buf[i * 2 + 1], 0x02, "section {i} biome plains=zigzag(1)=2");
+        }
+    }
+
+    #[test]
+    fn subchunk_words_are_not_length_prefixed() {
+        // bpb=1 (2 palette entries), first word should start immediately after header.
+        let mut sub = SubChunk::new_single(hash_block_state("minecraft:air"));
+        sub.set_block(0, 1, 0, hash_block_state("minecraft:dirt")); // index 1 -> palette 1, so word0 = 0b10
+        let mut buf = BytesMut::new();
+        serialize_sub_chunk(&mut buf, &sub);
+
+        assert_eq!(buf[2], 3, "storage_header (bpb=1, runtime=1)");
+        assert_eq!(
+            &buf[3..7],
+            &[0x02, 0x00, 0x00, 0x00],
+            "word0 must follow header directly (no length prefix)"
+        );
+    }
+
+    #[test]
+    fn biome_words_are_not_length_prefixed() {
+        // Single-biome section must be exactly [0x01, zigzag(biome)].
+        let biomes = [1u8; 256];
+        let mut buf = BytesMut::new();
+        serialize_biome_data(&mut buf, &biomes);
+        assert_eq!(&buf[0..2], &[0x01, 0x02]);
+        assert_eq!(buf.len(), 24 * 2);
+    }
+
+    #[test]
+    fn payload_ends_with_border_count_eof_when_no_tiles() {
+        use crate::block_hash::FlatWorldBlocks;
+        use crate::flat_generator::generate_flat_chunk;
+
+        let blocks = FlatWorldBlocks::compute();
+        let column = generate_flat_chunk(0, 0, &blocks);
+        let (_count, payload) = serialize_chunk_column(&column);
+
+        assert_eq!(payload.last().copied(), Some(0x00));
+        assert!(payload.len() >= 1);
+        if payload.len() >= 2 {
+            assert_ne!(
+                payload[payload.len() - 2],
+                0x00,
+                "unexpected trailing tile-length prefix before border count"
+            );
         }
     }
 

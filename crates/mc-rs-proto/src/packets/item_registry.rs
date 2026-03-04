@@ -94,6 +94,24 @@ mod tests {
     }
 
     #[test]
+    fn component_nbt_is_raw_no_prefix() {
+        let pkt = ItemRegistry {
+            entries: vec![ItemRegistryEntry {
+                string_id: "minecraft:stone".into(),
+                numeric_id: 1,
+                is_component_based: false,
+                version: 0,
+                component_nbt: Vec::new(),
+            }],
+        };
+        let mut buf = BytesMut::new();
+        pkt.proto_encode(&mut buf);
+        // Bedrock protocol: NBT written as raw bytes (no length prefix).
+        let len = buf.len();
+        assert_eq!(&buf[len - 3..], &[0x0A, 0x00, 0x00]);
+    }
+
+    #[test]
     fn encode_multiple_entries() {
         let pkt = ItemRegistry {
             entries: vec![

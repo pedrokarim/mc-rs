@@ -65,27 +65,82 @@ impl ProtoEncode for UpdateAbilities {
         };
 
         // Mirror PMMP-style base layer fields so the client gets a complete ability set.
-        set_bool(&mut set_abilities, &mut set_values, ABILITY_ALLOW_FLIGHT, is_creative_or_spectator);
-        set_bool(&mut set_abilities, &mut set_values, ABILITY_FLYING, is_spectator);
-        set_bool(&mut set_abilities, &mut set_values, ABILITY_NO_CLIP, is_spectator);
+        set_bool(
+            &mut set_abilities,
+            &mut set_values,
+            ABILITY_ALLOW_FLIGHT,
+            is_creative_or_spectator,
+        );
+        set_bool(
+            &mut set_abilities,
+            &mut set_values,
+            ABILITY_FLYING,
+            is_spectator,
+        );
+        set_bool(
+            &mut set_abilities,
+            &mut set_values,
+            ABILITY_NO_CLIP,
+            is_spectator,
+        );
         set_bool(&mut set_abilities, &mut set_values, ABILITY_OPERATOR, is_op);
         set_bool(&mut set_abilities, &mut set_values, ABILITY_TELEPORT, is_op);
-        set_bool(&mut set_abilities, &mut set_values, ABILITY_INVULNERABLE, is_creative_or_spectator);
+        set_bool(
+            &mut set_abilities,
+            &mut set_values,
+            ABILITY_INVULNERABLE,
+            is_creative_or_spectator,
+        );
         set_bool(&mut set_abilities, &mut set_values, ABILITY_MUTED, false);
-        set_bool(&mut set_abilities, &mut set_values, ABILITY_WORLD_BUILDER, false);
+        set_bool(
+            &mut set_abilities,
+            &mut set_values,
+            ABILITY_WORLD_BUILDER,
+            false,
+        );
         set_bool(
             &mut set_abilities,
             &mut set_values,
             ABILITY_INFINITE_RESOURCES,
             is_creative_or_spectator,
         );
-        set_bool(&mut set_abilities, &mut set_values, ABILITY_LIGHTNING, false);
-        set_bool(&mut set_abilities, &mut set_values, ABILITY_BUILD, can_build);
+        set_bool(
+            &mut set_abilities,
+            &mut set_values,
+            ABILITY_LIGHTNING,
+            false,
+        );
+        set_bool(
+            &mut set_abilities,
+            &mut set_values,
+            ABILITY_BUILD,
+            can_build,
+        );
         set_bool(&mut set_abilities, &mut set_values, ABILITY_MINE, can_build);
-        set_bool(&mut set_abilities, &mut set_values, ABILITY_DOORS_AND_SWITCHES, can_build);
-        set_bool(&mut set_abilities, &mut set_values, ABILITY_OPEN_CONTAINERS, can_build);
-        set_bool(&mut set_abilities, &mut set_values, ABILITY_ATTACK_PLAYERS, can_build);
-        set_bool(&mut set_abilities, &mut set_values, ABILITY_ATTACK_MOBS, can_build);
+        set_bool(
+            &mut set_abilities,
+            &mut set_values,
+            ABILITY_DOORS_AND_SWITCHES,
+            can_build,
+        );
+        set_bool(
+            &mut set_abilities,
+            &mut set_values,
+            ABILITY_OPEN_CONTAINERS,
+            can_build,
+        );
+        set_bool(
+            &mut set_abilities,
+            &mut set_values,
+            ABILITY_ATTACK_PLAYERS,
+            can_build,
+        );
+        set_bool(
+            &mut set_abilities,
+            &mut set_values,
+            ABILITY_ATTACK_MOBS,
+            can_build,
+        );
         set_bool(
             &mut set_abilities,
             &mut set_values,

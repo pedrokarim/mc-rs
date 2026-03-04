@@ -28,8 +28,7 @@ impl ProtoEncode for BlockActorData {
 impl ProtoDecode for BlockActorData {
     fn proto_decode(buf: &mut impl Buf) -> Result<Self, ProtoError> {
         let position = BlockPos::proto_decode(buf)?;
-        let mut nbt_data = vec![0u8; buf.remaining()];
-        buf.copy_to_slice(&mut nbt_data);
+        let nbt_data = buf.copy_to_bytes(buf.remaining()).to_vec();
         Ok(Self { position, nbt_data })
     }
 }
@@ -47,9 +46,8 @@ mod tests {
         };
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        // BlockPos (3 VarInts) + 3 bytes NBT
-        assert!(buf.len() >= 6);
-        // Last 3 bytes should be the NBT
+        // BlockPos (3 VarInts) + 3 bytes NBT (raw, no length prefix)
+        assert!(buf.len() >= 5);
         let len = buf.len();
         assert_eq!(&buf[len - 3..], &[0x0A, 0x00, 0x00]);
     }

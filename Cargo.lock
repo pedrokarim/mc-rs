@@ -1372,7 +1372,9 @@ dependencies = [
 name = "mc-rs-world"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "bytes",
+ "mc-rs-nbt",
  "rand",
  "rusty-leveldb",
  "serde",

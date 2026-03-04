@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use crate::block_hash::hash_block_state;
+use crate::block_hash::{hash_block_state, hash_default_bedrock, LEGACY_BEDROCK_HASH_EMPTY_STATES};
 
 /// Tool types relevant for mining speed calculation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,8 +58,17 @@ impl BlockRegistry {
     pub fn new() -> Self {
         let mut blocks = HashMap::with_capacity(BLOCK_DATA.len());
         for info in BLOCK_DATA {
-            let hash = hash_block_state(info.name);
+            let hash = if info.name == "minecraft:bedrock" {
+                hash_default_bedrock()
+            } else {
+                hash_block_state(info.name)
+            };
             blocks.insert(hash, info);
+            // Keep compatibility with older mc-rs chunk data that used empty-states
+            // bedrock hashing.
+            if info.name == "minecraft:bedrock" {
+                blocks.insert(LEGACY_BEDROCK_HASH_EMPTY_STATES, info);
+            }
         }
         Self {
             blocks,
@@ -878,7 +887,9 @@ static BLOCK_DATA: &[BlockInfo] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::block_hash::hash_block_state;
+    use crate::block_hash::{
+        hash_block_state, hash_default_bedrock, LEGACY_BEDROCK_HASH_EMPTY_STATES,
+    };
 
     #[test]
     fn known_block_hardness() {
@@ -894,6 +905,16 @@ mod tests {
 
         let dirt = hash_block_state("minecraft:dirt");
         assert_eq!(registry.hardness(dirt), Some(0.5));
+    }
+
+    #[test]
+    fn bedrock_canonical_and_legacy_hashes_are_both_mapped() {
+        let registry = BlockRegistry::new();
+        assert_eq!(registry.hardness(hash_default_bedrock()), Some(-1.0));
+        assert_eq!(
+            registry.hardness(LEGACY_BEDROCK_HASH_EMPTY_STATES),
+            Some(-1.0)
+        );
     }
 
     #[test]

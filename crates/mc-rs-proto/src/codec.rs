@@ -34,6 +34,25 @@ pub fn read_string(buf: &mut impl Buf) -> Result<String, ProtoError> {
     String::from_utf8(data.to_vec()).map_err(|_| ProtoError::InvalidUtf8)
 }
 
+/// Write a Bedrock byte-array (VarUInt32 length + raw bytes).
+pub fn write_byte_array(buf: &mut impl BufMut, bytes: &[u8]) {
+    VarUInt32(bytes.len() as u32).proto_encode(buf);
+    buf.put_slice(bytes);
+}
+
+/// Read a Bedrock byte-array (VarUInt32 length + raw bytes).
+pub fn read_byte_array(buf: &mut impl Buf) -> Result<Vec<u8>, ProtoError> {
+    let len = VarUInt32::proto_decode(buf)?.0 as usize;
+    if buf.remaining() < len {
+        return Err(ProtoError::BufferTooShort {
+            needed: len,
+            remaining: buf.remaining(),
+        });
+    }
+    let data = buf.copy_to_bytes(len);
+    Ok(data.to_vec())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -70,5 +89,14 @@ mod tests {
         write_string(&mut buf, "Hello");
         let truncated = buf.freeze().slice(..3); // Only length prefix, not full data
         assert!(read_string(&mut truncated.clone()).is_err());
+    }
+
+    #[test]
+    fn byte_array_roundtrip() {
+        let original = [0x0A, 0x00, 0x00];
+        let mut buf = BytesMut::new();
+        write_byte_array(&mut buf, &original);
+        let decoded = read_byte_array(&mut buf.freeze()).unwrap();
+        assert_eq!(decoded, original);
     }
 }

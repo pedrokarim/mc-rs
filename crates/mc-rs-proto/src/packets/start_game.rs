@@ -256,7 +256,7 @@ impl Default for StartGame {
             block_palette_checksum: 0,
             world_template_id: Uuid::ZERO,
             client_side_generation: false,
-            block_network_ids_are_hashes: true,
+            block_network_ids_are_hashes: false,
             network_permissions_disable_sounds: false,
             server_join_information: None,
             server_telemetry_server_id: String::new(),
@@ -437,6 +437,12 @@ mod tests {
     use super::*;
     use bytes::BytesMut;
 
+    fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+        haystack
+            .windows(needle.len())
+            .position(|window| window == needle)
+    }
+
     #[test]
     fn encode_default_does_not_panic() {
         let pkt = StartGame::default();
@@ -494,5 +500,41 @@ mod tests {
         assert!(pkt.server_telemetry_scenario_id.is_empty());
         assert!(pkt.server_telemetry_world_id.is_empty());
         assert!(pkt.server_telemetry_owner_id.is_empty());
+    }
+
+    #[test]
+    fn block_property_nbt_is_raw_no_prefix() {
+        let mut pkt = StartGame::default();
+        pkt.block_properties = vec![BlockProperty {
+            name: "minecraft:stone".into(),
+            nbt: Bytes::from_static(&[0x0A, 0x00, 0x00]),
+        }];
+        let mut buf = BytesMut::new();
+        pkt.proto_encode(&mut buf);
+
+        // String encoding for "minecraft:stone" is [0x0F, ...ascii...].
+        let mut marker = vec![0x0F];
+        marker.extend_from_slice(b"minecraft:stone");
+        let idx = find_subslice(&buf, &marker).expect("block property name marker not found");
+        let after_name = idx + marker.len();
+        // Bedrock protocol: NBT written as raw bytes (no length prefix).
+        assert_eq!(&buf[after_name..after_name + 3], &[0x0A, 0x00, 0x00]);
+    }
+
+    #[test]
+    fn property_data_is_raw_no_prefix() {
+        let mut pkt = StartGame::default();
+        pkt.game_engine = "engine-xyz".into();
+        pkt.property_data = Bytes::from_static(&[0x0A, 0x00, 0x00]);
+
+        let mut buf = BytesMut::new();
+        pkt.proto_encode(&mut buf);
+
+        let mut marker = vec![0x0A];
+        marker.extend_from_slice(b"engine-xyz");
+        let idx = find_subslice(&buf, &marker).expect("game engine marker not found");
+        let after_engine = idx + marker.len();
+        // Bedrock protocol: NBT written as raw bytes (no length prefix).
+        assert_eq!(&buf[after_engine..after_engine + 3], &[0x0A, 0x00, 0x00]);
     }
 }

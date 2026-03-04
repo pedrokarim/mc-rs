@@ -20,6 +20,8 @@ pub struct PlayerListAdd {
     pub is_teacher: bool,
     pub is_host: bool,
     pub is_sub_client: bool,
+    /// Name-tag color encoded as ARGB u32 (LE on wire). Default: opaque white.
+    pub color_argb: u32,
 }
 
 /// PlayerList packet — Add action (type 0).
@@ -47,6 +49,7 @@ impl ProtoEncode for PlayerListAddPacket {
             buf.put_u8(entry.is_teacher as u8);
             buf.put_u8(entry.is_host as u8);
             buf.put_u8(entry.is_sub_client as u8);
+            buf.put_u32_le(entry.color_argb);
         }
         // Verified entries — one bool per entry, after all entries
         for _ in &self.entries {
@@ -150,6 +153,7 @@ mod tests {
                 is_teacher: false,
                 is_host: false,
                 is_sub_client: false,
+                color_argb: 0xFFFF_FFFF,
             }],
         };
         let mut buf = BytesMut::new();
@@ -176,6 +180,7 @@ mod tests {
                 is_teacher: false,
                 is_host: false,
                 is_sub_client: false,
+                color_argb: 0xFFFF_FFFF,
             }],
         };
         let mut buf = BytesMut::new();

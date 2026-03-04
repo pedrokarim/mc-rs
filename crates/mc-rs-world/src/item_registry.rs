@@ -5,6 +5,9 @@
 
 use std::collections::HashMap;
 
+use base64::Engine;
+use bytes::BytesMut;
+use mc_rs_nbt::{read_nbt_le, write_nbt_network};
 use serde::Deserialize;
 
 /// Canonical item list extracted from Bedrock Dedicated Server.
@@ -35,6 +38,10 @@ pub struct ItemInfo {
     pub max_stack_size: u8,
     /// Whether this is a component-based item (1.20+ custom items).
     pub is_component_based: bool,
+    /// Item definition version from BedrockData.
+    pub version: i32,
+    /// Raw network NBT bytes for component-based items.
+    pub component_nbt: Vec<u8>,
 }
 
 /// Item table entry for the StartGame packet.
@@ -43,6 +50,8 @@ pub struct ItemTableEntry {
     pub string_id: String,
     pub numeric_id: i16,
     pub is_component_based: bool,
+    pub version: i32,
+    pub component_nbt: Vec<u8>,
 }
 
 /// Registry of all known Bedrock items.
@@ -68,6 +77,24 @@ impl ItemRegistry {
 
         for (name, entry) in raw {
             let max_stack = max_stack_size_for(&name);
+            let component_nbt = entry
+                .component_nbt
+                .as_deref()
+                .map(|b64| {
+                    let raw_le = base64::engine::general_purpose::STANDARD
+                        .decode(b64)
+                        .unwrap_or_else(|e| {
+                            panic!("invalid component_nbt base64 for item {name}: {e}")
+                        });
+                    let mut cursor = raw_le.as_slice();
+                    let root = read_nbt_le(&mut cursor).unwrap_or_else(|e| {
+                        panic!("invalid LE NBT in component_nbt for item {name}: {e}")
+                    });
+                    let mut network = BytesMut::new();
+                    write_nbt_network(&mut network, &root);
+                    network.to_vec()
+                })
+                .unwrap_or_default();
             by_id.insert(entry.runtime_id, name.clone());
             by_name.insert(
                 name.clone(),
@@ -76,6 +103,8 @@ impl ItemRegistry {
                     numeric_id: entry.runtime_id,
                     max_stack_size: max_stack,
                     is_component_based: entry.component_based,
+                    version: i32::from(entry.version),
+                    component_nbt,
                 },
             );
         }
@@ -102,14 +131,23 @@ impl ItemRegistry {
 
     /// Generate the item table entries for the StartGame packet.
     pub fn item_table_entries(&self) -> Vec<ItemTableEntry> {
-        self.by_name
+        let mut entries: Vec<ItemTableEntry> = self
+            .by_name
             .values()
             .map(|info| ItemTableEntry {
                 string_id: info.name.clone(),
                 numeric_id: info.numeric_id,
                 is_component_based: info.is_component_based,
+                version: info.version,
+                component_nbt: info.component_nbt.clone(),
             })
-            .collect()
+            .collect();
+        entries.sort_unstable_by(|a, b| {
+            a.numeric_id
+                .cmp(&b.numeric_id)
+                .then_with(|| a.string_id.cmp(&b.string_id))
+        });
+        entries
     }
 
     /// Total number of registered items.
@@ -138,6 +176,8 @@ impl ItemRegistry {
                 numeric_id: next_id,
                 max_stack_size,
                 is_component_based,
+                version: 0,
+                component_nbt: Vec::new(),
             },
         );
     }
@@ -357,6 +397,25 @@ mod tests {
             .unwrap();
         assert_eq!(stone_entry.numeric_id, 1);
         assert!(!stone_entry.is_component_based);
+        assert_eq!(stone_entry.version, 2);
+        assert!(stone_entry.component_nbt.is_empty());
+    }
+
+    #[test]
+    fn component_based_item_keeps_component_nbt() {
+        let registry = ItemRegistry::new();
+        let apple = registry.get_by_name("minecraft:apple").unwrap();
+        assert!(apple.is_component_based);
+        assert!(!apple.component_nbt.is_empty());
+        assert!(apple.version >= 1);
+
+        let entry = registry
+            .item_table_entries()
+            .into_iter()
+            .find(|e| e.string_id == "minecraft:apple")
+            .unwrap();
+        assert!(entry.is_component_based);
+        assert!(!entry.component_nbt.is_empty());
     }
 
     #[test]

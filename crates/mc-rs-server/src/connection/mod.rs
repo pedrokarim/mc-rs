@@ -13,6 +13,7 @@ mod survival;
 mod world_tick;
 
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write as _;
 use std::io::Cursor;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -48,10 +49,10 @@ use mc_rs_proto::packets::{
     PlayerListAdd, PlayerListAddPacket, PlayerListRemove, RemoveEntity, RequestChunkRadius,
     ResourcePackClientResponse, ResourcePackResponseStatus, ResourcePackStack, ResourcePacksInfo,
     Respawn, ScoreEntry, ServerToClientHandshake, SetDisplayObjective, SetEntityMotion,
-    SetLocalPlayerAsInitialized, SetPlayerGameType, SetScore, SetTime, SetTitle,
-    SpawnParticleEffect, StartGame, Text, Transfer, UpdateAbilities, UpdateAdventureSettings,
-    UpdateAttributes, UpdateBlock,
-    UseItemAction, UseItemOnEntityAction,
+    SetActorData, SetDifficulty, SetLocalPlayerAsInitialized, SetPlayerGameType, SetScore,
+    SetSpawnPosition, SetTime, SetTitle, SpawnParticleEffect, StartGame, Text, Transfer,
+    UpdateAbilities, UpdateAdventureSettings, UpdateAttributes, UpdateBlock, UseItemAction,
+    UseItemOnEntityAction,
 };
 use mc_rs_proto::types::{BlockPos, Uuid, VarUInt32, Vec2, Vec3};
 use mc_rs_raknet::{RakNetEvent, Reliability, ServerHandle};
@@ -426,21 +427,35 @@ impl ConnectionHandler {
             _ => 0,
         };
 
-        // Compute spawn position
-        let (spawn_position, spawn_block) = if let Some(ref gen) = overworld_generator {
-            let feet_y = gen.find_spawn_y();
-            let eye_y = feet_y as f32 + 1.62;
-            (Vec3::new(8.5, eye_y, 8.5), BlockPos::new(8, feet_y, 8))
-        } else if let Some(ref gen) = nether_generator {
-            let feet_y = gen.find_spawn_y();
-            let eye_y = feet_y as f32 + 1.62;
-            (Vec3::new(8.5, eye_y, 8.5), BlockPos::new(8, feet_y, 8))
-        } else if let Some(ref gen) = end_generator {
-            let feet_y = gen.find_spawn_y();
-            let eye_y = feet_y as f32 + 1.62;
-            (Vec3::new(8.5, eye_y, 8.5), BlockPos::new(8, feet_y, 8))
-        } else {
-            (Vec3::new(0.5, 5.62, 0.5), BlockPos::new(0, 4, 0))
+        // Compute spawn position for the active world dimension only.
+        // Important: flat overworld must NOT fall through to nether spawn logic.
+        let (spawn_position, spawn_block) = match dimension_id {
+            1 => {
+                let feet_y = nether_generator
+                    .as_ref()
+                    .map(|g| g.find_spawn_y())
+                    .unwrap_or(64);
+                let eye_y = feet_y as f32 + 1.62;
+                (Vec3::new(8.5, eye_y, 8.5), BlockPos::new(8, feet_y, 8))
+            }
+            2 => {
+                let feet_y = end_generator
+                    .as_ref()
+                    .map(|g| g.find_spawn_y())
+                    .unwrap_or(64);
+                let eye_y = feet_y as f32 + 1.62;
+                (Vec3::new(8.5, eye_y, 8.5), BlockPos::new(8, feet_y, 8))
+            }
+            _ => {
+                if let Some(ref gen) = overworld_generator {
+                    let feet_y = gen.find_spawn_y();
+                    let eye_y = feet_y as f32 + 1.62;
+                    (Vec3::new(8.5, eye_y, 8.5), BlockPos::new(8, feet_y, 8))
+                } else {
+                    // Flat overworld spawn is on the generated grass layer.
+                    (Vec3::new(0.5, 5.62, 0.5), BlockPos::new(0, 4, 0))
+                }
+            }
         };
 
         // Initialize world storage
@@ -1147,12 +1162,26 @@ impl ConnectionHandler {
         packet_id: u32,
         packet: &impl ProtoEncode,
     ) {
-        let (batch_config, has_encryption) = match self.connections.get(&addr) {
-            Some(c) => (c.batch_config.clone(), c.encryption.is_some()),
+        let (batch_config, has_encryption, state) = match self.connections.get(&addr) {
+            Some(c) => (c.batch_config.clone(), c.encryption.is_some(), c.state),
             None => return,
         };
 
         let sub_packet = encode_sub_packet(packet_id, packet);
+        let sub_len = sub_packet.len();
+        if should_trace_packet(Some(state), packet_id) {
+            let id_len = varuint32_encoded_len(packet_id);
+            let body_len = sub_len.saturating_sub(id_len);
+            info!(
+                "TRACE TX {addr} state={state:?} id=0x{packet_id:02X} ({}) sub_len={} body_len={} encrypted={} head={}",
+                packet_name(packet_id),
+                sub_len,
+                body_len,
+                has_encryption,
+                hex_preview(&sub_packet, 40)
+            );
+        }
+
         let batch = match encode_single(sub_packet, &batch_config) {
             Ok(b) => b,
             Err(e) => {
@@ -1503,6 +1532,100 @@ pub(super) fn encode_sub_packet(packet_id: u32, packet: &impl ProtoEncode) -> By
     VarUInt32(packet_id).proto_encode(&mut buf);
     packet.proto_encode(&mut buf);
     buf.freeze()
+}
+
+/// Byte length of a VarUInt32 once encoded.
+pub(super) fn varuint32_encoded_len(mut value: u32) -> usize {
+    let mut len = 1usize;
+    while value >= 0x80 {
+        len += 1;
+        value >>= 7;
+    }
+    len
+}
+
+/// Small hex dump preview for logging binary payloads.
+pub(super) fn hex_preview(bytes: &[u8], max_bytes: usize) -> String {
+    let take = bytes.len().min(max_bytes);
+    let mut out = String::new();
+    for (i, b) in bytes.iter().take(take).enumerate() {
+        if i > 0 {
+            out.push(' ');
+        }
+        let _ = write!(&mut out, "{b:02X}");
+    }
+    if bytes.len() > max_bytes {
+        out.push_str(" ...");
+    }
+    out
+}
+
+/// Human-readable packet name for diagnostics.
+pub(super) fn packet_name(packet_id: u32) -> &'static str {
+    match packet_id {
+        packets::id::REQUEST_NETWORK_SETTINGS => "RequestNetworkSettings",
+        packets::id::NETWORK_SETTINGS => "NetworkSettings",
+        packets::id::LOGIN => "Login",
+        packets::id::PLAY_STATUS => "PlayStatus",
+        packets::id::RESOURCE_PACKS_INFO => "ResourcePacksInfo",
+        packets::id::RESOURCE_PACK_STACK => "ResourcePackStack",
+        packets::id::RESOURCE_PACK_CLIENT_RESPONSE => "ResourcePackClientResponse",
+        packets::id::START_GAME => "StartGame",
+        packets::id::ITEM_REGISTRY => "ItemRegistry",
+        packets::id::AVAILABLE_ENTITY_IDENTIFIERS => "AvailableEntityIdentifiers",
+        packets::id::BIOME_DEFINITION_LIST => "BiomeDefinitionList",
+        packets::id::AVAILABLE_COMMANDS => "AvailableCommands",
+        packets::id::UPDATE_ABILITIES => "UpdateAbilities",
+        packets::id::UPDATE_ATTRIBUTES => "UpdateAttributes",
+        packets::id::CREATIVE_CONTENT => "CreativeContent",
+        packets::id::CRAFTING_DATA => "CraftingData",
+        packets::id::PLAYER_LIST => "PlayerList",
+        packets::id::REQUEST_CHUNK_RADIUS => "RequestChunkRadius",
+        packets::id::CHUNK_RADIUS_UPDATED => "ChunkRadiusUpdated",
+        packets::id::NETWORK_CHUNK_PUBLISHER_UPDATE => "NetworkChunkPublisherUpdate",
+        packets::id::LEVEL_CHUNK => "LevelChunk",
+        packets::id::SET_ACTOR_DATA => "SetActorData",
+        packets::id::SET_LOCAL_PLAYER_AS_INITIALIZED => "SetLocalPlayerAsInitialized",
+        packets::id::SERVERBOUND_LOADING_SCREEN => "ServerboundLoadingScreen",
+        packets::id::CLIENT_CACHE_STATUS => "ClientCacheStatus",
+        packets::id::DISCONNECT => "Disconnect",
+        _ => "Unknown",
+    }
+}
+
+/// Spawn diagnostic tracing toggle.
+///
+/// Enabled by default; set `MC_RS_TRACE_SPAWN=0` to disable.
+pub(super) fn spawn_trace_enabled() -> bool {
+    match std::env::var("MC_RS_TRACE_SPAWN") {
+        Ok(v) => !matches!(
+            v.as_str(),
+            "0" | "false" | "False" | "FALSE" | "off" | "OFF"
+        ),
+        Err(_) => true,
+    }
+}
+
+/// Decide whether packet-level tracing should be logged.
+pub(super) fn should_trace_packet(state: Option<LoginState>, packet_id: u32) -> bool {
+    if !spawn_trace_enabled() {
+        return false;
+    }
+
+    match state {
+        Some(LoginState::InGame) => matches!(
+            packet_id,
+            packets::id::REQUEST_CHUNK_RADIUS
+                | packets::id::CHUNK_RADIUS_UPDATED
+                | packets::id::NETWORK_CHUNK_PUBLISHER_UPDATE
+                | packets::id::LEVEL_CHUNK
+                | packets::id::SET_LOCAL_PLAYER_AS_INITIALIZED
+                | packets::id::SERVERBOUND_LOADING_SCREEN
+        ),
+        // Pre-game phases are the critical path for this issue: trace everything.
+        Some(_) => true,
+        None => true,
+    }
 }
 
 pub(super) fn gamemode_from_str(s: &str) -> i32 {

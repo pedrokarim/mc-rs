@@ -5,6 +5,7 @@
 use bytes::BufMut;
 
 use crate::codec::ProtoEncode;
+use crate::types::VarInt;
 
 /// SetTime packet.
 pub struct SetTime {
@@ -14,7 +15,7 @@ pub struct SetTime {
 
 impl ProtoEncode for SetTime {
     fn proto_encode(&self, buf: &mut impl BufMut) {
-        buf.put_i32_le(self.time);
+        VarInt(self.time).proto_encode(buf);
     }
 }
 
@@ -28,9 +29,8 @@ mod tests {
         let pkt = SetTime { time: 6000 };
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert_eq!(buf.len(), 4);
-        // i32_le for 6000
-        assert_eq!(&buf[..], &6000_i32.to_le_bytes());
+        // VarInt(6000) zigzag = 12000 => 0xE0 0x5D
+        assert_eq!(&buf[..], &[0xE0, 0x5D]);
     }
 
     #[test]
@@ -38,6 +38,7 @@ mod tests {
         let pkt = SetTime { time: 18000 };
         let mut buf = BytesMut::new();
         pkt.proto_encode(&mut buf);
-        assert_eq!(&buf[..], &18000_i32.to_le_bytes());
+        // VarInt(18000) zigzag = 36000 => 0xA0 0x99 0x02
+        assert_eq!(&buf[..], &[0xA0, 0x99, 0x02]);
     }
 }
