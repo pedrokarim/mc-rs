@@ -15,8 +15,10 @@ pub struct AvailableCommands;
 
 impl ProtoEncode for AvailableCommands {
     fn proto_encode(&self, buf: &mut impl BufMut) {
-        // EnumValues, ChainedSubCommands, Suffixes, Enums, ChainedSubCmds, Commands
-        for _ in 0..6 {
+        // Must match PocketMine's 8 arrays:
+        // enumValues, chainedSubCommandValues, postfixes, enums,
+        // chainedSubCommandData, commandData, softEnums, enumConstraints
+        for _ in 0..8 {
             VarUInt32(0).proto_encode(buf);
         }
     }
@@ -31,8 +33,8 @@ mod tests {
     fn encode_empty_stub() {
         let mut buf = BytesMut::new();
         AvailableCommands.proto_encode(&mut buf);
-        // 6 × VarUInt32(0) = 6 bytes (each 0 encodes as a single 0x00 byte)
-        assert_eq!(buf.len(), 6);
+        // 8 × VarUInt32(0) = 8 bytes (each 0 encodes as a single 0x00 byte)
+        assert_eq!(buf.len(), 8);
         assert!(buf.iter().all(|&b| b == 0));
     }
 }

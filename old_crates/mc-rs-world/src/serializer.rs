@@ -4,7 +4,6 @@ use bytes::{BufMut, BytesMut};
 
 use crate::block_hash::hash_block_state;
 use crate::chunk::{ChunkColumn, SubChunk, OVERWORLD_SUB_CHUNK_COUNT};
-use crate::network_runtime_ids::to_network_runtime_id;
 
 /// Serialize a full chunk column to the LevelChunk packet payload.
 ///
@@ -13,7 +12,6 @@ use crate::network_runtime_ids::to_network_runtime_id;
 pub fn serialize_chunk_column(column: &ChunkColumn) -> (u32, Vec<u8>) {
     let mut buf = BytesMut::new();
 
-    // Match PMMP: only send sub-chunks up to the highest non-empty one.
     let sub_chunk_count = highest_non_empty_subchunk_count(column);
     for sub_chunk in column.sub_chunks.iter().take(sub_chunk_count as usize) {
         serialize_sub_chunk(&mut buf, sub_chunk);
@@ -24,7 +22,6 @@ pub fn serialize_chunk_column(column: &ChunkColumn) -> (u32, Vec<u8>) {
 
     // Border blocks: empty (not Education Edition).
     buf.put_u8(0x00);
-    // No tiles are appended when none exist. PMMP writes only the border block count.
 
     (sub_chunk_count, buf.to_vec())
 }
@@ -50,47 +47,36 @@ fn serialize_sub_chunk(buf: &mut BytesMut, sub_chunk: &SubChunk) {
 
     let palette_size = sub_chunk.palette.len();
 
-    if palette_size <= 1 {
-        // Single-block sub-chunk: bits_per_block = 0
-        // storage_header = (0 << 1) | 1 = 1 (runtime flag set)
-        buf.put_u8(0x01);
-        // NO block data words for bits_per_block = 0
-        // NO palette count for bits=0.
-        // Just write the single palette entry directly
-        if palette_size == 1 {
-            let rid = to_network_runtime_id(sub_chunk.palette[0]);
-            write_signed_varint32(buf, rid as i32);
-        }
-    } else {
-        let bpb = bits_per_block_for_palette(palette_size);
-        let storage_header = (bpb << 1) | 1; // bit 0 = runtime flag
-        buf.put_u8(storage_header);
+    // PocketMine's ext-chunkutils2 uses MIN_BITS_PER_BLOCK=1 — it never produces
+    // bitsPerBlock=0. The Bedrock client may not handle bpb=0, causing silent chunk
+    // parse failure and a permanent loading screen. Use bpb >= 1 to match PocketMine.
+    let bpb = bits_per_block_for_palette(palette_size).max(1);
+    let storage_header = (bpb << 1) | 1; // bit 0 = runtime flag
+    buf.put_u8(storage_header);
 
-        // Pack block indices into u32 words (LSB-first)
-        let blocks_per_word = 32 / bpb as usize;
-        let word_count = 4096_usize.div_ceil(blocks_per_word);
-        let mut words = BytesMut::with_capacity(word_count * 4);
+    // Pack block indices into u32 words (LSB-first)
+    let blocks_per_word = 32 / bpb as usize;
+    let word_count = 4096_usize.div_ceil(blocks_per_word);
+    let mut words = BytesMut::with_capacity(word_count * 4);
 
-        for word_idx in 0..word_count {
-            let mut word: u32 = 0;
-            for slot in 0..blocks_per_word {
-                let block_idx = word_idx * blocks_per_word + slot;
-                if block_idx < 4096 {
-                    let palette_index = sub_chunk.blocks[block_idx] as u32;
-                    word |= palette_index << (bpb as u32 * slot as u32);
-                }
+    for word_idx in 0..word_count {
+        let mut word: u32 = 0;
+        for slot in 0..blocks_per_word {
+            let block_idx = word_idx * blocks_per_word + slot;
+            if block_idx < 4096 {
+                let palette_index = sub_chunk.blocks[block_idx] as u32;
+                word |= palette_index << (bpb as u32 * slot as u32);
             }
-            words.put_u32_le(word);
         }
-        // PMMP writes raw word bytes here (no length prefix).
-        buf.extend_from_slice(&words);
+        words.put_u32_le(word);
+    }
+    buf.extend_from_slice(&words);
 
-        // Palette
-        write_signed_varint32(buf, palette_size as i32);
-        for &runtime_id in &sub_chunk.palette {
-            let rid = to_network_runtime_id(runtime_id);
-            write_signed_varint32(buf, rid as i32);
-        }
+    // Palette count + entries: both zigzag-encoded signed VarInt (matching PocketMine:
+    // VarInt::writeSignedInt($stream, count($palette)); //yes, this is intentionally zigzag)
+    write_signed_varint32(buf, palette_size as i32);
+    for &block_hash in &sub_chunk.palette {
+        write_signed_varint32(buf, block_hash as i32);
     }
 }
 
@@ -112,6 +98,7 @@ fn highest_non_empty_subchunk_count(column: &ChunkColumn) -> u32 {
 
 /// Determine minimum bits-per-block for a given palette size.
 /// Valid values: 1, 2, 3, 4, 5, 6, 8, 16.
+/// Returns 0 for palette_size <= 1, but callers clamp to >= 1 to match PocketMine.
 fn bits_per_block_for_palette(palette_size: usize) -> u8 {
     match palette_size {
         0..=1 => 0,
@@ -144,60 +131,49 @@ fn serialize_biome_data(buf: &mut BytesMut, biomes: &[u8; 256]) {
         }
     }
 
-    // Check if all 16 entries are the same biome (common case)
-    let all_same = biome_4x4.iter().all(|&b| b == biome_4x4[0]);
-
     // Build section data once (all 24 sections are identical since biomes are 2D)
     let mut section_buf = BytesMut::new();
 
-    if all_same {
-        // Single-biome section: header = (0 << 1) | 1 = 0x01 (0 bits, runtime flag)
-        section_buf.put_u8(0x01);
-        // NO count for bits=0, just the single palette value
-        write_signed_varint32(&mut section_buf, biome_4x4[0] as i32);
-    } else {
-        // Multi-biome section: palette-based encoding for 64 entries.
-        // Build palette using O(1) lookup array instead of Vec::contains().
-        let mut biome_to_palette = [0xFFu8; 256];
-        let mut palette: Vec<u8> = Vec::new();
-        for &b in &biome_4x4 {
-            if biome_to_palette[b as usize] == 0xFF {
-                biome_to_palette[b as usize] = palette.len() as u8;
-                palette.push(b);
+    // Build palette from the 4x4 biome grid.
+    let mut biome_to_palette = [0xFFu8; 256];
+    let mut palette: Vec<u8> = Vec::new();
+    for &b in &biome_4x4 {
+        if biome_to_palette[b as usize] == 0xFF {
+            biome_to_palette[b as usize] = palette.len() as u8;
+            palette.push(b);
+        }
+    }
+
+    // PocketMine's ext-chunkutils2 uses MIN_BITS_PER_BLOCK=1 — never bpe=0.
+    // Match this to avoid silent client parse failures.
+    let bpe = bits_per_entry_for_biome_palette(palette.len()).max(1);
+    section_buf.put_u8((bpe << 1) | 1);
+
+    // Pack 64 entries into u32 words (4x4x4, all 4 Y levels have same biome as XZ)
+    let entries_per_word = 32 / bpe as usize;
+    let word_count = 64_usize.div_ceil(entries_per_word);
+    let mut words = BytesMut::with_capacity(word_count * 4);
+
+    for word_idx in 0..word_count {
+        let mut word: u32 = 0;
+        for slot in 0..entries_per_word {
+            let entry_idx = word_idx * entries_per_word + slot;
+            if entry_idx < 64 {
+                let sx = entry_idx % 4;
+                let sz = (entry_idx / 4) % 4;
+                let biome_id = biome_4x4[sx * 4 + sz];
+                let palette_idx = biome_to_palette[biome_id as usize] as u32;
+                word |= palette_idx << (bpe as u32 * slot as u32);
             }
         }
+        words.put_u32_le(word);
+    }
+    section_buf.extend_from_slice(&words);
 
-        let bpe = bits_per_entry_for_biome_palette(palette.len());
-        // Biome storage header: (bpe << 1) | 1 — runtime flag for network encoding
-        section_buf.put_u8((bpe << 1) | 1);
-
-        // Pack 64 entries into u32 words (4x4x4, all 4 Y levels have same biome as XZ)
-        let entries_per_word = 32 / bpe as usize;
-        let word_count = 64_usize.div_ceil(entries_per_word);
-        let mut words = BytesMut::with_capacity(word_count * 4);
-
-        for word_idx in 0..word_count {
-            let mut word: u32 = 0;
-            for slot in 0..entries_per_word {
-                let entry_idx = word_idx * entries_per_word + slot;
-                if entry_idx < 64 {
-                    let sx = entry_idx % 4;
-                    let sz = (entry_idx / 4) % 4;
-                    let biome_id = biome_4x4[sx * 4 + sz];
-                    let palette_idx = biome_to_palette[biome_id as usize] as u32;
-                    word |= palette_idx << (bpe as u32 * slot as u32);
-                }
-            }
-            words.put_u32_le(word);
-        }
-        // PMMP writes raw word bytes here (no length prefix).
-        section_buf.extend_from_slice(&words);
-
-        // Palette
-        write_signed_varint32(&mut section_buf, palette.len() as i32);
-        for &biome_id in &palette {
-            write_signed_varint32(&mut section_buf, biome_id as i32);
-        }
+    // Palette count + entries: both zigzag-encoded signed VarInt (matching PocketMine)
+    write_signed_varint32(&mut section_buf, palette.len() as i32);
+    for &biome_id in &palette {
+        write_signed_varint32(&mut section_buf, biome_id as i32);
     }
 
     // Write the same section data 24 times
@@ -245,7 +221,6 @@ mod tests {
     use super::*;
     use crate::block_hash::hash_block_state;
     use crate::block_hash::{hash_default_bedrock, LEGACY_BEDROCK_HASH_EMPTY_STATES};
-    use crate::network_runtime_ids::to_network_runtime_id;
 
     fn decode_signed_varint32(bytes: &[u8]) -> (i32, usize) {
         let mut shift = 0u32;
@@ -282,26 +257,36 @@ mod tests {
 
         assert_eq!(buf[0], 8, "version");
         assert_eq!(buf[1], 1, "num_layers");
-        assert_eq!(buf[2], 0x01, "storage_header (bpb=0, runtime=1)");
-        // NO palette count for bits=0 (gophertunnel skips count when p.size == 0)
-        let (rid, used) = decode_signed_varint32(&buf[3..]);
-        assert_eq!(rid as u32, to_network_runtime_id(air));
-        assert_eq!(buf.len(), 3 + used);
+        // bpb=1 minimum (matching PocketMine ext-chunkutils2), header = (1<<1)|1 = 3
+        assert_eq!(buf[2], 0x03, "storage_header (bpb=1, runtime=1)");
+        // 128 u32 words of zeros (all blocks are palette index 0)
+        let word_data_end = 3 + 128 * 4;
+        for i in (3..word_data_end).step_by(4) {
+            assert_eq!(&buf[i..i + 4], &[0, 0, 0, 0], "word data should be all zeros");
+        }
+        // Palette count: zigzag(1) = 0x02
+        assert_eq!(buf[word_data_end], 0x02, "palette count zigzag(1)");
+        // Palette entry is the FNV-1a hash directly
+        let (rid, _used) = decode_signed_varint32(&buf[word_data_end + 1..]);
+        assert_eq!(rid as u32, air);
     }
 
     #[test]
-    fn legacy_bedrock_hash_is_normalized_before_network_encode() {
+    fn legacy_bedrock_hash_is_written_directly() {
         let sub = SubChunk::new_single(LEGACY_BEDROCK_HASH_EMPTY_STATES);
         let mut buf = BytesMut::new();
         serialize_sub_chunk(&mut buf, &sub);
 
-        // [version=8][layers=1][header=0x01][palette_entry_varint...]
+        // [version=8][layers=1][header=0x03 (bpb=1)]
         assert_eq!(buf[0], 8);
         assert_eq!(buf[1], 1);
-        assert_eq!(buf[2], 0x01);
+        assert_eq!(buf[2], 0x03);
 
-        let (rid, _used) = decode_signed_varint32(&buf[3..]);
-        assert_eq!(rid as u32, to_network_runtime_id(hash_default_bedrock()));
+        // After 128 u32 words + palette count, palette entry is the hash
+        let word_data_end = 3 + 128 * 4;
+        assert_eq!(buf[word_data_end], 0x02, "palette count zigzag(1)");
+        let (rid, _used) = decode_signed_varint32(&buf[word_data_end + 1..]);
+        assert_eq!(rid as u32, LEGACY_BEDROCK_HASH_EMPTY_STATES);
     }
 
     #[test]
@@ -366,11 +351,17 @@ mod tests {
         let biomes = [1u8; 256]; // All plains
         let mut buf = BytesMut::new();
         serialize_biome_data(&mut buf, &biomes);
-        // 24 sections, each: 0x01 (header: bpe=0, runtime=1) + zigzag(1) = 0x02
-        assert_eq!(buf.len(), 24 * 2);
+        // With bpe=1 minimum: each section = 1 (header) + 8 (2 u32 words) + 1 (count) + 1 (entry) = 11 bytes
+        // 24 sections = 264 bytes
+        let section_size = 1 + 8 + 1 + 1; // header + 2 words + zigzag(1) + zigzag(1)
+        assert_eq!(buf.len(), 24 * section_size);
         for i in 0..24 {
-            assert_eq!(buf[i * 2], 0x01, "section {i} header (bpe=0, runtime=1)");
-            assert_eq!(buf[i * 2 + 1], 0x02, "section {i} biome plains=zigzag(1)=2");
+            let off = i * section_size;
+            assert_eq!(buf[off], 0x03, "section {i} header (bpe=1, runtime=1)");
+            // 8 bytes of zero words (all entries are palette index 0)
+            assert_eq!(&buf[off + 1..off + 9], &[0u8; 8], "section {i} word data");
+            assert_eq!(buf[off + 9], 0x02, "section {i} palette count zigzag(1)");
+            assert_eq!(buf[off + 10], 0x02, "section {i} biome plains=zigzag(1)=2");
         }
     }
 
@@ -392,12 +383,13 @@ mod tests {
 
     #[test]
     fn biome_words_are_not_length_prefixed() {
-        // Single-biome section must be exactly [0x01, zigzag(biome)].
+        // Single-biome section: header=0x03 then 2 u32 words follow directly (no length prefix)
         let biomes = [1u8; 256];
         let mut buf = BytesMut::new();
         serialize_biome_data(&mut buf, &biomes);
-        assert_eq!(&buf[0..2], &[0x01, 0x02]);
-        assert_eq!(buf.len(), 24 * 2);
+        assert_eq!(buf[0], 0x03, "header (bpe=1, runtime=1)");
+        // Words start immediately at offset 1
+        assert_eq!(&buf[1..9], &[0u8; 8], "word data directly after header");
     }
 
     #[test]

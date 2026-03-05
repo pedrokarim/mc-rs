@@ -309,33 +309,12 @@ impl ConnectionHandler {
                     match packets::ServerboundLoadingScreen::proto_decode(&mut cursor) {
                         Ok(pkt) => {
                             info!(
-                                "### BUILD_MARKER spawn-r10-2026-03-02: received ServerboundLoadingScreen from {addr} ###"
-                            );
-                            info!(
-                                "ServerboundLoadingScreen from {addr}: type={} (0=unknown, 1=start, 2=stop), loading_screen_id={:?} (None is usually normal)",
+                                "ServerboundLoadingScreen from {addr}: type={} (0=unknown, 1=start, 2=stop), loading_screen_id={:?}",
                                 pkt.loading_screen_type,
                                 pkt.loading_screen_id
                             );
-
-                            // Some clients get stuck without ever sending SetLocalPlayerAsInitialized.
-                            // Fallback: treat loading-screen start as spawn-ready while in Spawning.
-                            if pkt.loading_screen_type == 1 {
-                                let runtime_id = self
-                                    .connections
-                                    .get(&addr)
-                                    .and_then(|c| (c.state == LoginState::Spawning).then_some(c.entity_runtime_id));
-                                if let Some(runtime_id) = runtime_id {
-                                    info!(
-                                        "### BUILD_MARKER spawn-r12-2026-03-03: using ServerboundLoadingScreen(type=1) fallback for {addr} ###"
-                                    );
-                                    self.finalize_spawn_ready(
-                                        addr,
-                                        runtime_id,
-                                        "ServerboundLoadingScreen(type=1)",
-                                    )
-                                    .await;
-                                }
-                            }
+                            // PocketMine ignores this packet entirely.
+                            // Spawn finalization is driven solely by SetLocalPlayerAsInitialized.
                         }
                         Err(e) => {
                             warn!(
@@ -991,7 +970,7 @@ impl ConnectionHandler {
                 server_auth_block_breaking: true,
             },
             server_authoritative_inventory: true,
-            block_network_ids_are_hashes: false,
+            block_network_ids_are_hashes: true,
             network_permissions_disable_sounds: true,
             game_engine: server_engine.clone(),
             ..StartGame::default()
