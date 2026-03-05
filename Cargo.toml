@@ -1,18 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/mc-rs-raknet",
-    "crates/mc-rs-proto",
-    "crates/mc-rs-nbt",
-    "crates/mc-rs-crypto",
-    "crates/mc-rs-world",
-    "crates/mc-rs-game",
-    "crates/mc-rs-command",
-    "crates/mc-rs-plugin-api",
-    "crates/mc-rs-plugin-wasm",
-    "crates/mc-rs-plugin-lua",
-    "crates/mc-rs-behavior-pack",
-    "crates/mc-rs-server",
+    "crates_new/mc-rs-raknet",
+    "crates_new/mc-rs-crypto",
+    "crates_new/mc-rs-proto",
+    "crates_new/mc-rs-server",
 ]
 
 [workspace.dependencies]
@@ -31,6 +23,4 @@ sha2 = "0.10"
 aes = "0.8"
 cfb8 = "0.8"
 rusty-leveldb = "3"
-wasmtime = "29"
-toml = "0.8"
-mlua = { version = "0.10", features = ["lua54", "serialize", "vendored"] }
+tracing-subscriber = "0.3"
