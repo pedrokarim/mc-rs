@@ -338,11 +338,13 @@ dependencies = [
 name = "mc-rs-server"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "bytes",
  "flate2",
  "mc-rs-proto",
  "mc-rs-raknet",
  "rand",
+ "serde_json",
  "snap",
  "tokio",
  "tracing",

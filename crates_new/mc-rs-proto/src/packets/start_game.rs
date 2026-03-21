@@ -10,6 +10,7 @@ pub fn encode(
     position: [f32; 3],
     pitch: f32,
     yaw: f32,
+    world_time: i32,
     spawn_position: [i32; 3],
     world_name: &str,
 ) -> BytesMut {
@@ -31,7 +32,7 @@ pub fn encode(
     write_signed_varint32(&mut buf, 1); // #11 generator (OVERWORLD=1)
     write_signed_varint32(&mut buf, gamemode); // #12 worldGamemode
     buf.put_u8(0); // #13 hardcore
-    write_signed_varint32(&mut buf, 1); // #14 difficulty (Easy)
+    write_signed_varint32(&mut buf, 2); // #14 difficulty (Normal)
     write_block_pos(
         &mut buf,
         spawn_position[0],
@@ -42,7 +43,7 @@ pub fn encode(
     write_signed_varint32(&mut buf, 0); // #17 editorWorldType (NON_EDITOR)
     buf.put_u8(0); // #18 createdInEditorMode
     buf.put_u8(0); // #19 exportedFromEditorMode
-    write_signed_varint32(&mut buf, 0); // #20 time
+    write_signed_varint32(&mut buf, world_time); // #20 time
     write_signed_varint32(&mut buf, 0); // #21 eduEditionOffer
     buf.put_u8(0); // #22 hasEduFeaturesEnabled
     write_string(&mut buf, ""); // #23 eduProductUUID

@@ -53,6 +53,28 @@ pub fn encode_default_creative(actor_unique_id: i64) -> BytesMut {
     buf
 }
 
+/// UpdateAbilities packet matching PocketMine syncAbilities() for a normal survival player.
+/// Uses a single BASE layer with PMMP-like defaults.
+pub fn encode_default_survival(actor_unique_id: i64) -> BytesMut {
+    let mut buf = BytesMut::new();
+    buf.put_i64_le(actor_unique_id); // targetActorUniqueId (signed long LE)
+    buf.put_u8(PLAYER_PERMISSION_MEMBER);
+    buf.put_u8(COMMAND_PERMISSION_NORMAL);
+    buf.put_u8(1); // layer count
+
+    // PMMP still sets all bits in BASE; false values are carried in abilityValues.
+    let base_set = 0x000F_FFFF;
+    let base_values = BUILD
+        | MINE
+        | DOORS_AND_SWITCHES
+        | OPEN_CONTAINERS
+        | ATTACK_PLAYERS
+        | ATTACK_MOBS;
+    write_layer(&mut buf, LAYER_BASE, base_set, base_values, 0.05, 1.0, 0.1);
+
+    buf
+}
+
 fn write_layer(
     buf: &mut BytesMut,
     layer_id: u16,
@@ -96,5 +118,16 @@ mod tests {
         assert_eq!(fly, 0.05);
         assert_eq!(vertical, 1.0);
         assert_eq!(walk, 0.1);
+    }
+
+    #[test]
+    fn encodes_survival_values() {
+        let buf = encode_default_survival(1);
+        assert_eq!(buf.len(), 33, "unexpected UpdateAbilities wire size");
+
+        let set = u32::from_le_bytes([buf[13], buf[14], buf[15], buf[16]]);
+        let values = u32::from_le_bytes([buf[17], buf[18], buf[19], buf[20]]);
+        assert_eq!(set, 0x000F_FFFF);
+        assert_eq!(values, 0x0000_003F);
     }
 }

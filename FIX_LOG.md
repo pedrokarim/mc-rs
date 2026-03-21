@@ -3,6 +3,60 @@
 Ce fichier sert de mémoire des correctifs déjà appliqués pour éviter de tourner en rond.
 À chaque nouvelle demande de fix, vérifier d'abord ce log.
 
+## 2026-03-05 - `crates_new` PocketMine-first: spawn strict + chunk PMMP + trace
+
+### Contexte
+- Le code actif est dans `crates_new/*`.
+- On évite `old_crates/*` sauf dernier recours.
+
+### Correctifs appliqués
+Fichiers modifiés :
+- `crates_new/mc-rs-proto/src/packets/update_abilities.rs`
+- `crates_new/mc-rs-proto/src/packets/player_list.rs`
+- `crates_new/mc-rs-proto/src/packets/update_adventure_settings.rs`
+- `crates_new/mc-rs-proto/src/packets/mod.rs`
+- `crates_new/mc-rs-server/src/connection.rs`
+
+Changements :
+1. **Spawn policy strict PMMP**
+- Suppression du fallback `ServerboundLoadingScreen => InGame`.
+- `ServerboundLoadingScreen` reste uniquement un signal de diagnostic.
+- Succès de spawn = `SetLocalPlayerAsInitialized` uniquement.
+
+2. **UpdateAdventureSettings**
+- `showNameTags=true`
+- `autoJump=true`
+
+3. **Client cache status (0x81)**
+- Ajout de `ID_CLIENT_CACHE_STATUS`.
+- Packet reçu/loggé en pre-game pour éviter le “Unhandled 0x81”.
+
+4. **Chunk payload PMMP côté runtime**
+- Serializer colonne reconstruit:
+  - subchunks v8 (single-value bpb=0),
+  - biomes 24 sections,
+  - `border block array count = 0`,
+  - pas de tiles.
+- `subChunkCount` dérivé des bornes overworld `[-4..19]`.
+- Runtime IDs `air`/`bedrock` lus depuis `.reference/BedrockData/canonical_block_states.nbt` (fallback loggé si parse échoue).
+
+5. **Tracing temporaire activable**
+- Env `MC_RS_TRACE_SPAWN=1`:
+  - TX: StartGame, UpdateAbilities, PlayerList, NetworkChunkPublisherUpdate, 1er LevelChunk.
+  - RX: RequestChunkRadius, ServerboundLoadingScreen, SetLocalPlayerAsInitialized, ClientCacheStatus.
+
+### Vérifications
+- `cargo test -p mc-rs-proto` -> OK
+- `cargo test -p mc-rs-server` -> OK
+- `cargo build --release -p mc-rs-server` -> OK
+
+### Règle anti-boucle
+- Ne plus promouvoir `InGame` sur `ServerboundLoadingScreen`.
+- Garder la validation finale sur `SetLocalPlayerAsInitialized` uniquement.
+- Pour les chunks, conserver le format PMMP:
+  - words non préfixés,
+  - pas de longueur tiles fantôme après `border count`.
+
 ## 2026-03-04 - Erratum NBT: encodage brut (pas de préfixe VarUInt32)
 
 ### Contexte
@@ -817,3 +871,282 @@ let (spawn_position, spawn_block) = match dimension_id {
     }
 };
 ```
+
+---
+
+## 2026-03-05 - Pré-spawn PMMP: identité login réelle + survival par défaut
+
+### Cause probable ciblée
+- `PlayerList(Add)` envoyait un profil local factice (`uuid=0000...`, `username="Player"`, `xuid=""`).
+- Le flux pre-spawn était en `creative` hardcodé avec `CreativeContent` vide, alors que la baseline PMMP de test est en survival.
+
+### Fix appliqué (crates_new)
+Fichiers modifiés:
+- `crates_new/mc-rs-server/src/connection.rs`
+- `crates_new/mc-rs-server/Cargo.toml`
+- `crates_new/mc-rs-proto/src/packets/update_abilities.rs`
+
+Changements:
+1. Parse du `Login` (JWT chain) pour extraire `displayName`, `identity` (UUID), `XUID`.
+2. Stockage session de ces valeurs puis réutilisation dans `PlayerList(Add)`:
+   - UUID réel du joueur (au lieu de nil UUID),
+   - username réel,
+   - XUID réel.
+3. Alignement pre-spawn en survival:
+   - `StartGame.playerGamemode = 0`,
+   - `SetPlayerGameType = 0`,
+   - `UpdateAbilities` survival (`encode_default_survival`).
+4. Ajout dépendances `serde_json` + `base64` côté `mc-rs-server` pour parser le login JWT.
+
+### Extrait code clé
+```rust
+// connection.rs
+if let Ok(identity) = extract_login_identity(body) {
+    session.username = identity.username;
+    session.xuid = identity.xuid;
+    session.player_uuid = identity.uuid_bytes;
+}
+
+let spgt = packets::set_player_game_type::encode(0); // survival
+let uab = packets::update_abilities::encode_default_survival(actor_runtime_id as i64);
+let pl = packets::player_list::encode_add(&player_uuid, actor_runtime_id as i64, &username, &xuid, "", 7, &skin, ...);
+```
+
+### Vérification
+- `cargo test -p mc-rs-proto` -> OK
+- `cargo build --release -p mc-rs-server` -> OK
+
+---
+
+## 2026-03-05 - Spawn response: accepter `RequestChunkRadius` pendant l'attente de `SetLocalPlayerAsInitialized`
+
+### Symptôme
+- Logs runtime: après `PlayStatus(PLAYER_SPAWN)`, le client envoie encore `RequestChunkRadius` (`0x45`) avant `SetLocalPlayerAsInitialized`.
+- Le serveur le marquait `Unhandled packet 0x45 in phase WaitingForSpawnResponse`.
+
+### Fix appliqué (crates_new)
+Fichier modifié:
+- `crates_new/mc-rs-server/src/connection.rs`
+
+Changement:
+1. `ID_REQUEST_CHUNK_RADIUS` est maintenant aussi traité en phase `WaitingForSpawnResponse`.
+2. Le même handler de rayon/chunks est réutilisé pour ne pas laisser ces paquets sans réponse durant la transition spawn.
+
+### Extrait
+```rust
+(Phase::WaitingForChunkRadius, ID_REQUEST_CHUNK_RADIUS)
+| (Phase::PreSpawn, ID_REQUEST_CHUNK_RADIUS)
+| (Phase::WaitingForSpawnResponse, ID_REQUEST_CHUNK_RADIUS) => {
+    handle_request_chunk_radius(addr, body, handle).await
+}
+```
+
+### Vérification
+- `cargo build --release -p mc-rs-server` -> OK
+
+---
+
+## 2026-03-05 - Correction loops spawn + UUID PlayerList (PMMP parity)
+
+### Constats
+- Diff PMMP vs mc-rs sur `PlayerList(Add)`: UUID encodé différemment.
+- En runtime, le client renvoyait `RequestChunkRadius` pendant `WaitingForSpawnResponse` et le serveur relançait chunks + `PlayStatus(PlayerSpawn)` en boucle.
+
+### Fix appliqué
+Fichiers modifiés:
+- `crates_new/mc-rs-proto/src/packets/player_list.rs`
+- `crates_new/mc-rs-server/src/connection.rs`
+- `.reference/PocketMine-MP/src/network/mcpe/ChunkRequestTask.php` (instrumentation only)
+- `.reference/tools/compare_spawn_dumps.ps1` (instrumentation only)
+
+Changements:
+1. `PlayerList`: UUID encodé en format Bedrock/PMMP (`strrev(first8)+strrev(last8)`).
+2. `RequestChunkRadius` en phase `WaitingForSpawnResponse`:
+   - on met à jour rayon/publisher,
+   - on **n’envoie plus** de nouveau stream spawn + `PlayStatus(PlayerSpawn)` (stop boucle).
+3. Clamp rayon de chunks côté mc-rs: `2..8` (au lieu de `2..4`) pour être moins agressif.
+4. PMMP trace: ajout dump `level_chunk_first` depuis `ChunkRequestTask` (path `.reference/dumps/pmmp`) pour diff binaire complet.
+5. Script compare: sélection des dumps les plus récents (`LastWriteTime`).
+
+### Vérification
+- `cargo test -p mc-rs-proto packets::player_list::tests::uuid_is_written_in_bedrock_endian_layout` -> OK
+- `cargo build --release -p mc-rs-server` -> OK
+- `php -l .reference/PocketMine-MP/src/network/mcpe/ChunkRequestTask.php` -> OK
+
+---
+
+## 2026-03-05 - Alignement spawn/chunks vers PMMP (centre joueur + colonne terrain non-vide)
+
+### Constat
+- `SetLocalPlayerAsInitialized` toujours absent malgré `PlayStatus(PLAYER_SPAWN)`.
+- Les dumps montraient des écarts structurels persistants:
+  - `NetworkChunkPublisherUpdate` centré en `(0,64,0)` au lieu de la position joueur.
+  - `LevelChunk` première colonne très petite (`~799`), majoritairement vide.
+
+### Fix appliqué
+Fichier modifié:
+- `crates_new/mc-rs-server/src/connection.rs`
+
+Changements:
+1. Position de spawn/joueur alignée sur un centre non-zéro (même stratégie PMMP):
+   - `DEFAULT_SPAWN_BLOCK_POS = [258, 66, 258]`
+   - `DEFAULT_PLAYER_POS = [258.619, 66.0, 258.7035]`
+2. `StartGame`, `SetSpawnPosition`, `MovePlayer` utilisent cette position.
+3. `NetworkChunkPublisherUpdate` utilise ce centre joueur (plus `(0,64,0)`).
+4. Envoi des chunks centré sur le chunk du spawn (plus boucle autour de l’origine).
+5. Rayon demandé clampé à `2..16` (au lieu de `2..8`) pour se rapprocher de PMMP.
+6. Payload `LevelChunk` revu pour une colonne terrain non-vide:
+   - `subChunkCount` jusqu’à `y=4` (9 subchunks envoyés),
+   - couche basse bedrock/stone,
+   - couches profondes stone,
+   - couche surface `grass/dirt/air` à `y=64..79`,
+   - biomes + border count conformes.
+7. Résolution runtime IDs étendue depuis `canonical_block_states.nbt`:
+   - `air`, `bedrock`, `stone`, `dirt`, `grass_block`.
+
+### Extrait code
+```rust
+const DEFAULT_SPAWN_BLOCK_POS: [i32; 3] = [258, 66, 258];
+const DEFAULT_PLAYER_POS: [f32; 3] = [258.619, 66.0, 258.7035];
+
+let ncpu = packets::network_chunk_publisher_update::encode(
+    spawn[0], spawn[1], spawn[2], (radius as u32) * 16,
+);
+
+let center_chunk_x = spawn[0].div_euclid(16);
+let center_chunk_z = spawn[2].div_euclid(16);
+for cx in (center_chunk_x - radius)..=(center_chunk_x + radius) {
+    for cz in (center_chunk_z - radius)..=(center_chunk_z + radius) {
+        ...
+    }
+}
+```
+
+### Vérification
+- `cargo test -p mc-rs-server --quiet` -> OK
+- `cargo build --release -p mc-rs-server` -> OK
+
+---
+
+## 2026-03-05 - Diff PMMP: LevelChunk/StartGame/PlayerList (itération suivante)
+
+### Signal d'entrée
+Compare dumps:
+- `NetworkChunkPublisherUpdate`: OK identique.
+- `StartGame`: position/angles encore divergents.
+- `PlayerList`: divergence au `buildPlatform` + skin payload.
+- `LevelChunk`: payload encore divergent, début PMMP `08 00 08 00 08 00 ...` (subchunks négatifs vides).
+
+### Correctifs appliqués
+Fichier modifié:
+- `crates_new/mc-rs-server/src/connection.rs`
+
+Changements:
+1. `StartGame`/`MovePlayer`:
+   - `DEFAULT_PLAYER_POS.y = 67.621`
+   - `DEFAULT_PLAYER_PITCH = 29.10333`
+   - `DEFAULT_PLAYER_YAW = 306.4707`
+2. `PlayerList(Add)`:
+   - `build_platform = -1` (PMMP-like, au lieu de `7`).
+3. `LevelChunk` generation:
+   - `build_spawn_chunk_payload(chunk_x, chunk_z)` désormais **par chunk** (plus payload unique réutilisé).
+   - subchunks `< 0` envoyés en `08 00` (vides) comme PMMP.
+   - subchunks `0..4` générés par terrain déterministe (bedrock/stone/dirt/grass/water/air) puis encodés en palette runtime (`bpb` auto + packing bits générique).
+4. Ordre d'envoi:
+   - premier chunk forcé proche centre joueur `(centerX-1, centerZ)` pour matcher le pattern PMMP observé (`15,16`).
+
+### Vérification
+- `cargo test -p mc-rs-server --quiet` -> OK
+- `cargo build --release -p mc-rs-server` -> OK
+
+### 2026-03-06 - Fix packing palette subchunk (PMMP word layout)
+
+Cause:
+- Le packing des indices palette utilisait un bitstream continu (cross-word), ce qui ne correspond pas au layout PMMP/ext-chunkutils2.
+- Résultat direct: payload `LevelChunk` trop court et divergence massive sur le premier chunk.
+
+Correction:
+- `pack_palette_indices()` changé en layout PMMP:
+  - `blocksPerWord = floor(32 / bpb)`
+  - `wordCount = ceil(4096 / blocksPerWord)`
+  - pas de carry inter-word (bits de padding en fin de mot).
+- Ajustement exact des bits float `StartGame`:
+  - pitch: `0x41E8D3A0`
+  - yaw: `0x43993C3F`
+
+Validation:
+- `cargo test -p mc-rs-server --quiet` OK
+- `cargo build --release -p mc-rs-server` OK
+
+### 2026-03-06 - Diff binaire ciblé après nouveaux dumps (time/radius/skinVerified/chunk palettes)
+
+Signal d'entrée (dumps utilisateur):
+- `StartGame`: écart au champ `time` (`0` vs `38904` -> bytes `F0 DF 04` côté PMMP).
+- `NetworkChunkPublisherUpdate`: rayon publié `128` (mc-rs) vs `256` (PMMP).
+- `PlayerList`: `skin_verified` encore `false` côté mc-rs.
+- `LevelChunk`: payload toujours trop petit, structure subchunks y=0..4 trop simplifiée (`bpb/palette` insuffisants).
+
+Correctifs appliqués:
+- `crates_new/mc-rs-proto/src/packets/start_game.rs`
+  - `encode()` accepte désormais `world_time` et écrit ce champ au lieu de `0` hardcodé.
+- `crates_new/mc-rs-server/src/connection.rs`
+  - `DEFAULT_WORLD_TIME = 38904`, utilisé dans `StartGame` + `SetTime`.
+  - `RequestChunkRadius` rechangé à `clamp(2, 16)` pour rayon PMMP observé.
+  - `PlayerList encode_add(..., skin_verified=true)`.
+  - génération chunk remplacée par profils de palettes PMMP-like par subchunk (`y=0..4`) pour forcer les mêmes cardinalités `bpb/palette` (source principale du delta payload).
+
+Validation:
+- `cargo test -p mc-rs-server --quiet` OK
+- `cargo build --release -p mc-rs-server` OK
+
+### 2026-03-06 - Ajustement PMMP supplémentaire (Legacy skin pipeline + NCPU radius/center)
+
+Cause:
+- `PlayerList(Add)` restait trop différent de PMMP (payload skin ~33KB vs ~20KB), car le serveur renvoyait des champs client_data bruts au lieu du pipeline PMMP `ClientData -> Skin -> LegacySkinAdapter`.
+- `NetworkChunkPublisherUpdate` divergeait encore de PMMP (centre/rayon), avec `x/z=256` et rayon 16 chunks au lieu du profil PMMP observé (`x/z=258`, rayon 8 chunks).
+
+Correction:
+- `crates_new/mc-rs-server/src/connection.rs`:
+  - `RequestChunkRadius` clampé à `2..8` (comme cible PMMP actuelle du projet);
+  - `NetworkChunkPublisherUpdate` centré sur `[258,66,258]` via `DEFAULT_CHUNK_PUBLISHER_BLOCK_POS`;
+  - `build_skin_data_from_client_payload()` réécrit pour suivre la logique PMMP:
+    - décodage base64 des champs `SkinResourcePatch` / `SkinGeometryData`;
+    - extraction `geometry.default`, normalisation `resourcePatch` JSON;
+    - géométrie minifiée (quand JSON valide);
+    - dimensions skin dérivées du payload legacy (8192/16384/65536);
+    - cape legacy strictement 8192 bytes ou vide;
+    - sortie style `LegacySkinAdapter::toSkinData()` (`playFabId=""`, `geometryVersion="1.26.0"`, `animationData=""`, `capeId=""`, `armSize="wide"`, `skinColor=""`);
+    - `fullSkinId` UUIDv4 généré;
+    - fallback `build_minimal_skin()` si données incohérentes.
+
+Validation:
+- `cargo test -p mc-rs-server --quiet` OK
+- `cargo build --release -p mc-rs-server` OK
+
+### 2026-03-06 - Parité PMMP ciblée (PlayerList skin login + bpb=0 + réglages spawn)
+
+Cause:
+- `PlayerList(Add)` restait sur un skin minimal hardcodé (`Standard_Custom`) au lieu du skin réel du client (JWT `client_data`), avec longueur très inférieure à PMMP.
+- Les sections biome single-valued étaient encodées en `bpb=1` + words, alors que PMMP encode en `bpb=0` (sans words) quand palette taille=1.
+- `StartGame` avait encore des écarts de settings (notamment difficulté) par rapport au profil PMMP observé.
+
+Correction:
+- `crates_new/mc-rs-server/src/connection.rs`:
+  - ajout extraction `client_data` JWT depuis le paquet `Login` (lecture chain + `client_data_jwt`);
+  - sérialisation skin `PlayerList` depuis payload client (SkinId/SkinData/Cape/Geometry/Arm/flags) avec fallback minimal en cas d’échec;
+  - `skin_verified` passé à `true` pour l’entrée locale;
+  - support `bpb=0` dans subchunk runtime palette (pas de words, pas de palette-count explicite, 1 entrée palette);
+  - biomes single-valued encodés en `bpb=0` (header `0x01`) comme PMMP;
+  - spawn block position rapprochée PMMP: `[256, 70, 256]`.
+- `crates_new/mc-rs-proto/src/packets/start_game.rs`:
+  - difficulté `StartGame` alignée en `Normal` (`2`).
+- test ajusté:
+  - seuil `spawn_payload_is_not_tiny_empty_column` abaissé `> 3000` (payload plus compact après `bpb=0`).
+
+Instrumentation ajoutée (diagnostic local):
+- `.reference/tools/inspect_spawn.php` (décodage StartGame/PlayerList via BedrockProtocol PMMP).
+- `.reference/tools/inspect_level_chunk.php` (parse structure LevelChunk: subchunks/biomes/border/tiles).
+
+Validation:
+- `cargo test -p mc-rs-server --quiet` OK
+- `cargo build --release -p mc-rs-server` OK

@@ -162,3 +162,128 @@ Get-NetUDPEndpoint -LocalPort 19132 | ForEach-Object { Stop-Process -Id $_.Ownin
 2. test unitaire si possible,
 3. rebuild release confirme.
 
+## 2026-03-05 - Etat actuel `crates_new` (PocketMine-first)
+
+Contexte:
+- Le developpement actif est dans `crates_new/*`.
+- `old_crates/*` est a eviter sauf blocage majeur.
+
+Changements appliques aujourd'hui:
+1. `UpdateAbilities` aligne PMMP:
+- 2 layers (BASE + CACHE)
+- format layer complet: `layerType + abilitiesSet + abilityValues + flySpeed + verticalFlySpeed + walkSpeed`.
+- fichier: `crates_new/mc-rs-proto/src/packets/update_abilities.rs`
+
+2. `PlayerList(Add)` aligne PMMP:
+- ajout `color` ARGB (`u32 LE`) par entree.
+- ajout des bool `skin_verified` en fin de packet.
+- fichier: `crates_new/mc-rs-proto/src/packets/player_list.rs`
+
+3. `UpdateAdventureSettings`:
+- `showNameTags=true`
+- `autoJump=true`
+- fichier: `crates_new/mc-rs-proto/src/packets/update_adventure_settings.rs`
+
+4. Politique spawn stricte PMMP:
+- suppression du fallback `ServerboundLoadingScreen => InGame`.
+- succes spawn = reception `SetLocalPlayerAsInitialized` uniquement.
+- fichier: `crates_new/mc-rs-server/src/connection.rs`
+
+5. Chunk column PMMP (runtime):
+- payload reconstruit en v8 (subchunks + biomes + border count 0, sans tiles).
+- subchunks single-valued en bpb=0 (pas de words, pas de longueur words).
+- `subChunkCount` derive des bornes overworld `[-4..19]` avec top non-empty.
+- runtime IDs `air/bedrock` resolves depuis `.reference/BedrockData/canonical_block_states.nbt`.
+- fallback logge si parsing NBT echoue.
+- fichier: `crates_new/mc-rs-server/src/connection.rs`
+
+6. Instrumentation temporaire:
+- `MC_RS_TRACE_SPAWN=1` -> traces RX/TX (StartGame, UpdateAbilities, PlayerList, NCPU, 1er LevelChunk, RequestChunkRadius, LoadingScreen, SetLocalPlayerAsInitialized, ClientCacheStatus).
+- fichier: `crates_new/mc-rs-server/src/connection.rs`
+
+7. Signal client cache:
+- prise en charge de `ClientCacheStatus` (`0x81`) en pre-game avec log.
+- constante ajoutee: `ID_CLIENT_CACHE_STATUS=0x81`.
+- fichiers:
+  - `crates_new/mc-rs-proto/src/packets/mod.rs`
+  - `crates_new/mc-rs-server/src/connection.rs`
+
+Validation:
+- `cargo test -p mc-rs-proto` -> OK
+- `cargo test -p mc-rs-server` -> OK
+- `cargo build --release -p mc-rs-server` -> OK
+- binaire: `target/release/mc-rs-server.exe` mis a jour le `2026-03-05 15:16:31`.
+
+## 2026-03-05 - Mise a jour 16:37 (PocketMine-first)
+
+Corrections ajoutees depuis l'etat ci-dessus:
+1. `UpdateAbilities` corrige apres diff PMMP:
+- PMMP utilise 1 seule layer BASE dans ce cas (pas BASE+CACHE).
+- taille packet observee: `len=33`.
+- fichiers:
+  - `crates_new/mc-rs-proto/src/packets/update_abilities.rs`
+  - `crates_new/mc-rs-server/src/connection.rs`
+
+2. `ItemRegistry` non vide (alignement required_item_list):
+- abandon de `encode_empty()`.
+- chargement de `crates_new/mc-rs-proto/data/item_list.json`.
+- envoi de toutes les entrees (`name`, `runtime_id`, `component_based`, `version`, NBT compound vide).
+- fichiers:
+  - `crates_new/mc-rs-proto/src/packets/item_registry.rs`
+  - `crates_new/mc-rs-server/src/connection.rs`
+
+3. Spawn sync renforce:
+- envoi `SetSpawnPosition(player)` + `SetSpawnPosition(world)`.
+- envoi `MovePlayer(mode=normal)` juste avant `PlayStatus(PlayerSpawn)`.
+- fichiers:
+  - `crates_new/mc-rs-server/src/connection.rs`
+  - `crates_new/mc-rs-proto/src/packets/move_player.rs`
+
+4. Payload chunk rapproche PMMP:
+- subchunks "vides" encodes en `version=8, layerCount=0`.
+- seul subchunk top non-vide encode avec palette runtime single-valued.
+- but: eviter l'ecart "air layer forcee" sur subchunks vides.
+- fichier:
+  - `crates_new/mc-rs-server/src/connection.rs`
+
+5. Build/Tests valides apres patch:
+- `cargo test -p mc-rs-proto` -> OK (3 tests)
+- `cargo build --release -p mc-rs-server` -> OK
+- binaire actuel:
+  - `C:\\Users\\karim\\Desktop\\programming-laboratory\\mc-rs\\target\\release\\mc-rs-server.exe`
+  - LastWriteTime: `2026-03-05 16:41:23`
+
+## 2026-03-05 - Instrumentation diff binaire PMMP
+
+Objectif:
+- comparer PMMP vs mc-rs en binaire complet (payload packet, non tronque) pour isoler le premier octet divergent.
+
+Changements:
+1. `mc-rs` dump binaire TX sous `MC_RS_TRACE_SPAWN=1`:
+- paquets: `StartGame`, `UpdateAbilities`, `PlayerList`, `NetworkChunkPublisherUpdate`, `1er LevelChunk`.
+- sortie: `.reference/dumps/mc_rs/*.bin`
+- fichier: `crates_new/mc-rs-server/src/connection.rs`
+
+2. PMMP dump binaire TX sous `MC_RS_TRACE_SPAWN=1`:
+- hook temporaire dans `NetworkSession::sendDataPacketInternal()`.
+- extraction `packet_id` + payload binaire (sans header varint packet).
+- paquets: meme liste que ci-dessus (avec `1er LevelChunk` seulement).
+- sortie: `.reference/dumps/pmmp/*.bin`
+- fichier: `.reference/PocketMine-MP/src/network/mcpe/NetworkSession.php`
+
+3. Outil de comparaison:
+- script: `.reference/tools/compare_spawn_dumps.ps1`
+- compare `pmmp` vs `mc_rs` par type de paquet.
+- affiche: tailles + premier offset divergent + contexte hex.
+
+Validation technique:
+- `cargo test -p mc-rs-proto` -> OK
+- `cargo build --release -p mc-rs-server` -> OK
+- `php -l .reference/PocketMine-MP/src/network/mcpe/NetworkSession.php` -> OK
+
+Prerequis PMMP pour dumps:
+- installation d'un runtime `pmmp/PHP-Binaries` compatible dans:
+  - `.reference/PocketMine-MP/bin/php/php.exe`
+- extensions critiques verifiees (`chunkutils2`, `crypto`, `encoding`, `pmmpthread`, etc.) via `php -m`.
+- pour eviter le setup wizard interactif, lancer PMMP avec:
+  - `./start.ps1 --no-wizard`

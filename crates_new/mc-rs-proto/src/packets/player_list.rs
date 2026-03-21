@@ -21,7 +21,7 @@ pub fn encode_add(
     write_unsigned_varint32(&mut buf, 1); // 1 entry
 
     // UUID
-    buf.put_slice(uuid);
+    write_bedrock_uuid(&mut buf, uuid);
     // actor unique id
     write_signed_varlong(&mut buf, actor_unique_id);
     // username
@@ -46,6 +46,20 @@ pub fn encode_add(
     buf.put_u8(skin_verified as u8);
 
     buf
+}
+
+/// Bedrock UUID wire format: two little-endian 64-bit chunks.
+/// PMMP: strrev(first 8 bytes) + strrev(last 8 bytes).
+fn write_bedrock_uuid(buf: &mut BytesMut, uuid: &[u8; 16]) {
+    let mut p1 = [0u8; 8];
+    p1.copy_from_slice(&uuid[0..8]);
+    p1.reverse();
+    buf.put_slice(&p1);
+
+    let mut p2 = [0u8; 8];
+    p2.copy_from_slice(&uuid[8..16]);
+    p2.reverse();
+    buf.put_slice(&p2);
 }
 
 /// Build minimal skin data matching PocketMine's SkinData serialization exactly.
@@ -128,5 +142,22 @@ mod tests {
         let end = out.len();
         assert_eq!(&out[end - 5..end - 1], &color.to_le_bytes());
         assert_eq!(out[end - 1], 1);
+    }
+
+    #[test]
+    fn uuid_is_written_in_bedrock_endian_layout() {
+        let mut uuid = [0u8; 16];
+        for (i, b) in uuid.iter_mut().enumerate() {
+            *b = i as u8;
+        }
+
+        let out = encode_add(
+            &uuid, 1, "p", "", "", 7, &build_minimal_skin(), false, false, false, 0xFFFF_FFFF,
+            false,
+        );
+
+        // type(1) + count(1) then UUID(16)
+        let wire = &out[2..18];
+        assert_eq!(wire, &[7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8]);
     }
 }
