@@ -1,26 +1,26 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates_new/mc-rs-raknet",
-    "crates_new/mc-rs-crypto",
-    "crates_new/mc-rs-proto",
-    "crates_new/mc-rs-server",
+    "crates/mc-rs-proto",
+    "crates/mc-rs-raknet",
+    "crates/mc-rs-crypto",
+    "crates/mc-rs-server",
 ]
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "macros", "signal", "io-util", "io-std"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "macros", "signal", "io-util"] }
 bytes = "1"
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rand = "0.8"
 flate2 = "1"
 snap = "1"
-serde_json = "1"
 base64 = "0.22"
+uuid = { version = "1", features = ["v4"] }
 p384 = { version = "0.13", features = ["ecdh", "ecdsa", "pkcs8"] }
 sha2 = "0.10"
 aes = "0.8"
-cfb8 = "0.8"
-rusty-leveldb = "3"
-tracing-subscriber = "0.3"
+ctr = "0.9"

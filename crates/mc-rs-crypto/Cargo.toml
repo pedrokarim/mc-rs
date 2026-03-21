@@ -1,0 +1,14 @@
+[package]
+name = "mc-rs-crypto"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+p384 = { workspace = true }
+sha2 = { workspace = true }
+aes = { workspace = true }
+ctr = { workspace = true }
+base64 = { workspace = true }
+serde_json = { workspace = true }
+rand = { workspace = true }
+thiserror = { workspace = true }

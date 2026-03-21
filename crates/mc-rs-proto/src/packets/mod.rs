@@ -1,0 +1,44 @@
+pub mod chunks;
+pub mod login;
+pub mod player;
+pub mod world;
+
+/// Packet IDs for Minecraft Bedrock protocol version 924.
+pub mod packet_id {
+    pub const LOGIN: u32 = 0x01;
+    pub const PLAY_STATUS: u32 = 0x02;
+    pub const SERVER_TO_CLIENT_HANDSHAKE: u32 = 0x03;
+    pub const CLIENT_TO_SERVER_HANDSHAKE: u32 = 0x04;
+    pub const DISCONNECT: u32 = 0x05;
+    pub const RESOURCE_PACKS_INFO: u32 = 0x06;
+    pub const RESOURCE_PACK_STACK: u32 = 0x07;
+    pub const RESOURCE_PACK_CLIENT_RESPONSE: u32 = 0x08;
+    pub const TEXT: u32 = 0x09;
+    pub const SET_TIME: u32 = 0x0A;
+    pub const START_GAME: u32 = 0x0B;
+    pub const ADD_PLAYER: u32 = 0x0C;
+    pub const ADD_ACTOR: u32 = 0x0D;
+    pub const REMOVE_ACTOR: u32 = 0x0E;
+    pub const MOVE_PLAYER: u32 = 0x13;
+    pub const UPDATE_BLOCK: u32 = 0x15;
+    pub const SET_SPAWN_POSITION: u32 = 0x2B;
+    pub const CRAFTING_DATA: u32 = 0x34;
+    pub const LEVEL_CHUNK: u32 = 0x3A;
+    pub const SET_DIFFICULTY: u32 = 0x3C;
+    pub const PLAYER_LIST: u32 = 0x3F;
+    pub const REQUEST_CHUNK_RADIUS: u32 = 0x45;
+    pub const CHUNK_RADIUS_UPDATED: u32 = 0x46;
+    pub const AVAILABLE_ACTOR_IDENTIFIERS: u32 = 0x77;
+    pub const NETWORK_CHUNK_PUBLISHER_UPDATE: u32 = 0x79;
+    pub const BIOME_DEFINITION_LIST: u32 = 0x7A;
+    pub const NETWORK_SETTINGS: u32 = 0x8F;
+    pub const PLAYER_AUTH_INPUT: u32 = 0x90;
+    pub const CREATIVE_CONTENT: u32 = 0x12E;
+    pub const UPDATE_ABILITIES: u32 = 0x12B;
+    pub const UPDATE_ADVENTURE_SETTINGS: u32 = 0x12C;
+    pub const EMOTE_LIST: u32 = 0x98;
+    pub const SET_LOCAL_PLAYER_AS_INITIALIZED: u32 = 0x71;
+    pub const REQUEST_NETWORK_SETTINGS: u32 = 0xC1;
+    pub const ITEM_REGISTRY: u32 = 0x161;
+    pub const SERVERBOUND_LOADING_SCREEN: u32 = 0x138;
+}
