@@ -73,10 +73,11 @@ impl Simplex {
         let z = z + self.offset_z;
 
         // Skew input space
+        // PHP's (int) truncates toward zero, not floor()
         let s = (x + y + z) * F3;
-        let i = (x + s).floor() as i64;
-        let j = (y + s).floor() as i64;
-        let k = (z + s).floor() as i64;
+        let i = (x + s) as i64;
+        let j = (y + s) as i64;
+        let k = (z + s) as i64;
         let t = (i + j + k) as f64 * G3;
 
         // Unskew cell origin
@@ -152,8 +153,9 @@ impl Simplex {
         let y = y + self.offset_y;
 
         let s = (x + y) * F2;
-        let i = (x + s).floor() as i64;
-        let j = (y + s).floor() as i64;
+        // PHP's (int) truncates toward zero
+        let i = (x + s) as i64;
+        let j = (y + s) as i64;
         let t = (i + j) as f64 * G2;
 
         let x0 = x - (i as f64 - t);

@@ -25,6 +25,7 @@ pub mod extra_blocks {
     pub const DIAMOND_ORE: u32 = 6501;
     pub const REDSTONE_ORE: u32 = 6356;
     pub const LAPIS_ORE: u32 = 14583;
+    pub const SHORT_GRASS: u32 = 12421;
 }
 
 /// Water surface level (same as PocketMine-MP).
@@ -323,8 +324,7 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
     // Generate vegetation (trees, tall grass)
     let mut veg_random =
         Random::new(0xcafebabe_i64 ^ ((chunk_x as i64) << 8) ^ chunk_z as i64 ^ seed as i64);
-    let veg_map =
-        vegetation::generate_vegetation(chunk_x, chunk_z, &biome_ids, &surfaces, &mut veg_random);
+    let veg_map = vegetation::generate_vegetation(&biome_ids, &surfaces, &mut veg_random);
 
     // Pre-compute ground cover per column
     let mut covers: Vec<Vec<u32>> = Vec::with_capacity(256);

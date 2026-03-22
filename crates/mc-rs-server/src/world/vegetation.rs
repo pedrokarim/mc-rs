@@ -9,8 +9,6 @@ use super::terrain_generator::extra_blocks;
 /// Returns a map of (local_x, world_y, local_z) -> block ID.
 /// Only generates blocks within the chunk (0..16, 0..16).
 pub fn generate_vegetation(
-    chunk_x: i32,
-    chunk_z: i32,
     biome_ids: &[[u32; 16]; 16],
     surfaces: &[[i32; 16]; 16],
     random: &mut Random,
@@ -66,8 +64,7 @@ pub fn generate_vegetation(
         _ => 0,
     };
 
-    // We need the tall grass block ID - find it
-    let tall_grass_id = find_tall_grass_id(chunk_x, chunk_z);
+    let tall_grass_id = extra_blocks::SHORT_GRASS;
 
     for _ in 0..grass_count {
         let gx = random.next_range(0, 15) as usize;
@@ -87,16 +84,6 @@ pub fn generate_vegetation(
     blocks
 }
 
-/// We need the tall grass runtime ID. For now, use a pre-computed value.
-/// TODO: Look this up from canonical_block_states.nbt
-fn find_tall_grass_id(_chunk_x: i32, _chunk_z: i32) -> u32 {
-    // Short grass (formerly tall_grass type 1 in old versions)
-    // In newer Bedrock, this is "minecraft:short_grass" or "minecraft:tallgrass"
-    // For now, just skip tall grass placement if we don't have the ID
-    // We'll use 0 as a sentinel and skip it
-    0 // placeholder - will be resolved
-}
-
 /// Place an oak tree at the given position.
 /// Port of PMMP's Tree + OakTree classes.
 fn place_oak_tree(
@@ -107,8 +94,12 @@ fn place_oak_tree(
     random: &mut Random,
     blocks: &mut HashMap<(u8, i32, u8), u32>,
 ) {
-    // Check bounds: tree must fit within 0..16 range
+    // Check bounds: tree + canopy must fit within chunk
     if !(2..=13).contains(&x) || !(2..=13).contains(&z) {
+        return;
+    }
+    // Ensure tree doesn't go above world height limit
+    if y + height + 1 > 256 {
         return;
     }
 
@@ -158,7 +149,7 @@ mod tests {
         let surfaces = [[65i32; 16]; 16];
         let mut rng = Random::new(42);
 
-        let veg = generate_vegetation(0, 0, &biome_ids, &surfaces, &mut rng);
+        let veg = generate_vegetation(&biome_ids, &surfaces, &mut rng);
         assert!(!veg.is_empty(), "Expected vegetation in forest biome");
 
         // Should have logs and leaves
@@ -174,7 +165,7 @@ mod tests {
         let surfaces = [[65i32; 16]; 16];
         let mut rng = Random::new(42);
 
-        let veg = generate_vegetation(0, 0, &biome_ids, &surfaces, &mut rng);
+        let veg = generate_vegetation(&biome_ids, &surfaces, &mut rng);
         let has_logs = veg.values().any(|&id| id == extra_blocks::OAK_LOG);
         assert!(!has_logs, "Should not have trees in desert");
     }
@@ -185,7 +176,7 @@ mod tests {
         let surfaces = [[65i32; 16]; 16];
         let mut rng = Random::new(42);
 
-        let veg = generate_vegetation(0, 0, &biome_ids, &surfaces, &mut rng);
+        let veg = generate_vegetation(&biome_ids, &surfaces, &mut rng);
         for &(x, _y, z) in veg.keys() {
             assert!(x < 16, "Vegetation x={x} out of bounds");
             assert!(z < 16, "Vegetation z={z} out of bounds");
