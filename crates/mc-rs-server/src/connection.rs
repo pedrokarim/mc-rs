@@ -517,34 +517,9 @@ impl Connection {
         );
         self.state = ConnectionState::InGame;
 
-        let mut responses = Vec::new();
-
-        // PMMP: after SetLocalPlayerAsInitialized, setNoClientPredictions(false) + doFirstSpawn()
-        // The client may ignore metadata sent during PreSpawn, so we MUST re-send after spawn.
-
-        // 1. SetActorData with NO_AI=false — enable client physics/gravity
-        let player_name = self.display_name.clone().unwrap_or_default();
-        let actor_data = SetActorData::player_in_game(self.entity_runtime_id, &player_name);
-        responses.push(
-            self.encode_compressed_packet(packet_id::SET_ACTOR_DATA, &actor_data.encode()),
-        );
-
-        // 2. Re-send UpdateAbilities — ensure client applies survival restrictions
-        let abilities = UpdateAbilities::default_survival(self.entity_runtime_id as i64);
-        responses.push(
-            self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities.encode()),
-        );
-
-        // 3. Re-send UpdateAdventureSettings
-        let adventure = UpdateAdventureSettings::default_survival();
-        responses.push(
-            self.encode_compressed_packet(
-                packet_id::UPDATE_ADVENTURE_SETTINGS,
-                &adventure.encode(),
-            ),
-        );
-
-        responses
+        // Gravity works from PreSpawn (correct bit 49). No extra packets needed here.
+        // Sending a second SetActorData after init breaks skin rendering.
+        vec![]
     }
 
     // ── InGame handlers ──
@@ -924,9 +899,9 @@ impl Connection {
             ),
         );
 
-        // 9. SetActorData — entity metadata (NO_AI=true to freeze during chunk loading, like PMMP)
+        // 9. SetActorData — entity metadata (gravity, breathing, collision)
         let player_name = self.display_name.clone().unwrap_or_default();
-        let actor_data = SetActorData::player_pre_spawn(self.entity_runtime_id, &player_name);
+        let actor_data = SetActorData::player_in_game(self.entity_runtime_id, &player_name);
         responses
             .push(self.encode_compressed_packet(packet_id::SET_ACTOR_DATA, &actor_data.encode()));
 
