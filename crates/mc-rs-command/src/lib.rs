@@ -24,6 +24,8 @@ pub enum CommandAction {
     Stop,
     /// Set world time.
     SetTime { time: i32 },
+    /// Set weather.
+    SetWeather { rain: bool, thunder: bool },
     /// Kill the player.
     Kill,
 }
@@ -39,6 +41,7 @@ pub struct CommandDef {
 /// Context passed to command handlers.
 pub struct CommandContext {
     pub player_name: String,
+    pub position: [f32; 3],
 }
 
 /// Registry of all server commands.
@@ -289,6 +292,69 @@ impl CommandRegistry {
                     response: Some(format!("Difficulty set to {}", name)),
                     action: CommandAction::None,
                 }
+            },
+        });
+
+        self.register(CommandDef {
+            name: "weather",
+            description: "Set weather",
+            usage: "/weather <clear|rain|thunder>",
+            handler: |parts, ctx| {
+                if parts.len() < 2 {
+                    return CommandResult {
+                        response: Some("Usage: /weather <clear|rain|thunder>".to_string()),
+                        action: CommandAction::None,
+                    };
+                }
+                let (rain, thunder, name) = match parts[1] {
+                    "clear" | "c" => (false, false, "Clear"),
+                    "rain" | "r" => (true, false, "Rain"),
+                    "thunder" | "t" => (true, true, "Thunder"),
+                    _ => {
+                        return CommandResult {
+                            response: Some("Usage: /weather <clear|rain|thunder>".to_string()),
+                            action: CommandAction::None,
+                        };
+                    }
+                };
+                info!("[CMD] {} set weather to {}", ctx.player_name, name);
+                CommandResult {
+                    response: Some(format!("Weather set to {}", name)),
+                    action: CommandAction::SetWeather { rain, thunder },
+                }
+            },
+        });
+
+        self.register(CommandDef {
+            name: "spawn",
+            description: "Teleport to world spawn",
+            usage: "/spawn",
+            handler: |_, _| CommandResult {
+                response: Some("Teleported to spawn".to_string()),
+                action: CommandAction::Teleport { x: 0.5, y: -57.0, z: 0.5 },
+            },
+        });
+
+        self.register(CommandDef {
+            name: "pos",
+            description: "Show your current position",
+            usage: "/pos",
+            handler: |_, ctx| CommandResult {
+                response: Some(format!(
+                    "Position: {:.1}, {:.1}, {:.1}",
+                    ctx.position[0], ctx.position[1], ctx.position[2]
+                )),
+                action: CommandAction::None,
+            },
+        });
+
+        self.register(CommandDef {
+            name: "clear",
+            description: "Clear inventory",
+            usage: "/clear",
+            handler: |_, _| CommandResult {
+                response: Some("Inventory cleared (not implemented yet)".to_string()),
+                action: CommandAction::None,
             },
         });
     }

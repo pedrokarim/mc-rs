@@ -287,6 +287,10 @@ fn process_peer_events(
                                         }
                                     }
                                 }
+                                mc_rs_command::CommandAction::SetWeather { rain, thunder } => {
+                                    world_state.set_weather(rain, thunder);
+                                    info!("Weather changed: rain={}, thunder={}", rain, thunder);
+                                }
                                 mc_rs_command::CommandAction::Stop => {
                                     *should_stop = true;
                                 }

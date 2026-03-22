@@ -44,13 +44,12 @@ pub fn generate_flat_chunk() -> (u32, Vec<u8>) {
 
 /// Build the sub-chunk at index -4 containing the flat world layers.
 ///
-/// Layout within the 16-high sub-chunk (local y 0-15):
+/// Real Minecraft flat world layout within the 16-high sub-chunk (local y 0-15):
 /// - y=0 (world y=-64): bedrock
 /// - y=1 (world y=-63): dirt
 /// - y=2 (world y=-62): dirt
-/// - y=3 (world y=-61): dirt
-/// - y=4 (world y=-60): grass_block
-/// - y=5 to y=15: air
+/// - y=3 (world y=-61): grass_block
+/// - y=4 to y=15: air
 fn build_flat_sub_chunk() -> Vec<u8> {
     // Palette: [air, bedrock, dirt, grass_block]
     let palette = vec![
@@ -69,17 +68,16 @@ fn build_flat_sub_chunk() -> Vec<u8> {
             let base = (x << 8) | (z << 4);
 
             // y=0: bedrock (palette index 1)
-            blocks[base as usize] = 1; // y=0: bedrock
+            blocks[base as usize] = 1;
 
-            // y=1,2,3: dirt (palette index 2)
+            // y=1,2: dirt (palette index 2)
             blocks[(base | 1) as usize] = 2;
             blocks[(base | 2) as usize] = 2;
-            blocks[(base | 3) as usize] = 2;
 
-            // y=4: grass_block (palette index 3)
-            blocks[(base | 4) as usize] = 3;
+            // y=3: grass_block (palette index 3)
+            blocks[(base | 3) as usize] = 3;
 
-            // y=5-15: air (palette index 0, already default)
+            // y=4-15: air (palette index 0, already default)
         }
     }
 

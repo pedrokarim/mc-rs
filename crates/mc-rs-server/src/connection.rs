@@ -608,6 +608,7 @@ impl Connection {
         if pkt.message.starts_with('/') {
             let ctx = mc_rs_command::CommandContext {
                 player_name: player_name.clone(),
+                position: self.position,
             };
             let registry = mc_rs_command::CommandRegistry::new();
             let result = registry.execute(&pkt.message, &ctx);
@@ -637,6 +638,7 @@ impl Connection {
 
         let ctx = mc_rs_command::CommandContext {
             player_name: self.display_name.clone().unwrap_or_else(|| "Player".to_string()),
+            position: self.position,
         };
 
         let registry = mc_rs_command::CommandRegistry::new();
@@ -670,6 +672,7 @@ impl Connection {
             }
             mc_rs_command::CommandAction::SetTime { .. }
             | mc_rs_command::CommandAction::SetGamemode { .. }
+            | mc_rs_command::CommandAction::SetWeather { .. }
             | mc_rs_command::CommandAction::Stop
             | mc_rs_command::CommandAction::Kill => {
                 self.pending_actions.push(result.action);
