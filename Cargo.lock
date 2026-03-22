@@ -412,6 +412,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mc-rs-command"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+]
+
+[[package]]
 name = "mc-rs-crypto"
 version = "0.1.0"
 dependencies = [
@@ -456,6 +463,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "bytes",
+ "mc-rs-command",
  "mc-rs-crypto",
  "mc-rs-proto",
  "mc-rs-raknet",

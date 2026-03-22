@@ -499,9 +499,18 @@ impl Connection {
         let player_name = self.display_name.clone().unwrap_or_else(|| "Player".to_string());
         let xuid = self.xuid.clone().unwrap_or_default();
 
-        // Check for commands
+        // Check for commands (in case client sends via Text instead of CommandRequest)
         if pkt.message.starts_with('/') {
-            return self.handle_command(&pkt.message);
+            let ctx = mc_rs_command::CommandContext {
+                player_name: player_name.clone(),
+            };
+            let registry = mc_rs_command::CommandRegistry::new();
+            let result = registry.execute(&pkt.message, &ctx);
+            if let Some(ref response) = result.response {
+                let msg = mc_rs_proto::packets::player::Text::system(response);
+                return vec![self.encode_compressed_packet(packet_id::TEXT, &msg)];
+            }
+            return Vec::new();
         }
 
         info!("[CHAT] {}: {}", player_name, pkt.message);
@@ -517,100 +526,53 @@ impl Connection {
     }
 
     fn handle_command_request(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
-        // CommandRequest: String(command) + CommandOriginData(type + uuid + request_id + player_entity_id)
         let Ok(command) = reader.read_string() else {
             return Vec::new();
         };
-        info!("[CMD] {} executed: {}", self.display_name.as_deref().unwrap_or("?"), command);
-        self.handle_command(&command)
-    }
 
-    fn handle_command(&mut self, command: &str) -> Vec<Vec<u8>> {
-        let parts: Vec<&str> = command.split_whitespace().collect();
-        let cmd = parts.first().map(|s| *s).unwrap_or("");
-
-        let response = match cmd {
-            "/help" => "Commands: /help, /list, /tp <x> <y> <z>, /gamemode <0-3>, /stop".to_string(),
-            "/list" => "Use the player list to see online players.".to_string(),
-            "/tp" if parts.len() >= 4 => {
-                if let (Ok(x), Ok(y), Ok(z)) = (
-                    parts[1].parse::<f32>(),
-                    parts[2].parse::<f32>(),
-                    parts[3].parse::<f32>(),
-                ) {
-                    self.position = [x, y, z];
-                    let move_pkt = mc_rs_proto::packets::player::MovePlayer {
-                        runtime_entity_id: self.entity_runtime_id,
-                        position: self.position,
-                        pitch: self.pitch,
-                        yaw: self.yaw,
-                        head_yaw: self.head_yaw,
-                        mode: 2, // teleport
-                        on_ground: true,
-                        riding_runtime_id: 0,
-                        tick: self.tick,
-                    };
-                    let tp_response = self.encode_compressed_packet(
-                        packet_id::MOVE_PLAYER,
-                        &move_pkt.encode(),
-                    );
-                    info!("[CMD] {} teleported to {}, {}, {}", self.display_name.as_deref().unwrap_or("?"), x, y, z);
-                    return vec![tp_response];
-                }
-                "Usage: /tp <x> <y> <z>".to_string()
-            }
-            "/tp" => "Usage: /tp <x> <y> <z>".to_string(),
-            "/gamemode" if parts.len() >= 2 => {
-                match parts[1] {
-                    "0" | "survival" | "s" => {
-                        info!("[CMD] {} changed gamemode to Survival", self.display_name.as_deref().unwrap_or("?"));
-                        "Gamemode set to Survival (not fully implemented yet)".to_string()
-                    }
-                    "1" | "creative" | "c" => {
-                        info!("[CMD] {} changed gamemode to Creative", self.display_name.as_deref().unwrap_or("?"));
-                        "Gamemode set to Creative (not fully implemented yet)".to_string()
-                    }
-                    "2" | "adventure" | "a" => "Gamemode set to Adventure (not fully implemented yet)".to_string(),
-                    "3" | "spectator" | "sp" => "Gamemode set to Spectator (not fully implemented yet)".to_string(),
-                    _ => "Usage: /gamemode <0-3|survival|creative|adventure|spectator>".to_string(),
-                }
-            }
-            "/gamemode" => "Usage: /gamemode <0-3|survival|creative|adventure|spectator>".to_string(),
-            "/say" if parts.len() >= 2 => {
-                let message = parts[1..].join(" ");
-                let player_name = self.display_name.clone().unwrap_or_else(|| "Server".to_string());
-                let broadcast_msg = format!("[{}] {}", player_name, message);
-                info!("[SAY] {}", broadcast_msg);
-                let chat = mc_rs_proto::packets::player::Text::chat("Server", &broadcast_msg, "");
-                self.broadcasts.push(self.encode_compressed_packet(packet_id::TEXT, &chat));
-                format!("Broadcast: {}", message)
-            }
-            "/say" => "Usage: /say <message>".to_string(),
-            "/kill" => {
-                info!("[CMD] {} killed themselves", self.display_name.as_deref().unwrap_or("?"));
-                "You died! (respawn not implemented yet)".to_string()
-            }
-            "/stop" => {
-                info!("[CMD] Server stop requested by {}", self.display_name.as_deref().unwrap_or("?"));
-                "Server shutting down... (not implemented yet)".to_string()
-            }
-            "/time" if parts.len() >= 3 && parts[1] == "set" => {
-                if let Ok(time) = parts[2].parse::<i32>() {
-                    info!("[CMD] Time set to {} by {}", time, self.display_name.as_deref().unwrap_or("?"));
-                    format!("Time set to {} (not synced yet)", time)
-                } else {
-                    "Usage: /time set <value>".to_string()
-                }
-            }
-            "/time" => "Usage: /time set <value>".to_string(),
-            "/seed" => "Seed: 0 (flat world)".to_string(),
-            "/ping" => "Pong!".to_string(),
-            _ => format!("Unknown command: {}", cmd),
+        let ctx = mc_rs_command::CommandContext {
+            player_name: self.display_name.clone().unwrap_or_else(|| "Player".to_string()),
         };
 
-        // Send system message back to player
-        let msg = mc_rs_proto::packets::player::Text::system(&response);
-        vec![self.encode_compressed_packet(packet_id::TEXT, &msg)]
+        let registry = mc_rs_command::CommandRegistry::new();
+        let result = registry.execute(&command, &ctx);
+
+        let mut responses = Vec::new();
+
+        // Handle action
+        match result.action {
+            mc_rs_command::CommandAction::Teleport { x, y, z } => {
+                self.position = [x, y, z];
+                let move_pkt = mc_rs_proto::packets::player::MovePlayer {
+                    runtime_entity_id: self.entity_runtime_id,
+                    position: self.position,
+                    pitch: self.pitch,
+                    yaw: self.yaw,
+                    head_yaw: self.head_yaw,
+                    mode: 2,
+                    on_ground: true,
+                    riding_runtime_id: 0,
+                    tick: self.tick,
+                };
+                responses.push(self.encode_compressed_packet(
+                    packet_id::MOVE_PLAYER,
+                    &move_pkt.encode(),
+                ));
+            }
+            mc_rs_command::CommandAction::Broadcast { ref message } => {
+                let chat = mc_rs_proto::packets::player::Text::chat("Server", message, "");
+                self.broadcasts.push(self.encode_compressed_packet(packet_id::TEXT, &chat));
+            }
+            _ => {}
+        }
+
+        // Send text response
+        if let Some(ref response) = result.response {
+            let msg = mc_rs_proto::packets::player::Text::system(response);
+            responses.push(self.encode_compressed_packet(packet_id::TEXT, &msg));
+        }
+
+        responses
     }
 
     /// Take broadcast packets (to be sent to ALL other players).
@@ -716,8 +678,15 @@ impl Connection {
             &CreativeContent::encode_empty(),
         ));
 
-        // AvailableCommands — disabled for now (format needs investigation)
-        // Commands still work via CommandRequest handler, just no tab-complete
+        // AvailableCommands — register commands for tab-complete
+        let cmd_registry = mc_rs_command::CommandRegistry::new();
+        let cmd_list = cmd_registry.all_commands();
+        let cmd_refs: Vec<(&str, &str)> = cmd_list.iter().map(|&(n, d)| (n, d)).collect();
+        let commands = AvailableCommands::encode_simple(&cmd_refs);
+        responses.push(self.encode_compressed_packet(
+            packet_id::AVAILABLE_COMMANDS,
+            &commands,
+        ));
 
         info!("[{}] Sent {} PreSpawn packets", self.addr, responses.len());
 
