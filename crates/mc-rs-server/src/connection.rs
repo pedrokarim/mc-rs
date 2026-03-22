@@ -517,9 +517,34 @@ impl Connection {
         );
         self.state = ConnectionState::InGame;
 
-        // No need to send SetPlayerGameType here — gamemode is already set in StartGame
-        // and enforced by UpdateAbilities. PMMP only sends SetPlayerGameType on gamemode CHANGE.
-        vec![]
+        let mut responses = Vec::new();
+
+        // PMMP: after SetLocalPlayerAsInitialized, setNoClientPredictions(false) + doFirstSpawn()
+        // The client may ignore metadata sent during PreSpawn, so we MUST re-send after spawn.
+
+        // 1. SetActorData with NO_AI=false — enable client physics/gravity
+        let player_name = self.display_name.clone().unwrap_or_default();
+        let actor_data = SetActorData::player_in_game(self.entity_runtime_id, &player_name);
+        responses.push(
+            self.encode_compressed_packet(packet_id::SET_ACTOR_DATA, &actor_data.encode()),
+        );
+
+        // 2. Re-send UpdateAbilities — ensure client applies survival restrictions
+        let abilities = UpdateAbilities::default_survival(self.entity_runtime_id as i64);
+        responses.push(
+            self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities.encode()),
+        );
+
+        // 3. Re-send UpdateAdventureSettings
+        let adventure = UpdateAdventureSettings::default_survival();
+        responses.push(
+            self.encode_compressed_packet(
+                packet_id::UPDATE_ADVENTURE_SETTINGS,
+                &adventure.encode(),
+            ),
+        );
+
+        responses
     }
 
     // ── InGame handlers ──
@@ -880,8 +905,15 @@ impl Connection {
 
         // 7. UpdateAbilities — survival mode (AFTER attributes + commands per PMMP)
         let abilities = UpdateAbilities::default_survival(self.entity_runtime_id as i64);
+        let abilities_bytes = abilities.encode();
+        info!(
+            "[{}] UpdateAbilities hex ({} bytes): {:02X?}",
+            self.addr,
+            abilities_bytes.len(),
+            abilities_bytes
+        );
         responses
-            .push(self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities.encode()));
+            .push(self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities_bytes));
 
         // 8. UpdateAdventureSettings — PMMP sends this right after abilities
         let adventure = UpdateAdventureSettings::default_survival();
@@ -892,9 +924,9 @@ impl Connection {
             ),
         );
 
-        // 9. SetActorData — entity metadata (gravity, breathing, collision)
+        // 9. SetActorData — entity metadata (NO_AI=true to freeze during chunk loading, like PMMP)
         let player_name = self.display_name.clone().unwrap_or_default();
-        let actor_data = SetActorData::player_in_game(self.entity_runtime_id, &player_name);
+        let actor_data = SetActorData::player_pre_spawn(self.entity_runtime_id, &player_name);
         responses
             .push(self.encode_compressed_packet(packet_id::SET_ACTOR_DATA, &actor_data.encode()));
 

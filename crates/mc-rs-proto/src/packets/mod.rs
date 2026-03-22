@@ -38,7 +38,7 @@ pub mod packet_id {
     pub const PLAYER_AUTH_INPUT: u32 = 0x90;
     pub const CREATIVE_CONTENT: u32 = 0x12E;
     pub const UPDATE_ABILITIES: u32 = 0x12B;
-    pub const UPDATE_ADVENTURE_SETTINGS: u32 = 0x12C;
+    pub const UPDATE_ADVENTURE_SETTINGS: u32 = 0xBC;
     pub const EMOTE_LIST: u32 = 0x98;
     pub const SET_LOCAL_PLAYER_AS_INITIALIZED: u32 = 0x71;
     pub const REQUEST_NETWORK_SETTINGS: u32 = 0xC1;

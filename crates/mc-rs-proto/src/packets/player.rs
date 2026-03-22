@@ -559,7 +559,7 @@ impl UpdateAbilities {
 
         Self {
             entity_id,
-            permission_level: 1,   // MEMBER (PMMP PlayerPermissions::MEMBER = 1, NOT 0 which is VISITOR)
+            permission_level: 1, // MEMBER (PMMP PlayerPermissions::MEMBER = 1, NOT 0 which is VISITOR)
             command_permission: 0, // NORMAL
             layers: vec![AbilitiesLayer {
                 layer_type: 1, // BASE
@@ -752,8 +752,8 @@ pub mod entity_flags {
     pub const CAN_CLIMB: i64 = 1 << 19;
     pub const CAN_FLY: i64 = 1 << 21;
     pub const BREATHING: i64 = 1 << 35; // NOT in water
-    pub const HAS_GRAVITY: i64 = 1 << 47; // AFFECTED_BY_GRAVITY
     pub const HAS_COLLISION: i64 = 1 << 48;
+    pub const HAS_GRAVITY: i64 = 1 << 49; // AFFECTED_BY_GRAVITY (PMMP bit 49, NOT 47!)
 }
 
 impl SetActorData {
