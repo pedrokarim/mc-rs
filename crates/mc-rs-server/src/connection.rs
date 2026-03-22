@@ -83,7 +83,7 @@ impl Connection {
             uuid: None,
             xuid: None,
             client_pub_key_b64: None,
-            position: [0.5, -57.0, 0.5],
+            position: [0.5, -58.379, 0.5], // feet=-60 + 1.621 eye offset
             pitch: 0.0,
             yaw: 0.0,
             head_yaw: 0.0,

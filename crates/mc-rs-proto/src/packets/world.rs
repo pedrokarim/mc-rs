@@ -271,7 +271,7 @@ impl StartGame {
             actor_unique_id: entity_id,
             actor_runtime_id: entity_id as u64,
             player_gamemode: 0, // survival
-            player_position: [0.5, -57.0, 0.5],
+            player_position: [0.5, -58.379, 0.5], // feet=-60 + 1.621 eye offset (PMMP Human.php)
             pitch: 0.0,
             yaw: 0.0,
             seed: 0,
@@ -335,7 +335,7 @@ impl StartGame {
             current_tick: 0,
             enchantment_seed: 0,
             multiplayer_correlation_id: String::new(),
-            enable_new_inventory_system: false,
+            enable_new_inventory_system: true,
             server_software_version: "1.26.2".to_string(),
             // Empty NBT compound tag (network LE format):
             // tag_type=10 (compound), name_length=0 (VarUInt=0x00), end_tag=0x00
