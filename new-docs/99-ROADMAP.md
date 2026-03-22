@@ -18,7 +18,7 @@ Avancer **phase par phase**, chaque phase est **testable et fonctionnelle** avan
 - [x] Flat world chunks (bedrock + dirt + grass, paletted sub-chunks)
 - [x] Le client se connecte et voit le monde plat !
 
-## Phase 2 : Player basics — ✅ EN COURS
+## Phase 2 : Player basics — ✅ TERMINÉE
 
 **Objectif :** Le joueur peut se déplacer, voir les autres joueurs, et chatter.
 
@@ -30,10 +30,19 @@ Avancer **phase par phase**, chaque phase est **testable et fonctionnelle** avan
 - [x] Player registry (entity ID unique par joueur)
 - [x] AddPlayer / RemoveEntity packets
 - [x] PlayerList sync (ADD/REMOVE)
-- [x] Crate mc-rs-command (11 commandes : help, list, tp, gamemode, say, time, kill, stop, seed, ping, difficulty)
-- [ ] Chunk loading dynamique (envoi de chunks au déplacement)
-- [ ] Inventaire basique
-- [ ] Validation mouvement (anti-cheat)
+- [x] Chunk loading dynamique (nouveaux chunks au déplacement)
+- [x] Validation mouvement (NaN reject, void kill Y<-128)
+- [x] Config serveur enrichie (gamemode, difficulty, view_distance, etc.)
+
+## Phase 3 : Monde vivant — ✅ TERMINÉE
+
+**Objectif :** Cycle jour/nuit, météo, commandes fonctionnelles.
+
+- [x] World tick system (100 TPS)
+- [x] Cycle jour/nuit (24000 ticks, SetTime broadcast)
+- [x] Weather system (rain/thunder avec transitions smooth)
+- [x] 15 commandes fonctionnelles dans crate mc-rs-command
+- [x] /time set, /stop, /say, /weather, /spawn, /pos, /gamemode, /tp, /help, /list, /ping, /seed, /kill, /difficulty, /clear
 
 ---
 
