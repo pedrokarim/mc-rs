@@ -1,0 +1,23 @@
+
+=== Block Runtime IDs ===
+pub const AIR: u32 = 12530;
+pub const BEDROCK: u32 = 13079;
+pub const COAL_ORE: u32 = 6318;
+pub const DIAMOND_ORE: u32 = 6501;
+pub const DIRT: u32 = 9852;
+pub const GOLD_ORE: u32 = 3203;
+pub const GRASS_BLOCK: u32 = 11062;
+pub const GRAVEL: u32 = 15806;
+pub const IRON_ORE: u32 = 7336;
+pub const LAPIS_ORE: u32 = 14583;
+pub const OAK_LEAVES: u32 = 2752;
+pub const OAK_LOG: u32 = 1366;
+pub const REDSTONE_ORE: u32 = 6356;
+pub const SAND: u32 = 6234;
+pub const SANDSTONE: u32 = 5213;
+pub const SNOW: u32 = 6233;
+pub const SNOW_LAYER: u32 = 1019;
+pub const STONE: u32 = 2532;
+pub const WATER: u32 = 9268;
+Total states: 15845
+=== END ===
