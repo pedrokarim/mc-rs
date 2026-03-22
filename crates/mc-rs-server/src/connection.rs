@@ -821,11 +821,39 @@ impl Connection {
             &CreativeContent::encode_empty(),
         ));
 
+        // UpdateAttributes — health, hunger, movement speed, etc.
+        let attributes = UpdateAttributes::default_survival(self.entity_runtime_id);
+        responses.push(self.encode_compressed_packet(
+            packet_id::UPDATE_ATTRIBUTES,
+            &attributes.encode(),
+        ));
+
         // UpdateAbilities — survival mode abilities (no fly, no noclip)
         let abilities = UpdateAbilities::default_survival(self.entity_runtime_id as i64);
         responses.push(self.encode_compressed_packet(
             packet_id::UPDATE_ABILITIES,
             &abilities.encode(),
+        ));
+
+        // UpdateAdventureSettings
+        let adventure = UpdateAdventureSettings {
+            no_pvm: false,
+            no_mvp: false,
+            immutable_world: false,
+            show_name_tags: true,
+            auto_jump: true,
+        };
+        responses.push(self.encode_compressed_packet(
+            packet_id::UPDATE_ADVENTURE_SETTINGS,
+            &adventure.encode(),
+        ));
+
+        // SetActorData — player metadata (nametag, scale, bounding box)
+        let player_name = self.display_name.clone().unwrap_or_default();
+        let actor_data = SetActorData::default_player(self.entity_runtime_id, &player_name);
+        responses.push(self.encode_compressed_packet(
+            packet_id::SET_ACTOR_DATA,
+            &actor_data.encode(),
         ));
 
         // AvailableCommands — register commands for tab-complete

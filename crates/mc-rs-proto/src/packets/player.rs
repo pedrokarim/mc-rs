@@ -463,7 +463,38 @@ pub struct AbilitiesLayer {
     pub abilities_set: u32,
     pub abilities_values: u32,
     pub fly_speed: f32,
+    pub vertical_fly_speed: f32,
     pub walk_speed: f32,
+}
+
+// Ability flag bits (from PMMP AbilitiesLayer.php)
+#[allow(dead_code)]
+pub mod ability {
+    pub const BUILD: u32           = 1 << 0;
+    pub const MINE: u32            = 1 << 1;
+    pub const DOORS_AND_SWITCHES: u32 = 1 << 2;
+    pub const OPEN_CONTAINERS: u32 = 1 << 3;
+    pub const ATTACK_PLAYERS: u32  = 1 << 4;
+    pub const ATTACK_MOBS: u32     = 1 << 5;
+    pub const OPERATOR: u32        = 1 << 6;
+    pub const TELEPORT: u32        = 1 << 7;
+    pub const INVULNERABLE: u32    = 1 << 8;
+    pub const FLYING: u32          = 1 << 9;
+    pub const ALLOW_FLIGHT: u32    = 1 << 10;
+    pub const INFINITE_RESOURCES: u32 = 1 << 11;  // note: inverted logic
+    pub const LIGHTNING: u32       = 1 << 12;
+    pub const FLY_SPEED: u32       = 1 << 13;
+    pub const WALK_SPEED: u32      = 1 << 14;
+    pub const MUTED: u32           = 1 << 15;
+    pub const WORLD_BUILDER: u32   = 1 << 16;
+    pub const NO_CLIP: u32         = 1 << 17;
+    pub const PRIVILEGED_BUILDER: u32 = 1 << 18;
+
+    /// All abilities that can be set in the BASE layer
+    pub const ALL: u32 = BUILD | MINE | DOORS_AND_SWITCHES | OPEN_CONTAINERS
+        | ATTACK_PLAYERS | ATTACK_MOBS | OPERATOR | TELEPORT | INVULNERABLE
+        | FLYING | ALLOW_FLIGHT | INFINITE_RESOURCES | LIGHTNING
+        | FLY_SPEED | WALK_SPEED | MUTED | WORLD_BUILDER | NO_CLIP | PRIVILEGED_BUILDER;
 }
 
 impl UpdateAbilities {
@@ -479,43 +510,197 @@ impl UpdateAbilities {
             w.write_u32_le(layer.abilities_set);
             w.write_u32_le(layer.abilities_values);
             w.write_f32_le(layer.fly_speed);
+            w.write_f32_le(layer.vertical_fly_speed);
             w.write_f32_le(layer.walk_speed);
         }
 
         w.into_bytes()
     }
 
+    /// Survival mode abilities — no fly, can walk/mine/build/attack
     pub fn default_survival(entity_id: i64) -> Self {
+        let set = ability::ALL;
+        let values = ability::BUILD | ability::MINE | ability::DOORS_AND_SWITCHES
+            | ability::OPEN_CONTAINERS | ability::ATTACK_PLAYERS | ability::ATTACK_MOBS
+            | ability::FLY_SPEED | ability::WALK_SPEED;
+        // NOT set: FLYING, ALLOW_FLIGHT, NO_CLIP, INVULNERABLE, OPERATOR, INFINITE_RESOURCES
+
         Self {
             entity_id,
-            permission_level: 0,  // member
-            command_permission: 0, // normal
-            layers: vec![
-                AbilitiesLayer {
-                    layer_type: 1, // BASE
-                    abilities_set: 0x1BFFF,
-                    abilities_values: 0x23,  // survival: walk + attack + mine, no fly
-                    fly_speed: 0.05,
-                    walk_speed: 0.1,
-                },
-            ],
+            permission_level: 0,   // MEMBER
+            command_permission: 0,  // NORMAL
+            layers: vec![AbilitiesLayer {
+                layer_type: 1, // BASE
+                abilities_set: set,
+                abilities_values: values,
+                fly_speed: 0.05,
+                vertical_fly_speed: 1.0,
+                walk_speed: 0.1,
+            }],
         }
     }
 
+    /// Creative mode abilities — fly, invulnerable, infinite resources
     pub fn default_creative(entity_id: i64) -> Self {
+        let set = ability::ALL;
+        let values = ability::BUILD | ability::MINE | ability::DOORS_AND_SWITCHES
+            | ability::OPEN_CONTAINERS | ability::ATTACK_PLAYERS | ability::ATTACK_MOBS
+            | ability::ALLOW_FLIGHT | ability::FLYING | ability::INVULNERABLE
+            | ability::INFINITE_RESOURCES | ability::FLY_SPEED | ability::WALK_SPEED
+            | ability::NO_CLIP;
+
         Self {
             entity_id,
-            permission_level: 2,  // operator
-            command_permission: 1, // game directors
-            layers: vec![
-                AbilitiesLayer {
-                    layer_type: 1, // BASE
-                    abilities_set: 0x1BFFF,    // all abilities
-                    abilities_values: 0x18063,  // creative defaults
-                    fly_speed: 0.05,
-                    walk_speed: 0.1,
+            permission_level: 2,   // OPERATOR
+            command_permission: 1,  // GAME_DIRECTORS
+            layers: vec![AbilitiesLayer {
+                layer_type: 1, // BASE
+                abilities_set: set,
+                abilities_values: values,
+                fly_speed: 0.05,
+                vertical_fly_speed: 1.0,
+                walk_speed: 0.1,
+            }],
+        }
+    }
+}
+
+// ── UpdateAttributes (S→C, 0x1D) ──
+
+pub struct PlayerAttribute {
+    pub name: String,
+    pub min: f32,
+    pub max: f32,
+    pub current: f32,
+    pub default: f32,
+}
+
+pub struct UpdateAttributes {
+    pub runtime_entity_id: u64,
+    pub attributes: Vec<PlayerAttribute>,
+    pub tick: u64,
+}
+
+impl UpdateAttributes {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(256);
+        w.write_var_u64(self.runtime_entity_id);
+        w.write_var_u32(self.attributes.len() as u32);
+        for attr in &self.attributes {
+            w.write_f32_le(attr.min);
+            w.write_f32_le(attr.max);
+            w.write_f32_le(attr.current);
+            w.write_f32_le(attr.min);     // default_min
+            w.write_f32_le(attr.max);     // default_max
+            w.write_f32_le(attr.default);
+            w.write_string(&attr.name);
+            w.write_var_u32(0);           // modifiers count = 0
+        }
+        w.write_var_u64(self.tick);
+        w.into_bytes()
+    }
+
+    /// Default attributes for a survival player.
+    pub fn default_survival(runtime_entity_id: u64) -> Self {
+        Self {
+            runtime_entity_id,
+            attributes: vec![
+                PlayerAttribute {
+                    name: "minecraft:health".to_string(),
+                    min: 0.0, max: 20.0, current: 20.0, default: 20.0,
+                },
+                PlayerAttribute {
+                    name: "minecraft:player.hunger".to_string(),
+                    min: 0.0, max: 20.0, current: 20.0, default: 20.0,
+                },
+                PlayerAttribute {
+                    name: "minecraft:player.saturation".to_string(),
+                    min: 0.0, max: 20.0, current: 20.0, default: 20.0,
+                },
+                PlayerAttribute {
+                    name: "minecraft:movement".to_string(),
+                    min: 0.0, max: 3.4028235e38, current: 0.1, default: 0.1,
+                },
+                PlayerAttribute {
+                    name: "minecraft:attack_damage".to_string(),
+                    min: 0.0, max: 3.4028235e38, current: 1.0, default: 1.0,
+                },
+                PlayerAttribute {
+                    name: "minecraft:absorption".to_string(),
+                    min: 0.0, max: 3.4028235e38, current: 0.0, default: 0.0,
+                },
+                PlayerAttribute {
+                    name: "minecraft:knockback_resistance".to_string(),
+                    min: 0.0, max: 1.0, current: 0.0, default: 0.0,
+                },
+                PlayerAttribute {
+                    name: "minecraft:follow_range".to_string(),
+                    min: 0.0, max: 2048.0, current: 16.0, default: 16.0,
+                },
+                PlayerAttribute {
+                    name: "minecraft:player.level".to_string(),
+                    min: 0.0, max: 24791.0, current: 0.0, default: 0.0,
+                },
+                PlayerAttribute {
+                    name: "minecraft:player.experience".to_string(),
+                    min: 0.0, max: 1.0, current: 0.0, default: 0.0,
                 },
             ],
+            tick: 0,
+        }
+    }
+}
+
+// ── SetActorData (S→C, 0x27) ──
+
+pub struct SetActorData {
+    pub runtime_entity_id: u64,
+    pub metadata: Vec<(u32, u32, MetadataValue)>, // (key, type, value)
+    pub tick: u64,
+}
+
+pub enum MetadataValue {
+    Byte(u8),
+    Short(i16),
+    Int(i32),
+    Float(f32),
+    String(String),
+    Long(i64),
+}
+
+impl SetActorData {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(128);
+        w.write_var_u64(self.runtime_entity_id);
+        w.write_var_u32(self.metadata.len() as u32);
+        for (key, data_type, value) in &self.metadata {
+            w.write_var_u32(*key);
+            w.write_var_u32(*data_type);
+            match value {
+                MetadataValue::Byte(v) => w.write_u8(*v),
+                MetadataValue::Short(v) => w.write_i16_le(*v),
+                MetadataValue::Int(v) => w.write_var_i32(*v),
+                MetadataValue::Float(v) => w.write_f32_le(*v),
+                MetadataValue::String(v) => w.write_string(v),
+                MetadataValue::Long(v) => w.write_var_i64(*v),
+            }
+        }
+        w.write_var_u64(self.tick);
+        w.into_bytes()
+    }
+
+    /// Default player metadata — name tag, scale, bounding box
+    pub fn default_player(runtime_entity_id: u64, name: &str) -> Self {
+        Self {
+            runtime_entity_id,
+            metadata: vec![
+                (0, 7, MetadataValue::Long(0)),           // FLAGS (none set = normal)
+                (4, 4, MetadataValue::String(name.to_string())), // NAMETAG
+                (0x17, 3, MetadataValue::Float(1.0)),     // SCALE
+                (0x26, 3, MetadataValue::Float(0.6)),     // BOUNDING_BOX_WIDTH
+                (0x27, 3, MetadataValue::Float(1.8)),     // BOUNDING_BOX_HEIGHT
+            ],
+            tick: 0,
         }
     }
 }
