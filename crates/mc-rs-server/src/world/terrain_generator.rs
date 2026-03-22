@@ -52,6 +52,25 @@ pub mod extra_blocks {
     pub const LARGE_FERN: u32 = 12345;
     pub const WATERLILY: u32 = 3605;
     pub const SEAGRASS: u32 = 1301;
+    // Phase 1: simple vegetation
+    pub const CACTUS: u32 = 12880;
+    pub const DEADBUSH: u32 = 7319;
+    pub const BROWN_MUSHROOM: u32 = 4959;
+    pub const RED_MUSHROOM: u32 = 6797;
+    pub const PUMPKIN: u32 = 6763;
+    pub const REEDS: u32 = 11588;
+    pub const BAMBOO: u32 = 5253;
+    // Tree types
+    pub const BIRCH_LOG: u32 = 2535;
+    pub const BIRCH_LEAVES: u32 = 6160;
+    pub const SPRUCE_LOG: u32 = 6314;
+    pub const SPRUCE_LEAVES: u32 = 6578;
+    pub const ACACIA_LOG: u32 = 6466;
+    pub const ACACIA_LEAVES: u32 = 3810;
+    pub const DARK_OAK_LOG: u32 = 3989;
+    pub const DARK_OAK_LEAVES: u32 = 11647;
+    pub const JUNGLE_LOG: u32 = 1260;
+    pub const JUNGLE_LEAVES: u32 = 8677;
 }
 
 /// Water surface level (same as PocketMine-MP).
