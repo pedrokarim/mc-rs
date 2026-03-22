@@ -33,5 +33,21 @@
 - **Cause** : Probablement lié aux abilities ou au gamemode
 - **Status** : À investiguer après fix du skin
 
-## Prochaine action
-Essayer : Envoyer SetActorData UNE seule fois dans PreSpawn SANS NO_AI. Pas de SetActorData post-spawn. Ça devrait garder le skin et avoir la gravité.
+## Analyse approfondie (2026-03-22)
+
+### Abilities values CORRECTES
+- abilities_set = 0x000FFFFF (bits 0-19) — identique à PMMP
+- abilities_values = 0x0000003F (bits 0-5) — identique à PMMP
+- FLYING=false, ALLOW_FLIGHT=false dans les values
+
+### Paquets manquants (par rapport à PMMP)
+- **InventoryContent** — PMMP envoie l'inventaire complet pendant PreSpawn
+- **MobEquipment** — PMMP envoie l'item en main
+- **CreativeContent** avec les vrais items — on envoie vide
+
+### Théorie actuelle
+Le client Bedrock reste en mode créatif parce qu'on n'envoie pas les paquets d'inventaire.
+Sans inventaire, le client ne peut pas déterminer le gamemode correctement et fallback en créatif.
+
+### Prochaine action
+Implémenter les paquets d'inventaire basiques (InventoryContent vide pour les 36 slots + armor).

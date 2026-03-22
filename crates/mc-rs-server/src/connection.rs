@@ -516,8 +516,12 @@ impl Connection {
             self.display_name.as_deref().unwrap_or("Player")
         );
         self.state = ConnectionState::InGame;
-        // No second SetActorData — already sent in PreSpawn without NO_AI
-        Vec::new()
+
+        // Explicitly set survival mode after spawn
+        let mut gametype_writer = mc_rs_proto::io::ProtoWriter::with_capacity(4);
+        gametype_writer.write_var_i32(0); // 0 = survival
+        vec![self
+            .encode_compressed_packet(packet_id::SET_PLAYER_GAME_TYPE, gametype_writer.as_bytes())]
     }
 
     // ── InGame handlers ──
