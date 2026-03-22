@@ -58,10 +58,10 @@ pub struct SplitInfo {
 #[derive(Debug, Clone)]
 pub struct EncapsulatedPacket {
     pub reliability: Reliability,
-    pub message_index: Option<u32>,    // 24-bit, if reliable
-    pub sequence_index: Option<u32>,   // 24-bit, if sequenced
-    pub order_index: Option<u32>,      // 24-bit, if ordered/sequenced
-    pub order_channel: Option<u8>,     // if ordered/sequenced
+    pub message_index: Option<u32>,  // 24-bit, if reliable
+    pub sequence_index: Option<u32>, // 24-bit, if sequenced
+    pub order_index: Option<u32>,    // 24-bit, if ordered/sequenced
+    pub order_channel: Option<u8>,   // if ordered/sequenced
     pub split: Option<SplitInfo>,
     pub body: Vec<u8>,
 }

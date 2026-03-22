@@ -36,19 +36,29 @@ impl PlayerRegistry {
     }
 
     /// Register a new player. Returns the assigned entity ID.
-    pub fn add(&mut self, addr: SocketAddr, name: String, uuid: [u8; 16], xuid: String, position: [f32; 3]) -> i64 {
+    pub fn add(
+        &mut self,
+        addr: SocketAddr,
+        name: String,
+        uuid: [u8; 16],
+        xuid: String,
+        position: [f32; 3],
+    ) -> i64 {
         let entity_id = next_entity_id();
-        self.players.insert(addr, PlayerInfo {
+        self.players.insert(
             addr,
-            name,
-            uuid,
-            xuid,
-            entity_id,
-            position,
-            pitch: 0.0,
-            yaw: 0.0,
-            head_yaw: 0.0,
-        });
+            PlayerInfo {
+                addr,
+                name,
+                uuid,
+                xuid,
+                entity_id,
+                position,
+                pitch: 0.0,
+                yaw: 0.0,
+                head_yaw: 0.0,
+            },
+        );
         entity_id
     }
 
@@ -58,7 +68,14 @@ impl PlayerRegistry {
     }
 
     /// Update a player's position.
-    pub fn update_position(&mut self, addr: &SocketAddr, pos: [f32; 3], pitch: f32, yaw: f32, head_yaw: f32) {
+    pub fn update_position(
+        &mut self,
+        addr: &SocketAddr,
+        pos: [f32; 3],
+        pitch: f32,
+        yaw: f32,
+        head_yaw: f32,
+    ) {
         if let Some(info) = self.players.get_mut(addr) {
             info.position = pos;
             info.pitch = pitch;
@@ -69,7 +86,10 @@ impl PlayerRegistry {
 
     /// Get all players except the given addr.
     pub fn others(&self, except: &SocketAddr) -> Vec<&PlayerInfo> {
-        self.players.values().filter(|p| &p.addr != except).collect()
+        self.players
+            .values()
+            .filter(|p| &p.addr != except)
+            .collect()
     }
 
     /// Get all players.

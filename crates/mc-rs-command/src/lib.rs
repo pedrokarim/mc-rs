@@ -135,7 +135,10 @@ impl CommandRegistry {
                     let y = parse_coord(parts[2], ctx.position[1]);
                     let z = parse_coord(parts[3], ctx.position[2]);
                     if let (Some(x), Some(y), Some(z)) = (x, y, z) {
-                        info!("[CMD] {} teleported to {:.1}, {:.1}, {:.1}", ctx.player_name, x, y, z);
+                        info!(
+                            "[CMD] {} teleported to {:.1}, {:.1}, {:.1}",
+                            ctx.player_name, x, y, z
+                        );
                         return CommandResult {
                             response: Some(format!("Teleported to {:.1}, {:.1}, {:.1}", x, y, z)),
                             action: CommandAction::Teleport { x, y, z },
@@ -143,7 +146,9 @@ impl CommandRegistry {
                     }
                 }
                 CommandResult {
-                    response: Some("Usage: /tp <x> <y> <z> (use ~ for current position)".to_string()),
+                    response: Some(
+                        "Usage: /tp <x> <y> <z> (use ~ for current position)".to_string(),
+                    ),
                     action: CommandAction::None,
                 }
             },
@@ -289,7 +294,9 @@ impl CommandRegistry {
             handler: |parts, ctx| {
                 if parts.len() < 2 {
                     return CommandResult {
-                        response: Some("Usage: /difficulty <0-3|peaceful|easy|normal|hard>".to_string()),
+                        response: Some(
+                            "Usage: /difficulty <0-3|peaceful|easy|normal|hard>".to_string(),
+                        ),
                         action: CommandAction::None,
                     };
                 }
@@ -349,7 +356,11 @@ impl CommandRegistry {
             usage: "/spawn",
             handler: |_, _| CommandResult {
                 response: Some("Teleported to spawn".to_string()),
-                action: CommandAction::Teleport { x: 0.5, y: -57.0, z: 0.5 },
+                action: CommandAction::Teleport {
+                    x: 0.5,
+                    y: -57.0,
+                    z: 0.5,
+                },
             },
         });
 
@@ -387,7 +398,10 @@ impl CommandRegistry {
                     10.0
                 };
                 let y = ctx.position[1] + amount;
-                info!("[CMD] {} teleported up by {} blocks", ctx.player_name, amount);
+                info!(
+                    "[CMD] {} teleported up by {} blocks",
+                    ctx.player_name, amount
+                );
                 CommandResult {
                     response: Some(format!("Teleported up {} blocks (Y={:.1})", amount, y)),
                     action: CommandAction::Teleport {

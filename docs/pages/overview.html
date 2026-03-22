@@ -61,39 +61,23 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
       World
     </a>
-    <a href="entities.html" class="sidebar-link">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      Entities
-    </a>
   </div>
   <div class="sidebar-section">
-    <div class="sidebar-section-title">Gameplay</div>
-    <a href="gameplay.html" class="sidebar-link">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-      Gameplay
-    </a>
+    <div class="sidebar-section-title">Features</div>
     <a href="commands.html" class="sidebar-link">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
       Commands
     </a>
-    <a href="plugins.html" class="sidebar-link">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66 4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66 4.24-4.24"/></svg>
-      Plugins
-    </a>
-  </div>
-  <div class="sidebar-section">
-    <div class="sidebar-section-title">Operations</div>
     <a href="configuration.html" class="sidebar-link">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       Configuration
     </a>
-    <a href="security.html" class="sidebar-link">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      Security
-    </a>
-    <a href="performance.html" class="sidebar-link">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-      Performance
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Roadmap</div>
+    <a href="roadmap.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Roadmap
     </a>
   </div>
   <div class="sidebar-section">
@@ -112,24 +96,36 @@
   <div class="content-inner">
 
     <h1>Overview</h1>
-    <p class="page-subtitle">MC-RS is a from-scratch Minecraft Bedrock Edition server written entirely in Rust, targeting full survival gameplay with high performance and memory safety.</p>
+    <p class="page-subtitle">MC-RS is a from-scratch Minecraft Bedrock Edition server written in Rust, based on the PocketMine-MP reference implementation.</p>
 
     <!-- What is MC-RS? -->
     <h2>What is MC-RS?</h2>
-    <p>MC-RS is a complete <strong>Minecraft Bedrock Edition server implementation</strong> written in Rust. It targets protocol version <strong>924</strong> (Bedrock Edition <strong>1.26.0</strong>) and implements the full survival gameplay experience &mdash; not just a proxy or relay.</p>
-    <p>The server handles everything from the low-level RakNet UDP transport and ECDH encryption handshake through to world generation, mob AI, combat, crafting, enchantments, and a full plugin system. Players can connect with an unmodified Bedrock client (Windows 10, mobile, or console) and experience survival mode with:</p>
-    <ul>
-      <li>Procedurally generated terrain with 10 biomes, caves, ores, and structures</li>
-      <li>Full combat system with armor, enchantments, critical hits, and potion effects</li>
-      <li>Crafting tables, furnaces, anvils, enchanting tables, stonecutters, grindstones, and looms</li>
-      <li>Mob AI with pathfinding, breeding, and natural spawn/despawn cycles</li>
-      <li>Three dimensions: Overworld, Nether, and The End with portal mechanics</li>
-      <li>Plugin support via Rust API, WASM (wasmtime), and Lua (mlua)</li>
-    </ul>
+    <p>MC-RS is a <strong>Minecraft Bedrock Edition server</strong> written entirely in Rust. It targets protocol version <strong>924</strong> (Bedrock Edition <strong>1.26.2</strong>) and is a clean rewrite based on <a href="https://github.com/pmmp/PocketMine-MP" target="_blank" rel="noopener">PocketMine-MP</a> as the reference implementation.</p>
+    <p>The server currently handles the full connection lifecycle: RakNet UDP transport, ECDH encryption handshake, Xbox Live JWT login (with offline mode), zlib/snappy compression, chunk streaming, player movement, chat, commands, and multi-player synchronization. Players can connect with an unmodified Bedrock client and join a generated world together.</p>
 
     <div class="alert alert-info">
-      <strong>Note:</strong> MC-RS is a clean-room implementation. It does not use or depend on Mojang's official server code (BDS). All protocol handling is implemented from public documentation and packet analysis.
+      <strong>Note:</strong> MC-RS is a clean-room implementation. It does not use or depend on Mojang's official server code (BDS). All protocol handling is implemented from the PocketMine-MP source code and packet analysis.
     </div>
+
+    <!-- What Works Today -->
+    <h2>What Works Today</h2>
+    <ul>
+      <li>RakNet UDP transport with reliability, fragmentation, and ordering</li>
+      <li>ECDH P-384 key exchange + AES-256-CTR packet encryption</li>
+      <li>Xbox Live JWT authentication chain + offline mode</li>
+      <li>Zlib and Snappy batch compression</li>
+      <li>Flat world generator and Perlin noise terrain generator</li>
+      <li>Sub-chunk paletted storage with biome serialization</li>
+      <li>Multi-player support: AddPlayer, RemoveEntity, PlayerList broadcasts</li>
+      <li>Player movement synchronization across clients</li>
+      <li>Chat relay between players</li>
+      <li>16 built-in commands: help, list, tp, gamemode, say, time, kill, stop, ping, seed, pos, difficulty, weather, spawn, up, clear</li>
+      <li>Day/night cycle with time ticking</li>
+      <li>Weather cycle (clear, rain, thunder)</li>
+      <li>Player persistence via JSON files in the players/ directory</li>
+      <li>Dynamic spawn position based on terrain height</li>
+      <li>Server configuration via server.toml (server, world, gameplay sections)</li>
+    </ul>
 
     <!-- Why Rust? -->
     <h2>Why Rust?</h2>
@@ -153,7 +149,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>
         </div>
         <h3>Fearless Concurrency</h3>
-        <p>Send and Sync traits prevent data races. Combined with tokio's async runtime, MC-RS handles hundreds of concurrent connections without thread-safety bugs.</p>
+        <p>Send and Sync traits prevent data races. Combined with tokio's async runtime, MC-RS handles concurrent connections without thread-safety bugs.</p>
       </div>
       <div class="card">
         <div class="card-icon">
@@ -194,7 +190,7 @@
         </tr>
         <tr>
           <td><strong>Plugin System</strong></td>
-          <td>Rust + WASM + Lua</td>
+          <td>Planned</td>
           <td>None</td>
           <td>PHP plugins</td>
           <td>Java plugins</td>
@@ -208,14 +204,14 @@
         </tr>
         <tr>
           <td><strong>Survival Mode</strong></td>
-          <td>Full (combat, crafting, mobs, world gen)</td>
+          <td>In progress</td>
           <td>Full (reference)</td>
           <td>Partial</td>
           <td>Partial</td>
         </tr>
         <tr>
           <td><strong>Protocol Version</strong></td>
-          <td>924 (1.26.0)</td>
+          <td>924 (1.26.2)</td>
           <td>Latest</td>
           <td>924</td>
           <td>Varies</td>
@@ -227,53 +223,48 @@
     <h2>Project Status</h2>
     <div class="stats-row">
       <div class="stat">
-        <div class="stat-number">924</div>
-        <div class="stat-label">Tests</div>
-      </div>
-      <div class="stat">
-        <div class="stat-number">12</div>
+        <div class="stat-number">6</div>
         <div class="stat-label">Crates</div>
       </div>
       <div class="stat">
-        <div class="stat-number">5</div>
-        <div class="stat-label">Phases</div>
+        <div class="stat-number">~4.6K</div>
+        <div class="stat-label">Lines</div>
       </div>
       <div class="stat">
-        <div class="stat-number">50+</div>
+        <div class="stat-number">16</div>
+        <div class="stat-label">Commands</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">~30</div>
         <div class="stat-label">Packets</div>
       </div>
     </div>
 
-    <p>MC-RS has been developed in 5 major phases, each building on the previous:</p>
+    <p>MC-RS is being developed in phases. The first two phases are complete:</p>
     <table>
       <thead>
-        <tr><th>Phase</th><th>Scope</th><th>Highlights</th></tr>
+        <tr><th>Phase</th><th>Scope</th><th>Status</th></tr>
       </thead>
       <tbody>
         <tr>
           <td><strong>Phase 1</strong></td>
-          <td>Foundation</td>
-          <td>RakNet transport, protocol codec, login flow, encryption, world init, chunks, movement, blocks, inventory, chat, commands, dynamic chunk loading</td>
+          <td><strong>Foundation</strong> &mdash; RakNet transport, protocol codec, login flow, ECDH encryption, chunk streaming, movement, chat, commands, flat world generation</td>
+          <td><span class="tag tag-accent">Done</span></td>
         </tr>
         <tr>
           <td><strong>Phase 2</strong></td>
-          <td>Multiplayer</td>
-          <td>Multi-player sync, PvP combat, 40+ commands with entity selectors, permissions system (whitelist, ban, ops)</td>
+          <td><strong>Player Basics</strong> &mdash; Multi-player sync (AddPlayer, RemoveEntity, PlayerList), Perlin noise terrain, day/night cycle, weather, player persistence, 16 commands, server.toml config</td>
+          <td><span class="tag tag-accent">Done</span></td>
         </tr>
         <tr>
           <td><strong>Phase 3</strong></td>
-          <td>Gameplay</td>
-          <td>ECS entities, mob AI (9 behaviors), full combat (armor, enchantments, potions), survival (hunger, drowning, fall damage), crafting (50+ recipes), world generation (10 biomes, caves, ores, structures, Nether, End), persistence (LevelDB), block ticks (fluids, gravity, redstone, pistons), XP, weather, furnaces, enchanting tables, anvils</td>
+          <td><strong>Gameplay</strong> &mdash; Block breaking/placing, inventory, crafting, combat, hunger, mobs, entity system</td>
+          <td><span class="tag">Planned</span></td>
         </tr>
         <tr>
           <td><strong>Phase 4</strong></td>
-          <td>Extensibility</td>
-          <td>Rust plugin API (15 events), WASM runtime (wasmtime), Lua scripting (mlua), behavior pack loader, forms UI, hot-reload</td>
-        </tr>
-        <tr>
-          <td><strong>Phase 5</strong></td>
-          <td>Operations</td>
-          <td>Advanced commands (/setblock, /fill, /clone, /execute, /scoreboard), RCON, Query protocol, console REPL, ticking areas, multi-dimension portals, anti-cheat, performance optimizations</td>
+          <td><strong>Extensibility</strong> &mdash; Plugin API, persistence (LevelDB or similar), permissions, advanced commands</td>
+          <td><span class="tag">Planned</span></td>
         </tr>
       </tbody>
     </table>
@@ -287,14 +278,14 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="6" rx="1"/><rect x="16" y="3" width="6" height="6" rx="1"/><rect x="16" y="15" width="6" height="6" rx="1"/><path d="M8 10h4m0 0v-4m0 4v4m0-4h4"/></svg>
         </div>
         <h3>Architecture</h3>
-        <p>Understand the 12-crate workspace, data flow, and threading model.</p>
+        <p>Understand the 6-crate workspace, data flow, and threading model.</p>
       </a>
       <a href="configuration.html" class="card" style="text-decoration:none">
         <div class="card-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09"/></svg>
         </div>
         <h3>Configuration</h3>
-        <p>Set up server.toml with world, permissions, and logging options.</p>
+        <p>Set up server.toml with server, world, and gameplay options.</p>
       </a>
       <a href="https://github.com/pedrokarim/mc-rs" class="card" style="text-decoration:none" target="_blank" rel="noopener">
         <div class="card-icon">

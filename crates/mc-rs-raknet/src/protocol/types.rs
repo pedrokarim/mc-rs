@@ -50,10 +50,7 @@ pub fn read_address(buf: &[u8]) -> (SocketAddr, usize) {
     } else {
         // IPv6 — for now return a dummy, we only need IPv4 for Phase 1
         let port = read_u16_be(&buf[3..5]);
-        (
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port),
-            29,
-        )
+        (SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port), 29)
     }
 }
 

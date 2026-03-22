@@ -6,32 +6,29 @@ nav_exclude: true
 
 # MC-RS Developer Documentation
 
-**MC-RS** is a Minecraft Bedrock Edition server written in Rust, targeting protocol v924 (1.26.0).
+The plugin system for MC-RS is currently **planned** and not yet implemented.
 
-This documentation covers the **plugin and scripting system** for developers who want to extend the server with custom plugins.
+## Current Status
 
----
+MC-RS is focused on building a solid foundation first:
 
-## Choose your language / Choisissez votre langue
+- RakNet networking
+- Bedrock protocol (v924, Bedrock 1.26.2)
+- Login & encryption (ECDH P-384, AES-256-CTR)
+- World generation (flat & Perlin terrain)
+- Multi-player support
+- 16 built-in commands
+- Day/night & weather cycles
 
-<div style="display: flex; gap: 2rem; margin-top: 2rem;">
-  <a href="en/" style="display: inline-block; padding: 1rem 2rem; background: #2563eb; color: white; border-radius: 8px; text-decoration: none; font-size: 1.2rem; font-weight: bold;">
-    English Documentation
-  </a>
-  <a href="fr/" style="display: inline-block; padding: 1rem 2rem; background: #7c3aed; color: white; border-radius: 8px; text-decoration: none; font-size: 1.2rem; font-weight: bold;">
-    Documentation Fran&ccedil;aise
-  </a>
-</div>
+## Planned Plugin Features
 
----
+Once the core gameplay systems (block interaction, inventory, entities) are implemented, the plugin system will be developed with:
 
-## Plugin System Overview
+- **Event system** — Subscribe to server events (player join, chat, block changes)
+- **Lua scripting** — Lightweight scripts for simple plugins
+- **WASM plugins** — Sandboxed WebAssembly for performance-critical plugins
+- **Rust API** — Native plugin trait for maximum performance
 
-MC-RS supports two plugin runtimes:
+## Follow Development
 
-| Runtime | Language | Sandboxing | Use Case |
-|---------|----------|------------|----------|
-| **Lua** | Lua 5.4 | Memory + instruction limits, restricted globals | Quick scripts, simple plugins |
-| **WASM** | Any (Rust, C, ...) | Fuel metering + memory page limits | Performance-critical, complex plugins |
-
-Both runtimes share the same **Plugin API** with 17 events, a task scheduler, and full server interaction capabilities.
+Check the [main documentation](../) for the current project status, or visit the [GitHub repository](https://github.com/pedrokarim/mc-rs) to follow progress.

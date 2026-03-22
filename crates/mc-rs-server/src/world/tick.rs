@@ -12,9 +12,9 @@ pub struct WorldState {
     // Weather
     pub is_raining: bool,
     pub is_thundering: bool,
-    pub rain_level: f32,      // 0.0 - 1.0 (smooth transition)
+    pub rain_level: f32, // 0.0 - 1.0 (smooth transition)
     pub rain_target: f32,
-    pub lightning_level: f32,  // 0.0 - 1.0
+    pub lightning_level: f32, // 0.0 - 1.0
     pub lightning_target: f32,
     pub weather_duration: i32, // ticks remaining for current weather
     pub do_weather_cycle: bool,

@@ -192,7 +192,10 @@ impl RakNetSession {
             return;
         }
 
-        debug!("NewIncomingConnection from {} — session connected!", self.addr);
+        debug!(
+            "NewIncomingConnection from {} — session connected!",
+            self.addr
+        );
         self.state = SessionState::Connected;
         let _ = self.event_tx.send(SessionEvent::Connected);
     }
@@ -272,8 +275,7 @@ impl RakNetSession {
 
         // Send ACKs
         if !self.recv_layer.ack_queue.is_empty() {
-            let ack_pkt =
-                datagram::encode_ack_nack(id::ACK, &mut self.recv_layer.ack_queue);
+            let ack_pkt = datagram::encode_ack_nack(id::ACK, &mut self.recv_layer.ack_queue);
             if !ack_pkt.is_empty() {
                 let _ = self.socket.send_to(&ack_pkt, self.addr).await;
             }
@@ -282,8 +284,7 @@ impl RakNetSession {
 
         // Send NACKs
         if !self.recv_layer.nack_queue.is_empty() {
-            let nack_pkt =
-                datagram::encode_ack_nack(id::NACK, &mut self.recv_layer.nack_queue);
+            let nack_pkt = datagram::encode_ack_nack(id::NACK, &mut self.recv_layer.nack_queue);
             if !nack_pkt.is_empty() {
                 let _ = self.socket.send_to(&nack_pkt, self.addr).await;
             }

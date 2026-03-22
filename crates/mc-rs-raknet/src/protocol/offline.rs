@@ -121,7 +121,11 @@ mod tests {
 
     #[test]
     fn test_unconnected_pong_encode() {
-        let pong = encode_unconnected_pong(12345, 67890, "MCPE;Test;924;1.26.2;0;20;67890;world;Survival;19132;19133;");
+        let pong = encode_unconnected_pong(
+            12345,
+            67890,
+            "MCPE;Test;924;1.26.2;0;20;67890;world;Survival;19132;19133;",
+        );
         assert_eq!(pong[0], 0x1C);
         // send_time at offset 1
         assert_eq!(read_i64_be(&pong[1..9]), 12345);

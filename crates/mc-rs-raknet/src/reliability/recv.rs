@@ -143,9 +143,7 @@ impl ReceiveLayer {
             }
             let seq_idx = pkt.sequence_index.unwrap_or(0);
             let ord_idx = pkt.order_index.unwrap_or(0);
-            if seq_idx < self.recv_sequenced_highest[ch]
-                || ord_idx < self.recv_ordered_index[ch]
-            {
+            if seq_idx < self.recv_sequenced_highest[ch] || ord_idx < self.recv_ordered_index[ch] {
                 return; // old packet, discard
             }
             self.recv_sequenced_highest[ch] = seq_idx + 1;
@@ -163,8 +161,8 @@ impl ReceiveLayer {
                 output.push(pkt.body);
 
                 // Deliver any queued packets that are now in order
-                while let Some(entry) = self.recv_ordered_queue[ch]
-                    .remove(&self.recv_ordered_index[ch])
+                while let Some(entry) =
+                    self.recv_ordered_queue[ch].remove(&self.recv_ordered_index[ch])
                 {
                     self.recv_ordered_index[ch] += 1;
                     self.recv_sequenced_highest[ch] = 0;
@@ -192,16 +190,17 @@ impl ReceiveLayer {
             return None; // too many concurrent splits
         }
 
-        let assembly = self.split_packets.entry(split.id).or_insert_with(|| {
-            SplitAssembly {
+        let assembly = self
+            .split_packets
+            .entry(split.id)
+            .or_insert_with(|| SplitAssembly {
                 count: split.count,
                 parts: HashMap::new(),
                 reliability: pkt.reliability,
                 message_index: pkt.message_index,
                 order_index: pkt.order_index,
                 order_channel: pkt.order_channel,
-            }
-        });
+            });
 
         assembly.parts.insert(split.index, pkt.body);
 

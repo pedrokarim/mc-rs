@@ -1,5 +1,5 @@
 title: MC-RS Developer Docs
-description: Plugin and scripting documentation for MC-RS, a Minecraft Bedrock server in Rust.
+description: Developer documentation for MC-RS, a Minecraft Bedrock server in Rust.
 
 remote_theme: just-the-docs/just-the-docs
 
@@ -8,8 +8,7 @@ baseurl: "/mc-rs"
 
 color_scheme: dark
 
-search_enabled: true
-search.button: true
+search_enabled: false
 
 heading_anchors: true
 
@@ -18,29 +17,3 @@ nav_external_links:
     url: https://github.com/pedrokarim/mc-rs
 
 footer_content: "MC-RS &mdash; Minecraft Bedrock Edition Server in Rust"
-
-exclude:
-  - "*.toml"
-  - "*.lock"
-  - crates/
-  - target/
-
-collections:
-  en:
-    output: true
-    permalink: /en/:name/
-  fr:
-    output: true
-    permalink: /fr/:name/
-
-defaults:
-  - scope:
-      path: "en"
-    values:
-      layout: default
-      lang: en
-  - scope:
-      path: "fr"
-    values:
-      layout: default
-      lang: fr

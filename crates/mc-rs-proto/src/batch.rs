@@ -38,11 +38,9 @@ pub fn decode_batch(raw: &[u8], algo: CompressionAlgorithm) -> Result<Vec<Vec<u8
                 .map_err(|e| BatchError::DecompressError(e.to_string()))?;
             out
         }
-        CompressionAlgorithm::Snappy => {
-            snap::raw::Decoder::new()
-                .decompress_vec(raw)
-                .map_err(|e| BatchError::DecompressError(e.to_string()))?
-        }
+        CompressionAlgorithm::Snappy => snap::raw::Decoder::new()
+            .decompress_vec(raw)
+            .map_err(|e| BatchError::DecompressError(e.to_string()))?,
         CompressionAlgorithm::None => raw.to_vec(),
     };
 
@@ -51,11 +49,15 @@ pub fn decode_batch(raw: &[u8], algo: CompressionAlgorithm) -> Result<Vec<Vec<u8
     let mut packets = Vec::new();
 
     while reader.remaining() > 0 {
-        let len = reader.read_var_u32().map_err(|_| BatchError::InvalidLength)? as usize;
+        let len = reader
+            .read_var_u32()
+            .map_err(|_| BatchError::InvalidLength)? as usize;
         if len == 0 || reader.remaining() < len {
             break;
         }
-        let data = reader.read_raw(len).map_err(|_| BatchError::InvalidLength)?;
+        let data = reader
+            .read_raw(len)
+            .map_err(|_| BatchError::InvalidLength)?;
         packets.push(data);
     }
 

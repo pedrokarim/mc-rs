@@ -66,7 +66,6 @@ pub struct StartGame {
     pub chat_restriction_level: u8,
     pub disable_player_interactions: bool,
     // ── End LevelSettings ──
-
     pub level_id: String,
     pub world_name: String,
     pub premium_world_template_id: String,
@@ -81,7 +80,6 @@ pub struct StartGame {
 
     // Block palette (empty when using hashes)
     // We write count=0
-
     pub multiplayer_correlation_id: String,
     pub enable_new_inventory_system: bool,
     pub server_software_version: String,
@@ -277,8 +275,8 @@ impl StartGame {
             seed: 0,
             spawn_biome_type: 0, // default
             custom_biome_name: String::new(),
-            dimension: 0,  // overworld
-            generator: 2,  // flat
+            dimension: 0,      // overworld
+            generator: 2,      // flat
             world_gamemode: 0, // survival
             hardcore: false,
             difficulty: 1, // easy
@@ -459,23 +457,23 @@ impl AvailableCommands {
         // Command data
         w.write_var_u32(commands.len() as u32);
         for &(name, description) in commands {
-            w.write_string(name);         // command name (without /)
-            w.write_string(description);  // description
-            w.write_u16_le(0);            // flags
-            w.write_string("any");        // permission level string (PMMP uses string, not u8!)
-            w.write_i32_le(-1);           // alias enum index (-1 = none)
-            w.write_var_u32(0);           // chained sub command indices count
+            w.write_string(name); // command name (without /)
+            w.write_string(description); // description
+            w.write_u16_le(0); // flags
+            w.write_string("any"); // permission level string (PMMP uses string, not u8!)
+            w.write_i32_le(-1); // alias enum index (-1 = none)
+            w.write_var_u32(0); // chained sub command indices count
 
             // 1 overload with 1 optional RAWTEXT param
-            w.write_var_u32(1);           // overload count
-            w.write_bool(false);          // chaining = false
-            w.write_var_u32(1);           // parameter count
-            // Parameter "args":
+            w.write_var_u32(1); // overload count
+            w.write_bool(false); // chaining = false
+            w.write_var_u32(1); // parameter count
+                                // Parameter "args":
             w.write_string("args");
             // typeInfo = ARG_FLAG_VALID(0x100000) | RAWTEXT(70) = 0x00100046
             w.write_u32_le(0x00100046);
-            w.write_bool(true);           // optional = true
-            w.write_u8(0);                // flags = 0
+            w.write_bool(true); // optional = true
+            w.write_u8(0); // flags = 0
         }
 
         // Soft enums — empty
@@ -583,7 +581,7 @@ impl SetSpawnPosition {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_startgame_hex() {
         let sg = StartGame::default_flat();
@@ -591,7 +589,9 @@ mod tests {
         println!("\n=== StartGame: {} bytes ===", bytes.len());
         for (i, chunk) in bytes.chunks(32).enumerate() {
             print!("{:04X}: ", i * 32);
-            for b in chunk { print!("{:02X} ", b); }
+            for b in chunk {
+                print!("{:02X} ", b);
+            }
             println!();
         }
         println!("=== END ===\n");

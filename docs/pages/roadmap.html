@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roadmap — MC-RS Documentation</title>
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<!-- Header -->
+<header class="site-header">
+  <button class="hamburger" aria-label="Menu">&#9776;</button>
+  <a href="../" class="header-logo">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="8" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.3"/>
+      <rect x="8" y="2" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.6"/>
+      <rect x="6" y="6" width="16" height="16" rx="2" fill="#4ecca3"/>
+      <rect x="10" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="18" y="10" width="4" height="4" fill="#0f0f1a"/>
+      <rect x="12" y="16" width="8" height="3" rx="1" fill="#0f0f1a"/>
+    </svg>
+    <span>MC<span class="accent">-RS</span></span>
+  </a>
+  <div class="search-wrapper">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" class="search-input" placeholder="Search documentation...">
+    <span class="search-shortcut">/</span>
+    <div class="search-results"></div>
+  </div>
+</header>
+
+<!-- Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Getting Started</div>
+    <a href="../" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </a>
+    <a href="overview.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+      Overview
+    </a>
+    <a href="architecture.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="6" height="6" rx="1"/><rect x="16" y="3" width="6" height="6" rx="1"/><rect x="16" y="15" width="6" height="6" rx="1"/><path d="M8 10h4m0 0v-4m0 4v4m0-4h4"/></svg>
+      Architecture
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Core Systems</div>
+    <a href="protocol.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      Protocol
+    </a>
+    <a href="networking.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg>
+      Networking
+    </a>
+    <a href="world.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      World
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Features</div>
+    <a href="commands.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      Commands
+    </a>
+    <a href="configuration.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Configuration
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Roadmap</div>
+    <a href="roadmap.html" class="sidebar-link active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Roadmap
+    </a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Links</div>
+    <a href="https://github.com/pedrokarim/mc-rs" class="sidebar-link" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<div class="sidebar-overlay"></div>
+
+<!-- Main Content -->
+<main class="main-content">
+  <div class="content-inner">
+
+    <h1>Roadmap</h1>
+    <p class="page-subtitle">Development phases and planned features for MC-RS.</p>
+
+    <p>MC-RS is being developed in incremental phases. Each phase builds on the previous one, adding new systems and capabilities. The project follows a "plan par plan" approach &mdash; completing each phase fully before moving to the next.</p>
+
+    <!-- Phase 1 -->
+    <h2>Phase 1: Foundation</h2>
+    <div class="alert alert-info">
+      <strong>DONE</strong> &mdash; This phase is complete.
+    </div>
+    <p>The foundational layer that gets a player connected, authenticated, and into a world.</p>
+    <ul>
+      <li><strong>RakNet UDP transport</strong> &mdash; Full RakNet implementation with reliability, ordering, fragmentation, and MTU discovery</li>
+      <li><strong>Bedrock protocol codec</strong> &mdash; Packet encoding/decoding for protocol version 924 (Bedrock 1.26.2)</li>
+      <li><strong>Login sequence</strong> &mdash; Complete login flow: NetworkSettings, Login, JWT verification, PlayStatus, ResourcePacks, StartGame</li>
+      <li><strong>AES-256-CTR encryption</strong> &mdash; ECDH P-384 key exchange and encrypted packet transport</li>
+      <li><strong>Flat world generation</strong> &mdash; Superflat chunk generation with grass, dirt, and bedrock layers</li>
+      <li><strong>Player movement</strong> &mdash; PlayerAuthInput handling with server-side position tracking</li>
+      <li><strong>Chat system</strong> &mdash; Bidirectional chat with Text packets</li>
+    </ul>
+
+    <!-- Phase 2 -->
+    <h2>Phase 2: Player Basics</h2>
+    <div class="alert alert-info">
+      <strong>DONE</strong> &mdash; This phase is complete.
+    </div>
+    <p>Multi-player support, server management, and world variety.</p>
+    <ul>
+      <li><strong>Multi-player sync</strong> &mdash; AddPlayer/RemovePlayer, position broadcasting, player list</li>
+      <li><strong>16 built-in commands</strong> &mdash; help, list, tp, gamemode, say, time, kill, stop, ping, seed, pos, difficulty, weather, spawn, up, clear</li>
+      <li><strong>Terrain generation</strong> &mdash; Perlin noise terrain generator with dynamic hills and varied elevation</li>
+      <li><strong>Time and weather</strong> &mdash; Day/night cycle with SetTime, weather system with clear/rain/thunder</li>
+      <li><strong>Player persistence</strong> &mdash; Save and restore player position, game mode, and state across sessions</li>
+      <li><strong>Configuration</strong> &mdash; server.toml with server, world, and gameplay sections</li>
+      <li><strong>Dynamic spawn</strong> &mdash; Spawn position adapts to terrain height</li>
+    </ul>
+
+    <!-- Phase 3 -->
+    <h2>Phase 3: World Interaction</h2>
+    <div class="alert alert-warn">
+      <strong>NEXT</strong> &mdash; This is the next phase in development.
+    </div>
+    <p>The phase that makes the world interactive &mdash; players can modify terrain and manage items.</p>
+    <ul>
+      <li><strong>Block breaking and placing</strong> &mdash; InventoryTransaction handling for block interactions</li>
+      <li><strong>Item system</strong> &mdash; Item definitions, stack management, durability</li>
+      <li><strong>Inventory management</strong> &mdash; Full inventory with hotbar, armor slots, crafting grid</li>
+      <li><strong>Chunk persistence</strong> &mdash; Save modified chunks to LevelDB for world persistence across restarts</li>
+      <li><strong>Block updates</strong> &mdash; Neighbor updates, gravity blocks (sand/gravel), fluid flow</li>
+      <li><strong>Creative inventory</strong> &mdash; Full creative mode item catalog</li>
+    </ul>
+
+    <!-- Phase 4 -->
+    <h2>Phase 4: Entities &amp; Combat</h2>
+    <div class="alert alert-warn">
+      <strong>PLANNED</strong> &mdash; This phase is planned for future development.
+    </div>
+    <p>Bringing the world to life with mobs, combat mechanics, and survival systems.</p>
+    <ul>
+      <li><strong>Entity system</strong> &mdash; ECS-based entity management with AddActor/RemoveActor</li>
+      <li><strong>Mob spawning</strong> &mdash; Natural mob spawning based on light level and biome</li>
+      <li><strong>Basic AI</strong> &mdash; Pathfinding, hostile mob targeting, passive mob wandering</li>
+      <li><strong>Combat system</strong> &mdash; Melee and ranged attacks, armor reduction, knockback</li>
+      <li><strong>Hunger and health</strong> &mdash; Survival mechanics with hunger bar, natural regeneration, starvation</li>
+      <li><strong>Potion effects</strong> &mdash; MobEffect packets for speed, strength, poison, regeneration, etc.</li>
+      <li><strong>Experience and levels</strong> &mdash; XP orbs, level progression, enchanting cost</li>
+    </ul>
+
+    <!-- Phase 5 -->
+    <h2>Phase 5: Game Systems</h2>
+    <div class="alert alert-warn">
+      <strong>PLANNED</strong> &mdash; This phase is planned for future development.
+    </div>
+    <p>Advanced gameplay systems that complete the survival experience.</p>
+    <ul>
+      <li><strong>Crafting</strong> &mdash; Crafting table recipes, shaped and shapeless, smelting</li>
+      <li><strong>Enchanting</strong> &mdash; Enchanting table, anvil combining, grindstone disenchanting</li>
+      <li><strong>Advanced world generation</strong> &mdash; Biomes, caves, ores, structures, trees</li>
+      <li><strong>Redstone basics</strong> &mdash; Redstone wire, repeaters, torches, pistons</li>
+      <li><strong>Container blocks</strong> &mdash; Chests, furnaces, hoppers, dispensers</li>
+      <li><strong>Farming</strong> &mdash; Crop growth, animal breeding, bone meal</li>
+    </ul>
+
+    <!-- Phase 6 -->
+    <h2>Phase 6: Plugin System</h2>
+    <div class="alert alert-warn">
+      <strong>PLANNED</strong> &mdash; This phase is planned for future development.
+    </div>
+    <p>Extensibility through a plugin API supporting multiple runtimes.</p>
+    <ul>
+      <li><strong>Event system</strong> &mdash; Subscribe to server events (player join, block break, chat, etc.)</li>
+      <li><strong>Lua plugins</strong> &mdash; Lightweight scripting via mlua for simple customization</li>
+      <li><strong>WASM plugins</strong> &mdash; Sandboxed WebAssembly plugins via wasmtime for high-performance extensions</li>
+      <li><strong>Plugin API</strong> &mdash; Stable Rust API for native plugin development</li>
+      <li><strong>Hot-reload</strong> &mdash; Reload plugins without restarting the server</li>
+      <li><strong>Forms UI</strong> &mdash; Server-side forms for plugin configuration and player interaction</li>
+    </ul>
+
+    <!-- Phase 7 -->
+    <h2>Phase 7: Polish</h2>
+    <div class="alert alert-warn">
+      <strong>PLANNED</strong> &mdash; This phase is planned for future development.
+    </div>
+    <p>Production readiness, operational tooling, and performance optimization.</p>
+    <ul>
+      <li><strong>Performance optimization</strong> &mdash; Chunk generation caching, packet batching, memory pooling</li>
+      <li><strong>Anti-cheat</strong> &mdash; Movement validation, speed checks, reach distance enforcement</li>
+      <li><strong>RCON protocol</strong> &mdash; Remote console for server administration</li>
+      <li><strong>Query protocol</strong> &mdash; Standard Minecraft query protocol for server list pings</li>
+      <li><strong>Scoreboard</strong> &mdash; SetDisplayObjective and SetScore for sidebar, player list, and below-name displays</li>
+      <li><strong>Permissions</strong> &mdash; Operator levels, whitelist, ban list</li>
+      <li><strong>Advanced commands</strong> &mdash; /setblock, /fill, /clone, /execute, /scoreboard</li>
+    </ul>
+
+    <!-- Current Status -->
+    <h2>Current Status</h2>
+    <div class="stats-row">
+      <div class="stat">
+        <div class="stat-number">6</div>
+        <div class="stat-label">Crates</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">924</div>
+        <div class="stat-label">Protocol</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">16</div>
+        <div class="stat-label">Commands</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">2/7</div>
+        <div class="stat-label">Phases Done</div>
+      </div>
+    </div>
+
+    <p>Phases 1 and 2 are fully implemented. The server can accept multiple Bedrock 1.26.2 clients, authenticate them, send encrypted chunk data, synchronize player positions, and handle 16 built-in commands. The next milestone is Phase 3: making blocks breakable and placeable with full inventory support.</p>
+
+  </div>
+</main>
+
+<footer class="site-footer">
+  MC-RS &mdash; Minecraft Bedrock Edition Server in Rust &mdash; <a href="https://github.com/pedrokarim/mc-rs">GitHub</a> &mdash; MIT License
+</footer>
+
+<script src="../nav.js"></script>
+<script src="../search-data.js"></script>
+<script src="../search.js"></script>
+</body>
+</html>

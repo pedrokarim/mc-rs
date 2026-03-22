@@ -74,9 +74,12 @@ impl PlayerAuthInput {
             // Skip ItemInteractionData — complex, just skip
             // For now, we can't decode the rest reliably
             return Ok(Self {
-                pitch, yaw,
+                pitch,
+                yaw,
                 position: [pos_x, pos_y, pos_z],
-                move_vec_x, move_vec_z, head_yaw,
+                move_vec_x,
+                move_vec_z,
+                head_yaw,
                 block_actions: Vec::new(),
             });
         }
@@ -84,9 +87,12 @@ impl PlayerAuthInput {
         // Conditional: item stack request (bit 36)
         if (input_flags >> FLAG_PERFORM_ITEM_STACK_REQUEST) & 1 == 1 {
             return Ok(Self {
-                pitch, yaw,
+                pitch,
+                yaw,
                 position: [pos_x, pos_y, pos_z],
-                move_vec_x, move_vec_z, head_yaw,
+                move_vec_x,
+                move_vec_z,
+                head_yaw,
                 block_actions: Vec::new(),
             });
         }
@@ -120,9 +126,12 @@ impl PlayerAuthInput {
         }
 
         Ok(Self {
-            pitch, yaw,
+            pitch,
+            yaw,
             position: [pos_x, pos_y, pos_z],
-            move_vec_x, move_vec_z, head_yaw,
+            move_vec_x,
+            move_vec_z,
+            head_yaw,
             block_actions,
         })
     }
@@ -136,7 +145,7 @@ pub struct MovePlayer {
     pub pitch: f32,
     pub yaw: f32,
     pub head_yaw: f32,
-    pub mode: u8,           // 0=normal, 1=reset, 2=teleport, 3=rotation
+    pub mode: u8, // 0=normal, 1=reset, 2=teleport, 3=rotation
     pub on_ground: bool,
     pub riding_runtime_id: u64,
     pub tick: u64,
@@ -198,7 +207,7 @@ impl Text {
                 let msg = reader.read_string()?;
                 (String::new(), msg)
             }
-            2 | 3 | 4 => {
+            2..=4 => {
                 // TRANSLATION, POPUP, JUKEBOX — category=2 (with_params) → message + params
                 let msg = reader.read_string()?;
                 let count = reader.read_var_u32()?;
@@ -217,7 +226,7 @@ impl Text {
         let platform_chat_id = reader.read_string().unwrap_or_default();
         // filteredMessage (optional) — skip
         let _ = reader.read_bool(); // has_filtered
-        // if has_filtered, read string — but we skip
+                                    // if has_filtered, read string — but we skip
 
         Ok(Self {
             text_type,
@@ -232,27 +241,27 @@ impl Text {
     /// Encode a chat message to broadcast (category=1 AUTHORED_MESSAGE).
     pub fn chat(source: &str, message: &str, xuid: &str) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(128);
-        w.write_bool(false);  // needsTranslation
-        w.write_u8(1);        // category = AUTHORED_MESSAGE
-        w.write_u8(1);        // type = CHAT
+        w.write_bool(false); // needsTranslation
+        w.write_u8(1); // category = AUTHORED_MESSAGE
+        w.write_u8(1); // type = CHAT
         w.write_string(source);
         w.write_string(message);
         w.write_string(xuid); // xboxUserId
-        w.write_string("");   // platformChatId
-        w.write_bool(false);  // filteredMessage = None
+        w.write_string(""); // platformChatId
+        w.write_bool(false); // filteredMessage = None
         w.into_bytes()
     }
 
     /// Encode a system/raw message (category=0 MESSAGE_ONLY).
     pub fn system(message: &str) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(64);
-        w.write_bool(false);  // needsTranslation
-        w.write_u8(0);        // category = MESSAGE_ONLY
-        w.write_u8(0);        // type = RAW
+        w.write_bool(false); // needsTranslation
+        w.write_u8(0); // category = MESSAGE_ONLY
+        w.write_u8(0); // type = RAW
         w.write_string(message);
-        w.write_string("");   // xboxUserId
-        w.write_string("");   // platformChatId
-        w.write_bool(false);  // filteredMessage = None
+        w.write_string(""); // xboxUserId
+        w.write_string(""); // platformChatId
+        w.write_bool(false); // filteredMessage = None
         w.into_bytes()
     }
 }
@@ -261,11 +270,11 @@ impl Text {
 
 pub struct PlayerListAdd {
     pub uuid: [u8; 16],
-    pub entity_id: i64,        // varint64 (actor unique ID)
+    pub entity_id: i64, // varint64 (actor unique ID)
     pub username: String,
     pub xuid: String,
     pub platform_chat_id: String,
-    pub build_platform: i32,   // i32_le
+    pub build_platform: i32, // i32_le
     pub is_teacher: bool,
     pub is_host: bool,
     pub is_subclient: bool,
@@ -313,12 +322,12 @@ impl PlayerList {
 }
 
 fn write_empty_skin(w: &mut ProtoWriter) {
-    w.write_string("Custom");          // skin_id
-    w.write_string("");                 // play_fab_id
+    w.write_string("Custom"); // skin_id
+    w.write_string(""); // play_fab_id
     w.write_string("geometry.humanoid.custom"); // skin_resource_patch
-    // Skin image data
-    w.write_u32_le(64);                // width
-    w.write_u32_le(64);                // height
+                                                // Skin image data
+    w.write_u32_le(64); // width
+    w.write_u32_le(64); // height
     let skin_data = vec![0u8; 64 * 64 * 4]; // RGBA
     w.write_byte_array(&skin_data);
 
@@ -326,8 +335,8 @@ fn write_empty_skin(w: &mut ProtoWriter) {
     w.write_u32_le(0);
 
     // Cape image — empty
-    w.write_u32_le(0);  // width
-    w.write_u32_le(0);  // height
+    w.write_u32_le(0); // width
+    w.write_u32_le(0); // height
     w.write_byte_array(&[]); // data
 
     w.write_string(""); // geometry_data
@@ -391,7 +400,7 @@ impl AddPlayer {
         w.write_f32_le(self.head_yaw);
         // Held item (air = empty)
         w.write_var_i32(0); // runtime_id = 0 = air/empty
-        // Gamemode
+                            // Gamemode
         w.write_var_i32(self.gamemode);
         // Entity metadata (5 entries)
         w.write_var_u32(5);
@@ -425,12 +434,12 @@ impl AddPlayer {
         w.write_u32_le(0x1BFFF); // abilities set
         w.write_u32_le(0x18063); // abilities values (creative defaults)
         w.write_f32_le(0.05); // fly speed
-        w.write_f32_le(0.1);  // walk speed
-        // Entity links (none)
+        w.write_f32_le(0.1); // walk speed
+                             // Entity links (none)
         w.write_var_u32(0);
         // Device ID + OS
         w.write_string(""); // device_id
-        w.write_i32_le(0);  // device_os
+        w.write_i32_le(0); // device_os
         w.into_bytes()
     }
 }
@@ -470,33 +479,48 @@ pub struct AbilitiesLayer {
 // Ability flag bits (from PMMP AbilitiesLayer.php)
 #[allow(dead_code)]
 pub mod ability {
-    pub const BUILD: u32           = 1 << 0;
-    pub const MINE: u32            = 1 << 1;
+    pub const BUILD: u32 = 1 << 0;
+    pub const MINE: u32 = 1 << 1;
     pub const DOORS_AND_SWITCHES: u32 = 1 << 2;
     pub const OPEN_CONTAINERS: u32 = 1 << 3;
-    pub const ATTACK_PLAYERS: u32  = 1 << 4;
-    pub const ATTACK_MOBS: u32     = 1 << 5;
-    pub const OPERATOR: u32        = 1 << 6;
-    pub const TELEPORT: u32        = 1 << 7;
-    pub const INVULNERABLE: u32    = 1 << 8;
-    pub const FLYING: u32          = 1 << 9;
-    pub const ALLOW_FLIGHT: u32    = 1 << 10;
-    pub const INFINITE_RESOURCES: u32 = 1 << 11;  // note: inverted logic
-    pub const LIGHTNING: u32       = 1 << 12;
-    pub const FLY_SPEED: u32       = 1 << 13;
-    pub const WALK_SPEED: u32      = 1 << 14;
-    pub const MUTED: u32           = 1 << 15;
-    pub const WORLD_BUILDER: u32   = 1 << 16;
-    pub const NO_CLIP: u32         = 1 << 17;
+    pub const ATTACK_PLAYERS: u32 = 1 << 4;
+    pub const ATTACK_MOBS: u32 = 1 << 5;
+    pub const OPERATOR: u32 = 1 << 6;
+    pub const TELEPORT: u32 = 1 << 7;
+    pub const INVULNERABLE: u32 = 1 << 8;
+    pub const FLYING: u32 = 1 << 9;
+    pub const ALLOW_FLIGHT: u32 = 1 << 10;
+    pub const INFINITE_RESOURCES: u32 = 1 << 11; // note: inverted logic
+    pub const LIGHTNING: u32 = 1 << 12;
+    pub const FLY_SPEED: u32 = 1 << 13;
+    pub const WALK_SPEED: u32 = 1 << 14;
+    pub const MUTED: u32 = 1 << 15;
+    pub const WORLD_BUILDER: u32 = 1 << 16;
+    pub const NO_CLIP: u32 = 1 << 17;
     pub const PRIVILEGED_BUILDER: u32 = 1 << 18;
     pub const VERTICAL_FLY_SPEED: u32 = 1 << 19; // CRITICAL — must be in abilities_set!
 
     /// All abilities that can be set in the BASE layer (bits 0-19)
-    pub const ALL: u32 = BUILD | MINE | DOORS_AND_SWITCHES | OPEN_CONTAINERS
-        | ATTACK_PLAYERS | ATTACK_MOBS | OPERATOR | TELEPORT | INVULNERABLE
-        | FLYING | ALLOW_FLIGHT | INFINITE_RESOURCES | LIGHTNING
-        | FLY_SPEED | WALK_SPEED | MUTED | WORLD_BUILDER | NO_CLIP
-        | PRIVILEGED_BUILDER | VERTICAL_FLY_SPEED;
+    pub const ALL: u32 = BUILD
+        | MINE
+        | DOORS_AND_SWITCHES
+        | OPEN_CONTAINERS
+        | ATTACK_PLAYERS
+        | ATTACK_MOBS
+        | OPERATOR
+        | TELEPORT
+        | INVULNERABLE
+        | FLYING
+        | ALLOW_FLIGHT
+        | INFINITE_RESOURCES
+        | LIGHTNING
+        | FLY_SPEED
+        | WALK_SPEED
+        | MUTED
+        | WORLD_BUILDER
+        | NO_CLIP
+        | PRIVILEGED_BUILDER
+        | VERTICAL_FLY_SPEED;
 }
 
 impl UpdateAbilities {
@@ -524,15 +548,19 @@ impl UpdateAbilities {
         // ALL abilities are SET (we provide values for all of them)
         let set = ability::ALL;
         // Only these are ENABLED (true):
-        let values = ability::BUILD | ability::MINE | ability::DOORS_AND_SWITCHES
-            | ability::OPEN_CONTAINERS | ability::ATTACK_PLAYERS | ability::ATTACK_MOBS;
+        let values = ability::BUILD
+            | ability::MINE
+            | ability::DOORS_AND_SWITCHES
+            | ability::OPEN_CONTAINERS
+            | ability::ATTACK_PLAYERS
+            | ability::ATTACK_MOBS;
         // All others are false: FLYING, ALLOW_FLIGHT, NO_CLIP, INVULNERABLE,
         // OPERATOR, TELEPORT, INFINITE_RESOURCES, etc.
 
         Self {
             entity_id,
             permission_level: 0,   // MEMBER
-            command_permission: 0,  // NORMAL
+            command_permission: 0, // NORMAL
             layers: vec![AbilitiesLayer {
                 layer_type: 1, // BASE
                 abilities_set: set,
@@ -547,16 +575,24 @@ impl UpdateAbilities {
     /// Creative mode abilities — fly, invulnerable, infinite resources
     pub fn default_creative(entity_id: i64) -> Self {
         let set = ability::ALL;
-        let values = ability::BUILD | ability::MINE | ability::DOORS_AND_SWITCHES
-            | ability::OPEN_CONTAINERS | ability::ATTACK_PLAYERS | ability::ATTACK_MOBS
-            | ability::ALLOW_FLIGHT | ability::FLYING | ability::INVULNERABLE
-            | ability::INFINITE_RESOURCES | ability::FLY_SPEED | ability::WALK_SPEED
+        let values = ability::BUILD
+            | ability::MINE
+            | ability::DOORS_AND_SWITCHES
+            | ability::OPEN_CONTAINERS
+            | ability::ATTACK_PLAYERS
+            | ability::ATTACK_MOBS
+            | ability::ALLOW_FLIGHT
+            | ability::FLYING
+            | ability::INVULNERABLE
+            | ability::INFINITE_RESOURCES
+            | ability::FLY_SPEED
+            | ability::WALK_SPEED
             | ability::NO_CLIP;
 
         Self {
             entity_id,
             permission_level: 2,   // OPERATOR
-            command_permission: 1,  // GAME_DIRECTORS
+            command_permission: 1, // GAME_DIRECTORS
             layers: vec![AbilitiesLayer {
                 layer_type: 1, // BASE
                 abilities_set: set,
@@ -594,11 +630,11 @@ impl UpdateAttributes {
             w.write_f32_le(attr.min);
             w.write_f32_le(attr.max);
             w.write_f32_le(attr.current);
-            w.write_f32_le(attr.min);     // default_min
-            w.write_f32_le(attr.max);     // default_max
+            w.write_f32_le(attr.min); // default_min
+            w.write_f32_le(attr.max); // default_max
             w.write_f32_le(attr.default);
             w.write_string(&attr.name);
-            w.write_var_u32(0);           // modifiers count = 0
+            w.write_var_u32(0); // modifiers count = 0
         }
         w.write_var_u64(self.tick);
         w.into_bytes()
@@ -611,43 +647,73 @@ impl UpdateAttributes {
             attributes: vec![
                 PlayerAttribute {
                     name: "minecraft:health".to_string(),
-                    min: 0.0, max: 20.0, current: 20.0, default: 20.0,
+                    min: 0.0,
+                    max: 20.0,
+                    current: 20.0,
+                    default: 20.0,
                 },
                 PlayerAttribute {
                     name: "minecraft:player.hunger".to_string(),
-                    min: 0.0, max: 20.0, current: 20.0, default: 20.0,
+                    min: 0.0,
+                    max: 20.0,
+                    current: 20.0,
+                    default: 20.0,
                 },
                 PlayerAttribute {
                     name: "minecraft:player.saturation".to_string(),
-                    min: 0.0, max: 20.0, current: 20.0, default: 20.0,
+                    min: 0.0,
+                    max: 20.0,
+                    current: 20.0,
+                    default: 20.0,
                 },
                 PlayerAttribute {
                     name: "minecraft:movement".to_string(),
-                    min: 0.0, max: 3.4028235e38, current: 0.1, default: 0.1,
+                    min: 0.0,
+                    max: 3.4028235e38,
+                    current: 0.1,
+                    default: 0.1,
                 },
                 PlayerAttribute {
                     name: "minecraft:attack_damage".to_string(),
-                    min: 0.0, max: 3.4028235e38, current: 1.0, default: 1.0,
+                    min: 0.0,
+                    max: 3.4028235e38,
+                    current: 1.0,
+                    default: 1.0,
                 },
                 PlayerAttribute {
                     name: "minecraft:absorption".to_string(),
-                    min: 0.0, max: 3.4028235e38, current: 0.0, default: 0.0,
+                    min: 0.0,
+                    max: 3.4028235e38,
+                    current: 0.0,
+                    default: 0.0,
                 },
                 PlayerAttribute {
                     name: "minecraft:knockback_resistance".to_string(),
-                    min: 0.0, max: 1.0, current: 0.0, default: 0.0,
+                    min: 0.0,
+                    max: 1.0,
+                    current: 0.0,
+                    default: 0.0,
                 },
                 PlayerAttribute {
                     name: "minecraft:follow_range".to_string(),
-                    min: 0.0, max: 2048.0, current: 16.0, default: 16.0,
+                    min: 0.0,
+                    max: 2048.0,
+                    current: 16.0,
+                    default: 16.0,
                 },
                 PlayerAttribute {
                     name: "minecraft:player.level".to_string(),
-                    min: 0.0, max: 24791.0, current: 0.0, default: 0.0,
+                    min: 0.0,
+                    max: 24791.0,
+                    current: 0.0,
+                    default: 0.0,
                 },
                 PlayerAttribute {
                     name: "minecraft:player.experience".to_string(),
-                    min: 0.0, max: 1.0, current: 0.0, default: 0.0,
+                    min: 0.0,
+                    max: 1.0,
+                    current: 0.0,
+                    default: 0.0,
                 },
             ],
             tick: 0,
@@ -675,19 +741,19 @@ pub enum MetadataValue {
 /// Entity metadata flag bits (from PMMP EntityMetadataFlags.php)
 #[allow(dead_code)]
 pub mod entity_flags {
-    pub const ONFIRE: i64          = 1 << 0;
-    pub const SNEAKING: i64        = 1 << 1;
-    pub const RIDING: i64          = 1 << 2;
-    pub const SPRINTING: i64       = 1 << 3;
-    pub const USING_ITEM: i64      = 1 << 4;
+    pub const ONFIRE: i64 = 1 << 0;
+    pub const SNEAKING: i64 = 1 << 1;
+    pub const RIDING: i64 = 1 << 2;
+    pub const SPRINTING: i64 = 1 << 3;
+    pub const USING_ITEM: i64 = 1 << 4;
     pub const CAN_SHOW_NAMETAG: i64 = 1 << 5;
     pub const ALWAYS_SHOW_NAMETAG: i64 = 1 << 6;
-    pub const NO_AI: i64           = 1 << 16;  // aka IMMOBILE — disables client physics
-    pub const CAN_CLIMB: i64       = 1 << 19;
-    pub const CAN_FLY: i64         = 1 << 21;
-    pub const BREATHING: i64       = 1 << 35;  // NOT in water
-    pub const HAS_GRAVITY: i64     = 1 << 47;  // AFFECTED_BY_GRAVITY
-    pub const HAS_COLLISION: i64   = 1 << 48;
+    pub const NO_AI: i64 = 1 << 16; // aka IMMOBILE — disables client physics
+    pub const CAN_CLIMB: i64 = 1 << 19;
+    pub const CAN_FLY: i64 = 1 << 21;
+    pub const BREATHING: i64 = 1 << 35; // NOT in water
+    pub const HAS_GRAVITY: i64 = 1 << 47; // AFFECTED_BY_GRAVITY
+    pub const HAS_COLLISION: i64 = 1 << 48;
 }
 
 impl SetActorData {
@@ -726,9 +792,9 @@ impl SetActorData {
             metadata: vec![
                 (0, 7, MetadataValue::Long(flags)),
                 (4, 4, MetadataValue::String(name.to_string())),
-                (0x17, 3, MetadataValue::Float(1.0)),     // SCALE
-                (0x26, 3, MetadataValue::Float(0.6)),     // BOUNDING_BOX_WIDTH
-                (0x27, 3, MetadataValue::Float(1.8)),     // BOUNDING_BOX_HEIGHT
+                (0x17, 3, MetadataValue::Float(1.0)), // SCALE
+                (0x26, 3, MetadataValue::Float(0.6)), // BOUNDING_BOX_WIDTH
+                (0x27, 3, MetadataValue::Float(1.8)), // BOUNDING_BOX_HEIGHT
             ],
             tick: 0,
         }

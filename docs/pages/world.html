@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>World — MC-RS Documentation</title>
+  <title>World System — MC-RS Documentation</title>
   <link rel="stylesheet" href="../style.css">
 </head>
 <body>
@@ -61,39 +61,23 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
       World
     </a>
-    <a href="entities.html" class="sidebar-link">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      Entities
-    </a>
   </div>
   <div class="sidebar-section">
-    <div class="sidebar-section-title">Gameplay</div>
-    <a href="gameplay.html" class="sidebar-link">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-      Gameplay
-    </a>
+    <div class="sidebar-section-title">Features</div>
     <a href="commands.html" class="sidebar-link">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
       Commands
     </a>
-    <a href="plugins.html" class="sidebar-link">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66 4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66 4.24-4.24"/></svg>
-      Plugins
-    </a>
-  </div>
-  <div class="sidebar-section">
-    <div class="sidebar-section-title">Operations</div>
     <a href="configuration.html" class="sidebar-link">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       Configuration
     </a>
-    <a href="security.html" class="sidebar-link">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      Security
-    </a>
-    <a href="performance.html" class="sidebar-link">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-      Performance
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Roadmap</div>
+    <a href="roadmap.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Roadmap
     </a>
   </div>
   <div class="sidebar-section">
@@ -112,276 +96,152 @@
   <div class="content-inner">
 
     <h1>World System</h1>
-    <p class="page-subtitle">Chunk-based world with procedural terrain generation, caves, biomes, and LevelDB persistence.</p>
+    <p class="page-subtitle">Chunk-based world with flat and Perlin noise terrain generation.</p>
 
-    <!-- Chunk Structure -->
-    <h2>Chunk Structure</h2>
-    <p>The world is divided into vertical <strong>chunk columns</strong>, each spanning 16 blocks in X and 16 blocks in Z. The Y range extends from <strong>-64 to 319</strong> (384 blocks total), which is divided into <strong>24 sub-chunks</strong> of 16&times;16&times;16 blocks each.</p>
+    <!-- Chunk Format -->
+    <h2>Chunk Format</h2>
+    <p>The world is divided into vertical <strong>chunk columns</strong>, each spanning 16 blocks in X and 16 blocks in Z. The Y range extends from <strong>-64 to 319</strong> (384 blocks total), divided into <strong>24 sub-chunks</strong> of 16&times;16&times;16 blocks each.</p>
 
-    <p>Each sub-chunk stores block states as <code>u32</code> FNV-1a hashes in a flat array of 4096 entries (16&times;16&times;16). The <code>ChunkColumn</code> struct contains:</p>
+    <p>Each sub-chunk uses <strong>paletted storage</strong> with a dynamic number of bits per block. The palette maps local indices to block network IDs. Sub-chunks that contain only air are omitted during network serialization.</p>
 
+    <pre><code><span class="cm">// Sub-chunk paletted storage</span>
+<span class="ty">SubChunk</span> {
+    version: <span class="ty">u8</span>,              <span class="cm">// sub-chunk version (8)</span>
+    storage_count: <span class="ty">u8</span>,        <span class="cm">// number of block storage layers (1 or 2)</span>
+    storage: [<span class="ty">PalettedStorage</span>], <span class="cm">// block layers (layer 0 = blocks, layer 1 = waterlogged)</span>
+}
+
+<span class="ty">PalettedStorage</span> {
+    header: <span class="ty">u8</span>,               <span class="cm">// (bits_per_block &lt;&lt; 1) | 1  (runtime flag in bit 0)</span>
+    block_indices: [<span class="ty">u8</span>],      <span class="cm">// bit-packed palette indices for 4096 blocks</span>
+    palette_count: <span class="ty">VarInt32</span>,   <span class="cm">// number of entries in the palette</span>
+    palette: [<span class="ty">VarInt32</span>],       <span class="cm">// block network IDs (runtime hashes)</span>
+}
+
+<span class="cm">// Special case: single-block sub-chunk (bits_per_block = 0)</span>
+<span class="cm">// Header byte: 0x01 (0 &lt;&lt; 1 | 1)</span>
+<span class="cm">// NO palette count written, just the single block network ID</span></code></pre>
+
+    <div class="alert alert-info">
+      <strong>Network flag:</strong> The header byte has bit 0 set to 1 for network (runtime) serialization. This distinguishes it from disk (persistence) format where bit 0 is 0. MC-RS only uses the network format since chunks are not persisted to disk.
+    </div>
+
+    <!-- Biome Sections -->
+    <h2>Biome Sections</h2>
+    <p>Each sub-chunk includes a biome section serialized after the block storage layers. Biomes use the same paletted encoding as blocks but at <strong>4&times;4&times;4 resolution</strong> (64 cells per section instead of 4096).</p>
+
+    <p>For chunks with a single biome (the common case in MC-RS), the biome section is encoded compactly: a header byte of <code>0x01</code> (0 bits per entry, runtime flag set) followed by a single <code>VarInt32</code> biome network ID. No palette count is written for single-biome sections.</p>
+
+    <!-- Terrain Generators -->
+    <h2>Terrain Generators</h2>
+    <p>MC-RS includes two terrain generators, selectable via configuration.</p>
+
+    <h3>Flat Generator</h3>
+    <p>The flat generator produces a simple layered world:</p>
     <ul>
-      <li><strong><code>sub_chunks</code></strong> &mdash; A fixed-size array of 24 sub-chunks, each holding 4096 block state hashes. Empty sub-chunks (all air) can be omitted during network serialization.</li>
-      <li><strong><code>biomes</code></strong> &mdash; A <code>[u8; 256]</code> 2D biome map indexed as <code>[x * 16 + z]</code>. Each entry is a biome ID. During serialization, this is expanded into 4&times;4&times;4 biome sections with palette encoding.</li>
-      <li><strong><code>dirty</code></strong> &mdash; A boolean flag set to <code>true</code> when the chunk is generated or modified. Reset to <code>false</code> after saving to disk. Only dirty chunks are written during auto-save.</li>
+      <li><strong>Y = -64</strong> &mdash; Bedrock layer</li>
+      <li><strong>Y = -63 to -59</strong> &mdash; 5 layers of dirt</li>
+      <li><strong>Y = -58</strong> &mdash; Grass block on top</li>
+    </ul>
+    <p>Block IDs are resolved as sequential indices from <code>canonical_block_states.nbt</code>. All sub-chunks above the surface layer are empty (air) and omitted from the network payload.</p>
+
+    <h3>Perlin Noise Generator</h3>
+    <p>The Perlin generator uses <strong>multi-octave 2D Perlin noise</strong> (fractional Brownian motion) to produce dynamic terrain heights. The noise is sampled at each (x, z) column position and scaled to produce varied elevation.</p>
+
+    <p>Block placement is determined by height relative to sea level and noise values:</p>
+    <ul>
+      <li><strong>Stone</strong> &mdash; Fill below the surface depth</li>
+      <li><strong>Dirt</strong> &mdash; Several layers below the surface</li>
+      <li><strong>Grass</strong> &mdash; Surface block for normal-height terrain</li>
+      <li><strong>Sand</strong> &mdash; Surface block near water level (beaches)</li>
+      <li><strong>Water</strong> &mdash; Fills columns below sea level where no solid block exists</li>
+      <li><strong>Gravel</strong> &mdash; Underwater floor in some areas</li>
+      <li><strong>Snow</strong> &mdash; Surface block at high elevations</li>
+      <li><strong>Oak log + leaves</strong> &mdash; Simple trees placed on grass surfaces</li>
     </ul>
 
-    <pre><code><span class="cm">// Chunk column structure</span>
-<span class="kw">pub struct</span> <span class="ty">ChunkColumn</span> {
-    <span class="kw">pub</span> sub_chunks: [<span class="ty">SubChunk</span>; <span class="num">24</span>],  <span class="cm">// Y range: -64 to 319</span>
-    <span class="kw">pub</span> biomes: [<span class="ty">u8</span>; <span class="num">256</span>],           <span class="cm">// 2D biome map [x*16+z]</span>
-    <span class="kw">pub</span> dirty: <span class="ty">bool</span>,                  <span class="cm">// Modified since last save?</span>
-    <span class="kw">pub</span> cached_payload: <span class="ty">Option</span>&lt;<span class="ty">Vec</span>&lt;<span class="ty">u8</span>&gt;&gt;, <span class="cm">// Cached network payload</span>
-}
-
-<span class="cm">// Sub-chunk: 16x16x16 block storage</span>
-<span class="kw">pub struct</span> <span class="ty">SubChunk</span> {
-    <span class="kw">pub</span> blocks: [<span class="ty">u32</span>; <span class="num">4096</span>],  <span class="cm">// FNV-1a block state hashes</span>
-}</code></pre>
-
     <div class="alert alert-info">
-      <strong>Cached payloads:</strong> Once a chunk is serialized for network transmission, the encoded bytes are cached in <code>cached_payload</code>. This avoids re-encoding the same chunk for every connecting player. The cache is invalidated when the chunk is modified (dirty flag set).
+      <strong>Parallel generation:</strong> Chunk generation is offloaded to tokio's blocking thread pool via <code>spawn_blocking</code>. Multiple chunks can be generated in parallel, and the results are cached for subsequent player connections.
     </div>
 
-    <!-- Block States -->
-    <h2>Block States</h2>
-    <p>MC-RS uses an <strong>FNV-1a hash</strong> system for block network IDs instead of sequential runtime IDs. Each block state (block name + property values) is hashed to a deterministic <code>u32</code> value. This is enabled by setting <code>block_network_ids_are_hashes=true</code> in the <code>StartGame</code> packet, which avoids sending the full block palette (~15,000 entries) to each connecting client.</p>
+    <!-- Block Network IDs -->
+    <h2>Block Network IDs</h2>
+    <p>MC-RS sets <code>block_network_ids_are_hashes=true</code> in the <code>StartGame</code> packet. This avoids sending the full block palette (15,000+ entries) to each connecting client.</p>
 
-    <p>The canonical NBT form that is hashed consists of a compound tag with a <code>"name"</code> string and a <code>"states"</code> compound containing the block's properties:</p>
+    <p>Block network IDs are <strong>FNV-1a hashes</strong> computed from the canonical NBT representation of each block state. The canonical form is serialized as <strong>Network Little-Endian NBT</strong> (using ZigZag VarInt encoding for integer types) from <code>canonical_block_states.nbt</code>.</p>
 
-    <pre><code><span class="cm">// FNV-1a hash of canonical block state NBT</span>
-<span class="cm">// "minecraft:stone" → single hash (no properties)</span>
-<span class="cm">// "minecraft:wheat" + growth=0 → one hash</span>
-<span class="cm">// "minecraft:wheat" + growth=7 → different hash</span>
+    <p>MC-RS uses sequential indices from <code>canonical_block_states.nbt</code> as block runtime IDs. The file is parsed at startup using Network LE NBT decoding, and each block state's position in the file corresponds to its network ID.</p>
 
-<span class="kw">fn</span> <span class="fn">hash_block_state</span>(name: &amp;<span class="ty">str</span>) -&gt; <span class="ty">u32</span> {
-    <span class="cm">// Build canonical NBT: {name: "...", states: {}}</span>
-    <span class="cm">// Serialize to little-endian NBT bytes</span>
-    <span class="cm">// Compute FNV-1a hash of the byte sequence</span>
+    <pre><code><span class="cm">// canonical_block_states.nbt format</span>
+<span class="cm">// Network Little-Endian NBT (ZigZag VarInt for int types)</span>
+<span class="cm">// Each entry:</span>
+<span class="ty">TAG_Compound</span>(<span class="str">""</span>) {
+    <span class="ty">TAG_String</span>(<span class="str">"name"</span>): <span class="str">"minecraft:stone"</span>,
+    <span class="ty">TAG_Compound</span>(<span class="str">"states"</span>) {
+        <span class="cm">// block-specific properties</span>
+    },
+    <span class="ty">TAG_Int</span>(<span class="str">"version"</span>): <span class="num">...</span>,
 }
 
-<span class="kw">fn</span> <span class="fn">hash_block_state_with_int</span>(name: &amp;<span class="ty">str</span>, prop: &amp;<span class="ty">str</span>, val: <span class="ty">i32</span>) -&gt; <span class="ty">u32</span> {
-    <span class="cm">// Build: {name: "...", states: {prop: TAG_Int(val)}}</span>
-}</code></pre>
+<span class="cm">// Block at index 0 in the file → network ID 0</span>
+<span class="cm">// Block at index 1 → network ID 1</span>
+<span class="cm">// etc.</span></code></pre>
 
-    <p>MC-RS pre-computes hashes for approximately <strong>350 common block states</strong> in the <code>WorldBlocks</code> and <code>TickBlocks</code> structures at startup. These include all ores, logs, leaves, crops at each growth stage, fluids at each depth level, and redstone wire at each signal strength.</p>
+    <!-- Dynamic Spawn Position -->
+    <h2>Dynamic Spawn Position</h2>
+    <p>The spawn Y coordinate is not hardcoded. MC-RS generates the spawn chunk first, then scans the column at (0, 0) to find the highest solid block. The player is spawned 2 blocks above that surface, ensuring they always appear on top of the terrain regardless of which generator is active.</p>
 
-    <!-- Terrain Generation -->
-    <h2>Terrain Generation</h2>
-    <p>The <code>OverworldGenerator</code> in <code>mc-rs-world</code> produces terrain using seed-based <strong>Perlin noise</strong> with an <strong>OctaveNoise</strong> (fractional Brownian motion) wrapper that combines multiple noise octaves with configurable lacunarity and persistence.</p>
-
-    <p>Each chunk passes through an <strong>8-phase pipeline</strong>:</p>
+    <!-- Chunk Streaming -->
+    <h2>Chunk Streaming</h2>
+    <p>Chunks are sent to players based on their position in the world. The chunk loading flow works as follows:</p>
 
     <ol>
-      <li><strong>Base terrain (height map)</strong> &mdash; Multi-octave Perlin noise generates a 2D height map. The noise is sampled at each (x, z) column position and scaled to produce terrain heights between sea level and the mountain ceiling.</li>
-      <li><strong>Biome assignment</strong> &mdash; The <code>BiomeSelector</code> uses temperature, humidity, and river noise layers to classify each column into one of 10 biomes, controlling surface blocks and vegetation.</li>
-      <li><strong>Surface blocks</strong> &mdash; Biome-specific surface layers are applied: grass + dirt for plains, sand for deserts, stone for mountains, snow for ice plains. Bedrock is placed at Y=-64 with a randomized 5-layer pattern.</li>
-      <li><strong>Caves (spaghetti)</strong> &mdash; Two independent 3D noise fields generate spaghetti-style cave tunnels. A block is carved out if <code>c1&sup2; + c2&sup2; &lt; 0.006</code>, creating long winding passages through the terrain.</li>
-      <li><strong>Ores</strong> &mdash; 8 ore types (coal, iron, gold, diamond, lapis, redstone, emerald, copper) plus deepslate variants below Y=0. Veins are placed using a random walk algorithm at biome-appropriate Y ranges.</li>
-      <li><strong>Trees</strong> &mdash; 4 tree types (oak, birch, spruce, acacia) are placed based on biome. Tree placement is restricted to columns 2&ndash;13 within the chunk to avoid cross-chunk generation issues.</li>
-      <li><strong>Vegetation</strong> &mdash; Flowers, tall grass, ferns, and other decorations are scattered based on biome density parameters.</li>
-      <li><strong>Structures</strong> &mdash; Dungeons (small rooms with spawners) and villages are placed using structure-specific noise and spacing rules.</li>
+      <li><strong>RequestChunkRadius</strong> &mdash; The client sends its desired render distance (in chunks).</li>
+      <li><strong>ChunkRadiusUpdated</strong> &mdash; The server confirms the actual chunk radius it will provide (may be clamped to a server-configured maximum).</li>
+      <li><strong>LevelChunk</strong> &mdash; The server sends chunk data for all chunks within the negotiated radius around the player's position. Each <code>LevelChunk</code> packet contains the serialized sub-chunks, biome sections, and a border block count (0).</li>
+      <li><strong>NetworkChunkPublisherUpdate</strong> &mdash; The server announces the center position and radius of the chunk area it considers "published" (loaded and available to the client).</li>
     </ol>
 
-    <div class="alert alert-info">
-      <strong>Parallel generation:</strong> Chunk generation is computationally expensive. MC-RS offloads it to tokio's blocking thread pool via <code>spawn_blocking</code> with <code>Arc</code>-wrapped generators. Multiple chunks can be generated in parallel, and a batch noise sampling function (<code>sample_2d_batch</code>) amortizes noise computation across column groups.
+    <p>As the player moves, new chunks entering the radius are generated and sent, while chunks leaving the radius are no longer tracked. Chunks are generated on demand and cached in memory for the lifetime of the server process.</p>
+
+    <div class="alert alert-warn">
+      <strong>No chunk persistence:</strong> MC-RS does not use LevelDB or any disk-based chunk storage. Chunks exist only in memory and are regenerated on server restart. Only player data (position, game mode, etc.) is persisted as JSON files.
     </div>
 
-    <!-- Biomes -->
-    <h2>Biomes</h2>
-    <p>The <code>BiomeSelector</code> classifies each chunk column into one of 10 biomes using three noise layers: <strong>temperature</strong>, <strong>humidity</strong>, and <strong>river proximity</strong>. Sea level is at <strong>Y=62</strong>.</p>
+    <!-- Day/Night Cycle -->
+    <h2>Day/Night Cycle</h2>
+    <p>The world follows a <strong>24,000-tick day cycle</strong>, sent to clients via the <code>SetTime</code> packet. Time progresses each server tick when the <code>do_daylight_cycle</code> game rule is enabled.</p>
 
     <table>
       <thead>
-        <tr><th>Biome</th><th>ID</th><th>Temperature</th><th>Humidity</th><th>Surface</th><th>Features</th></tr>
+        <tr><th>Tick Range</th><th>Phase</th><th>Description</th></tr>
       </thead>
       <tbody>
-        <tr>
-          <td><strong>Ocean</strong></td>
-          <td><code>0</code></td>
-          <td>Any</td>
-          <td>Any</td>
-          <td>Sand, gravel</td>
-          <td>Water below Y=62, seagrass</td>
-        </tr>
-        <tr>
-          <td><strong>Plains</strong></td>
-          <td><code>1</code></td>
-          <td>Medium</td>
-          <td>Medium</td>
-          <td>Grass, dirt</td>
-          <td>Flowers, tall grass, villages</td>
-        </tr>
-        <tr>
-          <td><strong>Desert</strong></td>
-          <td><code>2</code></td>
-          <td>Hot</td>
-          <td>Dry</td>
-          <td>Sand, sandstone</td>
-          <td>Cacti, dead bushes</td>
-        </tr>
-        <tr>
-          <td><strong>Mountains</strong></td>
-          <td><code>3</code></td>
-          <td>Cold</td>
-          <td>Any</td>
-          <td>Stone, gravel</td>
-          <td>Steep terrain, emerald ore</td>
-        </tr>
-        <tr>
-          <td><strong>Forest</strong></td>
-          <td><code>4</code></td>
-          <td>Medium</td>
-          <td>Wet</td>
-          <td>Grass, dirt</td>
-          <td>Dense oak trees, flowers</td>
-        </tr>
-        <tr>
-          <td><strong>Taiga</strong></td>
-          <td><code>5</code></td>
-          <td>Cold</td>
-          <td>Wet</td>
-          <td>Grass, podzol</td>
-          <td>Spruce trees, ferns</td>
-        </tr>
-        <tr>
-          <td><strong>River</strong></td>
-          <td><code>7</code></td>
-          <td>Any</td>
-          <td>Any</td>
-          <td>Sand, clay</td>
-          <td>Water channels between biomes</td>
-        </tr>
-        <tr>
-          <td><strong>Ice Plains</strong></td>
-          <td><code>12</code></td>
-          <td>Frozen</td>
-          <td>Any</td>
-          <td>Snow, ice</td>
-          <td>Frozen rivers, snow layers</td>
-        </tr>
-        <tr>
-          <td><strong>Birch Forest</strong></td>
-          <td><code>27</code></td>
-          <td>Medium</td>
-          <td>Medium-Wet</td>
-          <td>Grass, dirt</td>
-          <td>Birch trees, flowers</td>
-        </tr>
-        <tr>
-          <td><strong>Savanna</strong></td>
-          <td><code>35</code></td>
-          <td>Hot</td>
-          <td>Medium</td>
-          <td>Grass, coarse dirt</td>
-          <td>Acacia trees, tall grass</td>
-        </tr>
+        <tr><td><code>0 &ndash; 6,000</code></td><td>Morning</td><td>Sun rises, sky brightens</td></tr>
+        <tr><td><code>6,000 &ndash; 12,000</code></td><td>Midday</td><td>Full daylight</td></tr>
+        <tr><td><code>12,000 &ndash; 13,000</code></td><td>Sunset</td><td>Sun sets, sky dims</td></tr>
+        <tr><td><code>13,000 &ndash; 23,000</code></td><td>Night</td><td>Moon and stars visible</td></tr>
+        <tr><td><code>23,000 &ndash; 24,000</code></td><td>Sunrise</td><td>New day begins</td></tr>
       </tbody>
     </table>
 
-    <p>Biome serialization uses a palette-based encoding. A section containing a single biome is encoded compactly as <code>0x00</code> + <code>VarInt(biome_id)</code>. Multi-biome sections use a full palette with bit-packed indices for each 4&times;4&times;4 cell.</p>
+    <!-- Weather -->
+    <h2>Weather</h2>
+    <p>MC-RS supports three weather states: <strong>clear</strong>, <strong>rain</strong>, and <strong>thunder</strong>. Weather transitions are controlled by the <code>do_weather_cycle</code> game rule. When enabled, weather changes occur at random intervals. Weather state can also be set manually via the <code>/weather</code> command.</p>
 
-    <!-- Dimensions -->
-    <h2>Dimensions</h2>
-    <p>MC-RS supports three dimensions, each with its own generator and world rules.</p>
-
-    <div class="card-grid">
-      <div class="card">
-        <div class="card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg>
-        </div>
-        <h3>Overworld</h3>
-        <p>Y range -64 to 319. Perlin noise terrain with 10 biomes, spaghetti caves, 8 ore types, 4 tree types, structures. Sea level at Y=62. Deepslate below Y=0, bedrock at Y=-64.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-        </div>
-        <h3>Nether</h3>
-        <p>Lava sea at Y=31. Netherrack ceiling at Y=127. Soul sand valleys, glowstone clusters on the ceiling. Nether portal links to Overworld with 8:1 coordinate scaling.</p>
-      </div>
-      <div class="card">
-        <div class="card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        </div>
-        <h3>The End</h3>
-        <p>Main island centered at (0, 0) made of end stone. Obsidian platform spawned at the player arrival point. End portal frame detection for dimension transitions.</p>
-      </div>
-    </div>
-
-    <h3>Portal Mechanics</h3>
-    <p><strong>Nether portals</strong> are detected by scanning for a valid obsidian frame (minimum 4&times;5 including frame). A player can light the portal interior using flint and steel. When a player enters an active portal, they are transferred to the Nether dimension with coordinates scaled by <strong>8:1</strong> (Overworld X/Z divided by 8 becomes Nether X/Z).</p>
-
-    <p><strong>End portals</strong> require a complete portal frame with all 12 ender eyes placed. Once activated, stepping into the portal transfers the player to The End's obsidian spawn platform at coordinates (100, 49, 0).</p>
-
-    <p>Dimension changes are handled via the <code>ChangeDimension</code> packet, which triggers the client to display a loading screen while the server generates and sends chunks in the target dimension.</p>
-
-    <!-- Persistence -->
-    <h2>Persistence</h2>
-    <p>MC-RS persists world data using <strong>LevelDB</strong> (via the <code>rusty-leveldb</code> crate, a pure Rust implementation) for chunk storage and <strong>JSON files</strong> for player data.</p>
-
-    <h3>Chunk Storage</h3>
-    <p>Chunks are stored in LevelDB with composite keys derived from chunk coordinates and a tag byte:</p>
-
-    <pre><code><span class="cm">// LevelDB key format for chunk data</span>
-<span class="cm">// Sub-chunk key: [X:i32_le][Z:i32_le][0x2F][y_index:u8]</span>
-<span class="cm">// Other tags:    [X:i32_le][Z:i32_le][tag:u8]</span>
-
-<span class="cm">// Disk sub-chunk format</span>
-<span class="ty">SubChunkDisk</span> {
-    version: <span class="ty">u8</span>,          <span class="cm">// 9 (current format)</span>
-    persistence_type: <span class="ty">u8</span>, <span class="cm">// 0 (paletted)</span>
-    bits_per_block: <span class="ty">u8</span>,   <span class="cm">// 1, 2, 3, 4, 5, 6, 8, or 16</span>
-    block_indices: [<span class="ty">u8</span>],  <span class="cm">// Bit-packed palette indices for 4096 blocks</span>
-    palette: [<span class="ty">u32</span>],       <span class="cm">// FNV-1a block state hashes</span>
-}</code></pre>
-
-    <h3>Level Data</h3>
-    <p>The <code>level.dat</code> file uses a custom format with an 8-byte header followed by little-endian NBT data:</p>
-    <ul>
-      <li><code>storage_version</code> (i32 LE) &mdash; Format version number</li>
-      <li><code>data_length</code> (i32 LE) &mdash; Length of the NBT payload</li>
-      <li>NBT payload (little-endian) &mdash; World name, seed, spawn position, game rules, weather state, time of day, and other world-level settings</li>
-    </ul>
-
-    <h3>Player Data</h3>
-    <p>Each player's state is saved as a JSON file at <code>worlds/&lt;name&gt;/players/&lt;uuid&gt;.json</code>, containing position, health, inventory, active effects, game mode, and XP level.</p>
-
-    <h3>Auto-Save</h3>
-    <p>MC-RS performs automatic saves at a configurable interval (default <strong>300 seconds</strong>). During auto-save:</p>
-    <ol>
-      <li>All <strong>dirty chunks</strong> are serialized and written to LevelDB</li>
-      <li>All <strong>online player data</strong> is written to JSON files</li>
-      <li>The <strong>level.dat</strong> is updated with current world state</li>
-    </ol>
-    <p>Manual saves are also triggered on <code>/stop</code> and Ctrl+C (graceful shutdown).</p>
-
-    <div class="alert alert-warn">
-      <strong>LevelDB threading:</strong> The <code>rusty-leveldb::DB</code> type is <code>!Send</code>, meaning it cannot be shared across threads. All LevelDB operations run on the main tokio task, which is safe because persistence I/O is batched during auto-save windows rather than performed per-block-change.
-    </div>
-
-    <!-- Block Ticks -->
-    <h2>Block Ticks</h2>
-    <p>MC-RS implements a block tick system that drives dynamic world behavior: crop growth, fluid flow, gravity, and redstone signal propagation.</p>
-
-    <h3>Tick Scheduler</h3>
-    <p>The <code>TickScheduler</code> uses a <strong>BinaryHeap</strong> (priority queue) combined with a <strong>HashSet</strong> for deduplication. Blocks schedule future ticks with a specific delay, and the scheduler drains all ticks that are ready on each game tick.</p>
-
-    <h3>Random Ticks</h3>
-    <p>Each game tick, MC-RS selects <strong>1 random block per sub-chunk</strong> in all chunks within a <strong>4-chunk radius</strong> of each player. If the selected block is a tick-eligible type, its tick handler is invoked. This drives:</p>
+    <!-- Limitations -->
+    <h2>Current Limitations</h2>
+    <p>The world system is focused on core chunk serialization and basic terrain. The following features are <strong>not implemented</strong>:</p>
 
     <ul>
-      <li><strong>Crop growth</strong> &mdash; Wheat (8 growth stages, <code>growth=0..7</code>), carrots, potatoes (8 stages), and beetroot (4 stages). Each random tick has a chance to advance the growth stage.</li>
-      <li><strong>Grass spread/decay</strong> &mdash; Grass blocks spread to adjacent dirt blocks with sufficient light. Grass decays to dirt if covered by an opaque block.</li>
-      <li><strong>Leaf decay</strong> &mdash; Leaves that are too far from any log block decay and drop saplings.</li>
-    </ul>
-
-    <h3>Scheduled Ticks</h3>
-    <p>Some block behaviors use the scheduled tick system with deterministic delays:</p>
-    <ul>
-      <li><strong>Fluid flow</strong> &mdash; Water spreads every 5 ticks (max distance 7), lava every 30 ticks (max distance 4). Source blocks, flowing levels (1&ndash;7), falling, infinite water source rule, and water+lava interactions (obsidian, cobblestone) are all simulated.</li>
-      <li><strong>Gravity blocks</strong> &mdash; Sand, gravel, and red sand check below every 2 ticks. If the block below is air, fluid, or non-solid, the block falls.</li>
-      <li><strong>Redstone</strong> &mdash; Wire propagates signal strength 0&ndash;15 with distance decay. Levers toggle, torches invert, and repeaters introduce configurable delays and signal boosting.</li>
+      <li><strong>No chunk persistence</strong> &mdash; Chunks are generated in memory only. No LevelDB or disk storage for chunks.</li>
+      <li><strong>No caves</strong> &mdash; No 3D noise carving or cave generation.</li>
+      <li><strong>No ores</strong> &mdash; No ore vein placement.</li>
+      <li><strong>No structures</strong> &mdash; No villages, dungeons, temples, or other structures.</li>
+      <li><strong>No biome diversity</strong> &mdash; The Perlin generator uses height-based block selection rather than a biome classification system.</li>
+      <li><strong>No Nether or End</strong> &mdash; Only the Overworld dimension exists.</li>
+      <li><strong>No block ticks</strong> &mdash; No crop growth, fluid flow, or redstone simulation.</li>
+      <li><strong>No block updates</strong> &mdash; Players cannot currently place or break blocks.</li>
     </ul>
 
   </div>

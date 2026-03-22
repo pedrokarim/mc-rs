@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::Path;
+
 use tracing::{info, warn};
 
 const PLAYERS_DIR: &str = "players";

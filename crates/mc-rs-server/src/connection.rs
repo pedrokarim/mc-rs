@@ -89,7 +89,7 @@ impl Connection {
                 // Calculate spawn height from terrain
                 let surface_y = terrain_generator::get_surface_height(0, 0, 42) as f32;
                 let feet_y = surface_y + 1.0; // 1 block above surface
-                let eye_y = feet_y + 1.621;   // PMMP eye offset
+                let eye_y = feet_y + 1.621; // PMMP eye offset
                 [0.5, eye_y, 0.5]
             },
             pitch: 0.0,
@@ -138,8 +138,8 @@ impl Connection {
             // It's sent raw (no compression) before NetworkSettings response
             (CompressionAlgorithm::None, &decrypted[..])
         } else {
-            let algo = CompressionAlgorithm::from_u8(decrypted[0])
-                .unwrap_or(CompressionAlgorithm::None);
+            let algo =
+                CompressionAlgorithm::from_u8(decrypted[0]).unwrap_or(CompressionAlgorithm::None);
             (algo, &decrypted[1..])
         };
 
@@ -197,9 +197,7 @@ impl Connection {
 
             // Silently ignore these in PreSpawn
             (ConnectionState::PreSpawn, packet_id::PLAYER_AUTH_INPUT)
-            | (ConnectionState::PreSpawn, packet_id::SERVERBOUND_LOADING_SCREEN) => {
-                Vec::new()
-            }
+            | (ConnectionState::PreSpawn, packet_id::SERVERBOUND_LOADING_SCREEN) => Vec::new(),
 
             // ── SpawnResponse ──
             (ConnectionState::SpawnResponse, packet_id::SET_LOCAL_PLAYER_AS_INITIALIZED) => {
@@ -211,9 +209,7 @@ impl Connection {
             (ConnectionState::InGame, packet_id::PLAYER_AUTH_INPUT) => {
                 self.handle_player_auth_input(reader)
             }
-            (ConnectionState::InGame, packet_id::TEXT) => {
-                self.handle_text(reader)
-            }
+            (ConnectionState::InGame, packet_id::TEXT) => self.handle_text(reader),
             (ConnectionState::InGame, packet_id::COMMAND_REQUEST) => {
                 self.handle_command_request(reader)
             }
@@ -221,7 +217,6 @@ impl Connection {
             // ── Silently ignored ──
             (_, packet_id::EMOTE_LIST)
             | (_, packet_id::SERVERBOUND_LOADING_SCREEN)
-            | (ConnectionState::PreSpawn, packet_id::PLAYER_AUTH_INPUT)
             | (ConnectionState::SpawnResponse, packet_id::PLAYER_AUTH_INPUT)
             | (_, 0x081) => Vec::new(),
 
@@ -274,24 +269,29 @@ impl Connection {
             return Vec::new();
         };
 
-        info!(
-            "[{}] Login: protocol={}",
-            self.addr, pkt.protocol_version
-        );
+        info!("[{}] Login: protocol={}", self.addr, pkt.protocol_version);
 
         // Parse authInfoJson to extract identity and public key
         match jwt::extract_login_identity(&pkt.chain_data) {
             Ok(identity) => {
                 self.client_pub_key_b64 = Some(identity.public_key_b64);
                 self.display_name = Some(identity.display_name);
-                self.xuid = if identity.xuid.is_empty() { None } else { Some(identity.xuid) };
+                self.xuid = if identity.xuid.is_empty() {
+                    None
+                } else {
+                    Some(identity.xuid)
+                };
                 if !identity.uuid_str.is_empty() {
                     self.uuid = uuid::Uuid::parse_str(&identity.uuid_str).ok();
                 }
                 // Load saved player data if exists
                 if let Some(ref xuid) = self.xuid {
                     if let Some(save) = player_data::load_player(xuid) {
-                        self.position = [save.position[0] as f32, save.position[1] as f32, save.position[2] as f32];
+                        self.position = [
+                            save.position[0] as f32,
+                            save.position[1] as f32,
+                            save.position[2] as f32,
+                        ];
                         self.yaw = save.rotation[0];
                         self.pitch = save.rotation[1];
                         info!(
@@ -306,7 +306,11 @@ impl Connection {
                     self.addr,
                     self.display_name.as_deref().unwrap_or("?"),
                     self.xuid.as_deref().unwrap_or("none"),
-                    if identity.authenticated { "xbox" } else { "offline" },
+                    if identity.authenticated {
+                        "xbox"
+                    } else {
+                        "offline"
+                    },
                 );
             }
             Err(e) => {
@@ -348,11 +352,11 @@ impl Connection {
         let handshake_jwt =
             jwt::create_handshake_jwt(&server_pub_b64, &salt_b64, |data| keypair.sign(data));
 
-        let handshake_pkt = ServerToClientHandshake {
-            jwt: handshake_jwt,
-        };
-        let response =
-            self.encode_compressed_packet(packet_id::SERVER_TO_CLIENT_HANDSHAKE, &handshake_pkt.encode());
+        let handshake_pkt = ServerToClientHandshake { jwt: handshake_jwt };
+        let response = self.encode_compressed_packet(
+            packet_id::SERVER_TO_CLIENT_HANDSHAKE,
+            &handshake_pkt.encode(),
+        );
 
         // DON'T enable encryption yet — the ServerToClientHandshake must be sent unencrypted.
         // Store the key to activate AFTER this packet is sent.
@@ -365,7 +369,10 @@ impl Connection {
     }
 
     fn handle_client_to_server_handshake(&mut self, _reader: &mut ProtoReader) -> Vec<Vec<u8>> {
-        info!("[{}] ClientToServerHandshake received — encryption verified", self.addr);
+        info!(
+            "[{}] ClientToServerHandshake received — encryption verified",
+            self.addr
+        );
 
         // Send PlayStatus(LOGIN_SUCCESS)
         let play_status = PlayStatus {
@@ -387,7 +394,10 @@ impl Connection {
             return Vec::new();
         };
 
-        debug!("[{}] ResourcePackClientResponse: status={}", self.addr, status);
+        debug!(
+            "[{}] ResourcePackClientResponse: status={}",
+            self.addr, status
+        );
 
         match status {
             3 => {
@@ -402,7 +412,10 @@ impl Connection {
                 self.send_pre_spawn_packets()
             }
             _ => {
-                debug!("[{}] Unexpected resource pack status: {}", self.addr, status);
+                debug!(
+                    "[{}] Unexpected resource pack status: {}",
+                    self.addr, status
+                );
                 Vec::new()
             }
         }
@@ -412,16 +425,18 @@ impl Connection {
         let radius = reader.read_var_i32().unwrap_or(4);
         let clamped = radius.clamp(2, 8);
         self.view_distance = clamped;
-        info!("[{}] RequestChunkRadius: {} (responding with {})", self.addr, radius, clamped);
+        info!(
+            "[{}] RequestChunkRadius: {} (responding with {})",
+            self.addr, radius, clamped
+        );
 
         let mut responses = Vec::new();
 
         // ChunkRadiusUpdated
         let radius_pkt = ChunkRadiusUpdated { radius: clamped };
-        responses.push(self.encode_compressed_packet(
-            packet_id::CHUNK_RADIUS_UPDATED,
-            &radius_pkt.encode(),
-        ));
+        responses.push(
+            self.encode_compressed_packet(packet_id::CHUNK_RADIUS_UPDATED, &radius_pkt.encode()),
+        );
 
         // NetworkChunkPublisherUpdate
         let spawn_x = self.position[0] as i32;
@@ -445,7 +460,8 @@ impl Connection {
         let seed = 42u64; // TODO: from config
         for cx in (spawn_chunk_x - clamped)..=(spawn_chunk_x + clamped) {
             for cz in (spawn_chunk_z - clamped)..=(spawn_chunk_z + clamped) {
-                let (sub_chunk_count, chunk_payload) = terrain_generator::generate_terrain_chunk(cx, cz, seed);
+                let (sub_chunk_count, chunk_payload) =
+                    terrain_generator::generate_terrain_chunk(cx, cz, seed);
                 let chunk = LevelChunk {
                     chunk_x: cx,
                     chunk_z: cz,
@@ -454,23 +470,24 @@ impl Connection {
                     cache_enabled: false,
                     payload: chunk_payload,
                 };
-                responses.push(self.encode_compressed_packet(
-                    packet_id::LEVEL_CHUNK,
-                    &chunk.encode(),
-                ));
+                responses
+                    .push(self.encode_compressed_packet(packet_id::LEVEL_CHUNK, &chunk.encode()));
                 self.sent_chunks.insert((cx, cz));
             }
         }
-        info!("[{}] Sent {} chunks (radius={})", self.addr, self.sent_chunks.len(), clamped);
+        info!(
+            "[{}] Sent {} chunks (radius={})",
+            self.addr,
+            self.sent_chunks.len(),
+            clamped
+        );
 
         // PLAYER_SPAWN — send after chunks
         let spawn_status = PlayStatus {
             status: PlayStatusType::PlayerSpawn,
         };
-        responses.push(self.encode_compressed_packet(
-            packet_id::PLAY_STATUS,
-            &spawn_status.encode(),
-        ));
+        responses
+            .push(self.encode_compressed_packet(packet_id::PLAY_STATUS, &spawn_status.encode()));
         self.state = ConnectionState::SpawnResponse;
         debug!("[{}] → SpawnResponse state", self.addr);
 
@@ -485,10 +502,8 @@ impl Connection {
         let spawn_status = PlayStatus {
             status: PlayStatusType::PlayerSpawn,
         };
-        let response = self.encode_compressed_packet(
-            packet_id::PLAY_STATUS,
-            &spawn_status.encode(),
-        );
+        let response =
+            self.encode_compressed_packet(packet_id::PLAY_STATUS, &spawn_status.encode());
         self.state = ConnectionState::SpawnResponse;
         debug!("[{}] → SpawnResponse state", self.addr);
         vec![response]
@@ -513,7 +528,10 @@ impl Connection {
         };
 
         // Validate position (anti-cheat basics)
-        if !pkt.position[0].is_finite() || !pkt.position[1].is_finite() || !pkt.position[2].is_finite() {
+        if !pkt.position[0].is_finite()
+            || !pkt.position[1].is_finite()
+            || !pkt.position[2].is_finite()
+        {
             return Vec::new(); // ignore invalid position
         }
 
@@ -532,10 +550,7 @@ impl Connection {
                 riding_runtime_id: 0,
                 tick: self.tick,
             };
-            return vec![self.encode_compressed_packet(
-                packet_id::MOVE_PLAYER,
-                &reset.encode(),
-            )];
+            return vec![self.encode_compressed_packet(packet_id::MOVE_PLAYER, &reset.encode())];
         }
 
         // Update player position
@@ -557,10 +572,8 @@ impl Connection {
             riding_runtime_id: 0,
             tick: self.tick,
         };
-        self.broadcasts.push(self.encode_compressed_packet(
-            packet_id::MOVE_PLAYER,
-            &move_pkt.encode(),
-        ));
+        self.broadcasts
+            .push(self.encode_compressed_packet(packet_id::MOVE_PLAYER, &move_pkt.encode()));
 
         // Check if player moved to a new chunk — send new chunks dynamically
         let mut responses = Vec::new();
@@ -592,7 +605,8 @@ impl Connection {
                     let cx = chunk_x + dx;
                     let cz = chunk_z + dz;
                     if !self.sent_chunks.contains(&(cx, cz)) {
-                        let (sub_count, payload) = terrain_generator::generate_terrain_chunk(cx, cz, 42); // TODO: seed from config
+                        let (sub_count, payload) =
+                            terrain_generator::generate_terrain_chunk(cx, cz, 42); // TODO: seed from config
                         let chunk_pkt = LevelChunk {
                             chunk_x: cx,
                             chunk_z: cz,
@@ -601,10 +615,12 @@ impl Connection {
                             cache_enabled: false,
                             payload,
                         };
-                        responses.push(self.encode_compressed_packet(
-                            packet_id::LEVEL_CHUNK,
-                            &chunk_pkt.encode(),
-                        ));
+                        responses.push(
+                            self.encode_compressed_packet(
+                                packet_id::LEVEL_CHUNK,
+                                &chunk_pkt.encode(),
+                            ),
+                        );
                         self.sent_chunks.insert((cx, cz));
                         new_chunks += 1;
                     }
@@ -612,7 +628,10 @@ impl Connection {
             }
 
             if new_chunks > 0 {
-                debug!("[{}] Sent {} new chunks around ({}, {})", self.addr, new_chunks, chunk_x, chunk_z);
+                debug!(
+                    "[{}] Sent {} new chunks around ({}, {})",
+                    self.addr, new_chunks, chunk_x, chunk_z
+                );
             }
         }
 
@@ -628,10 +647,8 @@ impl Connection {
                         flags: 3, // FLAG_NEIGHBORS | FLAG_NETWORK
                         layer: 0,
                     };
-                    let update_bytes = self.encode_compressed_packet(
-                        packet_id::UPDATE_BLOCK,
-                        &update.encode(),
-                    );
+                    let update_bytes =
+                        self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &update.encode());
                     // Send to the player who broke the block
                     responses.push(update_bytes.clone());
                     // Broadcast to all other players
@@ -653,7 +670,10 @@ impl Connection {
             return Vec::new();
         };
 
-        let player_name = self.display_name.clone().unwrap_or_else(|| "Player".to_string());
+        let player_name = self
+            .display_name
+            .clone()
+            .unwrap_or_else(|| "Player".to_string());
         let xuid = self.xuid.clone().unwrap_or_default();
 
         // Check for commands (in case client sends via Text instead of CommandRequest)
@@ -675,10 +695,8 @@ impl Connection {
 
         // Broadcast chat to all players (including self)
         let chat = mc_rs_proto::packets::player::Text::chat(&player_name, &pkt.message, &xuid);
-        self.broadcasts.push(self.encode_compressed_packet(
-            packet_id::TEXT,
-            &chat,
-        ));
+        self.broadcasts
+            .push(self.encode_compressed_packet(packet_id::TEXT, &chat));
 
         Vec::new()
     }
@@ -689,7 +707,10 @@ impl Connection {
         };
 
         let ctx = mc_rs_command::CommandContext {
-            player_name: self.display_name.clone().unwrap_or_else(|| "Player".to_string()),
+            player_name: self
+                .display_name
+                .clone()
+                .unwrap_or_else(|| "Player".to_string()),
             position: self.position,
         };
 
@@ -713,14 +734,14 @@ impl Connection {
                     riding_runtime_id: 0,
                     tick: self.tick,
                 };
-                responses.push(self.encode_compressed_packet(
-                    packet_id::MOVE_PLAYER,
-                    &move_pkt.encode(),
-                ));
+                responses.push(
+                    self.encode_compressed_packet(packet_id::MOVE_PLAYER, &move_pkt.encode()),
+                );
             }
             mc_rs_command::CommandAction::Broadcast { message } => {
                 let chat = mc_rs_proto::packets::player::Text::chat("Server", message, "");
-                self.broadcasts.push(self.encode_compressed_packet(packet_id::TEXT, &chat));
+                self.broadcasts
+                    .push(self.encode_compressed_packet(packet_id::TEXT, &chat));
             }
             mc_rs_command::CommandAction::SetTime { .. }
             | mc_rs_command::CommandAction::SetGamemode { .. }
@@ -763,16 +784,13 @@ impl Connection {
         writer.write_bool(false); // has_addons
         writer.write_bool(false); // has_scripts
         writer.write_bool(false); // force_disable_vibrant_visuals
-        // World template UUID (nil = 16 zero bytes, written as 2 x i64_le)
+                                  // World template UUID (nil = 16 zero bytes, written as 2 x i64_le)
         writer.write_i64_le(0);
         writer.write_i64_le(0);
-        writer.write_string("");  // world_template_version
-        writer.write_u16_le(0);   // resource_packs count
+        writer.write_string(""); // world_template_version
+        writer.write_u16_le(0); // resource_packs count
 
-        vec![self.encode_compressed_packet(
-            packet_id::RESOURCE_PACKS_INFO,
-            writer.as_bytes(),
-        )]
+        vec![self.encode_compressed_packet(packet_id::RESOURCE_PACKS_INFO, writer.as_bytes())]
     }
 
     fn send_resource_pack_stack(&self) -> Vec<Vec<u8>> {
@@ -784,17 +802,14 @@ impl Connection {
         // experiments: { count: u32_le, [name: String, enabled: bool]..., previously_toggled: bool }
         // useVanillaEditorPacks: bool
         let mut writer = mc_rs_proto::io::ProtoWriter::with_capacity(64);
-        writer.write_bool(false);            // must_accept
-        writer.write_var_u32(0);             // resource_pack_stack count
-        writer.write_string("1.26.2");       // base_game_version
-        writer.write_u32_le(0);              // experiments count
-        writer.write_bool(false);            // experiments_previously_toggled
-        writer.write_bool(false);            // use_vanilla_editor_packs
+        writer.write_bool(false); // must_accept
+        writer.write_var_u32(0); // resource_pack_stack count
+        writer.write_string("1.26.2"); // base_game_version
+        writer.write_u32_le(0); // experiments count
+        writer.write_bool(false); // experiments_previously_toggled
+        writer.write_bool(false); // use_vanilla_editor_packs
 
-        vec![self.encode_compressed_packet(
-            packet_id::RESOURCE_PACK_STACK,
-            writer.as_bytes(),
-        )]
+        vec![self.encode_compressed_packet(packet_id::RESOURCE_PACK_STACK, writer.as_bytes())]
     }
 
     // ── PreSpawn placeholder (will be fully built in steps 11-14) ──
@@ -804,20 +819,15 @@ impl Connection {
 
         // StartGame
         let start_game = StartGame::default_with_id(self.entity_runtime_id as i64, self.position);
-        responses.push(self.encode_compressed_packet(
-            packet_id::START_GAME,
-            &start_game.encode(),
-        ));
+        responses.push(self.encode_compressed_packet(packet_id::START_GAME, &start_game.encode()));
 
         // ItemRegistry (empty) — test if this crashes
-        responses.push(self.encode_compressed_packet(
-            packet_id::ITEM_REGISTRY,
-            &ItemRegistry::encode_empty(),
-        ));
+        responses.push(
+            self.encode_compressed_packet(packet_id::ITEM_REGISTRY, &ItemRegistry::encode_empty()),
+        );
 
         // AvailableActorIdentifiers — real NBT from PMMP
-        static ENTITY_IDENTIFIERS_NBT: &[u8] =
-            include_bytes!("../data/entity_identifiers.nbt");
+        static ENTITY_IDENTIFIERS_NBT: &[u8] = include_bytes!("../data/entity_identifiers.nbt");
         responses.push(self.encode_compressed_packet(
             packet_id::AVAILABLE_ACTOR_IDENTIFIERS,
             ENTITY_IDENTIFIERS_NBT,
@@ -827,47 +837,41 @@ impl Connection {
         let mut biome_writer = mc_rs_proto::io::ProtoWriter::with_capacity(4);
         biome_writer.write_var_u32(0);
         biome_writer.write_var_u32(0);
-        responses.push(self.encode_compressed_packet(
-            packet_id::BIOME_DEFINITION_LIST,
-            biome_writer.as_bytes(),
-        ));
+        responses.push(
+            self.encode_compressed_packet(
+                packet_id::BIOME_DEFINITION_LIST,
+                biome_writer.as_bytes(),
+            ),
+        );
 
         // 5. UpdateAttributes — health, hunger, movement speed (BEFORE abilities per PMMP)
         let attributes = UpdateAttributes::default_survival(self.entity_runtime_id);
-        responses.push(self.encode_compressed_packet(
-            packet_id::UPDATE_ATTRIBUTES,
-            &attributes.encode(),
-        ));
+        responses.push(
+            self.encode_compressed_packet(packet_id::UPDATE_ATTRIBUTES, &attributes.encode()),
+        );
 
         // 6. AvailableCommands (BEFORE abilities per PMMP)
         let cmd_registry = mc_rs_command::CommandRegistry::new();
         let cmd_list = cmd_registry.all_commands();
         let cmd_refs: Vec<(&str, &str)> = cmd_list.iter().map(|&(n, d)| (n, d)).collect();
         let commands = AvailableCommands::encode_simple(&cmd_refs);
-        responses.push(self.encode_compressed_packet(
-            packet_id::AVAILABLE_COMMANDS,
-            &commands,
-        ));
+        responses.push(self.encode_compressed_packet(packet_id::AVAILABLE_COMMANDS, &commands));
 
         // 7. UpdateAbilities — survival mode (AFTER attributes + commands per PMMP)
         let abilities = UpdateAbilities::default_survival(self.entity_runtime_id as i64);
-        responses.push(self.encode_compressed_packet(
-            packet_id::UPDATE_ABILITIES,
-            &abilities.encode(),
-        ));
+        responses
+            .push(self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities.encode()));
 
         // 8. SetActorData — entity metadata (gravity, breathing, collision)
         let player_name = self.display_name.clone().unwrap_or_default();
         let actor_data = SetActorData::player_in_game(self.entity_runtime_id, &player_name);
-        responses.push(self.encode_compressed_packet(
-            packet_id::SET_ACTOR_DATA, &actor_data.encode(),
-        ));
+        responses
+            .push(self.encode_compressed_packet(packet_id::SET_ACTOR_DATA, &actor_data.encode()));
 
         // 9. CraftingData (empty)
-        responses.push(self.encode_compressed_packet(
-            packet_id::CRAFTING_DATA,
-            &CraftingData::encode_empty(),
-        ));
+        responses.push(
+            self.encode_compressed_packet(packet_id::CRAFTING_DATA, &CraftingData::encode_empty()),
+        );
 
         // 10. CreativeContent (empty)
         responses.push(self.encode_compressed_packet(
@@ -908,8 +912,7 @@ impl Connection {
 
     pub fn encode_compressed_packet(&self, pkt_id: u32, payload: &[u8]) -> Vec<u8> {
         let pkt_bytes = codec::encode_packet(pkt_id, payload);
-        let batch_payload =
-            batch::encode_batch(&[pkt_bytes], self.compression_algo, 7);
+        let batch_payload = batch::encode_batch(&[pkt_bytes], self.compression_algo, 7);
 
         // If encryption is enabled, we need to encrypt
         // But we can't mutate self here, so encryption is handled in send path

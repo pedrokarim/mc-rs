@@ -120,10 +120,7 @@ impl RakNetServer {
             id::OPEN_CONNECTION_REQUEST_2 => {
                 self.handle_open_connection_request_2(packet, addr).await;
             }
-            _ if id::is_ack(packet_id)
-                || id::is_nack(packet_id)
-                || id::is_datagram(packet_id) =>
-            {
+            _ if id::is_ack(packet_id) || id::is_nack(packet_id) || id::is_datagram(packet_id) => {
                 if let Some(session) = self.sessions.get_mut(&addr) {
                     session.handle_raw_packet(packet);
                 }
@@ -166,8 +163,7 @@ impl RakNetServer {
     }
 
     async fn handle_open_connection_request_2(&mut self, packet: &[u8], addr: SocketAddr) {
-        let Some((_, mtu_size, client_guid)) =
-            offline::decode_open_connection_request_2(packet)
+        let Some((_, mtu_size, client_guid)) = offline::decode_open_connection_request_2(packet)
         else {
             return;
         };

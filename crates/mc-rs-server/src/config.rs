@@ -67,18 +67,42 @@ fn default_server() -> ServerSection {
     }
 }
 
-fn default_motd() -> String { "MC-RS Server".to_string() }
-fn default_sub_motd() -> String { "Powered by Rust".to_string() }
-fn default_port() -> u16 { 19132 }
-fn default_max_players() -> u32 { 20 }
-fn default_view_distance() -> i32 { 8 }
-fn default_tick_rate() -> u64 { 10 } // ms per tick (100 TPS)
-fn default_world_name() -> String { "world".to_string() }
-fn default_generator() -> String { "flat".to_string() }
-fn default_gamemode() -> String { "creative".to_string() }
-fn default_difficulty() -> String { "normal".to_string() }
-fn default_true() -> bool { true }
-fn default_spawn_protection() -> i32 { 16 }
+fn default_motd() -> String {
+    "MC-RS Server".to_string()
+}
+fn default_sub_motd() -> String {
+    "Powered by Rust".to_string()
+}
+fn default_port() -> u16 {
+    19132
+}
+fn default_max_players() -> u32 {
+    20
+}
+fn default_view_distance() -> i32 {
+    8
+}
+fn default_tick_rate() -> u64 {
+    10
+} // ms per tick (100 TPS)
+fn default_world_name() -> String {
+    "world".to_string()
+}
+fn default_generator() -> String {
+    "flat".to_string()
+}
+fn default_gamemode() -> String {
+    "creative".to_string()
+}
+fn default_difficulty() -> String {
+    "normal".to_string()
+}
+fn default_true() -> bool {
+    true
+}
+fn default_spawn_protection() -> i32 {
+    16
+}
 
 impl Default for ServerConfig {
     fn default() -> Self {

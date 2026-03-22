@@ -1,7 +1,7 @@
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
 use p384::ecdsa::signature::Signer;
-use p384::ecdsa::{SigningKey, Signature};
+use p384::ecdsa::{Signature, SigningKey};
 use p384::pkcs8::DecodePublicKey;
 use p384::{PublicKey, SecretKey};
 use rand::rngs::OsRng;

@@ -34,7 +34,7 @@ pub fn serialize_biome_section_single(biome_id: u32) -> Vec<u8> {
     let mut w = ProtoWriter::with_capacity(4);
     // header: bits=0, runtime flag set
     w.write_u8(1); // header: bits=0, runtime flag=1
-    // Single palette value (VarInt32 zigzag)
+                   // Single palette value (VarInt32 zigzag)
     w.write_var_i32(biome_id as i32);
     w.into_bytes()
 }
@@ -112,14 +112,14 @@ mod tests {
         assert_eq!(data[0], 8); // version
         assert_eq!(data[1], 1); // 1 storage layer
         assert_eq!(data[2], 1); // header: bits=0, runtime=1
-        // VarInt32 zigzag(42) = 84 = [0x54]
+                                // VarInt32 zigzag(42) = 84 = [0x54]
     }
 
     #[test]
     fn test_biome_section_plains() {
         let data = serialize_biome_section_single(1); // Plains
         assert_eq!(data[0], 1); // header: bits=0, runtime=1
-        // VarInt32 zigzag(1) = 2 = [0x02]
+                                // VarInt32 zigzag(1) = 2 = [0x02]
         assert_eq!(data[1], 0x02);
     }
 

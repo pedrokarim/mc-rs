@@ -51,11 +51,8 @@ pub fn decode_jwt(jwt: &str) -> Result<DecodedJwt, JwtError> {
 /// - Certificate: string (JSON {"chain":["jwt",...]} for SELF_SIGNED auth)
 ///
 /// Returns (client_public_key_b64, identity_claims, display_name, xuid, uuid_str)
-pub fn extract_login_identity(
-    auth_info_json: &str,
-) -> Result<LoginIdentity, JwtError> {
-    let auth_info: Value =
-        serde_json::from_str(auth_info_json).map_err(JwtError::JsonError)?;
+pub fn extract_login_identity(auth_info_json: &str) -> Result<LoginIdentity, JwtError> {
+    let auth_info: Value = serde_json::from_str(auth_info_json).map_err(JwtError::JsonError)?;
 
     let auth_type = auth_info
         .get("AuthenticationType")
@@ -71,14 +68,8 @@ pub fn extract_login_identity(
 
         let decoded = decode_jwt(token)?;
 
-        let display_name = decoded.claims["xname"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
-        let xuid = decoded.claims["xid"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
+        let display_name = decoded.claims["xname"].as_str().unwrap_or("").to_string();
+        let xuid = decoded.claims["xid"].as_str().unwrap_or("").to_string();
 
         // The ECDH client public key comes from the Certificate chain.
         // Walk the chain: the last identityPublicKey in claims is the client's key.
@@ -88,8 +79,8 @@ pub fn extract_login_identity(
                 if let Some(chain) = cert_json["chain"].as_array() {
                     for jwt_str in chain.iter().filter_map(|v| v.as_str()) {
                         if let Ok(jwt) = decode_jwt(jwt_str) {
-                            if let Some(key) = jwt.claims.get("identityPublicKey")
-                                .and_then(|v| v.as_str())
+                            if let Some(key) =
+                                jwt.claims.get("identityPublicKey").and_then(|v| v.as_str())
                             {
                                 pub_key = key.to_string();
                             }
@@ -123,8 +114,7 @@ pub fn extract_login_identity(
             .and_then(|v| v.as_str())
             .ok_or(JwtError::InvalidFormat)?;
 
-        let cert_json: Value =
-            serde_json::from_str(cert_str).map_err(JwtError::JsonError)?;
+        let cert_json: Value = serde_json::from_str(cert_str).map_err(JwtError::JsonError)?;
 
         let chain = cert_json["chain"]
             .as_array()
@@ -135,9 +125,7 @@ pub fn extract_login_identity(
         }
 
         // Parse the first (and usually only) JWT in the chain
-        let jwt_str = chain[0]
-            .as_str()
-            .ok_or(JwtError::InvalidFormat)?;
+        let jwt_str = chain[0].as_str().ok_or(JwtError::InvalidFormat)?;
 
         let decoded = decode_jwt(jwt_str)?;
 
@@ -151,18 +139,9 @@ pub fn extract_login_identity(
 
         // Identity from claims extraData
         let extra = &decoded.claims["extraData"];
-        let display_name = extra["displayName"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
-        let xuid = extra["XUID"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
-        let uuid_str = extra["identity"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
+        let display_name = extra["displayName"].as_str().unwrap_or("").to_string();
+        let xuid = extra["XUID"].as_str().unwrap_or("").to_string();
+        let uuid_str = extra["identity"].as_str().unwrap_or("").to_string();
 
         Ok(LoginIdentity {
             public_key_b64: pub_key,

@@ -31,7 +31,9 @@ pub struct RequestChunkRadius {
 }
 
 impl RequestChunkRadius {
-    pub fn decode(reader: &mut crate::io::ProtoReader) -> Result<Self, crate::io::reader::ProtoReadError> {
+    pub fn decode(
+        reader: &mut crate::io::ProtoReader,
+    ) -> Result<Self, crate::io::reader::ProtoReadError> {
         let radius = reader.read_var_i32()?;
         Ok(Self { radius })
     }
@@ -54,8 +56,8 @@ impl ChunkRadiusUpdated {
 // ── NetworkChunkPublisherUpdate (S→C, 0x79) ──
 
 pub struct NetworkChunkPublisherUpdate {
-    pub position: [i32; 3],   // BlockPos (varint32 x3)
-    pub radius: u32,          // varuint32 (in blocks)
+    pub position: [i32; 3], // BlockPos (varint32 x3)
+    pub radius: u32,        // varuint32 (in blocks)
 }
 
 impl NetworkChunkPublisherUpdate {
