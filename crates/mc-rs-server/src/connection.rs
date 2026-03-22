@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
 
 use base64::Engine;
 use tracing::{debug, info, warn};
@@ -18,6 +19,7 @@ use mc_rs_proto::packets::world::*;
 
 use crate::player_data;
 use crate::player_registry;
+use crate::world::chunk_cache::ChunkCache;
 use crate::world::flat_generator;
 use crate::world::terrain_generator;
 
@@ -71,10 +73,13 @@ pub struct Connection {
 
     // Server keypair (shared across connections)
     server_keypair: std::sync::Arc<ServerKeyPair>,
+
+    // Shared chunk cache (world persistence)
+    chunk_cache: Arc<Mutex<ChunkCache>>,
 }
 
 impl Connection {
-    pub fn new(addr: SocketAddr, server_keypair: std::sync::Arc<ServerKeyPair>) -> Self {
+    pub fn new(addr: SocketAddr, server_keypair: std::sync::Arc<ServerKeyPair>, chunk_cache: Arc<Mutex<ChunkCache>>) -> Self {
         Self {
             addr,
             state: ConnectionState::SessionStart,
@@ -104,6 +109,7 @@ impl Connection {
             broadcasts: Vec::new(),
             pending_actions: Vec::new(),
             server_keypair,
+            chunk_cache,
         }
     }
 
@@ -457,11 +463,13 @@ impl Connection {
         self.last_chunk_x = spawn_chunk_x;
         self.last_chunk_z = spawn_chunk_z;
 
-        let seed = 42u64; // TODO: from config
         for cx in (spawn_chunk_x - clamped)..=(spawn_chunk_x + clamped) {
             for cz in (spawn_chunk_z - clamped)..=(spawn_chunk_z + clamped) {
-                let (sub_chunk_count, chunk_payload) =
-                    terrain_generator::generate_terrain_chunk(cx, cz, seed);
+                let (sub_chunk_count, chunk_payload) = {
+                    let mut cache = self.chunk_cache.lock().unwrap();
+                    let col = cache.get_chunk(cx, cz);
+                    (col.sub_chunk_count, col.network_payload.clone())
+                };
                 let chunk = LevelChunk {
                     chunk_x: cx,
                     chunk_z: cz,
@@ -629,8 +637,11 @@ impl Connection {
                     let cx = chunk_x + dx;
                     let cz = chunk_z + dz;
                     if !self.sent_chunks.contains(&(cx, cz)) {
-                        let (sub_count, payload) =
-                            terrain_generator::generate_terrain_chunk(cx, cz, 42); // TODO: seed from config
+                        let (sub_count, payload) = {
+                            let mut cache = self.chunk_cache.lock().unwrap();
+                            let col = cache.get_chunk(cx, cz);
+                            (col.sub_chunk_count, col.network_payload.clone())
+                        };
                         let chunk_pkt = LevelChunk {
                             chunk_x: cx,
                             chunk_z: cz,
@@ -676,6 +687,12 @@ impl Connection {
                 responses.push(update_bytes.clone());
                 // Broadcast to all other players
                 self.broadcasts.push(update_bytes);
+                // Mark chunk as dirty for persistence
+                let chunk_x = action.position[0] >> 4;
+                let chunk_z = action.position[2] >> 4;
+                if let Ok(mut cache) = self.chunk_cache.lock() {
+                    cache.mark_dirty(chunk_x, chunk_z);
+                }
                 info!(
                     "[{}] Block broken at ({}, {}, {})",
                     self.addr, action.position[0], action.position[1], action.position[2]

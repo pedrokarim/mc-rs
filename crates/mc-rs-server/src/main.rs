@@ -138,7 +138,7 @@ async fn main() {
                 while let Some(peer) = raknet.accept() {
                     let addr = peer.addr;
                     info!("New peer: {}", addr);
-                    let conn = Connection::new(addr, Arc::clone(&server_keypair));
+                    let conn = Connection::new(addr, Arc::clone(&server_keypair), Arc::clone(&chunk_cache));
                     connections.insert(addr, conn);
                     peers.insert(addr, peer);
                 }
