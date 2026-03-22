@@ -8,7 +8,7 @@ use crate::tag::{NbtCompound, NbtRoot, NbtTag};
 /// Maximum nesting depth to prevent stack overflow.
 const MAX_DEPTH: usize = 512;
 
-/// Abstraction over the two NBT wire formats.
+/// Abstraction over the NBT wire formats (LE, BE, Network).
 pub(crate) trait NbtVariant {
     fn write_int(buf: &mut impl BufMut, value: i32);
     fn read_int(buf: &mut impl Buf) -> Result<i32, NbtError>;
@@ -18,6 +18,15 @@ pub(crate) trait NbtVariant {
 
     fn write_string_len(buf: &mut impl BufMut, len: usize);
     fn read_string_len(buf: &mut impl Buf) -> Result<usize, NbtError>;
+
+    fn read_short(buf: &mut impl Buf) -> Result<i16, NbtError>;
+    fn write_short(buf: &mut impl BufMut, value: i16);
+    fn read_long(buf: &mut impl Buf) -> Result<i64, NbtError>;
+    fn write_long(buf: &mut impl BufMut, value: i64);
+    fn read_float(buf: &mut impl Buf) -> Result<f32, NbtError>;
+    fn write_float(buf: &mut impl BufMut, value: f32);
+    fn read_double(buf: &mut impl Buf) -> Result<f64, NbtError>;
+    fn write_double(buf: &mut impl BufMut, value: f64);
 }
 
 // -----------------------------------------------------------------------
@@ -51,23 +60,11 @@ fn read_tag<V: NbtVariant>(
             ensure_remaining(buf, 1)?;
             Ok(NbtTag::Byte(buf.get_i8()))
         }
-        2 => {
-            ensure_remaining(buf, 2)?;
-            Ok(NbtTag::Short(buf.get_i16_le()))
-        }
+        2 => Ok(NbtTag::Short(V::read_short(buf)?)),
         3 => Ok(NbtTag::Int(V::read_int(buf)?)),
-        4 => {
-            ensure_remaining(buf, 8)?;
-            Ok(NbtTag::Long(buf.get_i64_le()))
-        }
-        5 => {
-            ensure_remaining(buf, 4)?;
-            Ok(NbtTag::Float(buf.get_f32_le()))
-        }
-        6 => {
-            ensure_remaining(buf, 8)?;
-            Ok(NbtTag::Double(buf.get_f64_le()))
-        }
+        4 => Ok(NbtTag::Long(V::read_long(buf)?)),
+        5 => Ok(NbtTag::Float(V::read_float(buf)?)),
+        6 => Ok(NbtTag::Double(V::read_double(buf)?)),
         7 => {
             let len = V::read_array_len(buf)?;
             if len < 0 {
@@ -172,11 +169,11 @@ pub(crate) fn write_nbt<V: NbtVariant>(buf: &mut impl BufMut, root: &NbtRoot) {
 fn write_tag<V: NbtVariant>(buf: &mut impl BufMut, tag: &NbtTag) {
     match tag {
         NbtTag::Byte(v) => buf.put_i8(*v),
-        NbtTag::Short(v) => buf.put_i16_le(*v),
+        NbtTag::Short(v) => V::write_short(buf, *v),
         NbtTag::Int(v) => V::write_int(buf, *v),
-        NbtTag::Long(v) => buf.put_i64_le(*v),
-        NbtTag::Float(v) => buf.put_f32_le(*v),
-        NbtTag::Double(v) => buf.put_f64_le(*v),
+        NbtTag::Long(v) => V::write_long(buf, *v),
+        NbtTag::Float(v) => V::write_float(buf, *v),
+        NbtTag::Double(v) => V::write_double(buf, *v),
         NbtTag::ByteArray(arr) => {
             V::write_array_len(buf, arr.len() as i32);
             for &b in arr {
@@ -206,7 +203,7 @@ fn write_tag<V: NbtVariant>(buf: &mut impl BufMut, tag: &NbtTag) {
         NbtTag::LongArray(arr) => {
             V::write_array_len(buf, arr.len() as i32);
             for &v in arr {
-                buf.put_i64_le(v);
+                V::write_long(buf, v);
             }
         }
     }

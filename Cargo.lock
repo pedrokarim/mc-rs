@@ -539,6 +539,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "bytes",
+ "flate2",
  "mc-rs-command",
  "mc-rs-crypto",
  "mc-rs-nbt",

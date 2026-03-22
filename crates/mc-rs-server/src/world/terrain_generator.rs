@@ -6,6 +6,7 @@ use super::flat_generator::block_ids;
 use super::noise::Simplex;
 use super::ore;
 use super::random::Random;
+use super::structure;
 use super::vegetation;
 
 /// Additional block IDs for terrain generation.
@@ -466,6 +467,18 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
     // Generate vegetation (trees, tall grass)
     let veg_map = vegetation::generate_vegetation(&biome_ids, &surfaces, &mut chunk_random);
 
+    // Generate structures (fossils, etc.)
+    let block_mapping = structure::build_block_mapping();
+    let center_biome = biome_ids[8][8];
+    let struct_map = structure::generate_structures(
+        chunk_x,
+        chunk_z,
+        seed,
+        center_biome,
+        &surfaces,
+        &block_mapping,
+    );
+
     // Pre-compute ground cover per column
     let mut covers: Vec<Vec<u32>> = Vec::with_capacity(256);
     let mut non_solid_top = [false; 256];
@@ -574,6 +587,13 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
                         if veg_id != 0 {
                             block = veg_id;
                         }
+                    }
+
+                    // Apply structures — highest priority
+                    if let Some(&struct_id) =
+                        struct_map.get(&(local_x as u8, world_y, local_z as u8))
+                    {
+                        block = struct_id;
                     }
 
                     if block != block_ids::AIR {

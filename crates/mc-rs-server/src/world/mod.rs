@@ -6,6 +6,7 @@ pub mod noise;
 pub mod ore;
 pub mod random;
 pub mod storage;
+pub mod structure;
 pub mod terrain_generator;
 pub mod tick;
 pub mod vegetation;

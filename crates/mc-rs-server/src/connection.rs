@@ -59,6 +59,7 @@ pub struct Connection {
     pub head_yaw: f32,
     pub entity_runtime_id: u64,
     pub tick: u64,
+    pub gamemode: i32, // 0=survival, 1=creative, 2=adventure, 3=spectator
 
     // Chunk tracking
     pub sent_chunks: HashSet<(i32, i32)>,
@@ -110,6 +111,7 @@ impl Connection {
             head_yaw: 0.0,
             entity_runtime_id: player_registry::next_entity_id() as u64,
             tick: 0,
+            gamemode: 0, // survival by default
             sent_chunks: HashSet::new(),
             view_distance: 8,
             last_chunk_x: 0,
@@ -316,9 +318,14 @@ impl Connection {
                         ];
                         self.yaw = save.rotation[0];
                         self.pitch = save.rotation[1];
+                        self.gamemode = save.gamemode;
                         info!(
-                            "[{}] Restored position: {:.1}, {:.1}, {:.1}",
-                            self.addr, self.position[0], self.position[1], self.position[2]
+                            "[{}] Restored position: {:.1}, {:.1}, {:.1} (gamemode={})",
+                            self.addr,
+                            self.position[0],
+                            self.position[1],
+                            self.position[2],
+                            self.gamemode
                         );
                     }
                 }
@@ -1164,8 +1171,10 @@ impl Connection {
                 self.broadcasts
                     .push(self.encode_compressed_packet(packet_id::TEXT, &chat));
             }
+            mc_rs_command::CommandAction::SetGamemode { .. } => {
+                // TODO: implement gamemode switching
+            }
             mc_rs_command::CommandAction::SetTime { .. }
-            | mc_rs_command::CommandAction::SetGamemode { .. }
             | mc_rs_command::CommandAction::SetWeather { .. }
             | mc_rs_command::CommandAction::Stop
             | mc_rs_command::CommandAction::Kill => {
@@ -1179,6 +1188,47 @@ impl Connection {
             let msg = mc_rs_proto::packets::player::Text::system(response);
             responses.push(self.encode_compressed_packet(packet_id::TEXT, &msg));
         }
+
+        responses
+    }
+
+    /// Change the player's gamemode (PMMP syncGameMode flow).
+    /// Sends: SetPlayerGameType + UpdateAbilities + UpdateAdventureSettings
+    fn apply_gamemode(&mut self, mode: i32) -> Vec<Vec<u8>> {
+        self.gamemode = mode;
+        let mut responses = Vec::new();
+
+        // 1. SetPlayerGameType — single VarInt32
+        let mut gt_writer = mc_rs_proto::io::ProtoWriter::with_capacity(4);
+        gt_writer.write_var_i32(mode);
+        responses.push(
+            self.encode_compressed_packet(packet_id::SET_PLAYER_GAME_TYPE, gt_writer.as_bytes()),
+        );
+
+        // 2. UpdateAbilities — survival vs creative flags
+        let abilities = if mode == 1 {
+            UpdateAbilities::default_creative(self.entity_runtime_id as i64)
+        } else {
+            UpdateAbilities::default_survival(self.entity_runtime_id as i64)
+        };
+        responses
+            .push(self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities.encode()));
+
+        // 3. UpdateAdventureSettings
+        let adventure = UpdateAdventureSettings::default_survival();
+        responses.push(
+            self.encode_compressed_packet(
+                packet_id::UPDATE_ADVENTURE_SETTINGS,
+                &adventure.encode(),
+            ),
+        );
+
+        info!(
+            "[{}] Gamemode changed to {} for {}",
+            self.addr,
+            mode,
+            self.display_name.as_deref().unwrap_or("Player")
+        );
 
         responses
     }
@@ -1239,7 +1289,9 @@ impl Connection {
         let mut responses = Vec::new();
 
         // StartGame
-        let start_game = StartGame::default_with_id(self.entity_runtime_id as i64, self.position);
+        let mut start_game =
+            StartGame::default_with_id(self.entity_runtime_id as i64, self.position);
+        start_game.player_gamemode = self.gamemode;
         responses.push(self.encode_compressed_packet(packet_id::START_GAME, &start_game.encode()));
 
         // ItemRegistry (empty) — test if this crashes
@@ -1278,17 +1330,14 @@ impl Connection {
         let commands = AvailableCommands::encode_simple(&cmd_refs);
         responses.push(self.encode_compressed_packet(packet_id::AVAILABLE_COMMANDS, &commands));
 
-        // 7. UpdateAbilities — survival mode (AFTER attributes + commands per PMMP)
-        let abilities = UpdateAbilities::default_survival(self.entity_runtime_id as i64);
-        let abilities_bytes = abilities.encode();
-        info!(
-            "[{}] UpdateAbilities hex ({} bytes): {:02X?}",
-            self.addr,
-            abilities_bytes.len(),
-            abilities_bytes
-        );
+        // 7. UpdateAbilities — based on player's gamemode
+        let abilities = if self.gamemode == 1 {
+            UpdateAbilities::default_creative(self.entity_runtime_id as i64)
+        } else {
+            UpdateAbilities::default_survival(self.entity_runtime_id as i64)
+        };
         responses
-            .push(self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities_bytes));
+            .push(self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities.encode()));
 
         // 8. UpdateAdventureSettings — PMMP sends this right after abilities
         let adventure = UpdateAdventureSettings::default_survival();

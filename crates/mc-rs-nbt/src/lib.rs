@@ -4,6 +4,7 @@
 //! - **Standard LE**: Used for disk storage and chunk data. Ints are i32_le, string lengths are u16_le.
 //! - **Network**: Used in most game packets. Ints are VarInt (ZigZag), string lengths are VarUInt32.
 
+mod be;
 pub mod error;
 mod io;
 mod le;
@@ -33,6 +34,16 @@ pub fn read_nbt_network(buf: &mut impl Buf) -> Result<NbtRoot, NbtError> {
 /// Write network NBT (VarInt variant) to a buffer.
 pub fn write_nbt_network(buf: &mut impl BufMut, root: &NbtRoot) {
     io::write_nbt::<network::NetworkVariant>(buf, root)
+}
+
+/// Read big-endian NBT (Java Edition format, used by structure files).
+pub fn read_nbt_be(buf: &mut impl Buf) -> Result<NbtRoot, NbtError> {
+    io::read_nbt::<be::BeVariant>(buf)
+}
+
+/// Write big-endian NBT.
+pub fn write_nbt_be(buf: &mut impl BufMut, root: &NbtRoot) {
+    io::write_nbt::<be::BeVariant>(buf, root)
 }
 
 #[cfg(test)]
