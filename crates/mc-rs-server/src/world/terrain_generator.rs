@@ -71,6 +71,12 @@ fn terrain_noise(world_x: i32, world_z: i32, seed: u64) -> f64 {
     total
 }
 
+/// Get the surface height at a specific world position.
+pub fn get_surface_height(world_x: i32, world_z: i32, seed: u64) -> i32 {
+    let noise_val = terrain_noise(world_x, world_z, seed);
+    -60 + (noise_val * 12.0) as i32
+}
+
 /// Generate a terrain chunk at the given chunk coordinates.
 /// Returns (sub_chunk_count, payload_bytes).
 pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<u8>) {

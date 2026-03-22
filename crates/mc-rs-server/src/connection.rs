@@ -84,7 +84,13 @@ impl Connection {
             uuid: None,
             xuid: None,
             client_pub_key_b64: None,
-            position: [0.5, -58.379, 0.5], // feet=-60 + 1.621 eye offset
+            position: {
+                // Calculate spawn height from terrain
+                let surface_y = terrain_generator::get_surface_height(0, 0, 42) as f32;
+                let feet_y = surface_y + 1.0; // 1 block above surface
+                let eye_y = feet_y + 1.621;   // PMMP eye offset
+                [0.5, eye_y, 0.5]
+            },
             pitch: 0.0,
             yaw: 0.0,
             head_yaw: 0.0,
@@ -783,7 +789,7 @@ impl Connection {
         let mut responses = Vec::new();
 
         // StartGame
-        let start_game = StartGame::default_flat_with_id(self.entity_runtime_id as i64);
+        let start_game = StartGame::default_with_id(self.entity_runtime_id as i64, self.position);
         responses.push(self.encode_compressed_packet(
             packet_id::START_GAME,
             &start_game.encode(),

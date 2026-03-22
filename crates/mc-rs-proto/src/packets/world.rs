@@ -266,12 +266,12 @@ impl StartGame {
         w.into_bytes()
     }
 
-    pub fn default_flat_with_id(entity_id: i64) -> Self {
+    pub fn default_with_id(entity_id: i64, spawn_pos: [f32; 3]) -> Self {
         Self {
             actor_unique_id: entity_id,
             actor_runtime_id: entity_id as u64,
             player_gamemode: 0, // survival
-            player_position: [0.5, -58.379, 0.5], // feet=-60 + 1.621 eye offset (PMMP Human.php)
+            player_position: spawn_pos,
             pitch: 0.0,
             yaw: 0.0,
             seed: 0,
