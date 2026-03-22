@@ -6,19 +6,13 @@ use super::chunk_serializer;
 ///
 /// For Phase 1, we use known hash values for the 4 blocks we need.
 /// The client computes: FNV1_32(block_state_nbt) for each canonical state.
+/// Block runtime IDs from canonical_block_states.nbt (sequential index).
+/// Used when blockNetworkIdsAreHashes=false in StartGame.
 pub mod block_ids {
-    // These values must match what the Bedrock client computes.
-    // We'll use placeholder runtime IDs and verify against the client.
-    // If hashes mode doesn't work, we can fall back to sequential IDs.
-    //
-    // Actually, with block_network_ids_are_hashes=true, the runtime IDs
-    // in the palette ARE the FNV1 hashes. The client looks up blocks by hash.
-    //
-    // Known FNV1-32a hashes for common block states (from PMMP/BDS analysis):
-    pub const AIR: u32 = 0xd5eb690;       // "minecraft:air" default state
-    pub const BEDROCK: u32 = 0xbdcaabad;   // "minecraft:bedrock" infiniburn=false
-    pub const DIRT: u32 = 0x6d61f16c;      // "minecraft:dirt" dirt_type=normal
-    pub const GRASS_BLOCK: u32 = 0x52ab2520; // "minecraft:grass_block" (or grass)
+    pub const AIR: u32 = 12530;
+    pub const BEDROCK: u32 = 13079;
+    pub const DIRT: u32 = 9852;
+    pub const GRASS_BLOCK: u32 = 11062;
 }
 
 /// Generate a flat chunk's serialized payload.
@@ -28,11 +22,11 @@ pub mod block_ids {
 ///
 /// Returns (sub_chunk_count, payload_bytes).
 pub fn generate_flat_chunk() -> (u32, Vec<u8>) {
-    let mut payload = Vec::with_capacity(512);
+    let mut payload = Vec::with_capacity(4096);
 
-    // 1 empty sub-chunk (all air) — version=8, storage_count=0
-    payload.push(8); // version
-    payload.push(0); // 0 storage layers = all air
+    // Sub-chunk -4 (y=-64 to -49): bedrock + dirt + grass
+    let sub_chunk = build_flat_sub_chunk();
+    payload.extend_from_slice(&sub_chunk);
 
     // All 24 biome sections (always required for overworld, index -4 to 19)
     let biome_section = chunk_serializer::serialize_biome_section_single(1); // Plains
@@ -43,7 +37,7 @@ pub fn generate_flat_chunk() -> (u32, Vec<u8>) {
     // Border blocks count
     payload.push(0); // u8 = 0
 
-    // Tile entities (empty — nothing to write)
+    // Tile entities (empty)
 
     (1, payload) // 1 sub-chunk
 }

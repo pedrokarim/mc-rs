@@ -271,7 +271,7 @@ impl StartGame {
             actor_unique_id: 1,
             actor_runtime_id: 1,
             player_gamemode: 1, // creative
-            player_position: [0.0, 10.0, 0.0],
+            player_position: [0.5, -59.38, 0.5],
             pitch: 0.0,
             yaw: 0.0,
             seed: 0,
@@ -282,7 +282,7 @@ impl StartGame {
             world_gamemode: 1, // creative
             hardcore: false,
             difficulty: 1, // easy
-            spawn_position: [0, 10, 0],
+            spawn_position: [0, -59, 0],
             achievements_disabled: true,
             editor_world_type: 0,
             created_in_editor: false,
@@ -433,7 +433,8 @@ pub struct CreativeContent;
 impl CreativeContent {
     pub fn encode_empty() -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(8);
-        w.write_var_u32(0);
+        w.write_var_u32(0); // groups count
+        w.write_var_u32(0); // items count
         w.into_bytes()
     }
 }

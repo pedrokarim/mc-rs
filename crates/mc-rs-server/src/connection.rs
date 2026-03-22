@@ -342,7 +342,7 @@ impl Connection {
 
     fn handle_request_chunk_radius(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
         let radius = reader.read_var_i32().unwrap_or(4);
-        let clamped = 2;
+        let clamped = radius.clamp(2, 8);
         info!("[{}] RequestChunkRadius: {} (responding with {})", self.addr, radius, clamped);
 
         let mut responses = Vec::new();
@@ -356,7 +356,7 @@ impl Connection {
 
         // NetworkChunkPublisherUpdate
         let publisher = NetworkChunkPublisherUpdate {
-            position: [0, 10, 0],
+            position: [0, -59, 0],
             radius: (clamped * 16) as u32,
         };
         responses.push(self.encode_compressed_packet(
@@ -511,7 +511,17 @@ impl Connection {
             biome_writer.as_bytes(),
         ));
 
-        // CraftingData + CreativeContent DISABLED for binary search
+        // CraftingData (empty)
+        responses.push(self.encode_compressed_packet(
+            packet_id::CRAFTING_DATA,
+            &CraftingData::encode_empty(),
+        ));
+
+        // CreativeContent (empty — needs BOTH groups and items counts)
+        responses.push(self.encode_compressed_packet(
+            packet_id::CREATIVE_CONTENT,
+            &CreativeContent::encode_empty(),
+        ));
 
         info!("[{}] Sent {} PreSpawn packets", self.addr, responses.len());
 
