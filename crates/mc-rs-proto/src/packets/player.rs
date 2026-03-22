@@ -559,7 +559,7 @@ impl UpdateAbilities {
 
         Self {
             entity_id,
-            permission_level: 0,   // MEMBER
+            permission_level: 1,   // MEMBER (PMMP PlayerPermissions::MEMBER = 1, NOT 0 which is VISITOR)
             command_permission: 0, // NORMAL
             layers: vec![AbilitiesLayer {
                 layer_type: 1, // BASE
@@ -837,7 +837,7 @@ impl InventoryContent {
         // FullContainerName
         w.write_u8(container_id);
         w.write_bool(false); // no dynamicId
-        // Storage item (air)
+                             // Storage item (air)
         w.write_var_i32(0);
         w.into_bytes()
     }
@@ -853,9 +853,9 @@ impl MobEquipment {
         let mut w = ProtoWriter::with_capacity(16);
         w.write_var_u64(runtime_entity_id);
         w.write_var_i32(0); // ItemStackWrapper: air
-        w.write_u8(0);      // inventory_slot
-        w.write_u8(0);      // hotbar_slot
-        w.write_u8(0);      // container_id (inventory)
+        w.write_u8(0); // inventory_slot
+        w.write_u8(0); // hotbar_slot
+        w.write_u8(0); // container_id (inventory)
         w.into_bytes()
     }
 }
@@ -871,6 +871,17 @@ pub struct UpdateAdventureSettings {
 }
 
 impl UpdateAdventureSettings {
+    /// Default adventure settings for survival (matches PMMP syncAdventureSettings)
+    pub fn default_survival() -> Self {
+        Self {
+            no_pvm: false,
+            no_mvp: false,
+            immutable_world: false,
+            show_name_tags: true,
+            auto_jump: true,
+        }
+    }
+
     pub fn encode(&self) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(8);
         w.write_bool(self.no_pvm);

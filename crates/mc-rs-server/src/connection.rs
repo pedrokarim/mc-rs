@@ -517,11 +517,9 @@ impl Connection {
         );
         self.state = ConnectionState::InGame;
 
-        // Explicitly set survival mode after spawn
-        let mut gametype_writer = mc_rs_proto::io::ProtoWriter::with_capacity(4);
-        gametype_writer.write_var_i32(0); // 0 = survival
-        vec![self
-            .encode_compressed_packet(packet_id::SET_PLAYER_GAME_TYPE, gametype_writer.as_bytes())]
+        // No need to send SetPlayerGameType here — gamemode is already set in StartGame
+        // and enforced by UpdateAbilities. PMMP only sends SetPlayerGameType on gamemode CHANGE.
+        vec![]
     }
 
     // ── InGame handlers ──
@@ -885,7 +883,16 @@ impl Connection {
         responses
             .push(self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities.encode()));
 
-        // 8. SetActorData — entity metadata (gravity, breathing, collision)
+        // 8. UpdateAdventureSettings — PMMP sends this right after abilities
+        let adventure = UpdateAdventureSettings::default_survival();
+        responses.push(
+            self.encode_compressed_packet(
+                packet_id::UPDATE_ADVENTURE_SETTINGS,
+                &adventure.encode(),
+            ),
+        );
+
+        // 9. SetActorData — entity metadata (gravity, breathing, collision)
         let player_name = self.display_name.clone().unwrap_or_default();
         let actor_data = SetActorData::player_in_game(self.entity_runtime_id, &player_name);
         responses
