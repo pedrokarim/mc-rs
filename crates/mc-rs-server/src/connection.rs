@@ -593,6 +593,35 @@ impl Connection {
             }
         }
 
+        // Handle block actions (breaking/placing)
+        for action in &pkt.block_actions {
+            match action.action_type {
+                // PREDICT_DESTROY_BLOCK (26) or CREATIVE_PLAYER_DESTROY_BLOCK
+                26 => {
+                    let air_id = flat_generator::block_ids::AIR;
+                    let update = UpdateBlock {
+                        position: action.position,
+                        runtime_id: air_id,
+                        flags: 3, // FLAG_NEIGHBORS | FLAG_NETWORK
+                        layer: 0,
+                    };
+                    let update_bytes = self.encode_compressed_packet(
+                        packet_id::UPDATE_BLOCK,
+                        &update.encode(),
+                    );
+                    // Send to the player who broke the block
+                    responses.push(update_bytes.clone());
+                    // Broadcast to all other players
+                    self.broadcasts.push(update_bytes);
+                    info!(
+                        "[{}] Block broken at ({}, {}, {})",
+                        self.addr, action.position[0], action.position[1], action.position[2]
+                    );
+                }
+                _ => {} // Other actions (START_BREAK, CRACK_BREAK, etc.) — ignored for now
+            }
+        }
+
         responses
     }
 

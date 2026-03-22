@@ -2,7 +2,14 @@ use crate::io::{ProtoReader, ProtoWriter};
 
 // ── PlayerAuthInput (C→S, 0x90) ──
 
-/// Player movement and input — decoded minimally (position + rotation only).
+/// Block action from PlayerAuthInput.
+pub struct BlockAction {
+    pub action_type: i32,
+    pub position: [i32; 3], // signed block position
+    pub face: i32,
+}
+
+/// Player movement and input.
 pub struct PlayerAuthInput {
     pub pitch: f32,
     pub yaw: f32,
@@ -10,7 +17,31 @@ pub struct PlayerAuthInput {
     pub move_vec_x: f32,
     pub move_vec_z: f32,
     pub head_yaw: f32,
-    // inputFlags, inputMode, playMode, etc. — skipped for now
+    pub block_actions: Vec<BlockAction>,
+}
+
+// PlayerAuthInput flag bits (from PMMP PlayerAuthInputFlags.php)
+const FLAG_PERFORM_ITEM_INTERACTION: usize = 34;
+const FLAG_PERFORM_BLOCK_ACTIONS: usize = 35;
+const FLAG_PERFORM_ITEM_STACK_REQUEST: usize = 36;
+
+/// Read a BitSet encoded as VarInt-style bytes (7 bits per byte, bit 7 = continuation).
+/// Returns the raw bits as a u128 (enough for 65 flags).
+fn read_bitset(reader: &mut ProtoReader) -> Result<u128, crate::io::reader::ProtoReadError> {
+    let mut result: u128 = 0;
+    let mut shift = 0;
+    loop {
+        let b = reader.read_u8()?;
+        result |= ((b & 0x7F) as u128) << shift;
+        if (b & 0x80) == 0 {
+            break;
+        }
+        shift += 7;
+        if shift >= 128 {
+            break;
+        }
+    }
+    Ok(result)
 }
 
 impl PlayerAuthInput {
@@ -23,14 +54,76 @@ impl PlayerAuthInput {
         let move_vec_x = reader.read_f32_le()?;
         let move_vec_z = reader.read_f32_le()?;
         let head_yaw = reader.read_f32_le()?;
-        // Don't read further — remaining fields are complex and not needed yet
+
+        // Read input flags (BitSet, VarInt-encoded)
+        let input_flags = read_bitset(reader)?;
+
+        // Read remaining fixed fields
+        let _input_mode = reader.read_var_u32()?;
+        let _play_mode = reader.read_var_u32()?;
+        let _interaction_mode = reader.read_var_u32()?;
+        let _interact_rot_x = reader.read_f32_le()?; // interactRotation
+        let _interact_rot_y = reader.read_f32_le()?;
+        let _tick = reader.read_var_u64()?;
+        let _delta_x = reader.read_f32_le()?; // position delta
+        let _delta_y = reader.read_f32_le()?;
+        let _delta_z = reader.read_f32_le()?;
+
+        // Conditional: item interaction (bit 34)
+        if (input_flags >> FLAG_PERFORM_ITEM_INTERACTION) & 1 == 1 {
+            // Skip ItemInteractionData — complex, just skip
+            // For now, we can't decode the rest reliably
+            return Ok(Self {
+                pitch, yaw,
+                position: [pos_x, pos_y, pos_z],
+                move_vec_x, move_vec_z, head_yaw,
+                block_actions: Vec::new(),
+            });
+        }
+
+        // Conditional: item stack request (bit 36)
+        if (input_flags >> FLAG_PERFORM_ITEM_STACK_REQUEST) & 1 == 1 {
+            return Ok(Self {
+                pitch, yaw,
+                position: [pos_x, pos_y, pos_z],
+                move_vec_x, move_vec_z, head_yaw,
+                block_actions: Vec::new(),
+            });
+        }
+
+        // Conditional: block actions (bit 35)
+        let mut block_actions = Vec::new();
+        if (input_flags >> FLAG_PERFORM_BLOCK_ACTIONS) & 1 == 1 {
+            let count = reader.read_var_i32()?;
+            for _ in 0..count.min(100) {
+                let action_type = reader.read_var_i32()?;
+                if action_type == 2 {
+                    // STOP_BREAK — no position data
+                    block_actions.push(BlockAction {
+                        action_type,
+                        position: [0, 0, 0],
+                        face: 0,
+                    });
+                } else {
+                    // Has position + face
+                    let bx = reader.read_var_i32()?;
+                    let by = reader.read_var_i32()?;
+                    let bz = reader.read_var_i32()?;
+                    let face = reader.read_var_i32()?;
+                    block_actions.push(BlockAction {
+                        action_type,
+                        position: [bx, by, bz],
+                        face,
+                    });
+                }
+            }
+        }
+
         Ok(Self {
-            pitch,
-            yaw,
+            pitch, yaw,
             position: [pos_x, pos_y, pos_z],
-            move_vec_x,
-            move_vec_z,
-            head_yaw,
+            move_vec_x, move_vec_z, head_yaw,
+            block_actions,
         })
     }
 }

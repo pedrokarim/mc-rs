@@ -410,6 +410,29 @@ impl AvailableActorIdentifiers {
     }
 }
 
+// ── UpdateBlock (S→C, 0x15) ──
+
+pub struct UpdateBlock {
+    pub position: [i32; 3], // x(VarInt), y(VarUInt32), z(VarInt)
+    pub runtime_id: u32,    // VarUInt32
+    pub flags: u32,         // VarUInt32 (FLAG_NETWORK=2 | FLAG_NEIGHBORS=1 = 3)
+    pub layer: u32,         // VarUInt32 (0 = main)
+}
+
+impl UpdateBlock {
+    pub fn encode(&self) -> Vec<u8> {
+        use crate::io::ProtoWriter;
+        let mut w = ProtoWriter::with_capacity(20);
+        w.write_var_i32(self.position[0]);
+        w.write_var_u32(self.position[1] as u32);
+        w.write_var_i32(self.position[2]);
+        w.write_var_u32(self.runtime_id);
+        w.write_var_u32(self.flags);
+        w.write_var_u32(self.layer);
+        w.into_bytes()
+    }
+}
+
 // ── AvailableCommands (S→C, 0x4C) ──
 
 pub struct AvailableCommands;
