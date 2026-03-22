@@ -26,6 +26,13 @@ pub mod extra_blocks {
     pub const REDSTONE_ORE: u32 = 6356;
     pub const LAPIS_ORE: u32 = 14583;
     pub const SHORT_GRASS: u32 = 12421;
+    pub const MYCELIUM: u32 = 5240;
+    pub const RED_SAND: u32 = 2732;
+    pub const HARDENED_CLAY: u32 = 2086;
+    pub const SNOW_BLOCK: u32 = 6233;
+    pub const PODZOL: u32 = 7292;
+    pub const COARSE_DIRT: u32 = 6725;
+    pub const RED_SANDSTONE: u32 = 12454;
 }
 
 /// Water surface level (same as PocketMine-MP).
