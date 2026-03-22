@@ -812,40 +812,14 @@ impl Connection {
             biome_writer.as_bytes(),
         ));
 
-        // CraftingData (empty)
-        responses.push(self.encode_compressed_packet(
-            packet_id::CRAFTING_DATA,
-            &CraftingData::encode_empty(),
-        ));
-
-        // CreativeContent (empty — needs BOTH groups and items counts)
-        responses.push(self.encode_compressed_packet(
-            packet_id::CREATIVE_CONTENT,
-            &CreativeContent::encode_empty(),
-        ));
-
-        // UpdateAbilities — survival mode abilities (no fly, no noclip)
-        let abilities = UpdateAbilities::default_survival(self.entity_runtime_id as i64);
-        responses.push(self.encode_compressed_packet(
-            packet_id::UPDATE_ABILITIES,
-            &abilities.encode(),
-        ));
-
-        // UpdateAttributes — health, hunger, movement speed
+        // 5. UpdateAttributes — health, hunger, movement speed (BEFORE abilities per PMMP)
         let attributes = UpdateAttributes::default_survival(self.entity_runtime_id);
         responses.push(self.encode_compressed_packet(
             packet_id::UPDATE_ATTRIBUTES,
             &attributes.encode(),
         ));
 
-        // SetActorData — send ONCE with correct flags (no NO_AI, gravity enabled)
-        let player_name = self.display_name.clone().unwrap_or_default();
-        let actor_data = SetActorData::player_in_game(self.entity_runtime_id, &player_name);
-        responses.push(self.encode_compressed_packet(
-            packet_id::SET_ACTOR_DATA, &actor_data.encode(),
-        ));
-
-        // AvailableCommands — register commands for tab-complete
+        // 6. AvailableCommands (BEFORE abilities per PMMP)
         let cmd_registry = mc_rs_command::CommandRegistry::new();
         let cmd_list = cmd_registry.all_commands();
         let cmd_refs: Vec<(&str, &str)> = cmd_list.iter().map(|&(n, d)| (n, d)).collect();
@@ -853,6 +827,32 @@ impl Connection {
         responses.push(self.encode_compressed_packet(
             packet_id::AVAILABLE_COMMANDS,
             &commands,
+        ));
+
+        // 7. UpdateAbilities — survival mode (AFTER attributes + commands per PMMP)
+        let abilities = UpdateAbilities::default_survival(self.entity_runtime_id as i64);
+        responses.push(self.encode_compressed_packet(
+            packet_id::UPDATE_ABILITIES,
+            &abilities.encode(),
+        ));
+
+        // 8. SetActorData — entity metadata (gravity, breathing, collision)
+        let player_name = self.display_name.clone().unwrap_or_default();
+        let actor_data = SetActorData::player_in_game(self.entity_runtime_id, &player_name);
+        responses.push(self.encode_compressed_packet(
+            packet_id::SET_ACTOR_DATA, &actor_data.encode(),
+        ));
+
+        // 9. CraftingData (empty)
+        responses.push(self.encode_compressed_packet(
+            packet_id::CRAFTING_DATA,
+            &CraftingData::encode_empty(),
+        ));
+
+        // 10. CreativeContent (empty)
+        responses.push(self.encode_compressed_packet(
+            packet_id::CREATIVE_CONTENT,
+            &CreativeContent::encode_empty(),
         ));
 
         info!("[{}] Sent {} PreSpawn packets", self.addr, responses.len());

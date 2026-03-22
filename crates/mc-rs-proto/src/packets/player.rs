@@ -489,12 +489,14 @@ pub mod ability {
     pub const WORLD_BUILDER: u32   = 1 << 16;
     pub const NO_CLIP: u32         = 1 << 17;
     pub const PRIVILEGED_BUILDER: u32 = 1 << 18;
+    pub const VERTICAL_FLY_SPEED: u32 = 1 << 19; // CRITICAL — must be in abilities_set!
 
-    /// All abilities that can be set in the BASE layer
+    /// All abilities that can be set in the BASE layer (bits 0-19)
     pub const ALL: u32 = BUILD | MINE | DOORS_AND_SWITCHES | OPEN_CONTAINERS
         | ATTACK_PLAYERS | ATTACK_MOBS | OPERATOR | TELEPORT | INVULNERABLE
         | FLYING | ALLOW_FLIGHT | INFINITE_RESOURCES | LIGHTNING
-        | FLY_SPEED | WALK_SPEED | MUTED | WORLD_BUILDER | NO_CLIP | PRIVILEGED_BUILDER;
+        | FLY_SPEED | WALK_SPEED | MUTED | WORLD_BUILDER | NO_CLIP
+        | PRIVILEGED_BUILDER | VERTICAL_FLY_SPEED;
 }
 
 impl UpdateAbilities {
