@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
 
 use super::biome::{self, BiomeSelector, Gaussian};
 use super::chunk_serializer;
@@ -255,11 +256,19 @@ pub fn get_surface_height(world_x: i32, world_z: i32, seed: u64) -> i32 {
     let local_x = world_x.rem_euclid(16) as usize;
     let local_z = world_z.rem_euclid(16) as usize;
 
-    let state = GeneratorState::new(seed);
+    // Reuse cached generator state
+
+    static SURF_GEN: LazyLock<Mutex<(u64, GeneratorState)>> =
+        LazyLock::new(|| Mutex::new((0, GeneratorState::new(0))));
+    let mut guard = SURF_GEN.lock().unwrap();
+    if guard.0 != seed {
+        *guard = (seed, GeneratorState::new(seed));
+    }
+    let state = &guard.1;
 
     let base_x = chunk_x * 16;
     let base_z = chunk_z * 16;
-    let (_biome_ids, min_heights, max_heights) = generate_biomes(base_x, base_z, &state, seed);
+    let (_biome_ids, min_heights, max_heights) = generate_biomes(base_x, base_z, state, seed);
 
     let mut global_min = f64::MAX;
     let mut global_max = f64::MIN;
@@ -417,9 +426,15 @@ fn block_at(
 pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<u8>) {
     let mut payload = Vec::with_capacity(16384);
 
-    // Create generator state ONCE per world seed (same noise for all chunks)
-    // This is critical: PMMP creates noiseBase in the constructor, not per chunk
-    let state = GeneratorState::new(seed);
+    // Cache generator state — PMMP creates this once in the constructor
+
+    static GENERATOR: LazyLock<Mutex<(u64, GeneratorState)>> =
+        LazyLock::new(|| Mutex::new((0, GeneratorState::new(0))));
+    let mut guard = GENERATOR.lock().unwrap();
+    if guard.0 != seed {
+        *guard = (seed, GeneratorState::new(seed));
+    }
+    let state = &guard.1;
 
     // Per-chunk RNG for randomized elements (ore, vegetation)
     let mut chunk_random =
@@ -427,7 +442,7 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
 
     let base_x = chunk_x * 16;
     let base_z = chunk_z * 16;
-    let (biome_ids, min_heights, max_heights) = generate_biomes(base_x, base_z, &state, seed);
+    let (biome_ids, min_heights, max_heights) = generate_biomes(base_x, base_z, state, seed);
 
     let mut global_min = f64::MAX;
     let mut global_max = f64::MIN;
@@ -469,7 +484,7 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
 
     // Generate structures (fossils, etc.)
     // Block mapping is cached — parsing canonical_block_states.nbt is expensive
-    use std::sync::LazyLock;
+
     static BLOCK_MAPPING: LazyLock<std::collections::HashMap<String, u32>> =
         LazyLock::new(structure::build_block_mapping);
     let center_biome = biome_ids[8][8];
