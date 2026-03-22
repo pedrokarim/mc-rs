@@ -153,6 +153,12 @@ impl Connection {
                 self.handle_request_chunk_radius(reader)
             }
 
+            // Silently ignore these in PreSpawn
+            (ConnectionState::PreSpawn, packet_id::PLAYER_AUTH_INPUT)
+            | (ConnectionState::PreSpawn, packet_id::SERVERBOUND_LOADING_SCREEN) => {
+                Vec::new()
+            }
+
             // ── SpawnResponse ──
             (ConnectionState::SpawnResponse, packet_id::SET_LOCAL_PLAYER_AS_INITIALIZED) => {
                 self.handle_set_local_player_as_initialized()
@@ -161,7 +167,8 @@ impl Connection {
             // ── Silently ignored packets ──
             (_, packet_id::EMOTE_LIST)
             | (_, packet_id::SERVERBOUND_LOADING_SCREEN)
-            | (_, packet_id::PLAYER_AUTH_INPUT) => Vec::new(),
+            | (_, packet_id::PLAYER_AUTH_INPUT)
+            | (_, 0x081) => Vec::new(), // ClientCacheStatus
 
             _ => {
                 debug!(
@@ -335,8 +342,8 @@ impl Connection {
 
     fn handle_request_chunk_radius(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
         let radius = reader.read_var_i32().unwrap_or(4);
-        let clamped = radius.clamp(2, 4);
-        debug!("[{}] RequestChunkRadius: {} (clamped to {})", self.addr, radius, clamped);
+        let clamped = 2;
+        info!("[{}] RequestChunkRadius: {} (responding with {})", self.addr, radius, clamped);
 
         let mut responses = Vec::new();
 
@@ -375,10 +382,9 @@ impl Connection {
                 ));
             }
         }
-
         info!("[{}] Sent {} chunks (radius={})", self.addr, (2 * clamped + 1).pow(2), clamped);
 
-        // Send PlayStatus(PLAYER_SPAWN) after chunks
+        // PLAYER_SPAWN — send after chunks
         let spawn_status = PlayStatus {
             status: PlayStatusType::PlayerSpawn,
         };
@@ -386,11 +392,27 @@ impl Connection {
             packet_id::PLAY_STATUS,
             &spawn_status.encode(),
         ));
-
         self.state = ConnectionState::SpawnResponse;
         debug!("[{}] → SpawnResponse state", self.addr);
 
         responses
+    }
+
+    fn send_player_spawn(&mut self) -> Vec<Vec<u8>> {
+        if self.state != ConnectionState::PreSpawn {
+            return Vec::new();
+        }
+        info!("[{}] Sending PlayStatus(PLAYER_SPAWN)", self.addr);
+        let spawn_status = PlayStatus {
+            status: PlayStatusType::PlayerSpawn,
+        };
+        let response = self.encode_compressed_packet(
+            packet_id::PLAY_STATUS,
+            &spawn_status.encode(),
+        );
+        self.state = ConnectionState::SpawnResponse;
+        debug!("[{}] → SpawnResponse state", self.addr);
+        vec![response]
     }
 
     fn handle_set_local_player_as_initialized(&mut self) -> Vec<Vec<u8>> {
@@ -459,127 +481,39 @@ impl Connection {
     fn send_pre_spawn_packets(&self) -> Vec<Vec<u8>> {
         let mut responses = Vec::new();
 
-        // 1. StartGame
+        // StartGame
         let start_game = StartGame::default_flat();
         responses.push(self.encode_compressed_packet(
             packet_id::START_GAME,
             &start_game.encode(),
         ));
 
-        // 2. ItemRegistry (empty)
+        // ItemRegistry (empty) — test if this crashes
         responses.push(self.encode_compressed_packet(
             packet_id::ITEM_REGISTRY,
             &ItemRegistry::encode_empty(),
         ));
 
-        // 3. AvailableActorIdentifiers — real NBT blob from PMMP bedrock-data
+        // AvailableActorIdentifiers — real NBT from PMMP
         static ENTITY_IDENTIFIERS_NBT: &[u8] =
             include_bytes!("../data/entity_identifiers.nbt");
-        let actor_ids = AvailableActorIdentifiers {
-            nbt_data: ENTITY_IDENTIFIERS_NBT.to_vec(),
-        };
         responses.push(self.encode_compressed_packet(
             packet_id::AVAILABLE_ACTOR_IDENTIFIERS,
-            &actor_ids.encode(),
+            ENTITY_IDENTIFIERS_NBT,
         ));
 
-        // 4. BiomeDefinitionList — empty for now (protocol 924 custom format)
-        // Format: VarUInt32(definition_count=0) + VarUInt32(string_count=0)
+        // BiomeDefinitionList — empty (protocol 924 custom format)
         let mut biome_writer = mc_rs_proto::io::ProtoWriter::with_capacity(4);
-        biome_writer.write_var_u32(0); // definition count
-        biome_writer.write_var_u32(0); // string count
+        biome_writer.write_var_u32(0);
+        biome_writer.write_var_u32(0);
         responses.push(self.encode_compressed_packet(
             packet_id::BIOME_DEFINITION_LIST,
             biome_writer.as_bytes(),
         ));
 
-        // 5. UpdateAbilities
-        let abilities = UpdateAbilities::default_creative(1);
-        responses.push(self.encode_compressed_packet(
-            packet_id::UPDATE_ABILITIES,
-            &abilities.encode(),
-        ));
+        // CraftingData + CreativeContent DISABLED for binary search
 
-        // 6. UpdateAdventureSettings
-        let adventure = UpdateAdventureSettings {
-            no_pvm: false,
-            no_mvp: false,
-            immutable_world: false,
-            show_name_tags: true,
-            auto_jump: true,
-        };
-        responses.push(self.encode_compressed_packet(
-            packet_id::UPDATE_ADVENTURE_SETTINGS,
-            &adventure.encode(),
-        ));
-
-        // 7. CraftingData (empty)
-        responses.push(self.encode_compressed_packet(
-            packet_id::CRAFTING_DATA,
-            &CraftingData::encode_empty(),
-        ));
-
-        // 8. CreativeContent (empty)
-        responses.push(self.encode_compressed_packet(
-            packet_id::CREATIVE_CONTENT,
-            &CreativeContent::encode_empty(),
-        ));
-
-        // 9. PlayerList (add self)
-        let uuid_bytes = self
-            .uuid
-            .map(|u| *u.as_bytes())
-            .unwrap_or([0u8; 16]);
-        let player_list = PlayerList {
-            action: 0, // add
-            entries: vec![PlayerListAdd {
-                uuid: uuid_bytes,
-                entity_id: 1,
-                username: self.display_name.clone().unwrap_or_else(|| "Player".to_string()),
-                xuid: self.xuid.clone().unwrap_or_default(),
-                platform_chat_id: String::new(),
-                build_platform: 0,
-                is_teacher: false,
-                is_host: true,
-                is_subclient: false,
-            }],
-        };
-        responses.push(self.encode_compressed_packet(
-            packet_id::PLAYER_LIST,
-            &player_list.encode(),
-        ));
-
-        // 10. SetTime
-        let set_time = SetTime { time: 0 };
-        responses.push(self.encode_compressed_packet(
-            packet_id::SET_TIME,
-            &set_time.encode(),
-        ));
-
-        // 11. SetDifficulty
-        let difficulty = SetDifficulty { difficulty: 1 };
-        responses.push(self.encode_compressed_packet(
-            packet_id::SET_DIFFICULTY,
-            &difficulty.encode(),
-        ));
-
-        // 12. SetSpawnPosition
-        let spawn_pos = SetSpawnPosition {
-            spawn_type: 1, // world
-            position: [0, 10, 0],
-            dimension: 0,
-            spawn_position: [0, 10, 0],
-        };
-        responses.push(self.encode_compressed_packet(
-            packet_id::SET_SPAWN_POSITION,
-            &spawn_pos.encode(),
-        ));
-
-        info!(
-            "[{}] Sent {} PreSpawn packets",
-            self.addr,
-            responses.len()
-        );
+        info!("[{}] Sent {} PreSpawn packets", self.addr, responses.len());
 
         responses
     }

@@ -335,7 +335,7 @@ impl StartGame {
             current_tick: 0,
             enchantment_seed: 0,
             multiplayer_correlation_id: String::new(),
-            enable_new_inventory_system: true,
+            enable_new_inventory_system: false,
             server_software_version: "1.26.2".to_string(),
             // Empty NBT compound tag (network LE format):
             // tag_type=10 (compound), name_length=0 (VarUInt=0x00), end_tag=0x00
@@ -343,7 +343,7 @@ impl StartGame {
             block_palette_checksum: 0,
             world_template_id: [0u8; 16],
             enable_client_side_chunk_generation: false,
-            block_network_ids_are_hashes: true,
+            block_network_ids_are_hashes: false,
             disable_client_sounds: true,
             server_id: String::new(),
             scenario_id: String::new(),
@@ -499,5 +499,23 @@ impl SetSpawnPosition {
         w.write_var_u32(self.spawn_position[1] as u32);
         w.write_var_i32(self.spawn_position[2]);
         w.into_bytes()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_startgame_hex() {
+        let sg = StartGame::default_flat();
+        let bytes = sg.encode();
+        println!("\n=== StartGame: {} bytes ===", bytes.len());
+        for (i, chunk) in bytes.chunks(32).enumerate() {
+            print!("{:04X}: ", i * 32);
+            for b in chunk { print!("{:02X} ", b); }
+            println!();
+        }
+        println!("=== END ===\n");
     }
 }
