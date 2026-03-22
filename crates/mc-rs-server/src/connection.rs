@@ -18,6 +18,7 @@ use mc_rs_proto::packets::world::*;
 
 use crate::player_registry;
 use crate::world::flat_generator;
+use crate::world::terrain_generator;
 
 /// Connection state for a single player.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -421,16 +422,17 @@ impl Connection {
         self.last_chunk_x = spawn_chunk_x;
         self.last_chunk_z = spawn_chunk_z;
 
-        let (sub_chunk_count, chunk_payload) = flat_generator::generate_flat_chunk();
+        let seed = 42u64; // TODO: from config
         for cx in (spawn_chunk_x - clamped)..=(spawn_chunk_x + clamped) {
             for cz in (spawn_chunk_z - clamped)..=(spawn_chunk_z + clamped) {
+                let (sub_chunk_count, chunk_payload) = terrain_generator::generate_terrain_chunk(cx, cz, seed);
                 let chunk = LevelChunk {
                     chunk_x: cx,
                     chunk_z: cz,
                     dimension_id: 0,
                     sub_chunk_count,
                     cache_enabled: false,
-                    payload: chunk_payload.clone(),
+                    payload: chunk_payload,
                 };
                 responses.push(self.encode_compressed_packet(
                     packet_id::LEVEL_CHUNK,
@@ -570,14 +572,14 @@ impl Connection {
                     let cx = chunk_x + dx;
                     let cz = chunk_z + dz;
                     if !self.sent_chunks.contains(&(cx, cz)) {
-                        let (sub_count, payload) = flat_generator::generate_flat_chunk();
+                        let (sub_count, payload) = terrain_generator::generate_terrain_chunk(cx, cz, 42); // TODO: seed from config
                         let chunk_pkt = LevelChunk {
                             chunk_x: cx,
                             chunk_z: cz,
                             dimension_id: 0,
                             sub_chunk_count: sub_count,
                             cache_enabled: false,
-                            payload: payload.clone(),
+                            payload,
                         };
                         responses.push(self.encode_compressed_packet(
                             packet_id::LEVEL_CHUNK,
