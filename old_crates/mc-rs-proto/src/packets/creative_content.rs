@@ -24,6 +24,8 @@ pub struct CreativeContent {
 
 impl ProtoEncode for CreativeContent {
     fn proto_encode(&self, buf: &mut impl BufMut) {
+        // Protocol 924: groups count first, then items count
+        VarUInt32(0).proto_encode(buf); // creative groups (empty)
         VarUInt32(self.items.len() as u32).proto_encode(buf);
         for item in &self.items {
             VarUInt32(item.network_id).proto_encode(buf);
