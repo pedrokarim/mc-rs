@@ -504,33 +504,11 @@ impl ConnectionHandler {
             return;
         }
 
-        if self.online_mode {
-            // Store client_data before encryption handshake
-            if let Some(conn) = self.connections.get_mut(&addr) {
-                conn.client_data = Some(client_data);
-            }
-            self.start_encryption_handshake(addr, login_data).await;
-        } else {
-            if let Some(conn) = self.connections.get_mut(&addr) {
-                conn.login_data = Some(login_data);
-                conn.client_data = Some(client_data);
-                conn.state = LoginState::LoggedIn;
-            }
-
-            self.send_packet(
-                addr,
-                packets::id::PLAY_STATUS,
-                &PlayStatus {
-                    status: PlayStatusType::LoginSuccess,
-                },
-            )
-            .await;
-
-            info!("Sent PlayStatus(LoginSuccess) to {addr} (offline mode)");
-
-            // Start resource pack exchange
-            self.send_resource_packs_info(addr).await;
+        // Always do encryption handshake (required for protocol 924)
+        if let Some(conn) = self.connections.get_mut(&addr) {
+            conn.client_data = Some(client_data);
         }
+        self.start_encryption_handshake(addr, login_data).await;
     }
 
     async fn start_encryption_handshake(&mut self, addr: SocketAddr, login_data: jwt::LoginData) {
@@ -569,7 +547,6 @@ impl ConnectionHandler {
 
         if let Some(conn) = self.connections.get_mut(&addr) {
             conn.login_data = Some(login_data);
-            conn.pending_encryption = Some(PendingEncryption { aes_key, iv });
             conn.state = LoginState::AwaitingHandshake;
         }
 
@@ -580,7 +557,14 @@ impl ConnectionHandler {
         )
         .await;
 
-        info!("Sent ServerToClientHandshake to {addr}, awaiting client confirmation");
+        // Activate encryption AFTER sending ServerToClientHandshake (unencrypted).
+        // The client will encrypt its next packet (ClientToServerHandshake),
+        // so we must be ready to decrypt it.
+        if let Some(conn) = self.connections.get_mut(&addr) {
+            conn.encryption = Some(PacketEncryption::new(&aes_key, &iv));
+        }
+
+        info!("Sent ServerToClientHandshake to {addr}, encryption activated");
     }
 
     async fn handle_client_to_server_handshake(
@@ -601,24 +585,12 @@ impl ConnectionHandler {
             return;
         }
 
-        let activated = if let Some(conn) = self.connections.get_mut(&addr) {
-            if let Some(pending) = conn.pending_encryption.take() {
-                conn.encryption = Some(PacketEncryption::new(&pending.aes_key, &pending.iv));
-                conn.state = LoginState::LoggedIn;
-                true
-            } else {
-                warn!("No pending encryption for {addr}");
-                false
-            }
-        } else {
-            false
-        };
-
-        if !activated {
-            return;
+        // Encryption was already activated after sending ServerToClientHandshake
+        if let Some(conn) = self.connections.get_mut(&addr) {
+            conn.state = LoginState::LoggedIn;
         }
 
-        info!("Encryption activated for {addr}");
+        info!("ClientToServerHandshake confirmed for {addr}");
 
         self.send_packet(
             addr,
