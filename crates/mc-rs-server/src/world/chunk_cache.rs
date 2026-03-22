@@ -2,7 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use tracing::{debug, info};
 
-use super::chunk_serializer;
+use super::chunk_serializer::{self, SubChunk};
+use super::flat_generator::block_ids;
 use super::storage::WorldStorage;
 use super::terrain_generator;
 
@@ -10,11 +11,28 @@ use super::terrain_generator;
 pub struct ChunkColumn {
     pub x: i32,
     pub z: i32,
-    /// Sub-chunk payloads (already serialized for network).
-    /// Index 0 = Y[-64,-49], index 1 = Y[-48,-33], etc.
-    pub sub_chunk_count: u32,
-    /// Full serialized payload (sub-chunks + biomes + border blocks)
+    /// Decompressed sub-chunks with actual runtime IDs.
+    pub sub_chunks: Vec<SubChunk>,
+    /// Serialized biome data (24 biome sections).
+    pub biome_data: Vec<u8>,
+    /// Cached network payload, invalidated on block changes.
     pub network_payload: Vec<u8>,
+    /// True if network_payload needs to be rebuilt from sub_chunks.
+    pub payload_dirty: bool,
+    /// Number of sub-chunks to send to the client.
+    pub sub_chunk_count: u32,
+}
+
+impl ChunkColumn {
+    /// Get the network-ready payload, rebuilding if needed.
+    pub fn get_network_payload(&mut self) -> &[u8] {
+        if self.payload_dirty {
+            self.network_payload =
+                chunk_serializer::rebuild_network_payload(&self.sub_chunks, &self.biome_data);
+            self.payload_dirty = false;
+        }
+        &self.network_payload
+    }
 }
 
 /// In-memory chunk cache with LevelDB persistence.
@@ -48,64 +66,147 @@ impl ChunkCache {
     }
 
     /// Get a chunk, loading from disk or generating if needed.
-    /// Returns the network-ready payload.
     pub fn get_chunk(&mut self, cx: i32, cz: i32) -> &ChunkColumn {
-        if !self.chunks.contains_key(&(cx, cz)) {
-            // Try loading from storage first
-            let loaded = if let Some(ref mut storage) = self.storage {
-                if storage.has_chunk(cx, cz) {
-                    // Load from LevelDB
-                    let sub_chunks = storage.load_sub_chunks(cx, cz);
-                    if !sub_chunks.is_empty() {
-                        debug!(
-                            "Loaded chunk ({}, {}) from LevelDB ({} sub-chunks)",
-                            cx,
-                            cz,
-                            sub_chunks.len()
-                        );
-                        // Reconstruct network payload from stored sub-chunks
-                        let mut payload = Vec::with_capacity(4096);
-                        for (_y_idx, data) in &sub_chunks {
-                            payload.extend_from_slice(data);
-                        }
-                        // Add biome sections
-                        let biome = chunk_serializer::serialize_biome_section_single(1);
-                        for _ in 0..24 {
-                            payload.extend_from_slice(&biome);
-                        }
-                        payload.push(0); // border blocks
-                        Some(ChunkColumn {
-                            x: cx,
-                            z: cz,
-                            sub_chunk_count: sub_chunks.len() as u32,
-                            network_payload: payload,
-                        })
-                    } else {
-                        None
+        self.ensure_chunk_loaded(cx, cz);
+        self.chunks.get(&(cx, cz)).unwrap()
+    }
+
+    /// Get a mutable reference to a chunk.
+    pub fn get_chunk_mut(&mut self, cx: i32, cz: i32) -> &mut ChunkColumn {
+        self.ensure_chunk_loaded(cx, cz);
+        self.chunks.get_mut(&(cx, cz)).unwrap()
+    }
+
+    /// Ensure a chunk is loaded in the cache.
+    fn ensure_chunk_loaded(&mut self, cx: i32, cz: i32) {
+        if self.chunks.contains_key(&(cx, cz)) {
+            return;
+        }
+
+        // Try loading from storage first
+        let loaded = if let Some(ref mut storage) = self.storage {
+            if storage.has_chunk(cx, cz) {
+                let stored_sub_chunks = storage.load_sub_chunks(cx, cz);
+                if !stored_sub_chunks.is_empty() {
+                    debug!(
+                        "Loaded chunk ({}, {}) from LevelDB ({} sub-chunks)",
+                        cx,
+                        cz,
+                        stored_sub_chunks.len()
+                    );
+                    // Reconstruct from stored sub-chunk data
+                    let mut payload = Vec::with_capacity(4096);
+                    for (_y_idx, data) in &stored_sub_chunks {
+                        payload.extend_from_slice(data);
                     }
+                    let biome = chunk_serializer::serialize_biome_section_single(1);
+                    let mut biome_data = Vec::with_capacity(biome.len() * 24);
+                    for _ in 0..24 {
+                        biome_data.extend_from_slice(&biome);
+                    }
+                    payload.extend_from_slice(&biome_data);
+                    payload.push(0); // border blocks
+
+                    let sub_count = stored_sub_chunks.len() as u32;
+                    let (sub_chunks, _) =
+                        chunk_serializer::parse_chunk_payload(&payload, sub_count, block_ids::AIR);
+
+                    Some(ChunkColumn {
+                        x: cx,
+                        z: cz,
+                        sub_chunks,
+                        biome_data,
+                        network_payload: payload,
+                        payload_dirty: false,
+                        sub_chunk_count: sub_count,
+                    })
                 } else {
                     None
                 }
             } else {
                 None
-            };
+            }
+        } else {
+            None
+        };
 
-            let column = loaded.unwrap_or_else(|| {
-                // Generate new chunk
-                let (sub_count, payload) =
-                    terrain_generator::generate_terrain_chunk(cx, cz, self.seed);
-                ChunkColumn {
-                    x: cx,
-                    z: cz,
-                    sub_chunk_count: sub_count,
-                    network_payload: payload,
-                }
-            });
+        let column = loaded.unwrap_or_else(|| {
+            // Generate new chunk
+            let (sub_count, payload) =
+                terrain_generator::generate_terrain_chunk(cx, cz, self.seed);
 
-            self.chunks.insert((cx, cz), column);
+            let (sub_chunks, biome_data) =
+                chunk_serializer::parse_chunk_payload(&payload, sub_count, block_ids::AIR);
+
+            ChunkColumn {
+                x: cx,
+                z: cz,
+                sub_chunks,
+                biome_data,
+                network_payload: payload,
+                payload_dirty: false,
+                sub_chunk_count: sub_count,
+            }
+        });
+
+        self.chunks.insert((cx, cz), column);
+    }
+
+    /// Get a block's runtime ID at world coordinates.
+    pub fn get_block(&mut self, world_x: i32, world_y: i32, world_z: i32) -> u32 {
+        let cx = world_x.div_euclid(16);
+        let cz = world_z.div_euclid(16);
+        let local_x = world_x.rem_euclid(16) as usize;
+        let local_y_offset = world_y + 64;
+        let local_z = world_z.rem_euclid(16) as usize;
+
+        if local_y_offset < 0 || local_y_offset >= 384 {
+            return block_ids::AIR;
         }
 
-        self.chunks.get(&(cx, cz)).unwrap()
+        let sub_idx = local_y_offset as usize / 16;
+        let local_y = local_y_offset as usize % 16;
+
+        self.ensure_chunk_loaded(cx, cz);
+        let chunk = self.chunks.get(&(cx, cz)).unwrap();
+
+        if sub_idx >= chunk.sub_chunks.len() {
+            return block_ids::AIR;
+        }
+
+        chunk.sub_chunks[sub_idx].get_block(local_x, local_y, local_z)
+    }
+
+    /// Set a block's runtime ID at world coordinates.
+    /// Marks the chunk as dirty and invalidates the network payload cache.
+    pub fn set_block(&mut self, world_x: i32, world_y: i32, world_z: i32, runtime_id: u32) {
+        let cx = world_x.div_euclid(16);
+        let cz = world_z.div_euclid(16);
+        let local_x = world_x.rem_euclid(16) as usize;
+        let local_y_offset = world_y + 64;
+        let local_z = world_z.rem_euclid(16) as usize;
+
+        if local_y_offset < 0 || local_y_offset >= 384 {
+            return;
+        }
+
+        let sub_idx = local_y_offset as usize / 16;
+        let local_y = local_y_offset as usize % 16;
+
+        self.ensure_chunk_loaded(cx, cz);
+        let chunk = self.chunks.get_mut(&(cx, cz)).unwrap();
+
+        // Extend sub_chunks if needed
+        while chunk.sub_chunks.len() <= sub_idx {
+            chunk.sub_chunks.push(SubChunk::new_air(block_ids::AIR));
+        }
+        if sub_idx as u32 >= chunk.sub_chunk_count {
+            chunk.sub_chunk_count = sub_idx as u32 + 1;
+        }
+
+        chunk.sub_chunks[sub_idx].set_block(local_x, local_y, local_z, runtime_id);
+        chunk.payload_dirty = true;
+        self.dirty.insert((cx, cz));
     }
 
     /// Mark a chunk as modified (needs saving).
@@ -129,13 +230,13 @@ impl ChunkCache {
 
         for (cx, cz) in &dirty_coords {
             if let Some(chunk) = self.chunks.get(&(*cx, *cz)) {
-                // Save the network payload as sub-chunk data
-                // For now, save the entire payload as sub-chunk 0
-                // TODO: properly split back into individual sub-chunks
                 storage.save_chunk_version(*cx, *cz);
                 storage.save_finalization(*cx, *cz);
-                // Save the raw payload as a single blob for sub-chunk 0
-                storage.save_sub_chunk(*cx, *cz, 0, &chunk.network_payload);
+                // Save each sub-chunk individually
+                for (i, sub) in chunk.sub_chunks.iter().enumerate() {
+                    let serialized = sub.serialize();
+                    storage.save_sub_chunk(*cx, *cz, i as u8, &serialized);
+                }
                 saved += 1;
             }
         }

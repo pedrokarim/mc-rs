@@ -578,6 +578,74 @@ impl SetSpawnPosition {
     }
 }
 
+// ── LevelEvent (S→C, 0x19) ──
+
+pub struct LevelEvent {
+    pub event_id: i32,
+    pub position: [f32; 3],
+    pub event_data: i32,
+}
+
+impl LevelEvent {
+    /// Block destroy particles.
+    pub const PARTICLE_DESTROY: i32 = 2001;
+
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(20);
+        w.write_var_i32(self.event_id);
+        w.write_f32_le(self.position[0]);
+        w.write_f32_le(self.position[1]);
+        w.write_f32_le(self.position[2]);
+        w.write_var_i32(self.event_data);
+        w.into_bytes()
+    }
+}
+
+// ── LevelSoundEvent (S→C, 0x7B) ──
+
+pub struct LevelSoundEvent {
+    pub sound: u32,
+    pub position: [f32; 3],
+    pub extra_data: i32,
+    pub entity_type: String,
+    pub is_baby_mob: bool,
+    pub disable_relative_volume: bool,
+    pub actor_unique_id: i64,
+}
+
+impl LevelSoundEvent {
+    pub const BREAK: u32 = 5;
+    pub const PLACE: u32 = 6;
+    pub const HIT: u32 = 1;
+
+    /// Create a non-actor block sound event.
+    pub fn block_sound(sound: u32, position: [f32; 3], block_runtime_id: i32) -> Self {
+        Self {
+            sound,
+            position,
+            extra_data: block_runtime_id,
+            entity_type: ":".to_string(),
+            is_baby_mob: false,
+            disable_relative_volume: false,
+            actor_unique_id: -1,
+        }
+    }
+
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(32);
+        w.write_var_u32(self.sound);
+        w.write_f32_le(self.position[0]);
+        w.write_f32_le(self.position[1]);
+        w.write_f32_le(self.position[2]);
+        w.write_var_i32(self.extra_data);
+        w.write_string(&self.entity_type);
+        w.write_bool(self.is_baby_mob);
+        w.write_bool(self.disable_relative_volume);
+        w.write_i64_le(self.actor_unique_id);
+        w.into_bytes()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

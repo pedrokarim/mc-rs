@@ -1,4 +1,4 @@
-use mc_rs_proto::io::ProtoWriter;
+use mc_rs_proto::io::{ProtoReader, ProtoWriter};
 
 /// Serialize a sub-chunk with the given palette (network format).
 ///
@@ -91,6 +91,177 @@ fn bits_for_palette(palette_size: usize) -> u8 {
         65..=256 => 8,
         _ => 16,
     }
+}
+
+/// A sub-chunk storing 16x16x16 blocks as actual runtime IDs.
+/// Index = (x << 8) | (z << 4) | y
+#[derive(Clone)]
+pub struct SubChunk {
+    pub blocks: [u32; 4096],
+}
+
+impl SubChunk {
+    pub fn new_air(air_id: u32) -> Self {
+        Self {
+            blocks: [air_id; 4096],
+        }
+    }
+
+    /// Get the block runtime ID at local coordinates.
+    pub fn get_block(&self, x: usize, y: usize, z: usize) -> u32 {
+        self.blocks[(x << 8) | (z << 4) | y]
+    }
+
+    /// Set the block runtime ID at local coordinates.
+    pub fn set_block(&mut self, x: usize, y: usize, z: usize, runtime_id: u32) {
+        self.blocks[(x << 8) | (z << 4) | y] = runtime_id;
+    }
+
+    /// Serialize this sub-chunk to network format.
+    pub fn serialize(&self) -> Vec<u8> {
+        // Build palette from blocks
+        let mut palette: Vec<u32> = Vec::new();
+        let mut palette_indices = [0u32; 4096];
+
+        for (i, &block) in self.blocks.iter().enumerate() {
+            let idx = if let Some(pos) = palette.iter().position(|&b| b == block) {
+                pos as u32
+            } else {
+                palette.push(block);
+                (palette.len() - 1) as u32
+            };
+            palette_indices[i] = idx;
+        }
+
+        serialize_sub_chunk(&palette_indices, &palette)
+    }
+}
+
+/// Deserialize a single sub-chunk from network bytes.
+/// Returns (SubChunk, bytes_consumed).
+pub fn deserialize_sub_chunk_data(data: &[u8]) -> Option<(SubChunk, usize)> {
+    if data.len() < 2 {
+        return None;
+    }
+
+    let mut reader = ProtoReader::new(data);
+    let version = reader.read_u8().ok()?;
+    if version != 8 {
+        return None;
+    }
+
+    let storage_count = reader.read_u8().ok()?;
+    let air_id = super::flat_generator::block_ids::AIR;
+    let mut blocks = [air_id; 4096];
+
+    for _ in 0..storage_count {
+        let header = reader.read_u8().ok()?;
+        let bits_per_block = header >> 1;
+
+        if bits_per_block == 0 {
+            // Single-value palette
+            let value = reader.read_var_i32().ok()? as u32;
+            blocks.fill(value);
+        } else {
+            // Read word array
+            let blocks_per_word = 32 / bits_per_block as usize;
+            let word_count = 4096usize.div_ceil(blocks_per_word);
+            let mask = (1u32 << bits_per_block) - 1;
+
+            let mut palette_indices = [0u32; 4096];
+            for word_idx in 0..word_count {
+                let word = reader.read_u32_le().ok()?;
+                for bit_idx in 0..blocks_per_word {
+                    let block_idx = word_idx * blocks_per_word + bit_idx;
+                    if block_idx >= 4096 {
+                        break;
+                    }
+                    palette_indices[block_idx] =
+                        (word >> (bit_idx * bits_per_block as usize)) & mask;
+                }
+            }
+
+            // Read palette
+            let palette_count = reader.read_var_i32().ok()? as usize;
+            let mut palette = Vec::with_capacity(palette_count);
+            for _ in 0..palette_count {
+                palette.push(reader.read_var_i32().ok()? as u32);
+            }
+
+            // Convert palette indices to runtime IDs
+            for i in 0..4096 {
+                let idx = palette_indices[i] as usize;
+                blocks[i] = if idx < palette.len() {
+                    palette[idx]
+                } else {
+                    air_id
+                };
+            }
+        }
+        // Only use the first storage layer (main blocks)
+        break;
+    }
+
+    Some((SubChunk { blocks }, reader.position()))
+}
+
+/// Rebuild the full network payload from sub-chunks and biome data.
+pub fn rebuild_network_payload(sub_chunks: &[SubChunk], biome_data: &[u8]) -> Vec<u8> {
+    let mut payload = Vec::with_capacity(16384);
+
+    for sub in sub_chunks {
+        payload.extend_from_slice(&sub.serialize());
+    }
+
+    payload.extend_from_slice(biome_data);
+
+    // Border blocks count
+    payload.push(0);
+
+    payload
+}
+
+/// Parse a full chunk payload into sub-chunks and biome data.
+/// Returns (Vec<SubChunk>, biome_data_bytes).
+pub fn parse_chunk_payload(
+    data: &[u8],
+    sub_chunk_count: u32,
+    air_id: u32,
+) -> (Vec<SubChunk>, Vec<u8>) {
+    let mut sub_chunks = Vec::with_capacity(sub_chunk_count as usize);
+    let mut offset = 0;
+
+    for _ in 0..sub_chunk_count {
+        if offset >= data.len() {
+            sub_chunks.push(SubChunk::new_air(air_id));
+            continue;
+        }
+        match deserialize_sub_chunk_data(&data[offset..]) {
+            Some((sub, consumed)) => {
+                sub_chunks.push(sub);
+                offset += consumed;
+            }
+            None => {
+                sub_chunks.push(SubChunk::new_air(air_id));
+                break;
+            }
+        }
+    }
+
+    // Remaining data is biome sections + border blocks
+    let biome_data = if offset < data.len() {
+        // Remove the trailing border blocks byte from biome data
+        let remaining = &data[offset..];
+        if remaining.len() > 1 {
+            remaining[..remaining.len() - 1].to_vec()
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+
+    (sub_chunks, biome_data)
 }
 
 #[cfg(test)]

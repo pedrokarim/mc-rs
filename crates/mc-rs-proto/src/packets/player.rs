@@ -792,9 +792,9 @@ impl SetActorData {
             metadata: vec![
                 (0, 7, MetadataValue::Long(flags)),
                 (4, 4, MetadataValue::String(name.to_string())),
-                (38, 3, MetadataValue::Float(1.0)),  // SCALE (PMMP = 38)
-                (53, 3, MetadataValue::Float(0.6)),  // BOUNDING_BOX_WIDTH (PMMP = 53)
-                (54, 3, MetadataValue::Float(1.8)),  // BOUNDING_BOX_HEIGHT (PMMP = 54)
+                (38, 3, MetadataValue::Float(1.0)), // SCALE (PMMP = 38)
+                (53, 3, MetadataValue::Float(0.6)), // BOUNDING_BOX_WIDTH (PMMP = 53)
+                (54, 3, MetadataValue::Float(1.8)), // BOUNDING_BOX_HEIGHT (PMMP = 54)
             ],
             tick: 0,
         }
@@ -812,9 +812,9 @@ impl SetActorData {
             metadata: vec![
                 (0, 7, MetadataValue::Long(flags)),
                 (4, 4, MetadataValue::String(name.to_string())),
-                (38, 3, MetadataValue::Float(1.0)),  // SCALE (PMMP EntityMetadataProperties::SCALE = 38)
-                (53, 3, MetadataValue::Float(0.6)),  // BOUNDING_BOX_WIDTH (PMMP = 53)
-                (54, 3, MetadataValue::Float(1.8)),  // BOUNDING_BOX_HEIGHT (PMMP = 54)
+                (38, 3, MetadataValue::Float(1.0)), // SCALE (PMMP EntityMetadataProperties::SCALE = 38)
+                (53, 3, MetadataValue::Float(0.6)), // BOUNDING_BOX_WIDTH (PMMP = 53)
+                (54, 3, MetadataValue::Float(1.8)), // BOUNDING_BOX_HEIGHT (PMMP = 54)
             ],
             tick: 0,
         }

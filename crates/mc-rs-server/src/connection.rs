@@ -79,7 +79,11 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub fn new(addr: SocketAddr, server_keypair: std::sync::Arc<ServerKeyPair>, chunk_cache: Arc<Mutex<ChunkCache>>) -> Self {
+    pub fn new(
+        addr: SocketAddr,
+        server_keypair: std::sync::Arc<ServerKeyPair>,
+        chunk_cache: Arc<Mutex<ChunkCache>>,
+    ) -> Self {
         Self {
             addr,
             state: ConnectionState::SessionStart,
@@ -467,8 +471,8 @@ impl Connection {
             for cz in (spawn_chunk_z - clamped)..=(spawn_chunk_z + clamped) {
                 let (sub_chunk_count, chunk_payload) = {
                     let mut cache = self.chunk_cache.lock().unwrap();
-                    let col = cache.get_chunk(cx, cz);
-                    (col.sub_chunk_count, col.network_payload.clone())
+                    let col = cache.get_chunk_mut(cx, cz);
+                    (col.sub_chunk_count, col.get_network_payload().to_vec())
                 };
                 let chunk = LevelChunk {
                     chunk_x: cx,
@@ -639,8 +643,8 @@ impl Connection {
                     if !self.sent_chunks.contains(&(cx, cz)) {
                         let (sub_count, payload) = {
                             let mut cache = self.chunk_cache.lock().unwrap();
-                            let col = cache.get_chunk(cx, cz);
-                            (col.sub_chunk_count, col.network_payload.clone())
+                            let col = cache.get_chunk_mut(cx, cz);
+                            (col.sub_chunk_count, col.get_network_payload().to_vec())
                         };
                         let chunk_pkt = LevelChunk {
                             chunk_x: cx,
@@ -675,6 +679,19 @@ impl Connection {
             // PREDICT_DESTROY_BLOCK (26) or CREATIVE_PLAYER_DESTROY_BLOCK
             if action.action_type == 26 {
                 let air_id = flat_generator::block_ids::AIR;
+                let bx = action.position[0];
+                let by = action.position[1];
+                let bz = action.position[2];
+
+                // Get the old block ID and set to air
+                let old_block_id = if let Ok(mut cache) = self.chunk_cache.lock() {
+                    let old = cache.get_block(bx, by, bz);
+                    cache.set_block(bx, by, bz, air_id);
+                    old
+                } else {
+                    air_id
+                };
+
                 let update = UpdateBlock {
                     position: action.position,
                     runtime_id: air_id,
@@ -683,19 +700,12 @@ impl Connection {
                 };
                 let update_bytes =
                     self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &update.encode());
-                // Send to the player who broke the block
                 responses.push(update_bytes.clone());
-                // Broadcast to all other players
                 self.broadcasts.push(update_bytes);
-                // Mark chunk as dirty for persistence
-                let chunk_x = action.position[0] >> 4;
-                let chunk_z = action.position[2] >> 4;
-                if let Ok(mut cache) = self.chunk_cache.lock() {
-                    cache.mark_dirty(chunk_x, chunk_z);
-                }
+
                 info!(
-                    "[{}] Block broken at ({}, {}, {})",
-                    self.addr, action.position[0], action.position[1], action.position[2]
+                    "[{}] Block broken at ({}, {}, {}) old_id={}",
+                    self.addr, bx, by, bz, old_block_id
                 );
             }
         }
