@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::net::SocketAddr;
 
 use base64::Engine;
@@ -54,6 +55,12 @@ pub struct Connection {
     pub entity_runtime_id: u64,
     pub tick: u64,
 
+    // Chunk tracking
+    pub sent_chunks: HashSet<(i32, i32)>,
+    pub view_distance: i32,
+    pub last_chunk_x: i32,
+    pub last_chunk_z: i32,
+
     // Packets to broadcast to ALL other players
     pub broadcasts: Vec<Vec<u8>>,
 
@@ -79,6 +86,10 @@ impl Connection {
             head_yaw: 0.0,
             entity_runtime_id: player_registry::next_entity_id() as u64,
             tick: 0,
+            sent_chunks: HashSet::new(),
+            view_distance: 8,
+            last_chunk_x: 0,
+            last_chunk_z: 0,
             broadcasts: Vec::new(),
             server_keypair,
         }
@@ -375,6 +386,7 @@ impl Connection {
     fn handle_request_chunk_radius(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
         let radius = reader.read_var_i32().unwrap_or(4);
         let clamped = radius.clamp(2, 8);
+        self.view_distance = clamped;
         info!("[{}] RequestChunkRadius: {} (responding with {})", self.addr, radius, clamped);
 
         let mut responses = Vec::new();
@@ -387,8 +399,11 @@ impl Connection {
         ));
 
         // NetworkChunkPublisherUpdate
+        let spawn_x = self.position[0] as i32;
+        let spawn_y = self.position[1] as i32;
+        let spawn_z = self.position[2] as i32;
         let publisher = NetworkChunkPublisherUpdate {
-            position: [0, -59, 0],
+            position: [spawn_x, spawn_y, spawn_z],
             radius: (clamped * 16) as u32,
         };
         responses.push(self.encode_compressed_packet(
@@ -396,10 +411,15 @@ impl Connection {
             &publisher.encode(),
         ));
 
-        // Send flat chunks around spawn
+        // Send flat chunks around spawn and track them
+        let spawn_chunk_x = spawn_x >> 4;
+        let spawn_chunk_z = spawn_z >> 4;
+        self.last_chunk_x = spawn_chunk_x;
+        self.last_chunk_z = spawn_chunk_z;
+
         let (sub_chunk_count, chunk_payload) = flat_generator::generate_flat_chunk();
-        for cx in -clamped..=clamped {
-            for cz in -clamped..=clamped {
+        for cx in (spawn_chunk_x - clamped)..=(spawn_chunk_x + clamped) {
+            for cz in (spawn_chunk_z - clamped)..=(spawn_chunk_z + clamped) {
                 let chunk = LevelChunk {
                     chunk_x: cx,
                     chunk_z: cz,
@@ -412,9 +432,10 @@ impl Connection {
                     packet_id::LEVEL_CHUNK,
                     &chunk.encode(),
                 ));
+                self.sent_chunks.insert((cx, cz));
             }
         }
-        info!("[{}] Sent {} chunks (radius={})", self.addr, (2 * clamped + 1).pow(2), clamped);
+        info!("[{}] Sent {} chunks (radius={})", self.addr, self.sent_chunks.len(), clamped);
 
         // PLAYER_SPAWN — send after chunks
         let spawn_status = PlayStatus {
@@ -464,6 +485,32 @@ impl Connection {
             return Vec::new();
         };
 
+        // Validate position (anti-cheat basics)
+        if !pkt.position[0].is_finite() || !pkt.position[1].is_finite() || !pkt.position[2].is_finite() {
+            return Vec::new(); // ignore invalid position
+        }
+
+        // Void kill check
+        if pkt.position[1] < -128.0 {
+            // Player fell into the void — teleport back to spawn
+            self.position = [0.5, -57.0, 0.5];
+            let reset = mc_rs_proto::packets::player::MovePlayer {
+                runtime_entity_id: self.entity_runtime_id,
+                position: self.position,
+                pitch: 0.0,
+                yaw: 0.0,
+                head_yaw: 0.0,
+                mode: 1, // reset
+                on_ground: true,
+                riding_runtime_id: 0,
+                tick: self.tick,
+            };
+            return vec![self.encode_compressed_packet(
+                packet_id::MOVE_PLAYER,
+                &reset.encode(),
+            )];
+        }
+
         // Update player position
         self.position = pkt.position;
         self.pitch = pkt.pitch;
@@ -488,7 +535,61 @@ impl Connection {
             &move_pkt.encode(),
         ));
 
-        Vec::new() // no response to the player itself
+        // Check if player moved to a new chunk — send new chunks dynamically
+        let mut responses = Vec::new();
+        let chunk_x = (self.position[0] as i32) >> 4;
+        let chunk_z = (self.position[2] as i32) >> 4;
+
+        if chunk_x != self.last_chunk_x || chunk_z != self.last_chunk_z {
+            self.last_chunk_x = chunk_x;
+            self.last_chunk_z = chunk_z;
+
+            // Send NetworkChunkPublisherUpdate with new position
+            let ncpu = NetworkChunkPublisherUpdate {
+                position: [
+                    self.position[0] as i32,
+                    self.position[1] as i32,
+                    self.position[2] as i32,
+                ],
+                radius: (self.view_distance * 16) as u32,
+            };
+            responses.push(self.encode_compressed_packet(
+                packet_id::NETWORK_CHUNK_PUBLISHER_UPDATE,
+                &ncpu.encode(),
+            ));
+
+            // Send missing chunks in view distance
+            let mut new_chunks = 0;
+            for dx in -self.view_distance..=self.view_distance {
+                for dz in -self.view_distance..=self.view_distance {
+                    let cx = chunk_x + dx;
+                    let cz = chunk_z + dz;
+                    if !self.sent_chunks.contains(&(cx, cz)) {
+                        let (sub_count, payload) = flat_generator::generate_flat_chunk();
+                        let chunk_pkt = LevelChunk {
+                            chunk_x: cx,
+                            chunk_z: cz,
+                            dimension_id: 0,
+                            sub_chunk_count: sub_count,
+                            cache_enabled: false,
+                            payload: payload.clone(),
+                        };
+                        responses.push(self.encode_compressed_packet(
+                            packet_id::LEVEL_CHUNK,
+                            &chunk_pkt.encode(),
+                        ));
+                        self.sent_chunks.insert((cx, cz));
+                        new_chunks += 1;
+                    }
+                }
+            }
+
+            if new_chunks > 0 {
+                debug!("[{}] Sent {} new chunks around ({}, {})", self.addr, new_chunks, chunk_x, chunk_z);
+            }
+        }
+
+        responses
     }
 
     fn handle_text(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
