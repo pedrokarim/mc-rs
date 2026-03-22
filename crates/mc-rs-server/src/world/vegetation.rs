@@ -123,59 +123,72 @@ fn tree_count_for_biome(biome: u32, random: &mut Random) -> i32 {
     }
 }
 
-/// Number of short grass per chunk.
-fn grass_count_for_biome(biome: u32, random: &mut Random) -> i32 {
+/// Number of short grass per chunk (from BDS feature_rules).
+fn grass_count_for_biome(biome: u32, _random: &mut Random) -> i32 {
     match biome {
-        biome_id::PLAINS | biome_id::SUNFLOWER_PLAINS => random.next_range(20, 40),
-        biome_id::SAVANNA | biome_id::SAVANNA_PLATEAU => random.next_range(15, 30),
-        biome_id::FOREST | biome_id::BIRCH_FOREST | biome_id::ROOFED_FOREST => {
-            random.next_range(5, 15)
-        }
-        biome_id::FLOWER_FOREST => random.next_range(8, 20),
-        biome_id::TAIGA | biome_id::COLD_TAIGA | biome_id::MEGA_TAIGA => random.next_range(3, 10),
-        biome_id::JUNGLE | biome_id::BAMBOO_JUNGLE | biome_id::JUNGLE_EDGE => {
-            random.next_range(10, 25)
-        }
-        biome_id::SWAMPLAND => random.next_range(8, 16),
-        biome_id::EXTREME_HILLS | biome_id::EXTREME_HILLS_EDGE => random.next_range(3, 8),
+        // BDS: plains_surface_tall_grass = 10 iterations
+        biome_id::PLAINS | biome_id::SUNFLOWER_PLAINS => 10,
+        // BDS: savanna_surface_tall_grass = 20
+        biome_id::SAVANNA | biome_id::SAVANNA_PLATEAU => 20,
+        biome_id::FOREST | biome_id::BIRCH_FOREST | biome_id::ROOFED_FOREST => 5,
+        biome_id::FLOWER_FOREST => 8,
+        // BDS: taiga_surface_tall_grass = 1 (sparse)
+        biome_id::TAIGA | biome_id::COLD_TAIGA => 1,
+        // BDS: mega_taiga_surface_tall_grass = 7
+        biome_id::MEGA_TAIGA | biome_id::MEGA_TAIGA_HILLS => 7,
+        // BDS: jungle_surface_tall_grass = 25
+        biome_id::JUNGLE | biome_id::JUNGLE_EDGE => 25,
+        // BDS: bamboo_jungle = 150 (!)
+        biome_id::BAMBOO_JUNGLE => 150,
+        // BDS: swamp_surface_tall_grass = 5
+        biome_id::SWAMPLAND => 5,
+        // BDS: savanna_mutated = 5
+        biome_id::SAVANNA_MUTATED => 5,
+        biome_id::EXTREME_HILLS | biome_id::EXTREME_HILLS_EDGE => 3,
         _ => 0,
     }
 }
 
-/// Number of flowers per chunk.
-fn flower_count_for_biome(biome: u32, random: &mut Random) -> i32 {
+/// Number of flowers per chunk (from BDS feature_rules).
+fn flower_count_for_biome(biome: u32, _random: &mut Random) -> i32 {
     match biome {
-        biome_id::FLOWER_FOREST => random.next_range(15, 30),
-        biome_id::PLAINS | biome_id::SUNFLOWER_PLAINS => random.next_range(2, 6),
-        biome_id::FOREST | biome_id::BIRCH_FOREST => random.next_range(1, 4),
-        biome_id::SWAMPLAND => random.next_range(0, 2),
-        biome_id::SAVANNA => random.next_range(0, 2),
-        biome_id::EXTREME_HILLS | biome_id::EXTREME_HILLS_EDGE => random.next_range(0, 2),
+        // BDS: flower_forest_surface_flowers = 100
+        biome_id::FLOWER_FOREST => 100,
+        // BDS: plains_surface_flowers = 4 (or 15 in flower patches)
+        biome_id::PLAINS | biome_id::SUNFLOWER_PLAINS => 4,
+        // BDS: forest_surface_flowers = 2
+        biome_id::FOREST | biome_id::BIRCH_FOREST => 2,
+        // BDS: jungle_surface_flowers = 4
+        biome_id::JUNGLE | biome_id::BAMBOO_JUNGLE | biome_id::JUNGLE_EDGE => 4,
+        // BDS: savanna_surface_flowers = 4
+        biome_id::SAVANNA | biome_id::SAVANNA_PLATEAU => 4,
+        // BDS: swamp_surface_flowers = 1
+        biome_id::SWAMPLAND => 1,
+        biome_id::EXTREME_HILLS | biome_id::EXTREME_HILLS_EDGE => 1,
         _ => 0,
     }
 }
 
-/// Number of ferns per chunk.
-fn fern_count_for_biome(biome: u32, random: &mut Random) -> i32 {
+/// Number of ferns per chunk (BDS uses tall_grass feature for taiga/jungle).
+fn fern_count_for_biome(biome: u32, _random: &mut Random) -> i32 {
     match biome {
-        biome_id::TAIGA | biome_id::COLD_TAIGA => random.next_range(5, 12),
-        biome_id::MEGA_TAIGA | biome_id::MEGA_TAIGA_HILLS => random.next_range(8, 16),
-        biome_id::JUNGLE | biome_id::BAMBOO_JUNGLE | biome_id::JUNGLE_EDGE => {
-            random.next_range(6, 14)
-        }
-        biome_id::TAIGA_HILLS | biome_id::COLD_TAIGA_HILLS => random.next_range(3, 8),
+        biome_id::TAIGA | biome_id::COLD_TAIGA => 5,
+        biome_id::MEGA_TAIGA | biome_id::MEGA_TAIGA_HILLS => 10,
+        biome_id::JUNGLE | biome_id::BAMBOO_JUNGLE | biome_id::JUNGLE_EDGE => 8,
+        biome_id::TAIGA_HILLS | biome_id::COLD_TAIGA_HILLS => 4,
         _ => 0,
     }
 }
 
 /// Number of tall grass (double plant) per chunk.
-fn tall_grass_count_for_biome(biome: u32, random: &mut Random) -> i32 {
+/// BDS: plains_first_double_plant_grass = 7
+fn tall_grass_count_for_biome(biome: u32, _random: &mut Random) -> i32 {
     match biome {
-        biome_id::PLAINS | biome_id::SUNFLOWER_PLAINS => random.next_range(3, 8),
-        biome_id::SAVANNA | biome_id::SAVANNA_PLATEAU => random.next_range(2, 5),
-        biome_id::FLOWER_FOREST => random.next_range(2, 6),
-        biome_id::FOREST | biome_id::BIRCH_FOREST => random.next_range(1, 3),
-        biome_id::JUNGLE | biome_id::BAMBOO_JUNGLE => random.next_range(3, 8),
+        biome_id::PLAINS | biome_id::SUNFLOWER_PLAINS => 7,
+        biome_id::SAVANNA | biome_id::SAVANNA_PLATEAU => 3,
+        biome_id::FLOWER_FOREST => 5,
+        biome_id::FOREST | biome_id::BIRCH_FOREST => 2,
+        biome_id::JUNGLE | biome_id::BAMBOO_JUNGLE => 5,
         _ => 0,
     }
 }
@@ -301,8 +314,8 @@ mod tests {
             .filter(|&&id| id == extra_blocks::SHORT_GRASS)
             .count();
         assert!(
-            grass_count >= 10,
-            "Plains should have lots of grass, got {grass_count}"
+            grass_count >= 3,
+            "Plains should have grass, got {grass_count}"
         );
     }
 

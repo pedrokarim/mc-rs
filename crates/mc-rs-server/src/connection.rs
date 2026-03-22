@@ -17,6 +17,7 @@ use mc_rs_proto::packets::packet_id;
 use mc_rs_proto::packets::player::*;
 use mc_rs_proto::packets::world::*;
 
+use crate::inventory::PlayerInventory;
 use crate::player_data;
 use crate::player_registry;
 use crate::world::chunk_cache::ChunkCache;
@@ -74,6 +75,9 @@ pub struct Connection {
     // Server keypair (shared across connections)
     server_keypair: std::sync::Arc<ServerKeyPair>,
 
+    // Player inventory
+    pub inventory: PlayerInventory,
+
     // Shared chunk cache (world persistence)
     chunk_cache: Arc<Mutex<ChunkCache>>,
 }
@@ -112,6 +116,7 @@ impl Connection {
             last_chunk_z: 0,
             broadcasts: Vec::new(),
             pending_actions: Vec::new(),
+            inventory: PlayerInventory::new(),
             server_keypair,
             chunk_cache,
         }
@@ -218,6 +223,13 @@ impl Connection {
             // ── InGame ──
             (ConnectionState::InGame, packet_id::PLAYER_AUTH_INPUT) => {
                 self.handle_player_auth_input(reader)
+            }
+            (ConnectionState::InGame, packet_id::INTERACT) => self.handle_interact(reader),
+            (ConnectionState::InGame, packet_id::CONTAINER_CLOSE) => {
+                self.handle_container_close(reader)
+            }
+            (ConnectionState::InGame, packet_id::MOB_EQUIPMENT) => {
+                self.handle_mob_equipment(reader)
             }
             (ConnectionState::InGame, packet_id::TEXT) => self.handle_text(reader),
             (ConnectionState::InGame, packet_id::COMMAND_REQUEST) => {
@@ -433,7 +445,7 @@ impl Connection {
 
     fn handle_request_chunk_radius(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
         let radius = reader.read_var_i32().unwrap_or(4);
-        let clamped = radius.clamp(2, 8);
+        let clamped = radius.clamp(2, 16);
         self.view_distance = clamped;
         info!(
             "[{}] RequestChunkRadius: {} (responding with {})",
@@ -692,6 +704,7 @@ impl Connection {
                     air_id
                 };
 
+                // Send UpdateBlock
                 let update = UpdateBlock {
                     position: action.position,
                     runtime_id: air_id,
@@ -703,6 +716,49 @@ impl Connection {
                 responses.push(update_bytes.clone());
                 self.broadcasts.push(update_bytes);
 
+                // Send block destroy particles
+                let block_center = [bx as f32 + 0.5, by as f32 + 0.5, bz as f32 + 0.5];
+                if old_block_id != air_id {
+                    let level_event = LevelEvent {
+                        event_id: LevelEvent::PARTICLE_DESTROY,
+                        position: block_center,
+                        event_data: old_block_id as i32,
+                    };
+                    let event_bytes = self
+                        .encode_compressed_packet(packet_id::LEVEL_EVENT, &level_event.encode());
+                    responses.push(event_bytes.clone());
+                    self.broadcasts.push(event_bytes);
+
+                    // Send block break sound
+                    let sound = LevelSoundEvent::block_sound(
+                        LevelSoundEvent::BREAK,
+                        block_center,
+                        old_block_id as i32,
+                    );
+                    let sound_bytes = self
+                        .encode_compressed_packet(packet_id::LEVEL_SOUND_EVENT, &sound.encode());
+                    responses.push(sound_bytes.clone());
+                    self.broadcasts.push(sound_bytes);
+                }
+
+                // Add block drop to inventory
+                if old_block_id != air_id {
+                    if let Some(drop_item) = crate::inventory::block_drop(old_block_id) {
+                        if let Some(slot) = self.inventory.add_item(drop_item) {
+                            // Send inventory slot update
+                            let slot_pkt = InventorySlot::encode(
+                                0,
+                                slot as u32,
+                                &self.inventory.slots[slot],
+                                0,
+                            );
+                            responses.push(
+                                self.encode_compressed_packet(packet_id::INVENTORY_SLOT, &slot_pkt),
+                            );
+                        }
+                    }
+                }
+
                 info!(
                     "[{}] Block broken at ({}, {}, {}) old_id={}",
                     self.addr, bx, by, bz, old_block_id
@@ -710,7 +766,324 @@ impl Connection {
             }
         }
 
+        // Handle block placement (item interaction with ACTION_CLICK_BLOCK)
+        if let Some(ref interaction) = pkt.item_interaction {
+            if interaction.action_type == 0 {
+                // ACTION_CLICK_BLOCK
+                self.handle_block_place(interaction, &mut responses);
+            }
+        }
+
+        // Handle inventory stack requests (slot movements)
+        if let Some(ref request) = pkt.item_stack_request {
+            self.handle_item_stack_request(request, &mut responses);
+        }
+
         responses
+    }
+
+    fn handle_block_place(
+        &mut self,
+        interaction: &mc_rs_proto::packets::player::ItemInteractionData,
+        responses: &mut Vec<Vec<u8>>,
+    ) {
+        let held = &self.inventory.slots[self.inventory.held_slot as usize];
+        if held.item.is_air() {
+            return;
+        }
+
+        // Check if held item is a placeable block
+        let block_runtime_id = match crate::inventory::item_to_block(held.item.id) {
+            Some(id) => id,
+            None => return, // Not a block item
+        };
+
+        // Calculate target position from face offset
+        let (dx, dy, dz) = match interaction.face {
+            0 => (0, -1, 0), // down
+            1 => (0, 1, 0),  // up
+            2 => (0, 0, -1), // north
+            3 => (0, 0, 1),  // south
+            4 => (-1, 0, 0), // west
+            5 => (1, 0, 0),  // east
+            _ => return,
+        };
+
+        let tx = interaction.block_position[0] + dx;
+        let ty = interaction.block_position[1] + dy;
+        let tz = interaction.block_position[2] + dz;
+
+        // Set the block
+        if let Ok(mut cache) = self.chunk_cache.lock() {
+            let existing = cache.get_block(tx, ty, tz);
+            if existing != flat_generator::block_ids::AIR {
+                return; // Can't place on a non-air block
+            }
+            cache.set_block(tx, ty, tz, block_runtime_id);
+        }
+
+        // Send UpdateBlock
+        let update = UpdateBlock {
+            position: [tx, ty, tz],
+            runtime_id: block_runtime_id,
+            flags: 3,
+            layer: 0,
+        };
+        let update_bytes = self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &update.encode());
+        responses.push(update_bytes.clone());
+        self.broadcasts.push(update_bytes);
+
+        // Send place sound
+        let block_center = [tx as f32 + 0.5, ty as f32 + 0.5, tz as f32 + 0.5];
+        let sound = LevelSoundEvent::block_sound(
+            LevelSoundEvent::PLACE,
+            block_center,
+            block_runtime_id as i32,
+        );
+        let sound_bytes =
+            self.encode_compressed_packet(packet_id::LEVEL_SOUND_EVENT, &sound.encode());
+        responses.push(sound_bytes.clone());
+        self.broadcasts.push(sound_bytes);
+
+        // Decrement item count in inventory
+        let slot = self.inventory.held_slot as usize;
+        if self.inventory.slots[slot].item.count > 1 {
+            self.inventory.slots[slot].item.count -= 1;
+        } else {
+            self.inventory.slots[slot] = ItemStackWrapper::air();
+        }
+
+        // Send inventory slot update
+        let slot_pkt = InventorySlot::encode(0, slot as u32, &self.inventory.slots[slot], 0);
+        responses.push(self.encode_compressed_packet(packet_id::INVENTORY_SLOT, &slot_pkt));
+
+        info!(
+            "[{}] Block placed at ({}, {}, {}) block_id={}",
+            self.addr, tx, ty, tz, block_runtime_id
+        );
+    }
+
+    fn handle_item_stack_request(
+        &mut self,
+        request: &mc_rs_proto::packets::player::ItemStackRequest,
+        responses: &mut Vec<Vec<u8>>,
+    ) {
+        use mc_rs_proto::packets::player::StackRequestAction;
+        use mc_rs_proto::packets::world::{ItemStackResponse, ItemStackResponseContainer};
+
+        let mut changed_containers: Vec<ItemStackResponseContainer> = Vec::new();
+
+        for action in &request.actions {
+            match action {
+                StackRequestAction::Take {
+                    count,
+                    source,
+                    destination,
+                }
+                | StackRequestAction::Place {
+                    count,
+                    source,
+                    destination,
+                } => {
+                    let src_slot = self.resolve_slot(source.container_id, source.slot_id);
+                    let dst_slot = self.resolve_slot(destination.container_id, destination.slot_id);
+
+                    if let (Some(src_idx), Some(dst_idx)) = (src_slot, dst_slot) {
+                        let take_count = *count;
+
+                        // Take from source
+                        let src_item = self.inventory.slots[src_idx].item.clone();
+                        if src_item.is_air() || src_item.count < take_count as u16 {
+                            continue;
+                        }
+
+                        // Place to destination
+                        let dst_item = &self.inventory.slots[dst_idx].item;
+                        if dst_item.is_air() {
+                            // Move to empty slot
+                            let mut new_item = src_item.clone();
+                            new_item.count = take_count as u16;
+                            let stack_id = self.inventory.next_stack_id();
+                            self.inventory.slots[dst_idx] =
+                                ItemStackWrapper::new(new_item, stack_id);
+                        } else if dst_item.id == src_item.id && dst_item.meta == src_item.meta {
+                            // Stack on same item
+                            self.inventory.slots[dst_idx].item.count += take_count as u16;
+                        } else {
+                            continue; // Can't place here
+                        }
+
+                        // Reduce source
+                        if self.inventory.slots[src_idx].item.count <= take_count as u16 {
+                            self.inventory.slots[src_idx] = ItemStackWrapper::air();
+                        } else {
+                            self.inventory.slots[src_idx].item.count -= take_count as u16;
+                        }
+
+                        // Track changes for response
+                        self.add_slot_to_response(
+                            &mut changed_containers,
+                            source.container_id,
+                            source.slot_id,
+                            src_idx,
+                        );
+                        self.add_slot_to_response(
+                            &mut changed_containers,
+                            destination.container_id,
+                            destination.slot_id,
+                            dst_idx,
+                        );
+                    }
+                }
+                StackRequestAction::Swap {
+                    source,
+                    destination,
+                    ..
+                } => {
+                    let src_slot = self.resolve_slot(source.container_id, source.slot_id);
+                    let dst_slot = self.resolve_slot(destination.container_id, destination.slot_id);
+
+                    if let (Some(src_idx), Some(dst_idx)) = (src_slot, dst_slot) {
+                        self.inventory.slots.swap(src_idx, dst_idx);
+
+                        self.add_slot_to_response(
+                            &mut changed_containers,
+                            source.container_id,
+                            source.slot_id,
+                            src_idx,
+                        );
+                        self.add_slot_to_response(
+                            &mut changed_containers,
+                            destination.container_id,
+                            destination.slot_id,
+                            dst_idx,
+                        );
+                    }
+                }
+                StackRequestAction::Destroy { source, .. }
+                | StackRequestAction::Drop { source, .. } => {
+                    if let Some(slot_idx) = self.resolve_slot(source.container_id, source.slot_id) {
+                        self.inventory.slots[slot_idx] = ItemStackWrapper::air();
+                        self.add_slot_to_response(
+                            &mut changed_containers,
+                            source.container_id,
+                            source.slot_id,
+                            slot_idx,
+                        );
+                    }
+                }
+                StackRequestAction::Unknown(_) => {}
+            }
+        }
+
+        // Send response
+        let response = ItemStackResponse::ok(request.request_id, changed_containers);
+        responses.push(
+            self.encode_compressed_packet(packet_id::ITEM_STACK_RESPONSE, &response.encode()),
+        );
+    }
+
+    /// Resolve a container_id + slot_id to an index in self.inventory.slots.
+    fn resolve_slot(&self, container_id: u8, slot_id: u8) -> Option<usize> {
+        match container_id {
+            0 | 28 => {
+                // Inventory / hotbar (container 0 or 28 for hotbar)
+                let idx = slot_id as usize;
+                if idx < 36 {
+                    Some(idx)
+                } else {
+                    None
+                }
+            }
+            _ => None, // Armor, offhand, etc. not handled yet
+        }
+    }
+
+    /// Add a slot to the response containers.
+    fn add_slot_to_response(
+        &self,
+        containers: &mut Vec<mc_rs_proto::packets::world::ItemStackResponseContainer>,
+        container_id: u8,
+        slot_id: u8,
+        inventory_idx: usize,
+    ) {
+        use mc_rs_proto::packets::world::{ItemStackResponseContainer, ItemStackResponseSlot};
+
+        let item = &self.inventory.slots[inventory_idx];
+        let response_slot = ItemStackResponseSlot {
+            slot: slot_id,
+            hotbar_slot: slot_id,
+            count: item.item.count as u8,
+            stack_id: item.stack_id,
+            custom_name: String::new(),
+            filtered_custom_name: String::new(),
+            durability_correction: 0,
+        };
+
+        // Find or create the container
+        if let Some(container) = containers
+            .iter_mut()
+            .find(|c| c.container_id == container_id)
+        {
+            container.slots.push(response_slot);
+        } else {
+            containers.push(ItemStackResponseContainer {
+                container_id,
+                slots: vec![response_slot],
+            });
+        }
+    }
+
+    fn handle_interact(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
+        let Ok(action) = reader.read_u8() else {
+            return Vec::new();
+        };
+        let _actor_runtime_id = reader.read_var_u64().unwrap_or(0);
+
+        if action == 6 {
+            // OPEN_INVENTORY
+            let container_open = ContainerOpen::player_inventory(self.entity_runtime_id as i64);
+            let pkt =
+                self.encode_compressed_packet(packet_id::CONTAINER_OPEN, &container_open.encode());
+            debug!("[{}] Opening player inventory", self.addr);
+            return vec![pkt];
+        }
+
+        Vec::new()
+    }
+
+    fn handle_container_close(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
+        let window_id = reader.read_u8().unwrap_or(0);
+        let window_type = reader.read_u8().unwrap_or(0);
+        let _server = reader.read_bool().unwrap_or(false);
+
+        // Echo back the close
+        let close = ContainerClose {
+            window_id,
+            window_type,
+            server: true,
+        };
+        vec![self.encode_compressed_packet(packet_id::CONTAINER_CLOSE, &close.encode())]
+    }
+
+    fn handle_mob_equipment(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
+        let _runtime_entity_id = reader.read_var_u64().unwrap_or(0);
+        // Skip the ItemStackWrapper (just skip the item ID to determine air)
+        let _item_id = reader.read_var_i32().unwrap_or(0);
+        // For non-air items, skip the rest — but we only need the hotbar slot
+        // The remaining bytes are: count(u16), meta(VarU32), hasNetId, stackId?, blockRuntimeId, extraData
+        // Then: inventory_slot(u8), hotbar_slot(u8), container_id(u8)
+        // For simplicity, read remaining bytes and get the last 3
+        let remaining = reader.read_remaining();
+        if remaining.len() >= 3 {
+            let hotbar_slot = remaining[remaining.len() - 2];
+            if hotbar_slot < 9 {
+                self.inventory.held_slot = hotbar_slot;
+                debug!("[{}] Held slot changed to {}", self.addr, hotbar_slot);
+            }
+        }
+
+        Vec::new()
     }
 
     fn handle_text(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
@@ -936,22 +1309,30 @@ impl Connection {
         // Main inventory (window 0, 36 slots)
         responses.push(self.encode_compressed_packet(
             packet_id::INVENTORY_CONTENT,
-            &InventoryContent::encode_empty(0, 36, 0),
+            &InventoryContent::encode_items(0, &self.inventory.slots, 0),
         ));
         // Armor inventory (window 120, 4 slots)
         responses.push(self.encode_compressed_packet(
             packet_id::INVENTORY_CONTENT,
-            &InventoryContent::encode_empty(120, 4, 120),
+            &InventoryContent::encode_items(120, &self.inventory.armor, 120),
         ));
         // Offhand (window 119, 1 slot)
         responses.push(self.encode_compressed_packet(
             packet_id::INVENTORY_CONTENT,
-            &InventoryContent::encode_empty(119, 1, 119),
+            &InventoryContent::encode_items(
+                119,
+                std::slice::from_ref(&self.inventory.offhand),
+                119,
+            ),
         ));
-        // MobEquipment (selected hotbar slot = air)
+        // MobEquipment (selected hotbar slot)
         responses.push(self.encode_compressed_packet(
             packet_id::MOB_EQUIPMENT,
-            &MobEquipment::encode_empty(self.entity_runtime_id),
+            &MobEquipment::encode_item(
+                self.entity_runtime_id,
+                self.inventory.held_item(),
+                self.inventory.held_slot,
+            ),
         ));
 
         // 10. CraftingData (empty)
