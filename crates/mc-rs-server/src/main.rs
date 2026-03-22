@@ -20,6 +20,7 @@ use tracing::{error, info};
 use crate::config::ServerConfig;
 use crate::connection::Connection;
 use crate::player_registry::PlayerRegistry;
+use crate::world::tick::{WorldState, WorldPacket, encode_set_time};
 
 #[tokio::main]
 async fn main() {
@@ -77,11 +78,20 @@ async fn main() {
     let mut connections: HashMap<SocketAddr, Connection> = HashMap::new();
     let mut peers: HashMap<SocketAddr, mc_rs_raknet::RakNetPeer> = HashMap::new();
     let mut registry = PlayerRegistry::new();
+    let mut world_state = WorldState::new(
+        config.gameplay.do_daylight_cycle,
+        config.gameplay.do_weather_cycle,
+    );
 
     // Session tick interval (100 TPS = 10ms)
-    let mut tick_timer = interval(Duration::from_millis(10));
+    let mut tick_timer = interval(Duration::from_millis(config.server.tick_rate));
+    let mut should_stop = false;
 
     loop {
+        if should_stop {
+            info!("Server stopping...");
+            break;
+        }
         tokio::select! {
             // Receive UDP packets (this awaits until data arrives)
             result = raknet.recv_and_process() => {
@@ -99,15 +109,35 @@ async fn main() {
                 }
 
                 // Process events from all peers
-                process_peer_events(&mut peers, &mut connections, &mut raknet, &mut registry);
+                process_peer_events(&mut peers, &mut connections, &mut raknet, &mut registry, &mut world_state, &mut should_stop);
             }
 
             // Tick sessions periodically
             _ = tick_timer.tick() => {
                 raknet.tick_sessions().await;
 
+                // World tick (day/night cycle, weather)
+                let world_packets = world_state.tick();
+                for wp in world_packets {
+                    match wp {
+                        WorldPacket::SetTime(time) => {
+                            let time_bytes = encode_set_time(time);
+                            for (addr, conn) in connections.iter_mut() {
+                                if conn.is_in_game() {
+                                    let pkt = conn.encode_compressed_packet(
+                                        packet_id::SET_TIME,
+                                        &time_bytes,
+                                    );
+                                    let prepared = conn.prepare_for_send(pkt);
+                                    raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, false);
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Also check for events after session ticks
-                process_peer_events(&mut peers, &mut connections, &mut raknet, &mut registry);
+                process_peer_events(&mut peers, &mut connections, &mut raknet, &mut registry, &mut world_state, &mut should_stop);
             }
         }
     }
@@ -118,6 +148,8 @@ fn process_peer_events(
     connections: &mut HashMap<SocketAddr, Connection>,
     raknet: &mut RakNetServer,
     registry: &mut PlayerRegistry,
+    world_state: &mut WorldState,
+    should_stop: &mut bool,
 ) {
     let addrs: Vec<SocketAddr> = peers.keys().copied().collect();
     for addr in addrs {
@@ -133,7 +165,7 @@ fn process_peer_events(
                     }
                     SessionEvent::Packet(data) => {
                         // Extract data from connection (scoped borrow)
-                        let (responses, broadcasts, join_info) = {
+                        let (responses, broadcasts, join_info, actions) = {
                             let Some(conn) = connections.get_mut(&addr) else { continue };
                             let was_in_game = conn.is_in_game();
 
@@ -157,8 +189,9 @@ fn process_peer_events(
                             registry.update_position(&addr, conn.position, conn.pitch, conn.yaw, conn.head_yaw);
 
                             let broadcasts = conn.take_broadcasts();
+                            let actions = std::mem::take(&mut conn.pending_actions);
 
-                            (responses, broadcasts, join_info)
+                            (responses, broadcasts, join_info, actions)
                         };
                         // Borrow of conn dropped here
 
@@ -236,6 +269,28 @@ fn process_peer_events(
                                         raknet.send_to_session(other_addr, prepared, Reliability::ReliableOrdered, true);
                                     }
                                 }
+                            }
+                        }
+
+                        // Process server-side actions from commands
+                        for action in actions {
+                            match action {
+                                mc_rs_command::CommandAction::SetTime { time } => {
+                                    world_state.set_time(time);
+                                    // Broadcast immediately
+                                    let time_bytes = encode_set_time(time);
+                                    for (a, c) in connections.iter_mut() {
+                                        if c.is_in_game() {
+                                            let pkt = c.encode_compressed_packet(packet_id::SET_TIME, &time_bytes);
+                                            let prepared = c.prepare_for_send(pkt);
+                                            raknet.send_to_session(a, prepared, Reliability::ReliableOrdered, true);
+                                        }
+                                    }
+                                }
+                                mc_rs_command::CommandAction::Stop => {
+                                    *should_stop = true;
+                                }
+                                _ => {} // Other actions handled in connection.rs
                             }
                         }
                     }

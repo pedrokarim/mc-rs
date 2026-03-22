@@ -64,6 +64,9 @@ pub struct Connection {
     // Packets to broadcast to ALL other players
     pub broadcasts: Vec<Vec<u8>>,
 
+    // Server-side actions from commands (read by main.rs)
+    pub pending_actions: Vec<mc_rs_command::CommandAction>,
+
     // Server keypair (shared across connections)
     server_keypair: std::sync::Arc<ServerKeyPair>,
 }
@@ -91,6 +94,7 @@ impl Connection {
             last_chunk_x: 0,
             last_chunk_z: 0,
             broadcasts: Vec::new(),
+            pending_actions: Vec::new(),
             server_keypair,
         }
     }
@@ -641,9 +645,9 @@ impl Connection {
         let mut responses = Vec::new();
 
         // Handle action
-        match result.action {
+        match &result.action {
             mc_rs_command::CommandAction::Teleport { x, y, z } => {
-                self.position = [x, y, z];
+                self.position = [*x, *y, *z];
                 let move_pkt = mc_rs_proto::packets::player::MovePlayer {
                     runtime_entity_id: self.entity_runtime_id,
                     position: self.position,
@@ -660,11 +664,17 @@ impl Connection {
                     &move_pkt.encode(),
                 ));
             }
-            mc_rs_command::CommandAction::Broadcast { ref message } => {
+            mc_rs_command::CommandAction::Broadcast { message } => {
                 let chat = mc_rs_proto::packets::player::Text::chat("Server", message, "");
                 self.broadcasts.push(self.encode_compressed_packet(packet_id::TEXT, &chat));
             }
-            _ => {}
+            mc_rs_command::CommandAction::SetTime { .. }
+            | mc_rs_command::CommandAction::SetGamemode { .. }
+            | mc_rs_command::CommandAction::Stop
+            | mc_rs_command::CommandAction::Kill => {
+                self.pending_actions.push(result.action);
+            }
+            mc_rs_command::CommandAction::None => {}
         }
 
         // Send text response
