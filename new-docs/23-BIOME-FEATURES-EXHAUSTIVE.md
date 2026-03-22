@@ -423,33 +423,43 @@ Les structures sont générées par le **serveur**, pas le client. Le serveur pl
 
 ## Résumé : ce qui manque dans notre implémentation
 
-### Végétation manquante
-- [ ] Cactus (desert, mesa)
-- [ ] Dead bush (desert, mesa, mega_taiga, swamp)
-- [ ] Vines / lianes (jungle, swamp)
-- [ ] Bamboo (jungle, bamboo_jungle)
-- [ ] Reeds / canne à sucre (tous biomes, près de l'eau)
-- [ ] Nénuphars / waterlily (swamp)
-- [ ] Mushrooms / champignons (swamp, mega_taiga, taiga)
-- [ ] Huge mushrooms (mushroom_island, roofed_forest)
-- [ ] Melon (jungle)
-- [ ] Pumpkin (très rare, tous biomes)
-- [ ] Sweet berry bush (taiga, cold_taiga)
-- [ ] Forest rocks / mossy cobblestone (mega_taiga)
-- [ ] Coral (warm_ocean)
-- [ ] Seagrass (ocean, river)
-- [ ] Fallen logs (bois tombé) — existe dans Bedrock, très rare
+### Végétation — implémentée
+- [x] Cactus (desert 10, mesa 5) — colonnes 1-3 blocs
+- [x] Dead bush (mesa 20, desert 2, mega_taiga 1, swamp 1)
+- [x] Bamboo (bamboo_jungle 40-80, jungle 16) — colonnes 5-12 blocs
+- [x] Reeds / canne à sucre (desert 50, overworld 10) — près de l'eau
+- [x] Nénuphars / waterlily (swamp 4) — sur surface de l'eau
+- [x] Mushrooms / champignons (swamp 8, mega_taiga 3, taiga 1)
+- [x] Pumpkin (1/32 chance, tous biomes herbeux)
+- [x] Flowers (flower_forest 100, plains 4, savanna 4, forest 2)
+- [x] Short grass, tall grass, ferns — densité BDS exacte
+- [x] 7 types de fleurs (dandelion, poppy, allium, azure_bluet, oxeye_daisy, cornflower, blue_orchid)
 
-### Arbres manquants (types)
-- [ ] Birch tree (birch_forest)
-- [ ] Spruce tree (taiga, mega_taiga, extreme_hills)
-- [ ] Jungle tree (jungle) — géant 2x2
-- [ ] Acacia tree (savanna) — forme en V
-- [ ] Dark oak tree (roofed_forest) — 2x2
-- [ ] Mega spruce (mega_taiga) — 2x2
+### Végétation — manquante
+- [ ] Vines / lianes (jungle 50, swamp) — blocs latéraux sur les arbres
+- [ ] Huge mushrooms (mushroom_island, roofed_forest) — structures champignon géant
+- [ ] Melon (jungle 1)
+- [ ] Sweet berry bush (taiga, cold_taiga)
+- [ ] Forest rocks / mossy cobblestone (mega_taiga 1)
+- [ ] Coral / sea anemone (warm_ocean)
+- [ ] Seagrass (ocean 12, river 12)
+- [ ] Fallen logs (bois tombé) — très rare
+
+### Arbres — implémentés
+- [x] Oak tree (plains, forest, swamp)
+- [x] Birch tree (birch_forest) — hauteur 5-7
+- [x] Spruce tree (taiga, cold_taiga, mega_taiga, extreme_hills) — canopy triangulaire
+- [x] Acacia tree (savanna)
+- [x] Jungle tree (jungle) — hauteur 5-9
+- [x] Dark oak tree (roofed_forest)
+
+### Arbres — manquants
+- [ ] Mega spruce 2x2 (mega_taiga)
+- [ ] Mega jungle 2x2 (jungle)
+- [ ] Swamp oak avec lianes
 
 ### Structures (non implémentées)
-- [ ] Toutes les structures ci-dessus
+- [ ] Toutes les structures (villages, temples, monuments, etc.)
 
 ### Surface manquante
 - [ ] Terracotta colorée en couches (mesa)
