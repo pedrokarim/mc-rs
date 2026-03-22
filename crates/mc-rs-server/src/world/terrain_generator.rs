@@ -468,7 +468,10 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
     let veg_map = vegetation::generate_vegetation(&biome_ids, &surfaces, &mut chunk_random);
 
     // Generate structures (fossils, etc.)
-    let block_mapping = structure::build_block_mapping();
+    // Block mapping is cached — parsing canonical_block_states.nbt is expensive
+    use std::sync::LazyLock;
+    static BLOCK_MAPPING: LazyLock<std::collections::HashMap<String, u32>> =
+        LazyLock::new(structure::build_block_mapping);
     let center_biome = biome_ids[8][8];
     let struct_map = structure::generate_structures(
         chunk_x,
@@ -476,7 +479,7 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
         seed,
         center_biome,
         &surfaces,
-        &block_mapping,
+        &BLOCK_MAPPING,
     );
 
     // Pre-compute ground cover per column
