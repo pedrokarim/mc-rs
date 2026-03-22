@@ -479,13 +479,8 @@ impl Connection {
             self.display_name.as_deref().unwrap_or("Player")
         );
         self.state = ConnectionState::InGame;
-
-        // Send SetActorData with NO_AI=false — enables client-side physics/gravity
-        let player_name = self.display_name.clone().unwrap_or_default();
-        let actor_data = SetActorData::player_in_game(self.entity_runtime_id, &player_name);
-        vec![self.encode_compressed_packet(
-            packet_id::SET_ACTOR_DATA, &actor_data.encode(),
-        )]
+        // No second SetActorData — already sent in PreSpawn without NO_AI
+        Vec::new()
     }
 
     // ── InGame handlers ──
@@ -841,18 +836,9 @@ impl Connection {
             &attributes.encode(),
         ));
 
-        // UpdateAdventureSettings
-        let adventure = UpdateAdventureSettings {
-            no_pvm: false, no_mvp: false, immutable_world: false,
-            show_name_tags: true, auto_jump: true,
-        };
-        responses.push(self.encode_compressed_packet(
-            packet_id::UPDATE_ADVENTURE_SETTINGS, &adventure.encode(),
-        ));
-
-        // SetActorData — entity metadata with gravity, breathing, NO_AI (pre-spawn freeze)
+        // SetActorData — send ONCE with correct flags (no NO_AI, gravity enabled)
         let player_name = self.display_name.clone().unwrap_or_default();
-        let actor_data = SetActorData::player_pre_spawn(self.entity_runtime_id, &player_name);
+        let actor_data = SetActorData::player_in_game(self.entity_runtime_id, &player_name);
         responses.push(self.encode_compressed_packet(
             packet_id::SET_ACTOR_DATA, &actor_data.encode(),
         ));
