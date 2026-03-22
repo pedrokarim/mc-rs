@@ -40,5 +40,7 @@ pub mod packet_id {
     pub const SET_LOCAL_PLAYER_AS_INITIALIZED: u32 = 0x71;
     pub const REQUEST_NETWORK_SETTINGS: u32 = 0xC1;
     pub const ITEM_REGISTRY: u32 = 0x161;
+    pub const AVAILABLE_COMMANDS: u32 = 0x4C;
+    pub const COMMAND_REQUEST: u32 = 0x4D;
     pub const SERVERBOUND_LOADING_SCREEN: u32 = 0x138;
 }

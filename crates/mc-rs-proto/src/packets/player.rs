@@ -73,6 +73,9 @@ impl MovePlayer {
 }
 
 // ── Text (Bi-directional, 0x09) ──
+// Protocol 924 format (from PMMP TextPacket.php):
+//   needsTranslation(bool) + category(u8) + type(u8) + [conditional] + xuid + platformChatId + filteredMessage(optional)
+// Categories: 0=MESSAGE_ONLY, 1=AUTHORED_MESSAGE, 2=MESSAGE_WITH_PARAMS
 
 pub struct Text {
     pub text_type: u8,
@@ -84,29 +87,30 @@ pub struct Text {
 }
 
 impl Text {
-    /// Decode a Text packet from the client (type=1 = chat).
+    /// Decode a Text packet from the client.
     pub fn decode(reader: &mut ProtoReader) -> Result<Self, crate::io::reader::ProtoReadError> {
-        let text_type = reader.read_u8()?;
         let needs_translation = reader.read_bool()?;
+        let _category = reader.read_u8()?; // category byte (protocol 924)
+        let text_type = reader.read_u8()?;
 
         let (source_name, message) = match text_type {
-            1 | 2 | 7 => {
-                // CHAT, WHISPER, ANNOUNCEMENT — has source + message
+            1 | 7 | 8 => {
+                // CHAT, WHISPER, ANNOUNCEMENT — category=1 (authored) → source + message
                 let source = reader.read_string()?;
                 let msg = reader.read_string()?;
                 (source, msg)
             }
-            0 | 6 | 8 | 9 => {
-                // RAW, JUKEBOX_POPUP, SYSTEM, OBJECT_WHISPER — message only
+            0 | 5 | 6 | 10 => {
+                // RAW, TIP, SYSTEM, JSON — category=0 (message_only) → message only
                 let msg = reader.read_string()?;
                 (String::new(), msg)
             }
-            3 | 4 | 5 => {
-                // TRANSLATION, POPUP, TIP — message + params
+            2 | 3 | 4 => {
+                // TRANSLATION, POPUP, JUKEBOX — category=2 (with_params) → message + params
                 let msg = reader.read_string()?;
                 let count = reader.read_var_u32()?;
                 for _ in 0..count {
-                    let _ = reader.read_string()?; // skip params
+                    let _ = reader.read_string()?;
                 }
                 (String::new(), msg)
             }
@@ -118,6 +122,9 @@ impl Text {
 
         let xuid = reader.read_string().unwrap_or_default();
         let platform_chat_id = reader.read_string().unwrap_or_default();
+        // filteredMessage (optional) — skip
+        let _ = reader.read_bool(); // has_filtered
+        // if has_filtered, read string — but we skip
 
         Ok(Self {
             text_type,
@@ -129,26 +136,30 @@ impl Text {
         })
     }
 
-    /// Encode a chat message to broadcast.
+    /// Encode a chat message to broadcast (category=1 AUTHORED_MESSAGE).
     pub fn chat(source: &str, message: &str, xuid: &str) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(128);
-        w.write_u8(1); // type = CHAT
-        w.write_bool(false); // needs_translation
+        w.write_bool(false);  // needsTranslation
+        w.write_u8(1);        // category = AUTHORED_MESSAGE
+        w.write_u8(1);        // type = CHAT
         w.write_string(source);
         w.write_string(message);
-        w.write_string(xuid);
-        w.write_string(""); // platform_chat_id
+        w.write_string(xuid); // xboxUserId
+        w.write_string("");   // platformChatId
+        w.write_bool(false);  // filteredMessage = None
         w.into_bytes()
     }
 
-    /// Encode a system message (no source name).
+    /// Encode a system/raw message (category=0 MESSAGE_ONLY).
     pub fn system(message: &str) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(64);
-        w.write_u8(0); // type = RAW
-        w.write_bool(false);
+        w.write_bool(false);  // needsTranslation
+        w.write_u8(0);        // category = MESSAGE_ONLY
+        w.write_u8(0);        // type = RAW
         w.write_string(message);
-        w.write_string(""); // xuid
-        w.write_string(""); // platform_chat_id
+        w.write_string("");   // xboxUserId
+        w.write_string("");   // platformChatId
+        w.write_bool(false);  // filteredMessage = None
         w.into_bytes()
     }
 }

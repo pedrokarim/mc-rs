@@ -410,6 +410,62 @@ impl AvailableActorIdentifiers {
     }
 }
 
+// ── AvailableCommands (S→C, 0x4C) ──
+
+pub struct AvailableCommands;
+
+impl AvailableCommands {
+    /// Encode a minimal AvailableCommands packet with simple commands.
+    /// Each command has 1 overload with 1 optional RAWTEXT arg.
+    pub fn encode_simple(commands: &[(&str, &str)]) -> Vec<u8> {
+        use crate::io::ProtoWriter;
+        let mut w = ProtoWriter::with_capacity(512);
+
+        // Enum values (string pool) — empty
+        w.write_var_u32(0);
+        // Chained sub command values — empty
+        w.write_var_u32(0);
+        // Postfixes — empty
+        w.write_var_u32(0);
+        // Enums — empty
+        w.write_var_u32(0);
+        // Chained sub command data — empty
+        w.write_var_u32(0);
+
+        // Command data
+        w.write_var_u32(commands.len() as u32);
+        for &(name, description) in commands {
+            // CommandData
+            w.write_string(name);         // command name (without /)
+            w.write_string(description);  // description
+            w.write_u16_le(0);            // flags
+            w.write_u8(0);                // permission level (0=NORMAL)
+            w.write_i32_le(-1);           // alias enum index (-1 = none)
+            w.write_var_u32(0);           // chained sub command indices count
+
+            // Overloads (1 overload with 1 optional param)
+            w.write_var_u32(1); // 1 overload
+            // Overload 0:
+            w.write_bool(false); // chaining = false
+            w.write_var_u32(1);  // 1 parameter
+            // Parameter:
+            w.write_string("args");       // param name
+            // ARG_TYPE_RAWTEXT = 0x100000 | 0x20 = 0x100020
+            // symbol = type | ARG_FLAG_VALID(0x100000)
+            w.write_i32_le(0x100020_u32 as i32); // param type (RAWTEXT + VALID flag)
+            w.write_bool(true);           // optional = true
+            w.write_u8(0);                // options = 0
+        }
+
+        // Soft enums — empty
+        w.write_var_u32(0);
+        // Constraints — empty
+        w.write_var_u32(0);
+
+        w.into_bytes()
+    }
+}
+
 // ── CraftingData (S→C, 0x34) — empty ──
 
 pub struct CraftingData;

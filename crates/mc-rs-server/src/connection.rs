@@ -191,6 +191,9 @@ impl Connection {
             (ConnectionState::InGame, packet_id::TEXT) => {
                 self.handle_text(reader)
             }
+            (ConnectionState::InGame, packet_id::COMMAND_REQUEST) => {
+                self.handle_command_request(reader)
+            }
 
             // ── Silently ignored ──
             (_, packet_id::EMOTE_LIST)
@@ -513,6 +516,15 @@ impl Connection {
         Vec::new()
     }
 
+    fn handle_command_request(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
+        // CommandRequest: String(command) + CommandOriginData(type + uuid + request_id + player_entity_id)
+        let Ok(command) = reader.read_string() else {
+            return Vec::new();
+        };
+        info!("[CMD] {} executed: {}", self.display_name.as_deref().unwrap_or("?"), command);
+        self.handle_command(&command)
+    }
+
     fn handle_command(&mut self, command: &str) -> Vec<Vec<u8>> {
         let parts: Vec<&str> = command.split_whitespace().collect();
         let cmd = parts.first().map(|s| *s).unwrap_or("");
@@ -548,6 +560,51 @@ impl Connection {
                 "Usage: /tp <x> <y> <z>".to_string()
             }
             "/tp" => "Usage: /tp <x> <y> <z>".to_string(),
+            "/gamemode" if parts.len() >= 2 => {
+                match parts[1] {
+                    "0" | "survival" | "s" => {
+                        info!("[CMD] {} changed gamemode to Survival", self.display_name.as_deref().unwrap_or("?"));
+                        "Gamemode set to Survival (not fully implemented yet)".to_string()
+                    }
+                    "1" | "creative" | "c" => {
+                        info!("[CMD] {} changed gamemode to Creative", self.display_name.as_deref().unwrap_or("?"));
+                        "Gamemode set to Creative (not fully implemented yet)".to_string()
+                    }
+                    "2" | "adventure" | "a" => "Gamemode set to Adventure (not fully implemented yet)".to_string(),
+                    "3" | "spectator" | "sp" => "Gamemode set to Spectator (not fully implemented yet)".to_string(),
+                    _ => "Usage: /gamemode <0-3|survival|creative|adventure|spectator>".to_string(),
+                }
+            }
+            "/gamemode" => "Usage: /gamemode <0-3|survival|creative|adventure|spectator>".to_string(),
+            "/say" if parts.len() >= 2 => {
+                let message = parts[1..].join(" ");
+                let player_name = self.display_name.clone().unwrap_or_else(|| "Server".to_string());
+                let broadcast_msg = format!("[{}] {}", player_name, message);
+                info!("[SAY] {}", broadcast_msg);
+                let chat = mc_rs_proto::packets::player::Text::chat("Server", &broadcast_msg, "");
+                self.broadcasts.push(self.encode_compressed_packet(packet_id::TEXT, &chat));
+                format!("Broadcast: {}", message)
+            }
+            "/say" => "Usage: /say <message>".to_string(),
+            "/kill" => {
+                info!("[CMD] {} killed themselves", self.display_name.as_deref().unwrap_or("?"));
+                "You died! (respawn not implemented yet)".to_string()
+            }
+            "/stop" => {
+                info!("[CMD] Server stop requested by {}", self.display_name.as_deref().unwrap_or("?"));
+                "Server shutting down... (not implemented yet)".to_string()
+            }
+            "/time" if parts.len() >= 3 && parts[1] == "set" => {
+                if let Ok(time) = parts[2].parse::<i32>() {
+                    info!("[CMD] Time set to {} by {}", time, self.display_name.as_deref().unwrap_or("?"));
+                    format!("Time set to {} (not synced yet)", time)
+                } else {
+                    "Usage: /time set <value>".to_string()
+                }
+            }
+            "/time" => "Usage: /time set <value>".to_string(),
+            "/seed" => "Seed: 0 (flat world)".to_string(),
+            "/ping" => "Pong!".to_string(),
             _ => format!("Unknown command: {}", cmd),
         };
 
@@ -658,6 +715,9 @@ impl Connection {
             packet_id::CREATIVE_CONTENT,
             &CreativeContent::encode_empty(),
         ));
+
+        // AvailableCommands — disabled for now (format needs investigation)
+        // Commands still work via CommandRequest handler, just no tab-complete
 
         info!("[{}] Sent {} PreSpawn packets", self.addr, responses.len());
 
