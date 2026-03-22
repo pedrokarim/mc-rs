@@ -1,5 +1,6 @@
 mod config;
 mod connection;
+pub mod player_data;
 pub mod player_registry;
 mod world;
 
@@ -15,7 +16,7 @@ use mc_rs_raknet::RakNetServer;
 use mc_rs_proto::packets::packet_id;
 use mc_rs_proto::packets::player::*;
 use tokio::time::{interval, Duration};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::config::ServerConfig;
 use crate::connection::Connection;
@@ -299,6 +300,26 @@ fn process_peer_events(
                         }
                     }
                     SessionEvent::Disconnected => {
+                        // Save player data before removing
+                        if let Some(conn) = connections.get(&addr) {
+                            if let Some(ref xuid) = conn.xuid {
+                                let save_data = player_data::PlayerSaveData {
+                                    position: [
+                                        conn.position[0] as f64,
+                                        conn.position[1] as f64,
+                                        conn.position[2] as f64,
+                                    ],
+                                    rotation: [conn.yaw, conn.pitch],
+                                    gamemode: 0,
+                                    health: 20.0,
+                                    hunger: 20.0,
+                                };
+                                if let Err(e) = player_data::save_player(xuid, &save_data) {
+                                    warn!("Failed to save player data: {}", e);
+                                }
+                            }
+                        }
+
                         // Broadcast RemoveEntity + PlayerList(REMOVE) to all others
                         if let Some(player_info) = registry.remove(&addr) {
                             info!("[{}] {} left the game", addr, player_info.name);

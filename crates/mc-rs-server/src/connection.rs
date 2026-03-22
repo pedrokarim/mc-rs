@@ -16,6 +16,7 @@ use mc_rs_proto::packets::packet_id;
 use mc_rs_proto::packets::player::*;
 use mc_rs_proto::packets::world::*;
 
+use crate::player_data;
 use crate::player_registry;
 use crate::world::flat_generator;
 use crate::world::terrain_generator;
@@ -287,6 +288,19 @@ impl Connection {
                 if !identity.uuid_str.is_empty() {
                     self.uuid = uuid::Uuid::parse_str(&identity.uuid_str).ok();
                 }
+                // Load saved player data if exists
+                if let Some(ref xuid) = self.xuid {
+                    if let Some(save) = player_data::load_player(xuid) {
+                        self.position = [save.position[0] as f32, save.position[1] as f32, save.position[2] as f32];
+                        self.yaw = save.rotation[0];
+                        self.pitch = save.rotation[1];
+                        info!(
+                            "[{}] Restored position: {:.1}, {:.1}, {:.1}",
+                            self.addr, self.position[0], self.position[1], self.position[2]
+                        );
+                    }
+                }
+
                 info!(
                     "[{}] Player: {} (xuid={}, auth={})",
                     self.addr,

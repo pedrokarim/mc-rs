@@ -5,6 +5,7 @@ members = [
     "crates/mc-rs-raknet",
     "crates/mc-rs-crypto",
     "crates/mc-rs-command",
+    "crates/mc-rs-nbt",
     "crates/mc-rs-server",
 ]
 exclude = [

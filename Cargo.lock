@@ -433,6 +433,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mc-rs-nbt"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "thiserror",
+]
+
+[[package]]
 name = "mc-rs-proto"
 version = "0.1.0"
 dependencies = [
