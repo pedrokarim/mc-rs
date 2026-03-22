@@ -705,10 +705,10 @@ impl SetActorData {
                 MetadataValue::Long(v) => w.write_var_i64(*v),
             }
         }
-        w.write_var_u64(self.tick);
-        // PropertySyncData (PMMP) — required at the end!
+        // PropertySyncData (PMMP) — BEFORE tick!
         w.write_var_u32(0); // property_int_count
         w.write_var_u32(0); // property_float_count
+        w.write_var_u64(self.tick);
         w.into_bytes()
     }
 
