@@ -33,6 +33,12 @@ pub mod extra_blocks {
     pub const PODZOL: u32 = 7292;
     pub const COARSE_DIRT: u32 = 6725;
     pub const RED_SANDSTONE: u32 = 12454;
+    pub const DEEPSLATE: u32 = 1310;
+    pub const TUFF: u32 = 1763;
+    pub const GRANITE: u32 = 284;
+    pub const DIORITE: u32 = 415;
+    pub const ANDESITE: u32 = 2530;
+    pub const LAVA: u32 = 5406;
 }
 
 /// Water surface level (same as PocketMine-MP).
@@ -254,24 +260,103 @@ pub fn get_surface_height(world_x: i32, world_z: i32, seed: u64) -> i32 {
     surfaces[local_x][local_z]
 }
 
+/// Deterministic hash for block variety (bedrock dégradé, stone variants).
+/// Returns a value 0..99 for percentage-based decisions.
+#[inline]
+fn block_variety_hash(x: i32, y: i32, z: i32, seed: u64) -> u32 {
+    let h = (x as u64).wrapping_mul(73856093)
+        ^ (y as u64).wrapping_mul(19349663)
+        ^ (z as u64).wrapping_mul(83492791)
+        ^ seed;
+    (h.wrapping_mul(h.wrapping_add(223)) >> 16) as u32 % 100
+}
+
+/// Pick the underground solid block based on Y level.
+/// Implements realistic layer composition from Bedrock Edition analysis:
+/// - Y=-64 to -60: bedrock (gradient)
+/// - Y=-59 to 0: deepslate + tuff
+/// - Y=1 to 8: deepslate/stone transition
+/// - Y=9+: stone + granite/diorite/andesite
+fn underground_block(world_x: i32, world_y: i32, world_z: i32, seed: u64) -> u32 {
+    let h = block_variety_hash(world_x, world_y, world_z, seed);
+
+    if world_y <= -63 {
+        // Y=-64, -63: 100% bedrock
+        block_ids::BEDROCK
+    } else if world_y == -62 {
+        // 75% bedrock, 25% deepslate
+        if h < 75 {
+            block_ids::BEDROCK
+        } else {
+            extra_blocks::DEEPSLATE
+        }
+    } else if world_y == -61 {
+        // 50% bedrock, 50% deepslate
+        if h < 50 {
+            block_ids::BEDROCK
+        } else {
+            extra_blocks::DEEPSLATE
+        }
+    } else if world_y == -60 {
+        // 25% bedrock, 75% deepslate
+        if h < 25 {
+            block_ids::BEDROCK
+        } else {
+            extra_blocks::DEEPSLATE
+        }
+    } else if world_y <= 0 {
+        // Deepslate zone: 88% deepslate, 7% tuff, 5% other
+        if h < 7 {
+            extra_blocks::TUFF
+        } else {
+            extra_blocks::DEEPSLATE
+        }
+    } else if world_y <= 8 {
+        // Transition zone: linear blend deepslate → stone over 8 levels
+        // Y=1: 70% deepslate, Y=4: 40%, Y=8: 0%
+        let deepslate_pct = (80 - world_y * 10).max(0) as u32;
+        if h < deepslate_pct {
+            extra_blocks::DEEPSLATE
+        } else {
+            // Stone with variants
+            stone_with_variants(world_x, world_y, world_z, seed)
+        }
+    } else {
+        // Stone zone with variants
+        stone_with_variants(world_x, world_y, world_z, seed)
+    }
+}
+
+/// Stone with granite/diorite/andesite variants (~7% each).
+#[inline]
+fn stone_with_variants(x: i32, y: i32, z: i32, seed: u64) -> u32 {
+    let h = block_variety_hash(x, y, z, seed.wrapping_add(1));
+    if h < 7 {
+        extra_blocks::GRANITE
+    } else if h < 14 {
+        extra_blocks::DIORITE
+    } else if h < 21 {
+        extra_blocks::ANDESITE
+    } else {
+        extra_blocks::STONE
+    }
+}
+
 /// Determine the block at a given world position, including ground cover.
+#[allow(clippy::too_many_arguments)]
 fn block_at(
+    world_x: i32,
     world_y: i32,
+    world_z: i32,
     surface_y: i32,
     cover: &[u32],
     noise_value_positive: bool,
     is_non_solid_top: bool,
+    seed: u64,
 ) -> u32 {
-    if world_y == 0 {
-        return block_ids::BEDROCK;
-    }
-    if world_y < 0 {
-        return extra_blocks::STONE;
-    }
-
-    if noise_value_positive {
-        // This is a solid block — check if it should be ground cover
-        if !cover.is_empty() {
+    if noise_value_positive || world_y <= 0 {
+        // Solid block
+        if !cover.is_empty() && noise_value_positive {
             let diff_y = if is_non_solid_top { 1 } else { 0 };
             let cover_start = surface_y + diff_y;
             let depth = cover_start - world_y;
@@ -279,13 +364,14 @@ fn block_at(
                 return cover[depth as usize];
             }
         }
-        extra_blocks::STONE
+        // Underground block with realistic layers
+        underground_block(world_x, world_y, world_z, seed)
     } else if world_y <= WATER_HEIGHT {
         extra_blocks::WATER
     } else {
-        // Non-solid: check if snow_layer should go on top
+        // Air — check for snow_layer on top
         if is_non_solid_top && world_y == surface_y + 1 && !cover.is_empty() {
-            return cover[0]; // snow_layer
+            return cover[0];
         }
         block_ids::AIR
     }
@@ -407,12 +493,14 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
                     let world_y = sub_y_start + local_y as i32;
                     let idx = (local_x << 8) | (local_z << 4) | local_y;
 
-                    let mut block = if world_y == 0 {
-                        block_ids::BEDROCK
-                    } else if world_y < 0 || world_y < noise_min {
-                        extra_blocks::STONE
+                    let world_x = base_x + local_x as i32;
+                    let world_z = base_z + local_z as i32;
+
+                    let mut block = if world_y < 0 || world_y < noise_min {
+                        // Underground: use realistic layers
+                        underground_block(world_x, world_y, world_z, seed)
                     } else if world_y <= col_max_block {
-                        // Compute noise value
+                        // Noise-sculpted zone
                         let noise_positive = if world_y > noise_max || smooth_height == 0.0 {
                             false
                         } else {
@@ -427,13 +515,22 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
                             }
                         };
 
-                        block_at(world_y, surface_y, cover, noise_positive, is_non_solid_top)
+                        block_at(
+                            world_x,
+                            world_y,
+                            world_z,
+                            surface_y,
+                            cover,
+                            noise_positive,
+                            is_non_solid_top,
+                            seed,
+                        )
                     } else {
                         block_ids::AIR
                     };
 
-                    // Replace stone with ore if applicable
-                    if block == extra_blocks::STONE {
+                    // Replace stone/deepslate with ore if applicable
+                    if block == extra_blocks::STONE || block == extra_blocks::DEEPSLATE {
                         if let Some(&ore_id) = ore_map.get(&(local_x as u8, world_y, local_z as u8))
                         {
                             block = ore_id;

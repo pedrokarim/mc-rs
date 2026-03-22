@@ -121,42 +121,46 @@ fn noise_params_to_elevation(depth: f64, scale: f64) -> (f64, f64) {
     (min_el, max_el)
 }
 
-/// Grassy cover: grass, dirt x4
+/// Grassy cover: grass, dirt x2 (median depth = 3)
 fn grassy() -> Vec<u32> {
-    vec![
-        block_ids::GRASS_BLOCK,
-        block_ids::DIRT,
-        block_ids::DIRT,
-        block_ids::DIRT,
-        block_ids::DIRT,
-    ]
+    vec![block_ids::GRASS_BLOCK, block_ids::DIRT, block_ids::DIRT]
 }
 
-/// Snowy cover: snow_layer, grass, dirt x3
+/// Snowy cover: snow_layer, grass, dirt
 fn snowy() -> Vec<u32> {
     vec![
         extra_blocks::SNOW_LAYER,
         block_ids::GRASS_BLOCK,
         block_ids::DIRT,
-        block_ids::DIRT,
-        block_ids::DIRT,
     ]
 }
 
-/// Sandy cover: sand x2, sandstone x3
+/// Sandy cover for beach: sand x3
 fn sandy() -> Vec<u32> {
+    vec![extra_blocks::SAND, extra_blocks::SAND, extra_blocks::SAND]
+}
+
+/// Desert cover: sand x3 + sandstone x8 (real Bedrock: 8-12 blocks of sandstone)
+fn desert_cover() -> Vec<u32> {
     vec![
         extra_blocks::SAND,
         extra_blocks::SAND,
+        extra_blocks::SAND,
+        extra_blocks::SANDSTONE,
+        extra_blocks::SANDSTONE,
+        extra_blocks::SANDSTONE,
+        extra_blocks::SANDSTONE,
+        extra_blocks::SANDSTONE,
         extra_blocks::SANDSTONE,
         extra_blocks::SANDSTONE,
         extra_blocks::SANDSTONE,
     ]
 }
 
-/// Mesa cover: red_sand, hardened_clay x4
+/// Mesa cover: red_sand x2, hardened_clay x4
 fn mesa() -> Vec<u32> {
     vec![
+        extra_blocks::RED_SAND,
         extra_blocks::RED_SAND,
         extra_blocks::HARDENED_CLAY,
         extra_blocks::HARDENED_CLAY,
@@ -165,11 +169,9 @@ fn mesa() -> Vec<u32> {
     ]
 }
 
-/// Gravel cover (ocean floor)
+/// Gravel cover (ocean floor): 3 blocks
 fn gravelly() -> Vec<u32> {
     vec![
-        extra_blocks::GRAVEL,
-        extra_blocks::GRAVEL,
         extra_blocks::GRAVEL,
         extra_blocks::GRAVEL,
         extra_blocks::GRAVEL,
@@ -178,42 +180,22 @@ fn gravelly() -> Vec<u32> {
 
 /// Dirt cover (river bed)
 fn dirty() -> Vec<u32> {
-    vec![
-        block_ids::DIRT,
-        block_ids::DIRT,
-        block_ids::DIRT,
-        block_ids::DIRT,
-        block_ids::DIRT,
-    ]
+    vec![block_ids::DIRT, block_ids::DIRT, block_ids::DIRT]
 }
 
 /// Mushroom cover
 fn mushroom() -> Vec<u32> {
-    vec![
-        extra_blocks::MYCELIUM,
-        block_ids::DIRT,
-        block_ids::DIRT,
-        block_ids::DIRT,
-        block_ids::DIRT,
-    ]
+    vec![extra_blocks::MYCELIUM, block_ids::DIRT, block_ids::DIRT]
 }
 
 /// Podzol cover (mega taiga)
 fn podzol() -> Vec<u32> {
-    vec![
-        extra_blocks::PODZOL,
-        block_ids::DIRT,
-        block_ids::DIRT,
-        block_ids::DIRT,
-        block_ids::DIRT,
-    ]
+    vec![extra_blocks::PODZOL, block_ids::DIRT, block_ids::DIRT]
 }
 
 /// Stone cover (stone beach)
 fn stony() -> Vec<u32> {
     vec![
-        extra_blocks::STONE,
-        extra_blocks::STONE,
         extra_blocks::STONE,
         extra_blocks::STONE,
         extra_blocks::STONE,
@@ -225,8 +207,6 @@ fn snow_block() -> Vec<u32> {
     vec![
         extra_blocks::SNOW_BLOCK,
         extra_blocks::SNOW_BLOCK,
-        block_ids::DIRT,
-        block_ids::DIRT,
         block_ids::DIRT,
     ]
 }
@@ -280,7 +260,7 @@ pub fn get_biome(id: u32) -> BiomeDef {
                 id,
                 min_elevation: min,
                 max_elevation: max,
-                ground_cover: sandy(),
+                ground_cover: desert_cover(),
             }
         }
         biome_id::DESERT_HILLS => {
@@ -289,7 +269,7 @@ pub fn get_biome(id: u32) -> BiomeDef {
                 id,
                 min_elevation: min,
                 max_elevation: max,
-                ground_cover: sandy(),
+                ground_cover: desert_cover(),
             }
         }
 
@@ -609,7 +589,7 @@ pub fn get_biome(id: u32) -> BiomeDef {
                 id,
                 min_elevation: min,
                 max_elevation: max,
-                ground_cover: sandy(),
+                ground_cover: desert_cover(),
             }
         }
         biome_id::EXTREME_HILLS_MUTATED | biome_id::EXTREME_HILLS_PLUS_TREES_MUTATED => {
