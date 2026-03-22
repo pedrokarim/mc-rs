@@ -997,55 +997,16 @@ impl ConnectionHandler {
             .await;
         info!("Sent StartGame to {addr}");
 
-        // PocketMine onEnterWorld parity: send time + difficulty + world spawn pre-spawn.
-        self.send_packet(
-            addr,
-            packets::id::SET_TIME,
-            &SetTime {
-                time: self.world_time as i32,
-            },
-        )
-        .await;
-        self.send_packet(
-            addr,
-            packets::id::SET_DIFFICULTY,
-            &SetDifficulty {
-                difficulty: difficulty as u32,
-            },
-        )
-        .await;
-        self.send_packet(
-            addr,
-            packets::id::SET_SPAWN_POSITION,
-            &SetSpawnPosition::world_spawn(self.spawn_block, self.dimension_id),
-        )
-        .await;
-        info!(
-            "### BUILD_MARKER spawn-r11-2026-03-03: sent pre-spawn SetTime/SetDifficulty/SetSpawnPosition(world) to {addr} ###"
-        );
+        // TEMPORARILY DISABLED — matching new code minimal set
+        // SetTime, SetDifficulty, SetSpawnPosition skipped
 
-        // Send ItemRegistryPacket (0xA2) — required after StartGame in protocol 924+
-        let item_entries: Vec<packets::ItemRegistryEntry> = self
-            .item_registry
-            .item_table_entries()
-            .into_iter()
-            .map(|e| packets::ItemRegistryEntry {
-                string_id: e.string_id,
-                numeric_id: e.numeric_id,
-                is_component_based: e.is_component_based,
-                version: e.version,
-                component_nbt: e.component_nbt,
-            })
-            .collect();
+        // Send EMPTY ItemRegistryPacket (matching new working code)
         let item_registry_pkt = packets::ItemRegistry {
-            entries: item_entries,
+            entries: vec![],
         };
         self.send_packet(addr, packets::id::ITEM_REGISTRY, &item_registry_pkt)
             .await;
-        info!(
-            "Sent ItemRegistryPacket to {addr} ({} items)",
-            self.item_registry.len()
-        );
+        info!("Sent empty ItemRegistryPacket to {addr}");
 
         // Phase 2: send actor identifiers before chunk-radius negotiation.
         self.send_packet(
@@ -1065,180 +1026,27 @@ impl ConnectionHandler {
         .await;
         info!("Sent BiomeDefinitionList(canonical) to {addr} (pre-spawn)");
 
-        self.send_packet(addr, packets::id::AVAILABLE_COMMANDS, &AvailableCommands)
-            .await;
-        info!("Sent AvailableCommands (empty stub) to {addr}");
+        // TEMPORARILY DISABLED — matching new code minimal set
+        // AvailableCommands, SetPlayerGameType, UpdateAbilities,
+        // UpdateAdventureSettings, SetActorData, UpdateAttributes,
+        // Inventory, MobEquipment, PlayerList all skipped
 
-        let (
-            is_op,
-            conn_display_name,
-            conn_entity_unique_id,
-            conn_entity_runtime_id,
-            conn_gamemode,
-            hp,
-            food,
-            sat,
-            exh,
-            xl,
-            xt,
-        ) = match self.connections.get(&addr) {
-            Some(c) => {
-                let op = c
-                    .login_data
-                    .as_ref()
-                    .map(|d| self.permissions.ops.contains(&d.display_name))
-                    .unwrap_or(false);
-                (
-                    op,
-                    c.login_data
-                        .as_ref()
-                        .map(|d| d.display_name.clone())
-                        .unwrap_or_default(),
-                    c.entity_unique_id,
-                    c.entity_runtime_id,
-                    c.gamemode,
-                    c.health,
-                    c.food as f32,
-                    c.saturation,
-                    c.exhaustion,
-                    c.xp_level,
-                    c.xp_total,
-                )
-            }
-            None => return,
+        // Send empty CraftingData (matching new working code)
+        let empty_crafting = packets::CraftingData {
+            shaped: vec![],
+            shapeless: vec![],
+            furnace: vec![],
+            clear_recipes: true,
         };
-
-        self.send_packet(
-            addr,
-            packets::id::SET_PLAYER_GAME_TYPE,
-            &SetPlayerGameType {
-                gamemode: conn_gamemode,
-            },
-        )
-        .await;
-        self.send_packet(
-            addr,
-            packets::id::UPDATE_ABILITIES,
-            &UpdateAbilities {
-                command_permission_level: if is_op { 1 } else { 0 },
-                permission_level: if is_op { 2 } else { 1 },
-                entity_unique_id: conn_entity_unique_id,
-                gamemode: conn_gamemode,
-            },
-        )
-        .await;
-        self.send_packet(
-            addr,
-            packets::id::UPDATE_ADVENTURE_SETTINGS,
-            &UpdateAdventureSettings::default(),
-        )
-        .await;
-        let actor_tick = self.game_world.current_tick();
-        self.send_packet(
-            addr,
-            packets::id::SET_ACTOR_DATA,
-            &SetActorData {
-                actor_runtime_id: conn_entity_runtime_id,
-                metadata: default_player_metadata(&conn_display_name),
-                tick: actor_tick,
-            },
-        )
-        .await;
-
-        let xp_progress = xp::xp_progress(xl, xt);
-        let attr_tick = self.game_world.current_tick();
-        self.send_packet(
-            addr,
-            packets::id::UPDATE_ATTRIBUTES,
-            &UpdateAttributes::all(
-                conn_entity_runtime_id,
-                hp,
-                food,
-                sat,
-                exh,
-                xl,
-                xp_progress,
-                attr_tick,
-            ),
-        )
-        .await;
-        info!(
-            "### BUILD_MARKER spawn-r10-2026-03-02: sent pre-spawn abilities/attributes for {addr} (op={is_op}, gamemode={conn_gamemode}) ###"
-        );
-
-        self.send_inventory(addr).await;
-        info!("Sent pre-spawn inventory content to {addr}");
-
-        // Keep selected hotbar slot synchronized before the loading screen closes.
-        if let Some((rid, held_slot, held_item)) = self
-            .connections
-            .get(&addr)
-            .map(|c| (c.entity_runtime_id, c.inventory.held_slot, c.inventory.held_item().clone()))
-        {
-            self.send_packet(
-                addr,
-                packets::id::MOB_EQUIPMENT,
-                &MobEquipment {
-                    entity_runtime_id: rid,
-                    item: held_item,
-                    inventory_slot: held_slot,
-                    hotbar_slot: held_slot,
-                    window_id: 0,
-                },
-            )
+        self.send_packet(addr, packets::id::CRAFTING_DATA, &empty_crafting)
             .await;
-        }
+        info!("Sent empty CraftingData to {addr}");
 
-        // Keep creative menu descriptors in sync with ItemRegistry (PocketMine sends this pre-spawn too).
-        let mut creative_items: Vec<(i32, u16)> = self
-            .item_registry
-            .item_table_entries()
-            .into_iter()
-            .map(|e| (i32::from(e.numeric_id), 1))
-            .collect();
-        creative_items.sort_unstable_by_key(|(rid, _)| *rid);
-        let creative_content = packets::creative_content::build_creative_content(&creative_items);
-        self.send_packet(addr, packets::id::CREATIVE_CONTENT, &creative_content)
+        // Send empty CreativeContent (matching new working code — 0 groups, 0 items)
+        let empty_creative = packets::CreativeContent { items: vec![] };
+        self.send_packet(addr, packets::id::CREATIVE_CONTENT, &empty_creative)
             .await;
-        info!(
-            "Sent CreativeContent to {addr} ({} items)",
-            creative_items.len()
-        );
-
-        let crafting_data = self.build_crafting_data();
-        self.send_packet(addr, packets::id::CRAFTING_DATA, &crafting_data)
-            .await;
-        info!("Sent pre-spawn CraftingData to {addr}");
-
-        // Pre-populate tab-list with local player entry (PocketMine-aligned pre-spawn behavior).
-        if let Some(entry) = self.connections.get(&addr).and_then(|conn| {
-            let login = conn.login_data.as_ref()?;
-            let uuid = Uuid::parse(&login.identity).unwrap_or(Uuid::ZERO);
-            let client_data = conn.client_data.clone().unwrap_or_default();
-            Some(PlayerListAdd {
-                uuid,
-                entity_unique_id: conn.entity_unique_id,
-                username: login.display_name.clone(),
-                xuid: login.xuid.clone(),
-                platform_chat_id: String::new(),
-                device_os: client_data.device_os,
-                skin_data: client_data,
-                is_teacher: false,
-                is_host: false,
-                is_sub_client: false,
-                color_argb: 0xFFFF_FFFF,
-            })
-        }) {
-            self.send_packet(
-                addr,
-                packets::id::PLAYER_LIST,
-                &PlayerListAddPacket {
-                    entries: vec![entry],
-                },
-            )
-            .await;
-            info!("Sent pre-spawn PlayerList(local) to {addr}");
-        }
+        info!("Sent empty CreativeContent to {addr}");
 
         if let Some(conn) = self.connections.get_mut(&addr) {
             conn.state = LoginState::Spawning;
