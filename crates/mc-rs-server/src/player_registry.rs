@@ -28,6 +28,12 @@ pub struct PlayerRegistry {
     pub players: HashMap<SocketAddr, PlayerInfo>,
 }
 
+impl Default for PlayerRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PlayerRegistry {
     pub fn new() -> Self {
         Self {

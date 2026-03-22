@@ -57,7 +57,12 @@ impl ChunkCache {
                     // Load from LevelDB
                     let sub_chunks = storage.load_sub_chunks(cx, cz);
                     if !sub_chunks.is_empty() {
-                        debug!("Loaded chunk ({}, {}) from LevelDB ({} sub-chunks)", cx, cz, sub_chunks.len());
+                        debug!(
+                            "Loaded chunk ({}, {}) from LevelDB ({} sub-chunks)",
+                            cx,
+                            cz,
+                            sub_chunks.len()
+                        );
                         // Reconstruct network payload from stored sub-chunks
                         let mut payload = Vec::with_capacity(4096);
                         for (_y_idx, data) in &sub_chunks {
@@ -87,7 +92,8 @@ impl ChunkCache {
 
             let column = loaded.unwrap_or_else(|| {
                 // Generate new chunk
-                let (sub_count, payload) = terrain_generator::generate_terrain_chunk(cx, cz, self.seed);
+                let (sub_count, payload) =
+                    terrain_generator::generate_terrain_chunk(cx, cz, self.seed);
                 ChunkColumn {
                     x: cx,
                     z: cz,

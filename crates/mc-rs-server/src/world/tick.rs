@@ -47,7 +47,7 @@ impl WorldState {
         // Server runs at 100 TPS, Minecraft game logic at 20 TPS
         // 24000 game ticks / 20 TPS = 1200 seconds = 20 minutes (correct MC cycle)
         self.time_broadcast_counter += 1;
-        if self.do_daylight_cycle && self.time_broadcast_counter % 5 == 0 {
+        if self.do_daylight_cycle && self.time_broadcast_counter.is_multiple_of(5) {
             self.time += 1;
             if self.time >= 24000 {
                 self.time = 0;

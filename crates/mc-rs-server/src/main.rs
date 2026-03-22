@@ -90,9 +90,10 @@ async fn main() {
 
     // World chunk cache with LevelDB persistence
     let world_dir = std::path::Path::new("worlds").join(&config.world.name);
-    let chunk_cache = std::sync::Arc::new(std::sync::Mutex::new(
-        ChunkCache::new(&world_dir, config.world.seed as u64),
-    ));
+    let chunk_cache = std::sync::Arc::new(std::sync::Mutex::new(ChunkCache::new(
+        &world_dir,
+        config.world.seed as u64,
+    )));
     let mut auto_save_counter: u32 = 0;
 
     // Session tick interval (100 TPS = 10ms)
@@ -110,7 +111,11 @@ async fn main() {
             for (_, conn) in connections.iter() {
                 if let Some(ref xuid) = conn.xuid {
                     let save = player_data::PlayerSaveData {
-                        position: [conn.position[0] as f64, conn.position[1] as f64, conn.position[2] as f64],
+                        position: [
+                            conn.position[0] as f64,
+                            conn.position[1] as f64,
+                            conn.position[2] as f64,
+                        ],
                         rotation: [conn.yaw, conn.pitch],
                         gamemode: 0,
                         health: 20.0,

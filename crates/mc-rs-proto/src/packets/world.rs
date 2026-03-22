@@ -584,7 +584,7 @@ mod tests {
 
     #[test]
     fn test_startgame_hex() {
-        let sg = StartGame::default_flat();
+        let sg = StartGame::default_with_id(1, [0.0, 64.0, 0.0]);
         let bytes = sg.encode();
         println!("\n=== StartGame: {} bytes ===", bytes.len());
         for (i, chunk) in bytes.chunks(32).enumerate() {

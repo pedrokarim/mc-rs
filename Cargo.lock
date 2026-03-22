@@ -541,6 +541,7 @@ dependencies = [
  "bytes",
  "mc-rs-command",
  "mc-rs-crypto",
+ "mc-rs-nbt",
  "mc-rs-proto",
  "mc-rs-raknet",
  "rand",
