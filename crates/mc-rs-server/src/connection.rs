@@ -479,7 +479,14 @@ impl Connection {
             self.display_name.as_deref().unwrap_or("Player")
         );
         self.state = ConnectionState::InGame;
-        Vec::new()
+
+        // Send SetActorData with NO_AI=false — enables client-side physics/gravity
+        let player_name = self.display_name.clone().unwrap_or_default();
+        let actor_data = SetActorData::player_in_game(self.entity_runtime_id, &player_name);
+        vec![self.encode_compressed_packet(
+            packet_id::SET_ACTOR_DATA,
+            &actor_data.encode(),
+        )]
     }
 
     // ── InGame handlers ──
@@ -835,12 +842,25 @@ impl Connection {
             &attributes.encode(),
         ));
 
-        // SetPlayerGameType — explicitly set survival mode
-        let mut gametype_writer = mc_rs_proto::io::ProtoWriter::with_capacity(4);
-        gametype_writer.write_var_i32(0); // 0 = survival
+        // UpdateAdventureSettings
+        let adventure = UpdateAdventureSettings {
+            no_pvm: false,
+            no_mvp: false,
+            immutable_world: false,
+            show_name_tags: true,
+            auto_jump: true,
+        };
         responses.push(self.encode_compressed_packet(
-            packet_id::SET_PLAYER_GAME_TYPE,
-            gametype_writer.as_bytes(),
+            packet_id::UPDATE_ADVENTURE_SETTINGS,
+            &adventure.encode(),
+        ));
+
+        // SetActorData — player metadata with NO_AI=true (freeze during chunk loading)
+        let player_name = self.display_name.clone().unwrap_or_default();
+        let actor_data = SetActorData::player_pre_spawn(self.entity_runtime_id, &player_name);
+        responses.push(self.encode_compressed_packet(
+            packet_id::SET_ACTOR_DATA,
+            &actor_data.encode(),
         ));
 
         // AvailableCommands — register commands for tab-complete

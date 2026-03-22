@@ -670,6 +670,24 @@ pub enum MetadataValue {
     Long(i64),
 }
 
+/// Entity metadata flag bits (from PMMP EntityMetadataFlags.php)
+#[allow(dead_code)]
+pub mod entity_flags {
+    pub const ONFIRE: i64          = 1 << 0;
+    pub const SNEAKING: i64        = 1 << 1;
+    pub const RIDING: i64          = 1 << 2;
+    pub const SPRINTING: i64       = 1 << 3;
+    pub const USING_ITEM: i64      = 1 << 4;
+    pub const CAN_SHOW_NAMETAG: i64 = 1 << 5;
+    pub const ALWAYS_SHOW_NAMETAG: i64 = 1 << 6;
+    pub const NO_AI: i64           = 1 << 16;  // aka IMMOBILE — disables client physics
+    pub const CAN_CLIMB: i64       = 1 << 19;
+    pub const CAN_FLY: i64         = 1 << 21;
+    pub const BREATHING: i64       = 1 << 35;  // NOT in water
+    pub const HAS_GRAVITY: i64     = 1 << 47;  // AFFECTED_BY_GRAVITY
+    pub const HAS_COLLISION: i64   = 1 << 48;
+}
+
 impl SetActorData {
     pub fn encode(&self) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(128);
@@ -688,19 +706,47 @@ impl SetActorData {
             }
         }
         w.write_var_u64(self.tick);
+        // PropertySyncData (PMMP) — required at the end!
+        w.write_var_u32(0); // property_int_count
+        w.write_var_u32(0); // property_float_count
         w.into_bytes()
     }
 
-    /// Default player metadata — name tag, scale, bounding box
-    pub fn default_player(runtime_entity_id: u64, name: &str) -> Self {
+    /// Player metadata for pre-spawn (NO_AI=true to freeze during chunk loading)
+    pub fn player_pre_spawn(runtime_entity_id: u64, name: &str) -> Self {
+        let flags = entity_flags::CAN_SHOW_NAMETAG
+            | entity_flags::NO_AI       // freeze during pre-spawn
+            | entity_flags::BREATHING   // not underwater
+            | entity_flags::HAS_GRAVITY // affected by gravity (once NO_AI is removed)
+            | entity_flags::HAS_COLLISION;
         Self {
             runtime_entity_id,
             metadata: vec![
-                (0, 7, MetadataValue::Long(0)),           // FLAGS (none set = normal)
-                (4, 4, MetadataValue::String(name.to_string())), // NAMETAG
+                (0, 7, MetadataValue::Long(flags)),
+                (4, 4, MetadataValue::String(name.to_string())),
                 (0x17, 3, MetadataValue::Float(1.0)),     // SCALE
                 (0x26, 3, MetadataValue::Float(0.6)),     // BOUNDING_BOX_WIDTH
                 (0x27, 3, MetadataValue::Float(1.8)),     // BOUNDING_BOX_HEIGHT
+            ],
+            tick: 0,
+        }
+    }
+
+    /// Player metadata for in-game (NO_AI=false, gravity active)
+    pub fn player_in_game(runtime_entity_id: u64, name: &str) -> Self {
+        let flags = entity_flags::CAN_SHOW_NAMETAG
+            | entity_flags::BREATHING
+            | entity_flags::HAS_GRAVITY
+            | entity_flags::HAS_COLLISION;
+        // NO_AI is NOT set — client can apply physics
+        Self {
+            runtime_entity_id,
+            metadata: vec![
+                (0, 7, MetadataValue::Long(flags)),
+                (4, 4, MetadataValue::String(name.to_string())),
+                (0x17, 3, MetadataValue::Float(1.0)),
+                (0x26, 3, MetadataValue::Float(0.6)),
+                (0x27, 3, MetadataValue::Float(1.8)),
             ],
             tick: 0,
         }
