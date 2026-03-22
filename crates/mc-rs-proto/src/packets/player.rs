@@ -5,8 +5,63 @@ use crate::io::{ProtoReader, ProtoWriter};
 /// Block action from PlayerAuthInput.
 pub struct BlockAction {
     pub action_type: i32,
-    pub position: [i32; 3], // signed block position
+    pub position: [i32; 3],
     pub face: i32,
+}
+
+/// Item interaction data from PlayerAuthInput (UseItemTransactionData).
+pub struct ItemInteractionData {
+    pub action_type: u32, // 0=CLICK_BLOCK, 1=CLICK_AIR, 2=BREAK_BLOCK
+    pub block_position: [i32; 3],
+    pub face: i32,
+    pub hotbar_slot: i32,
+    pub player_position: [f32; 3],
+    pub click_position: [f32; 3],
+    pub block_runtime_id: u32,
+    pub client_prediction: u32,
+}
+
+/// Slot info from ItemStackRequest actions.
+pub struct SlotInfo {
+    pub container_id: u8,
+    pub slot_id: u8,
+    pub stack_id: i32,
+}
+
+/// A single action in an ItemStackRequest.
+pub enum StackRequestAction {
+    /// Take/Place: move `count` items from source to destination.
+    Take {
+        count: u8,
+        source: SlotInfo,
+        destination: SlotInfo,
+    },
+    Place {
+        count: u8,
+        source: SlotInfo,
+        destination: SlotInfo,
+    },
+    Swap {
+        count: u8,
+        source: SlotInfo,
+        destination: SlotInfo,
+    },
+    Drop {
+        count: u8,
+        source: SlotInfo,
+    },
+    Destroy {
+        count: u8,
+        source: SlotInfo,
+    },
+    /// Other actions we don't handle yet.
+    Unknown(u8),
+}
+
+/// An ItemStackRequest decoded from PlayerAuthInput.
+pub struct ItemStackRequest {
+    pub request_id: i32,
+    pub actions: Vec<StackRequestAction>,
 }
 
 /// Player movement and input.
@@ -18,6 +73,8 @@ pub struct PlayerAuthInput {
     pub move_vec_z: f32,
     pub head_yaw: f32,
     pub block_actions: Vec<BlockAction>,
+    pub item_interaction: Option<ItemInteractionData>,
+    pub item_stack_request: Option<ItemStackRequest>,
 }
 
 // PlayerAuthInput flag bits (from PMMP PlayerAuthInputFlags.php)
@@ -26,7 +83,6 @@ const FLAG_PERFORM_BLOCK_ACTIONS: usize = 35;
 const FLAG_PERFORM_ITEM_STACK_REQUEST: usize = 36;
 
 /// Read a BitSet encoded as VarInt-style bytes (7 bits per byte, bit 7 = continuation).
-/// Returns the raw bits as a u128 (enough for 65 flags).
 fn read_bitset(reader: &mut ProtoReader) -> Result<u128, crate::io::reader::ProtoReadError> {
     let mut result: u128 = 0;
     let mut shift = 0;
@@ -44,6 +100,230 @@ fn read_bitset(reader: &mut ProtoReader) -> Result<u128, crate::io::reader::Prot
     Ok(result)
 }
 
+/// Skip an ItemStackWrapper in the reader.
+fn skip_item_stack_wrapper(
+    reader: &mut ProtoReader,
+) -> Result<(), crate::io::reader::ProtoReadError> {
+    let id = reader.read_var_i32()?;
+    if id == 0 {
+        return Ok(());
+    }
+    let _count = reader.read_u16_le()?;
+    let _meta = reader.read_var_u32()?;
+    let has_net_id = reader.read_bool()?;
+    if has_net_id {
+        let _stack_id = reader.read_var_i32()?;
+    }
+    let _block_runtime_id = reader.read_var_i32()?;
+    let _extra_data = reader.read_string()?;
+    Ok(())
+}
+
+/// Skip a NetworkInventoryAction in the reader.
+fn skip_network_inventory_action(
+    reader: &mut ProtoReader,
+) -> Result<(), crate::io::reader::ProtoReadError> {
+    let source_type = reader.read_var_u32()?;
+    match source_type {
+        0 => {
+            let _window_id = reader.read_var_i32()?;
+        } // SOURCE_CONTAINER
+        1 => {
+            let _flags = reader.read_var_u32()?;
+        } // SOURCE_WORLD
+        2 => {} // SOURCE_CREATIVE
+        _ => {}
+    }
+    let _slot = reader.read_var_u32()?;
+    skip_item_stack_wrapper(reader)?; // old item
+    skip_item_stack_wrapper(reader)?; // new item
+    Ok(())
+}
+
+/// Decode the ItemInteractionData from PlayerAuthInput.
+fn decode_item_interaction(
+    reader: &mut ProtoReader,
+) -> Result<ItemInteractionData, crate::io::reader::ProtoReadError> {
+    // Legacy request ID
+    let request_id = reader.read_var_i32()?;
+    if request_id != 0 {
+        let changed_slots_count = reader.read_var_u32()?;
+        for _ in 0..changed_slots_count {
+            let _container_id = reader.read_u8()?;
+            let slot_count = reader.read_var_u32()?;
+            for _ in 0..slot_count {
+                let _slot = reader.read_u8()?;
+            }
+        }
+    }
+
+    // UseItemTransactionData
+    let action_count = reader.read_var_u32()?;
+    for _ in 0..action_count.min(100) {
+        skip_network_inventory_action(reader)?;
+    }
+
+    let action_type = reader.read_var_u32()?;
+    let trigger_type = reader.read_var_u32()?;
+    let _ = trigger_type;
+
+    let bx = reader.read_var_i32()?;
+    let by = reader.read_var_u32()? as i32;
+    let bz = reader.read_var_i32()?;
+
+    let face = reader.read_var_i32()?;
+    let hotbar_slot = reader.read_var_i32()?;
+
+    skip_item_stack_wrapper(reader)?; // item in hand
+
+    let px = reader.read_f32_le()?;
+    let py = reader.read_f32_le()?;
+    let pz = reader.read_f32_le()?;
+
+    let cx = reader.read_f32_le()?;
+    let cy = reader.read_f32_le()?;
+    let cz = reader.read_f32_le()?;
+
+    let block_runtime_id = reader.read_var_u32()?;
+    let client_prediction = reader.read_var_u32()?;
+
+    Ok(ItemInteractionData {
+        action_type,
+        block_position: [bx, by, bz],
+        face,
+        hotbar_slot,
+        player_position: [px, py, pz],
+        click_position: [cx, cy, cz],
+        block_runtime_id,
+        client_prediction,
+    })
+}
+
+/// Read a SlotInfo from the reader.
+fn read_slot_info(reader: &mut ProtoReader) -> Result<SlotInfo, crate::io::reader::ProtoReadError> {
+    let container_id = reader.read_u8()?;
+    let has_dynamic = reader.read_bool()?;
+    if has_dynamic {
+        let _dynamic_id = reader.read_u32_le()?;
+    }
+    let slot_id = reader.read_u8()?;
+    let stack_id = reader.read_var_i32()?;
+    Ok(SlotInfo {
+        container_id,
+        slot_id,
+        stack_id,
+    })
+}
+
+/// Decode an ItemStackRequest from the reader.
+fn decode_item_stack_request(
+    reader: &mut ProtoReader,
+) -> Result<ItemStackRequest, crate::io::reader::ProtoReadError> {
+    let request_id = reader.read_var_i32()?;
+    let action_count = reader.read_var_u32()?;
+    let mut actions = Vec::new();
+
+    for _ in 0..action_count.min(60) {
+        let action_type = reader.read_u8()?;
+        let action = match action_type {
+            0 => {
+                let count = reader.read_u8()?;
+                let source = read_slot_info(reader)?;
+                let destination = read_slot_info(reader)?;
+                StackRequestAction::Take {
+                    count,
+                    source,
+                    destination,
+                }
+            }
+            1 => {
+                let count = reader.read_u8()?;
+                let source = read_slot_info(reader)?;
+                let destination = read_slot_info(reader)?;
+                StackRequestAction::Place {
+                    count,
+                    source,
+                    destination,
+                }
+            }
+            2 => {
+                let count = reader.read_u8()?;
+                let source = read_slot_info(reader)?;
+                let destination = read_slot_info(reader)?;
+                StackRequestAction::Swap {
+                    count,
+                    source,
+                    destination,
+                }
+            }
+            3 => {
+                let count = reader.read_u8()?;
+                let source = read_slot_info(reader)?;
+                StackRequestAction::Drop { count, source }
+            }
+            4 => {
+                let count = reader.read_u8()?;
+                let source = read_slot_info(reader)?;
+                StackRequestAction::Destroy { count, source }
+            }
+            5 => {
+                // CraftingConsumeInput — skip
+                let _count = reader.read_u8()?;
+                read_slot_info(reader)?;
+                StackRequestAction::Unknown(5)
+            }
+            6 => {
+                let _slot = reader.read_u8()?;
+                StackRequestAction::Unknown(6)
+            }
+            11 => {
+                let _hotbar = reader.read_var_i32()?;
+                let _durability = reader.read_var_i32()?;
+                let _stack_id = reader.read_var_i32()?;
+                StackRequestAction::Unknown(11)
+            }
+            12 => {
+                let _recipe_id = reader.read_var_u32()?;
+                let _times = reader.read_u8()?;
+                StackRequestAction::Unknown(12)
+            }
+            13 => {
+                let _recipe_id = reader.read_var_u32()?;
+                let _times = reader.read_u8()?;
+                let ingredient_count = reader.read_u8()?;
+                for _ in 0..ingredient_count {
+                    let _item = reader.read_u8()?;
+                }
+                StackRequestAction::Unknown(13)
+            }
+            14 => {
+                let _slot = reader.read_var_u32()?;
+                StackRequestAction::Unknown(14)
+            }
+            other => StackRequestAction::Unknown(other),
+        };
+        actions.push(action);
+        if matches!(action_type, 6..=10 | 15..) {
+            // Unknown actions may have unparseable data, stop
+            if action_type > 14 {
+                break;
+            }
+        }
+    }
+
+    // Filter strings
+    let filter_count = reader.read_var_u32()?;
+    for _ in 0..filter_count {
+        let _s = reader.read_string()?;
+    }
+    let _filter_cause = reader.read_i32_le()?;
+
+    Ok(ItemStackRequest {
+        request_id,
+        actions,
+    })
+}
+
 impl PlayerAuthInput {
     pub fn decode(reader: &mut ProtoReader) -> Result<Self, crate::io::reader::ProtoReadError> {
         let pitch = reader.read_f32_le()?;
@@ -55,54 +335,72 @@ impl PlayerAuthInput {
         let move_vec_z = reader.read_f32_le()?;
         let head_yaw = reader.read_f32_le()?;
 
-        // Read input flags (BitSet, VarInt-encoded)
         let input_flags = read_bitset(reader)?;
 
-        // Read remaining fixed fields
         let _input_mode = reader.read_var_u32()?;
         let _play_mode = reader.read_var_u32()?;
         let _interaction_mode = reader.read_var_u32()?;
-        let _interact_rot_x = reader.read_f32_le()?; // interactRotation
+        let _interact_rot_x = reader.read_f32_le()?;
         let _interact_rot_y = reader.read_f32_le()?;
         let _tick = reader.read_var_u64()?;
-        let _delta_x = reader.read_f32_le()?; // position delta
+        let _delta_x = reader.read_f32_le()?;
         let _delta_y = reader.read_f32_le()?;
         let _delta_z = reader.read_f32_le()?;
 
-        // Conditional: item interaction (bit 34)
-        if (input_flags >> FLAG_PERFORM_ITEM_INTERACTION) & 1 == 1 {
-            // Skip ItemInteractionData — complex, just skip
-            // For now, we can't decode the rest reliably
-            return Ok(Self {
-                pitch,
-                yaw,
-                position: [pos_x, pos_y, pos_z],
-                move_vec_x,
-                move_vec_z,
-                head_yaw,
-                block_actions: Vec::new(),
-            });
-        }
+        // Decode order must match PMMP: item_interaction, item_stack_request, block_actions
 
-        // Conditional: item stack request (bit 36)
-        if (input_flags >> FLAG_PERFORM_ITEM_STACK_REQUEST) & 1 == 1 {
-            return Ok(Self {
-                pitch,
-                yaw,
-                position: [pos_x, pos_y, pos_z],
-                move_vec_x,
-                move_vec_z,
-                head_yaw,
-                block_actions: Vec::new(),
-            });
-        }
+        // Item interaction (bit 34) — decode fully
+        let item_interaction = if (input_flags >> FLAG_PERFORM_ITEM_INTERACTION) & 1 == 1 {
+            match decode_item_interaction(reader) {
+                Ok(data) => Some(data),
+                Err(_) => {
+                    return Ok(Self {
+                        pitch,
+                        yaw,
+                        position: [pos_x, pos_y, pos_z],
+                        move_vec_x,
+                        move_vec_z,
+                        head_yaw,
+                        block_actions: Vec::new(),
+                        item_interaction: None,
+                        item_stack_request: None,
+                    });
+                }
+            }
+        } else {
+            None
+        };
 
-        // Conditional: block actions (bit 35)
+        // Item stack request (bit 36) — decode
+        let item_stack_request = if (input_flags >> FLAG_PERFORM_ITEM_STACK_REQUEST) & 1 == 1 {
+            match decode_item_stack_request(reader) {
+                Ok(req) => Some(req),
+                Err(_) => {
+                    return Ok(Self {
+                        pitch,
+                        yaw,
+                        position: [pos_x, pos_y, pos_z],
+                        move_vec_x,
+                        move_vec_z,
+                        head_yaw,
+                        block_actions: Vec::new(),
+                        item_interaction,
+                        item_stack_request: None,
+                    });
+                }
+            }
+        } else {
+            None
+        };
+
+        // Block actions (bit 35)
         let mut block_actions = Vec::new();
         if (input_flags >> FLAG_PERFORM_BLOCK_ACTIONS) & 1 == 1 {
-            let count = reader.read_var_i32()?;
+            let count = reader.read_var_i32().unwrap_or(0);
             for _ in 0..count.min(100) {
-                let action_type = reader.read_var_i32()?;
+                let Ok(action_type) = reader.read_var_i32() else {
+                    break;
+                };
                 if action_type == 2 {
                     // STOP_BREAK — no position data
                     block_actions.push(BlockAction {
@@ -111,11 +409,10 @@ impl PlayerAuthInput {
                         face: 0,
                     });
                 } else {
-                    // Has position + face
-                    let bx = reader.read_var_i32()?;
-                    let by = reader.read_var_i32()?;
-                    let bz = reader.read_var_i32()?;
-                    let face = reader.read_var_i32()?;
+                    let bx = reader.read_var_i32().unwrap_or(0);
+                    let by = reader.read_var_i32().unwrap_or(0);
+                    let bz = reader.read_var_i32().unwrap_or(0);
+                    let face = reader.read_var_i32().unwrap_or(0);
                     block_actions.push(BlockAction {
                         action_type,
                         position: [bx, by, bz],
@@ -133,6 +430,8 @@ impl PlayerAuthInput {
             move_vec_z,
             head_yaw,
             block_actions,
+            item_interaction,
+            item_stack_request,
         })
     }
 }
@@ -821,6 +1120,83 @@ impl SetActorData {
     }
 }
 
+// ── ItemStack / ItemStackWrapper ──
+
+/// An item stack with network encoding.
+#[derive(Clone, Debug)]
+pub struct ItemStack {
+    pub id: i32, // network item ID (0 = air/empty)
+    pub count: u16,
+    pub meta: u32,
+    pub block_runtime_id: i32, // for block items, the block runtime ID
+    pub extra_data: Vec<u8>,   // raw extra data (empty for basic items)
+}
+
+impl ItemStack {
+    pub const AIR: Self = Self {
+        id: 0,
+        count: 0,
+        meta: 0,
+        block_runtime_id: 0,
+        extra_data: Vec::new(),
+    };
+
+    pub fn new(id: i32, count: u16, block_runtime_id: i32) -> Self {
+        Self {
+            id,
+            count,
+            meta: 0,
+            block_runtime_id,
+            extra_data: Vec::new(),
+        }
+    }
+
+    pub fn is_air(&self) -> bool {
+        self.id == 0 || self.count == 0
+    }
+}
+
+/// ItemStackWrapper adds a server-assigned stack ID for inventory tracking.
+#[derive(Clone, Debug)]
+pub struct ItemStackWrapper {
+    pub stack_id: i32,
+    pub item: ItemStack,
+}
+
+impl ItemStackWrapper {
+    pub fn air() -> Self {
+        Self {
+            stack_id: 0,
+            item: ItemStack::AIR,
+        }
+    }
+
+    pub fn new(item: ItemStack, stack_id: i32) -> Self {
+        Self { stack_id, item }
+    }
+
+    /// Encode to network bytes (PMMP CommonTypes::writeItemStackWrapper).
+    pub fn encode(&self, w: &mut ProtoWriter) {
+        w.write_var_i32(self.item.id);
+        if self.item.id == 0 {
+            return;
+        }
+        w.write_u16_le(self.item.count);
+        w.write_var_u32(self.item.meta);
+        let has_net_id = self.stack_id != 0;
+        w.write_bool(has_net_id);
+        if has_net_id {
+            w.write_var_i32(self.stack_id);
+        }
+        w.write_var_i32(self.item.block_runtime_id);
+        // Extra data as length-prefixed string
+        w.write_var_u32(self.item.extra_data.len() as u32);
+        if !self.item.extra_data.is_empty() {
+            w.write_raw(&self.item.extra_data);
+        }
+    }
+}
+
 // ── InventoryContent (S→C, 0x31) ──
 
 pub struct InventoryContent;
@@ -832,13 +1208,46 @@ impl InventoryContent {
         w.write_var_u32(window_id);
         w.write_var_u32(slot_count);
         for _ in 0..slot_count {
-            w.write_var_i32(0); // ItemStackWrapper: air (id=0)
+            w.write_var_i32(0); // air
         }
+        w.write_u8(container_id);
+        w.write_bool(false);
+        w.write_var_i32(0);
+        w.into_bytes()
+    }
+
+    /// Encode inventory with actual items.
+    pub fn encode_items(window_id: u32, items: &[ItemStackWrapper], container_id: u8) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(256);
+        w.write_var_u32(window_id);
+        w.write_var_u32(items.len() as u32);
+        for item in items {
+            item.encode(&mut w);
+        }
+        w.write_u8(container_id);
+        w.write_bool(false);
+        w.write_var_i32(0);
+        w.into_bytes()
+    }
+}
+
+// ── InventorySlot (S→C, 0x32) ──
+
+pub struct InventorySlot;
+
+impl InventorySlot {
+    /// Encode a single slot update.
+    pub fn encode(window_id: u32, slot: u32, item: &ItemStackWrapper, container_id: u8) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(64);
+        w.write_var_u32(window_id);
+        w.write_var_u32(slot);
         // FullContainerName
         w.write_u8(container_id);
-        w.write_bool(false); // no dynamicId
-                             // Storage item (air)
+        w.write_bool(false);
+        // Storage item
         w.write_var_i32(0);
+        // Item
+        item.encode(&mut w);
         w.into_bytes()
     }
 }
@@ -852,9 +1261,24 @@ impl MobEquipment {
     pub fn encode_empty(runtime_entity_id: u64) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(16);
         w.write_var_u64(runtime_entity_id);
-        w.write_var_i32(0); // ItemStackWrapper: air
-        w.write_u8(0); // inventory_slot
-        w.write_u8(0); // hotbar_slot
+        w.write_var_i32(0); // air
+        w.write_u8(0);
+        w.write_u8(0);
+        w.write_u8(0);
+        w.into_bytes()
+    }
+
+    /// Encode with actual held item.
+    pub fn encode_item(
+        runtime_entity_id: u64,
+        item: &ItemStackWrapper,
+        hotbar_slot: u8,
+    ) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(64);
+        w.write_var_u64(runtime_entity_id);
+        item.encode(&mut w);
+        w.write_u8(hotbar_slot); // inventory_slot
+        w.write_u8(hotbar_slot); // hotbar_slot
         w.write_u8(0); // container_id (inventory)
         w.into_bytes()
     }
