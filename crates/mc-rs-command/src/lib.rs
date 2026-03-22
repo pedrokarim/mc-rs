@@ -44,6 +44,18 @@ pub struct CommandContext {
     pub position: [f32; 3],
 }
 
+/// Parse a coordinate value that supports tildes (~) for relative position.
+/// "~" = current position, "~5" = current + 5, "~-3" = current - 3, "10" = absolute 10
+fn parse_coord(s: &str, current: f32) -> Option<f32> {
+    if s == "~" {
+        Some(current)
+    } else if let Some(offset) = s.strip_prefix('~') {
+        offset.parse::<f32>().ok().map(|o| current + o)
+    } else {
+        s.parse::<f32>().ok()
+    }
+}
+
 /// Registry of all server commands.
 pub struct CommandRegistry {
     commands: HashMap<String, CommandDef>,
@@ -119,20 +131,19 @@ impl CommandRegistry {
             usage: "/tp <x> <y> <z>",
             handler: |parts, ctx| {
                 if parts.len() >= 4 {
-                    if let (Ok(x), Ok(y), Ok(z)) = (
-                        parts[1].parse::<f32>(),
-                        parts[2].parse::<f32>(),
-                        parts[3].parse::<f32>(),
-                    ) {
-                        info!("[CMD] {} teleported to {}, {}, {}", ctx.player_name, x, y, z);
+                    let x = parse_coord(parts[1], ctx.position[0]);
+                    let y = parse_coord(parts[2], ctx.position[1]);
+                    let z = parse_coord(parts[3], ctx.position[2]);
+                    if let (Some(x), Some(y), Some(z)) = (x, y, z) {
+                        info!("[CMD] {} teleported to {:.1}, {:.1}, {:.1}", ctx.player_name, x, y, z);
                         return CommandResult {
-                            response: Some(format!("Teleported to {}, {}, {}", x, y, z)),
+                            response: Some(format!("Teleported to {:.1}, {:.1}, {:.1}", x, y, z)),
                             action: CommandAction::Teleport { x, y, z },
                         };
                     }
                 }
                 CommandResult {
-                    response: Some("Usage: /tp <x> <y> <z>".to_string()),
+                    response: Some("Usage: /tp <x> <y> <z> (use ~ for current position)".to_string()),
                     action: CommandAction::None,
                 }
             },
@@ -203,7 +214,14 @@ impl CommandRegistry {
             usage: "/time set <value>",
             handler: |parts, ctx| {
                 if parts.len() >= 3 && parts[1] == "set" {
-                    if let Ok(time) = parts[2].parse::<i32>() {
+                    let time = match parts[2] {
+                        "day" | "sunrise" => Some(0),
+                        "noon" | "midday" => Some(6000),
+                        "sunset" | "dusk" => Some(12000),
+                        "night" | "midnight" => Some(18000),
+                        other => other.parse::<i32>().ok(),
+                    };
+                    if let Some(time) = time {
                         info!("[CMD] {} set time to {}", ctx.player_name, time);
                         return CommandResult {
                             response: Some(format!("Time set to {}", time)),
@@ -212,7 +230,7 @@ impl CommandRegistry {
                     }
                 }
                 CommandResult {
-                    response: Some("Usage: /time set <value>".to_string()),
+                    response: Some("Usage: /time set <day|noon|sunset|night|value>".to_string()),
                     action: CommandAction::None,
                 }
             },
@@ -355,6 +373,29 @@ impl CommandRegistry {
             handler: |_, _| CommandResult {
                 response: Some("Inventory cleared (not implemented yet)".to_string()),
                 action: CommandAction::None,
+            },
+        });
+
+        self.register(CommandDef {
+            name: "up",
+            description: "Teleport up by N blocks",
+            usage: "/up [blocks]",
+            handler: |parts, ctx| {
+                let amount = if parts.len() >= 2 {
+                    parts[1].parse::<f32>().unwrap_or(10.0)
+                } else {
+                    10.0
+                };
+                let y = ctx.position[1] + amount;
+                info!("[CMD] {} teleported up by {} blocks", ctx.player_name, amount);
+                CommandResult {
+                    response: Some(format!("Teleported up {} blocks (Y={:.1})", amount, y)),
+                    action: CommandAction::Teleport {
+                        x: ctx.position[0],
+                        y,
+                        z: ctx.position[2],
+                    },
+                }
             },
         });
     }
