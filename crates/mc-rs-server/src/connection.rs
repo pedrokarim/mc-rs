@@ -537,8 +537,8 @@ impl Connection {
 
         // Void kill check
         if pkt.position[1] < -128.0 {
-            // Player fell into the void — teleport back to spawn
-            self.position = [0.5, -57.0, 0.5];
+            let surface = terrain_generator::get_surface_height(0, 0, 42) as f32;
+            self.position = [0.5, surface + 2.621, 0.5];
             let reset = mc_rs_proto::packets::player::MovePlayer {
                 runtime_entity_id: self.entity_runtime_id,
                 position: self.position,
@@ -547,6 +547,28 @@ impl Connection {
                 head_yaw: 0.0,
                 mode: 1, // reset
                 on_ground: true,
+                riding_runtime_id: 0,
+                tick: self.tick,
+            };
+            return vec![self.encode_compressed_packet(packet_id::MOVE_PLAYER, &reset.encode())];
+        }
+
+        // Anti-fly: if player is moving UP by more than 1.5 blocks per tick,
+        // clamp their Y to prevent fly hacking
+        let dy = pkt.position[1] - self.position[1];
+        if dy > 1.5 {
+            // Player is rising too fast — clamp Y to max jump height
+            let clamped_y = self.position[1] + 1.5;
+            self.position = [pkt.position[0], clamped_y, pkt.position[2]];
+            // Send correction
+            let reset = mc_rs_proto::packets::player::MovePlayer {
+                runtime_entity_id: self.entity_runtime_id,
+                position: self.position,
+                pitch: pkt.pitch,
+                yaw: pkt.yaw,
+                head_yaw: pkt.head_yaw,
+                mode: 1, // reset
+                on_ground: false,
                 riding_runtime_id: 0,
                 tick: self.tick,
             };
