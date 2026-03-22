@@ -52,10 +52,27 @@ pub mod biome_id {
     pub const DEEP_FROZEN_OCEAN: u32 = 47;
     pub const BAMBOO_JUNGLE: u32 = 48;
     pub const SUNFLOWER_PLAINS: u32 = 129;
-    pub const FLOWER_FOREST: u32 = 132;
     pub const ICE_PLAINS_SPIKES: u32 = 140;
+    pub const DESERT_MUTATED: u32 = 130;
+    pub const EXTREME_HILLS_MUTATED: u32 = 131;
+    pub const FLOWER_FOREST: u32 = 132;
+    pub const TAIGA_MUTATED: u32 = 133;
+    pub const SWAMPLAND_MUTATED: u32 = 134;
+    pub const JUNGLE_MUTATED: u32 = 149;
+    pub const JUNGLE_EDGE_MUTATED: u32 = 151;
+    pub const BIRCH_FOREST_MUTATED: u32 = 155;
+    pub const BIRCH_FOREST_HILLS_MUTATED: u32 = 156;
+    pub const ROOFED_FOREST_MUTATED: u32 = 157;
+    pub const COLD_TAIGA_MUTATED: u32 = 158;
+    pub const REDWOOD_TAIGA_MUTATED: u32 = 160;
+    pub const REDWOOD_TAIGA_HILLS_MUTATED: u32 = 161;
+    pub const EXTREME_HILLS_PLUS_TREES_MUTATED: u32 = 162;
     pub const SAVANNA_MUTATED: u32 = 163;
+    pub const SAVANNA_PLATEAU_MUTATED: u32 = 164;
     pub const MESA_BRYCE: u32 = 165;
+    pub const MESA_PLATEAU_STONE_MUTATED: u32 = 166;
+    pub const MESA_PLATEAU_MUTATED: u32 = 167;
+    pub const BAMBOO_JUNGLE_HILLS: u32 = 169;
 }
 
 /// Biome definition with elevation range and ground cover.
@@ -575,6 +592,143 @@ pub fn get_biome(id: u32) -> BiomeDef {
                 ground_cover: mesa(),
             }
         }
+        biome_id::MESA_PLATEAU_MUTATED | biome_id::MESA_PLATEAU_STONE_MUTATED => {
+            let (min, max) = noise_type_to_elevation("mountains");
+            BiomeDef {
+                id,
+                min_elevation: min,
+                max_elevation: max,
+                ground_cover: mesa(),
+            }
+        }
+
+        // ── Mutated variants ──
+        biome_id::DESERT_MUTATED => {
+            let (min, max) = noise_params_to_elevation(0.225, 0.25);
+            BiomeDef {
+                id,
+                min_elevation: min,
+                max_elevation: max,
+                ground_cover: sandy(),
+            }
+        }
+        biome_id::EXTREME_HILLS_MUTATED | biome_id::EXTREME_HILLS_PLUS_TREES_MUTATED => {
+            let (min, max) = noise_type_to_elevation("extreme");
+            BiomeDef {
+                id,
+                min_elevation: min,
+                max_elevation: max,
+                ground_cover: grassy(),
+            }
+        }
+        biome_id::TAIGA_MUTATED => {
+            let (min, max) = noise_type_to_elevation("default_mutated");
+            BiomeDef {
+                id,
+                min_elevation: min,
+                max_elevation: max,
+                ground_cover: grassy(),
+            }
+        }
+        biome_id::SWAMPLAND_MUTATED => {
+            let (min, max) = noise_params_to_elevation(-0.1, 0.3);
+            BiomeDef {
+                id,
+                min_elevation: min,
+                max_elevation: max,
+                ground_cover: grassy(),
+            }
+        }
+        biome_id::JUNGLE_MUTATED => {
+            let (min, max) = noise_type_to_elevation("default_mutated");
+            BiomeDef {
+                id,
+                min_elevation: min,
+                max_elevation: max,
+                ground_cover: grassy(),
+            }
+        }
+        biome_id::JUNGLE_EDGE_MUTATED => {
+            let (min, max) = noise_type_to_elevation("default_mutated");
+            BiomeDef {
+                id,
+                min_elevation: min,
+                max_elevation: max,
+                ground_cover: grassy(),
+            }
+        }
+        biome_id::BIRCH_FOREST_MUTATED => {
+            let (min, max) = noise_type_to_elevation("default_mutated");
+            BiomeDef {
+                id,
+                min_elevation: min,
+                max_elevation: max,
+                ground_cover: grassy(),
+            }
+        }
+        biome_id::BIRCH_FOREST_HILLS_MUTATED => {
+            let (min, max) = noise_params_to_elevation(0.55, 0.5);
+            BiomeDef {
+                id,
+                min_elevation: min,
+                max_elevation: max,
+                ground_cover: grassy(),
+            }
+        }
+        biome_id::ROOFED_FOREST_MUTATED => {
+            let (min, max) = noise_type_to_elevation("default_mutated");
+            BiomeDef {
+                id,
+                min_elevation: min,
+                max_elevation: max,
+                ground_cover: grassy(),
+            }
+        }
+        biome_id::COLD_TAIGA_MUTATED => {
+            let (min, max) = noise_params_to_elevation(0.3, 0.4);
+            BiomeDef {
+                id,
+                min_elevation: min,
+                max_elevation: max,
+                ground_cover: snowy(),
+            }
+        }
+        biome_id::REDWOOD_TAIGA_MUTATED => {
+            let (min, max) = noise_type_to_elevation("taiga");
+            BiomeDef {
+                id,
+                min_elevation: min,
+                max_elevation: max,
+                ground_cover: podzol(),
+            }
+        }
+        biome_id::REDWOOD_TAIGA_HILLS_MUTATED => {
+            let (min, max) = noise_params_to_elevation(0.55, 0.5);
+            BiomeDef {
+                id,
+                min_elevation: min,
+                max_elevation: max,
+                ground_cover: podzol(),
+            }
+        }
+        biome_id::SAVANNA_PLATEAU_MUTATED => {
+            let (min, max) = noise_params_to_elevation(1.05, 1.2125);
+            BiomeDef {
+                id,
+                min_elevation: min,
+                max_elevation: max,
+                ground_cover: grassy(),
+            }
+        }
+        biome_id::BAMBOO_JUNGLE_HILLS => {
+            let (min, max) = noise_type_to_elevation("mountains");
+            BiomeDef {
+                id,
+                min_elevation: min,
+                max_elevation: max,
+                ground_cover: grassy(),
+            }
+        }
 
         // ── Default (unknown biomes) ──
         _ => {
@@ -632,26 +786,26 @@ impl BiomeSelector {
     }
 }
 
-/// Full biome lookup covering all 40+ overworld biomes.
+/// Full biome lookup covering all 60+ overworld biomes.
 /// Maps temperature (0..1) x rainfall (0..1) to biome ID.
 /// Temperature: 0=frozen, 0.5=temperate, 1=hot
 /// Rainfall: 0=dry/ocean, 0.5=moderate, 1=wet/mountains
 fn lookup_biome(temperature: f64, rainfall: f64) -> u32 {
-    if rainfall < 0.12 {
-        // Very low rainfall → deep oceans
-        if temperature < 0.25 {
+    if rainfall < 0.10 {
+        // Deep oceans
+        if temperature < 0.20 {
             biome_id::DEEP_FROZEN_OCEAN
-        } else if temperature < 0.45 {
+        } else if temperature < 0.40 {
             biome_id::DEEP_COLD_OCEAN
-        } else if temperature < 0.65 {
+        } else if temperature < 0.60 {
             biome_id::DEEP_OCEAN
         } else if temperature < 0.80 {
             biome_id::DEEP_LUKEWARM_OCEAN
         } else {
             biome_id::DEEP_WARM_OCEAN
         }
-    } else if rainfall < 0.22 {
-        // Low rainfall → oceans
+    } else if rainfall < 0.19 {
+        // Oceans
         if temperature < 0.20 {
             biome_id::FROZEN_OCEAN
         } else if temperature < 0.40 {
@@ -663,13 +817,15 @@ fn lookup_biome(temperature: f64, rainfall: f64) -> u32 {
         } else {
             biome_id::WARM_OCEAN
         }
-    } else if rainfall < 0.30 {
-        // Ocean edges → beaches, rivers, shores
-        if temperature < 0.15 {
+    } else if rainfall < 0.27 {
+        // Coasts, beaches, rivers
+        if temperature < 0.12 {
             biome_id::COLD_BEACH
-        } else if temperature < 0.30 {
+        } else if temperature < 0.25 {
+            biome_id::FROZEN_RIVER
+        } else if temperature < 0.40 {
             biome_id::STONE_BEACH
-        } else if temperature < 0.50 {
+        } else if temperature < 0.55 {
             biome_id::BEACH
         } else if temperature < 0.70 {
             biome_id::RIVER
@@ -678,88 +834,127 @@ fn lookup_biome(temperature: f64, rainfall: f64) -> u32 {
         } else {
             biome_id::SWAMPLAND
         }
-    } else if rainfall < 0.45 {
-        // Moderate-dry → flat biomes
-        if temperature < 0.12 {
+    } else if rainfall < 0.38 {
+        // Flat biomes
+        if temperature < 0.10 {
             biome_id::ICE_PLAINS
-        } else if temperature < 0.25 {
+        } else if temperature < 0.20 {
             biome_id::ICE_PLAINS_SPIKES
-        } else if temperature < 0.40 {
+        } else if temperature < 0.32 {
             biome_id::COLD_TAIGA
+        } else if temperature < 0.42 {
+            biome_id::COLD_TAIGA_MUTATED
         } else if temperature < 0.55 {
             biome_id::PLAINS
         } else if temperature < 0.65 {
             biome_id::SUNFLOWER_PLAINS
-        } else if temperature < 0.80 {
+        } else if temperature < 0.78 {
             biome_id::SAVANNA
-        } else {
+        } else if temperature < 0.88 {
             biome_id::DESERT
+        } else {
+            biome_id::DESERT_MUTATED
         }
-    } else if rainfall < 0.60 {
-        // Moderate → forests and temperate
-        if temperature < 0.15 {
+    } else if rainfall < 0.50 {
+        // Forests + temperate
+        if temperature < 0.12 {
             biome_id::COLD_TAIGA_HILLS
-        } else if temperature < 0.30 {
+        } else if temperature < 0.25 {
             biome_id::TAIGA
-        } else if temperature < 0.45 {
+        } else if temperature < 0.35 {
+            biome_id::TAIGA_MUTATED
+        } else if temperature < 0.47 {
             biome_id::FOREST
-        } else if temperature < 0.55 {
+        } else if temperature < 0.57 {
             biome_id::FLOWER_FOREST
-        } else if temperature < 0.70 {
+        } else if temperature < 0.68 {
             biome_id::BIRCH_FOREST
-        } else if temperature < 0.82 {
+        } else if temperature < 0.78 {
+            biome_id::BIRCH_FOREST_MUTATED
+        } else if temperature < 0.88 {
             biome_id::SAVANNA_PLATEAU
         } else {
             biome_id::DESERT_HILLS
         }
-    } else if rainfall < 0.75 {
-        // Moderate-wet → hills and dense forests
-        if temperature < 0.15 {
+    } else if rainfall < 0.62 {
+        // Dense forests + hills
+        if temperature < 0.12 {
             biome_id::MEGA_TAIGA
-        } else if temperature < 0.30 {
+        } else if temperature < 0.22 {
+            biome_id::REDWOOD_TAIGA_MUTATED
+        } else if temperature < 0.33 {
             biome_id::TAIGA_HILLS
-        } else if temperature < 0.45 {
+        } else if temperature < 0.44 {
             biome_id::FOREST_HILLS
-        } else if temperature < 0.60 {
+        } else if temperature < 0.55 {
             biome_id::ROOFED_FOREST
+        } else if temperature < 0.65 {
+            biome_id::ROOFED_FOREST_MUTATED
         } else if temperature < 0.75 {
             biome_id::BIRCH_FOREST_HILLS
-        } else if temperature < 0.87 {
-            biome_id::MESA
+        } else if temperature < 0.85 {
+            biome_id::BIRCH_FOREST_HILLS_MUTATED
         } else {
-            biome_id::MESA_BRYCE
+            biome_id::SWAMPLAND_MUTATED
         }
-    } else if rainfall < 0.88 {
-        // Wet → jungles, mega terrain
-        if temperature < 0.15 {
+    } else if rainfall < 0.74 {
+        // Mesa + moderate mountains
+        if temperature < 0.12 {
             biome_id::MEGA_TAIGA_HILLS
-        } else if temperature < 0.30 {
+        } else if temperature < 0.22 {
+            biome_id::REDWOOD_TAIGA_HILLS_MUTATED
+        } else if temperature < 0.35 {
             biome_id::ICE_MOUNTAINS
-        } else if temperature < 0.45 {
+        } else if temperature < 0.48 {
             biome_id::EXTREME_HILLS_EDGE
         } else if temperature < 0.60 {
             biome_id::JUNGLE_EDGE
-        } else if temperature < 0.75 {
-            biome_id::JUNGLE
-        } else if temperature < 0.87 {
-            biome_id::BAMBOO_JUNGLE
+        } else if temperature < 0.70 {
+            biome_id::JUNGLE_EDGE_MUTATED
+        } else if temperature < 0.80 {
+            biome_id::MESA
+        } else if temperature < 0.90 {
+            biome_id::MESA_BRYCE
         } else {
             biome_id::MESA_PLATEAU
         }
-    } else {
-        // Very wet → extreme terrain
-        if temperature < 0.20 {
+    } else if rainfall < 0.86 {
+        // Jungles + big terrain
+        if temperature < 0.12 {
+            biome_id::EXTREME_HILLS_MUTATED
+        } else if temperature < 0.25 {
             biome_id::EXTREME_HILLS
-        } else if temperature < 0.35 {
+        } else if temperature < 0.38 {
             biome_id::EXTREME_HILLS_PLUS_TREES
         } else if temperature < 0.50 {
-            biome_id::SAVANNA_MUTATED
-        } else if temperature < 0.65 {
-            biome_id::JUNGLE_HILLS
-        } else if temperature < 0.80 {
-            biome_id::MUSHROOM_ISLAND
+            biome_id::EXTREME_HILLS_PLUS_TREES_MUTATED
+        } else if temperature < 0.62 {
+            biome_id::JUNGLE
+        } else if temperature < 0.72 {
+            biome_id::JUNGLE_MUTATED
+        } else if temperature < 0.82 {
+            biome_id::BAMBOO_JUNGLE
+        } else if temperature < 0.92 {
+            biome_id::BAMBOO_JUNGLE_HILLS
         } else {
             biome_id::MESA_PLATEAU_STONE
+        }
+    } else {
+        // Extreme terrain
+        if temperature < 0.15 {
+            biome_id::SAVANNA_MUTATED
+        } else if temperature < 0.30 {
+            biome_id::SAVANNA_PLATEAU_MUTATED
+        } else if temperature < 0.45 {
+            biome_id::JUNGLE_HILLS
+        } else if temperature < 0.60 {
+            biome_id::MUSHROOM_ISLAND
+        } else if temperature < 0.75 {
+            biome_id::MESA_PLATEAU_MUTATED
+        } else if temperature < 0.88 {
+            biome_id::MESA_PLATEAU_STONE_MUTATED
+        } else {
+            biome_id::SAVANNA_MUTATED
         }
     }
 }
