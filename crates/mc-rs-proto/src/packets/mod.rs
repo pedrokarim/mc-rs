@@ -23,6 +23,7 @@ pub mod packet_id {
     pub const UPDATE_BLOCK: u32 = 0x15;
     pub const UPDATE_ATTRIBUTES: u32 = 0x1D;
     pub const SET_ACTOR_DATA: u32 = 0x27;
+    pub const SET_PLAYER_GAME_TYPE: u32 = 0x3E;
     pub const SET_SPAWN_POSITION: u32 = 0x2B;
     pub const CRAFTING_DATA: u32 = 0x34;
     pub const LEVEL_CHUNK: u32 = 0x3A;

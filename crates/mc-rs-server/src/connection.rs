@@ -821,13 +821,6 @@ impl Connection {
             &CreativeContent::encode_empty(),
         ));
 
-        // UpdateAttributes — health, hunger, movement speed, etc.
-        let attributes = UpdateAttributes::default_survival(self.entity_runtime_id);
-        responses.push(self.encode_compressed_packet(
-            packet_id::UPDATE_ATTRIBUTES,
-            &attributes.encode(),
-        ));
-
         // UpdateAbilities — survival mode abilities (no fly, no noclip)
         let abilities = UpdateAbilities::default_survival(self.entity_runtime_id as i64);
         responses.push(self.encode_compressed_packet(
@@ -835,25 +828,19 @@ impl Connection {
             &abilities.encode(),
         ));
 
-        // UpdateAdventureSettings
-        let adventure = UpdateAdventureSettings {
-            no_pvm: false,
-            no_mvp: false,
-            immutable_world: false,
-            show_name_tags: true,
-            auto_jump: true,
-        };
+        // UpdateAttributes — health, hunger, movement speed
+        let attributes = UpdateAttributes::default_survival(self.entity_runtime_id);
         responses.push(self.encode_compressed_packet(
-            packet_id::UPDATE_ADVENTURE_SETTINGS,
-            &adventure.encode(),
+            packet_id::UPDATE_ATTRIBUTES,
+            &attributes.encode(),
         ));
 
-        // SetActorData — player metadata (nametag, scale, bounding box)
-        let player_name = self.display_name.clone().unwrap_or_default();
-        let actor_data = SetActorData::default_player(self.entity_runtime_id, &player_name);
+        // SetPlayerGameType — explicitly set survival mode
+        let mut gametype_writer = mc_rs_proto::io::ProtoWriter::with_capacity(4);
+        gametype_writer.write_var_i32(0); // 0 = survival
         responses.push(self.encode_compressed_packet(
-            packet_id::SET_ACTOR_DATA,
-            &actor_data.encode(),
+            packet_id::SET_PLAYER_GAME_TYPE,
+            gametype_writer.as_bytes(),
         ));
 
         // AvailableCommands — register commands for tab-complete

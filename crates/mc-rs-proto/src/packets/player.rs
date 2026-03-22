@@ -519,11 +519,13 @@ impl UpdateAbilities {
 
     /// Survival mode abilities — no fly, can walk/mine/build/attack
     pub fn default_survival(entity_id: i64) -> Self {
+        // ALL abilities are SET (we provide values for all of them)
         let set = ability::ALL;
+        // Only these are ENABLED (true):
         let values = ability::BUILD | ability::MINE | ability::DOORS_AND_SWITCHES
-            | ability::OPEN_CONTAINERS | ability::ATTACK_PLAYERS | ability::ATTACK_MOBS
-            | ability::FLY_SPEED | ability::WALK_SPEED;
-        // NOT set: FLYING, ALLOW_FLIGHT, NO_CLIP, INVULNERABLE, OPERATOR, INFINITE_RESOURCES
+            | ability::OPEN_CONTAINERS | ability::ATTACK_PLAYERS | ability::ATTACK_MOBS;
+        // All others are false: FLYING, ALLOW_FLIGHT, NO_CLIP, INVULNERABLE,
+        // OPERATOR, TELEPORT, INFINITE_RESOURCES, etc.
 
         Self {
             entity_id,
