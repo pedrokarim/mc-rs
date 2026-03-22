@@ -271,7 +271,7 @@ impl StartGame {
             actor_unique_id: 1,
             actor_runtime_id: 1,
             player_gamemode: 1, // creative
-            player_position: [0.5, -59.38, 0.5],
+            player_position: [0.5, -57.0, 0.5],
             pitch: 0.0,
             yaw: 0.0,
             seed: 0,
