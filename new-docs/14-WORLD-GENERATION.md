@@ -141,155 +141,78 @@ src/world/generator/LightPopulationTask.php
 
 ---
 
-## Équivalent Rust
+## Implémentation Rust (état actuel)
 
-### Crate : `mc-rs-world` (module `generator`)
+### Module : `mc-rs-server/src/world/`
 
+L'implémentation est un port direct de l'algorithme Normal de PocketMine-MP,
+sans dépendances externes pour le bruit ou le RNG.
+
+**Fichiers :**
+
+| Fichier | Description |
+|---|---|
+| `random.rs` | XorShift128 RNG (port exact de PMMP `Random`) |
+| `noise.rs` | Simplex 2D/3D + multi-octave + `getFastNoise3D` trilinéaire |
+| `biome.rs` | 11 biomes + BiomeSelector (temp/rainfall) + Gaussian smoothing |
+| `terrain_generator.rs` | Génération terrain principale + block IDs |
+| `ore.rs` | Minerais : veines courbes (8 types) |
+| `vegetation.rs` | Arbres (chêne) + herbe courte par biome |
+| `chunk_serializer.rs` | Sérialisation sub-chunks (format réseau paletté) |
+| `flat_generator.rs` | Générateur plat (non utilisé par défaut) |
+
+**Architecture (fonctions, pas de trait) :**
 ```rust
-use noise::{NoiseFn, Perlin, Fbm};
-
-/// Trait pour les générateurs de monde
-pub trait Generator: Send + Sync {
-    fn generate_chunk(&self, cx: i32, cz: i32) -> Chunk;
-    fn populate_chunk(&self, cx: i32, cz: i32, chunks: &mut ChunkAccess);
-    fn spawn_location(&self) -> BlockPos;
-}
-
-/// Générateur plat
-pub struct FlatGenerator {
-    layers: Vec<FlatLayer>,
-    biome: u32,
-}
-
-pub struct FlatLayer {
-    pub block: BlockState,
-    pub height: u32,
-}
-
-impl Generator for FlatGenerator {
-    fn generate_chunk(&self, cx: i32, cz: i32) -> Chunk {
-        let mut chunk = Chunk::new(cx, cz);
-        let mut y = -64i32;
-        for layer in &self.layers {
-            for dy in 0..layer.height {
-                let block_y = y + dy as i32;
-                for x in 0..16 {
-                    for z in 0..16 {
-                        chunk.set_block(x, block_y, z, layer.block);
-                    }
-                }
-            }
-            y += layer.height as i32;
-        }
-        chunk
-    }
-
-    fn populate_chunk(&self, _cx: i32, _cz: i32, _chunks: &mut ChunkAccess) {
-        // Pas de population pour flat
-    }
-
-    fn spawn_location(&self) -> BlockPos {
-        let height: i32 = self.layers.iter().map(|l| l.height as i32).sum();
-        BlockPos { x: 0, y: -64 + height, z: 0 }
-    }
-}
-
-/// Générateur normal (overworld)
-pub struct NormalGenerator {
-    seed: i64,
-    noise: Fbm<Perlin>,
-    biome_noise: Fbm<Perlin>,
-}
-
-impl Generator for NormalGenerator {
-    fn generate_chunk(&self, cx: i32, cz: i32) -> Chunk {
-        let mut chunk = Chunk::new(cx, cz);
-
-        for x in 0u8..16 {
-            for z in 0u8..16 {
-                let world_x = (cx * 16 + x as i32) as f64;
-                let world_z = (cz * 16 + z as i32) as f64;
-
-                // Heightmap via noise
-                let height = self.get_height(world_x, world_z);
-
-                // Bedrock
-                chunk.set_block(x, -64, z, BlockState::BEDROCK);
-
-                // Stone
-                for y in -63..height - 3 {
-                    chunk.set_block(x, y, z, BlockState::STONE);
-                }
-
-                // Dirt + surface
-                let biome = self.get_biome(world_x, world_z);
-                let (surface, sub_surface) = biome.surface_blocks();
-                for y in (height - 3)..height {
-                    chunk.set_block(x, y, z, sub_surface);
-                }
-                chunk.set_block(x, height, z, surface);
-
-                // Water fill
-                if height < 62 {
-                    for y in (height + 1)..=62 {
-                        chunk.set_block(x, y, z, BlockState::WATER);
-                    }
-                }
-            }
-        }
-
-        chunk
-    }
-
-    fn populate_chunk(&self, cx: i32, cz: i32, chunks: &mut ChunkAccess) {
-        let mut rng = ChunkRng::new(self.seed, cx, cz);
-
-        // Ores
-        self.populate_ores(&mut rng, cx, cz, chunks);
-
-        // Trees
-        self.populate_trees(&mut rng, cx, cz, chunks);
-
-        // Tall grass
-        self.populate_grass(&mut rng, cx, cz, chunks);
-    }
-
-    fn spawn_location(&self) -> BlockPos {
-        // Trouver un bon spawn sur la surface
-        let height = self.get_height(0.0, 0.0);
-        BlockPos { x: 0, y: height + 1, z: 0 }
-    }
-}
-
-/// Populator de minerai
-pub struct OrePopulator {
-    ores: Vec<OreConfig>,
-}
-
-pub struct OreConfig {
-    pub block: BlockState,
-    pub cluster_size: u32,
-    pub count_per_chunk: u32,
-    pub min_y: i32,
-    pub max_y: i32,
-}
-
-impl OrePopulator {
-    pub fn default_ores() -> Self {
-        Self {
-            ores: vec![
-                OreConfig { block: BlockState::COAL_ORE, cluster_size: 17, count_per_chunk: 20, min_y: 0, max_y: 128 },
-                OreConfig { block: BlockState::IRON_ORE, cluster_size: 9, count_per_chunk: 20, min_y: -64, max_y: 72 },
-                OreConfig { block: BlockState::GOLD_ORE, cluster_size: 9, count_per_chunk: 2, min_y: -64, max_y: 30 },
-                OreConfig { block: BlockState::DIAMOND_ORE, cluster_size: 8, count_per_chunk: 1, min_y: -64, max_y: 16 },
-                OreConfig { block: BlockState::REDSTONE_ORE, cluster_size: 8, count_per_chunk: 8, min_y: -64, max_y: 16 },
-                OreConfig { block: BlockState::LAPIS_ORE, cluster_size: 7, count_per_chunk: 1, min_y: -64, max_y: 30 },
-            ],
-        }
-    }
-}
-
-/// Dépendances recommandées
-// noise = "0.9"  → Perlin, Simplex, Fbm
-// rand = "0.8"   → RNG seedé par chunk
+// Point d'entrée principal
+pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<u8>);
+pub fn get_surface_height(world_x: i32, world_z: i32, seed: u64) -> i32;
 ```
+
+**Pipeline de génération (dans `generate_terrain_chunk`) :**
+1. Initialiser RNG avec `0xdeadbeef ^ (cx << 8) ^ cz ^ seed`
+2. Créer Simplex noise (4 octaves, persistence 1/4, expansion 1/32)
+3. Générer biomes + Gaussian smooth des élévations
+4. Générer bruit 3D via `getFastNoise3D` (sampling 4/8/4)
+5. Pré-calculer hauteurs de surface par colonne
+6. Générer positions des minerais (veines courbes)
+7. Générer végétation (arbres, herbe)
+8. Pour chaque sub-chunk, placer les blocs :
+   - Y=0 : bedrock
+   - Y<0 : stone
+   - Zone noise : `noiseValue - 1/smoothHeight * (y - smoothHeight - minSum)`
+     - `> 0` → stone (+ ground cover + ores)
+     - `≤ 0 && y ≤ 62` → water
+     - sinon → air (+ végétation)
+9. Sérialiser sub-chunks + biomes
+
+**Biomes implémentés :**
+
+| ID | Biome | Élévation | Cover |
+|---|---|---|---|
+| 0 | Ocean | 46-58 | Gravel |
+| 1 | Plains | 63-68 | Grass + Dirt |
+| 2 | Desert | 63-74 | Sand + Sandstone |
+| 3 | Extreme Hills | 63-127 | Grass + Dirt |
+| 4 | Forest | 63-81 | Grass + Dirt |
+| 5 | Taiga | 63-81 | Snow + Grass + Dirt |
+| 6 | Swampland | 62-63 | Grass + Dirt |
+| 7 | River | 58-62 | Dirt |
+| 12 | Ice Plains | 63-74 | Snow + Grass + Dirt |
+| 20 | Small Mountains | 63-97 | Grass + Dirt |
+| 27 | Birch Forest | 63-81 | Grass + Dirt |
+
+**Minerais (paramètres PMMP) :**
+
+| Minerai | Clusters/chunk | Taille | Y min | Y max |
+|---|---|---|---|---|
+| Coal | 20 | 16 | 0 | 128 |
+| Iron | 20 | 8 | 0 | 64 |
+| Redstone | 8 | 7 | 0 | 16 |
+| Lapis | 1 | 6 | 0 | 32 |
+| Gold | 2 | 8 | 0 | 32 |
+| Diamond | 1 | 7 | 0 | 16 |
+| Dirt (poches) | 20 | 32 | 0 | 128 |
+| Gravel (poches) | 10 | 16 | 0 | 128 |
+
+**Block IDs :** Indices séquentiels de `canonical_block_states.nbt` (copié dans `data/`).
+Fichier de référence parsé via `mc-rs-nbt` pour extraire les IDs exacts.

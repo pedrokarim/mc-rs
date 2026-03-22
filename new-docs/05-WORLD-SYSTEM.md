@@ -155,114 +155,56 @@ src/world/light/
 
 ---
 
-## Équivalent Rust
+## Implémentation Rust (état actuel)
 
-### Crate : `mc-rs-world`
+### Module : `mc-rs-server/src/world/`
 
+Le système de monde est intégré directement dans `mc-rs-server` (pas de crate séparé).
+
+**Fichiers :**
+
+| Fichier | Description |
+|---|---|
+| `terrain_generator.rs` | Génération de terrain (Simplex 3D, biomes, ores, végétation) |
+| `flat_generator.rs` | Génération plate (4 couches fixes) |
+| `chunk_serializer.rs` | Sérialisation sub-chunks en format réseau paletté |
+| `chunk_cache.rs` | Cache mémoire avec LevelDB persistence |
+| `storage.rs` | Interface LevelDB (rusty-leveldb) |
+| `tick.rs` | Temps du monde (jour/nuit) + météo |
+| `biome.rs` | 11 biomes, sélection par bruit, lissage Gaussien |
+| `noise.rs` | Simplex noise 2D/3D (port PMMP) |
+| `random.rs` | XorShift128 RNG (port PMMP) |
+| `ore.rs` | Génération de minerais (veines courbes) |
+| `vegetation.rs` | Arbres (chêne) et herbe courte |
+
+**Architecture actuelle :**
+- Pas de trait `Generator` — fonctions standalone dans `terrain_generator.rs`
+- Chunks générés à la demande quand un joueur s'en approche
+- `ChunkCache` garde les chunks en mémoire et les sauvegarde dans LevelDB
+- `WorldState` gère le cycle jour/nuit et la météo (tick séparé)
+
+**Génération de chunks :**
 ```rust
-pub struct WorldManager {
-    worlds: HashMap<String, World>,
-    default_world: String,
-}
+// Génère un chunk complet (terrain + biomes + ores + arbres)
+pub fn generate_terrain_chunk(cx: i32, cz: i32, seed: u64) -> (u32, Vec<u8>);
 
-pub struct World {
-    pub name: String,
-    pub seed: i64,
-    pub spawn: BlockPos,
-    pub time: i64,
-    pub difficulty: Difficulty,
-    pub game_rules: GameRules,
-    chunks: HashMap<ChunkPos, Chunk>,
-    entities: Vec<EntityId>,
-    provider: Box<dyn WorldProvider>,
-    generator: Box<dyn Generator>,
-    // Tick
-    scheduled_updates: BTreeMap<u64, Vec<BlockUpdate>>,
-}
-
-pub struct Chunk {
-    pub x: i32,
-    pub z: i32,
-    sub_chunks: [Option<SubChunk>; 24],  // y=-4 à y=19
-    height_map: HeightArray,
-    dirty_flags: u8,
-    entities: Vec<EntityId>,
-    tiles: HashMap<BlockPos, Box<dyn BlockEntity>>,
-}
-
-pub struct SubChunk {
-    block_layers: Vec<PalettedStorage>,  // généralement 1, parfois 2
-    biomes: PalettedStorage,             // résolution 4x4x4
-    sky_light: Option<LightArray>,
-    block_light: Option<LightArray>,
-}
-
-pub struct PalettedStorage {
-    palette: Vec<u32>,         // runtime block state IDs
-    bits_per_block: u8,
-    data: Vec<u32>,            // mots compactés
-}
-
-impl PalettedStorage {
-    pub fn new_single(value: u32) -> Self {
-        Self { palette: vec![value], bits_per_block: 0, data: vec![] }
-    }
-
-    pub fn get(&self, x: u8, y: u8, z: u8) -> u32 {
-        if self.bits_per_block == 0 {
-            return self.palette[0];
-        }
-        let index = ((x as usize) << 8) | ((z as usize) << 4) | (y as usize);
-        let blocks_per_word = 32 / self.bits_per_block as usize;
-        let word_index = index / blocks_per_word;
-        let bit_offset = (index % blocks_per_word) * self.bits_per_block as usize;
-        let mask = (1u32 << self.bits_per_block) - 1;
-        let palette_index = (self.data[word_index] >> bit_offset) & mask;
-        self.palette[palette_index as usize]
-    }
-
-    pub fn set(&mut self, x: u8, y: u8, z: u8, value: u32) {
-        // Resize palette if needed, update bits_per_block, etc.
-        todo!()
-    }
-}
-
-pub type HeightArray = [[i16; 16]; 16];
-pub type LightArray = [u8; 2048]; // 4 bits par bloc, 4096 blocs
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ChunkPos {
-    pub x: i32,
-    pub z: i32,
-}
+// Hauteur de surface pour le spawn
+pub fn get_surface_height(world_x: i32, world_z: i32, seed: u64) -> i32;
 ```
 
-### LevelDB Provider
-
+**Sérialisation sub-chunk :**
 ```rust
-pub trait WorldProvider: Send {
-    fn load_chunk(&self, x: i32, z: i32) -> Result<Option<Chunk>>;
-    fn save_chunk(&self, chunk: &Chunk) -> Result<()>;
-    fn load_world_data(&self) -> Result<WorldData>;
-    fn save_world_data(&self, data: &WorldData) -> Result<()>;
-}
+pub fn serialize_sub_chunk(blocks: &[u32; 4096], palette: &[u32]) -> Vec<u8>;
+pub fn serialize_biome_section_single(biome_id: u32) -> Vec<u8>;
+```
 
-pub struct LevelDbProvider {
-    db: Database,  // rusty-leveldb ou leveldb crate
-    path: PathBuf,
-}
-
-impl LevelDbProvider {
-    fn make_key(x: i32, z: i32, tag: u8, sub_y: Option<u8>) -> Vec<u8> {
-        let mut key = Vec::with_capacity(10);
-        key.extend_from_slice(&x.to_le_bytes());
-        key.extend_from_slice(&z.to_le_bytes());
-        key.push(tag);
-        if let Some(y) = sub_y {
-            key.push(y);
-        }
-        key
-    }
+**Cache + Persistance :**
+```rust
+pub struct ChunkCache {
+    chunks: HashMap<(i32, i32), ChunkColumn>,
+    dirty: HashSet<(i32, i32)>,
+    storage: Option<WorldStorage>,  // LevelDB
+    seed: u64,
 }
 ```
 
@@ -270,5 +212,5 @@ impl LevelDbProvider {
 
 | Crate | Usage |
 |---|---|
-| `rusty-leveldb` ou `leveldb` | LevelDB storage |
-| `mc-rs-nbt` | NBT read/write |
+| `rusty-leveldb` | LevelDB storage |
+| `mc-rs-nbt` | NBT read/write (canonical_block_states.nbt) |

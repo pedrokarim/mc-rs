@@ -64,12 +64,12 @@ Avancer **phase par phase**, chaque phase est **testable et fonctionnelle** avan
 - [ ] Tool tiers (bois → netherite)
 - [ ] Vitesse de minage selon l'outil
 
-### 3.3 - World persistence
-- [ ] LevelDB read/write
-- [ ] Sauvegarder les chunks modifiés
-- [ ] Charger les chunks depuis LevelDB
+### 3.3 - World persistence — ✅ TERMINÉE
+- [x] LevelDB read/write (rusty-leveldb)
+- [x] Sauvegarder les chunks modifiés (ChunkCache + dirty tracking)
+- [x] Charger les chunks depuis LevelDB
 - [ ] level.dat (métadonnées monde)
-- [ ] Auto-save périodique
+- [x] Auto-save périodique
 
 ### 3.4 - Block entities (tiles)
 - [ ] Chest (inventaire 27 slots)
@@ -137,11 +137,14 @@ Avancer **phase par phase**, chaque phase est **testable et fonctionnelle** avan
 - [ ] Ban list (player + IP)
 - [ ] Whitelist
 
-### 5.4 - World generation améliorée
-- [ ] Normal generator (noise-based terrain)
-- [ ] Biomes
-- [ ] Ore populator
-- [ ] Tree populator
+### 5.4 - World generation améliorée — ✅ TERMINÉE
+- [x] Normal generator (Simplex 3D noise, port PMMP)
+- [x] 11 Biomes (sélection temp/rainfall, Gaussian smoothing)
+- [x] Ground cover par biome (grass, sand, snow, gravel, dirt)
+- [x] Ore populator (8 types, veines courbes)
+- [x] Tree populator (chêne, placement par biome)
+- [x] Tall grass / short grass par biome
+- [x] Eau à Y=62
 - [ ] Caves
 - [ ] Structures basiques
 
