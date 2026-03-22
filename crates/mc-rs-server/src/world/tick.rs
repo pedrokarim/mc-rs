@@ -39,20 +39,22 @@ impl WorldState {
 
     /// Tick the world. Returns packets to broadcast to all players.
     /// Call this every server tick (10ms = 100 TPS).
-    /// Returns (set_time_packet, level_events)
+    /// World time advances every 5 server ticks to match Minecraft's 20 TPS game tick rate.
     pub fn tick(&mut self) -> Vec<WorldPacket> {
         let mut packets = Vec::new();
 
-        // Day/night cycle
-        if self.do_daylight_cycle {
+        // Day/night cycle — advance 1 game tick every 5 server ticks
+        // Server runs at 100 TPS, Minecraft game logic at 20 TPS
+        // 24000 game ticks / 20 TPS = 1200 seconds = 20 minutes (correct MC cycle)
+        self.time_broadcast_counter += 1;
+        if self.do_daylight_cycle && self.time_broadcast_counter % 5 == 0 {
             self.time += 1;
             if self.time >= 24000 {
                 self.time = 0;
             }
         }
 
-        // Broadcast time every 200 ticks (2 seconds at 100 TPS)
-        self.time_broadcast_counter += 1;
+        // Broadcast time every 200 server ticks (2 seconds)
         if self.time_broadcast_counter >= 200 {
             self.time_broadcast_counter = 0;
             packets.push(WorldPacket::SetTime(self.time));

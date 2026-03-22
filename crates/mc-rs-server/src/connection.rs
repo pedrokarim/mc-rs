@@ -821,6 +821,13 @@ impl Connection {
             &CreativeContent::encode_empty(),
         ));
 
+        // UpdateAbilities — survival mode abilities (no fly, no noclip)
+        let abilities = UpdateAbilities::default_survival(self.entity_runtime_id as i64);
+        responses.push(self.encode_compressed_packet(
+            packet_id::UPDATE_ABILITIES,
+            &abilities.encode(),
+        ));
+
         // AvailableCommands — register commands for tab-complete
         let cmd_registry = mc_rs_command::CommandRegistry::new();
         let cmd_list = cmd_registry.all_commands();

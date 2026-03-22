@@ -270,7 +270,7 @@ impl StartGame {
         Self {
             actor_unique_id: entity_id,
             actor_runtime_id: entity_id as u64,
-            player_gamemode: 1, // creative
+            player_gamemode: 0, // survival
             player_position: [0.5, -57.0, 0.5],
             pitch: 0.0,
             yaw: 0.0,
@@ -279,7 +279,7 @@ impl StartGame {
             custom_biome_name: String::new(),
             dimension: 0,  // overworld
             generator: 2,  // flat
-            world_gamemode: 1, // creative
+            world_gamemode: 0, // survival
             hardcore: false,
             difficulty: 1, // easy
             spawn_position: [0, -59, 0],

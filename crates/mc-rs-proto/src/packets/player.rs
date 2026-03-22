@@ -485,6 +485,23 @@ impl UpdateAbilities {
         w.into_bytes()
     }
 
+    pub fn default_survival(entity_id: i64) -> Self {
+        Self {
+            entity_id,
+            permission_level: 0,  // member
+            command_permission: 0, // normal
+            layers: vec![
+                AbilitiesLayer {
+                    layer_type: 1, // BASE
+                    abilities_set: 0x1BFFF,
+                    abilities_values: 0x23,  // survival: walk + attack + mine, no fly
+                    fly_speed: 0.05,
+                    walk_speed: 0.1,
+                },
+            ],
+        }
+    }
+
     pub fn default_creative(entity_id: i64) -> Self {
         Self {
             entity_id,
