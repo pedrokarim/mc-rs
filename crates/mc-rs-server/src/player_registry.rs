@@ -21,6 +21,7 @@ pub struct PlayerInfo {
     pub pitch: f32,
     pub yaw: f32,
     pub head_yaw: f32,
+    pub gamemode: i32,
 }
 
 /// Tracks all connected players.
@@ -63,6 +64,7 @@ impl PlayerRegistry {
                 pitch: 0.0,
                 yaw: 0.0,
                 head_yaw: 0.0,
+                gamemode: 0,
             },
         );
         entity_id

@@ -260,69 +260,885 @@ pub fn build_block_mapping() -> HashMap<String, u32> {
     mapping
 }
 
+/// How to place a structure vertically.
+#[derive(Clone, Copy)]
+pub enum Placement {
+    /// On the surface (Y = surface + 1)
+    Surface,
+    /// Underground at random depth
+    Underground { min_y: i32, max_y: i32 },
+    /// At a fixed Y level
+    FixedY(i32),
+    /// Underwater (on the ocean floor)
+    OceanFloor,
+}
+
 /// Structure definition: which structure, where, how rare.
 pub struct StructureDef {
     pub name: &'static str,
     pub path: &'static str,
     pub biomes: &'static [u32],
     pub chance: u32, // 1 in N chunks
+    pub placement: Placement,
 }
 
+/// Helper macro to define structures concisely.
+macro_rules! structure {
+    ($name:expr, $dir:expr, $file:expr, $biomes:expr, $chance:expr, $placement:expr) => {
+        StructureDef {
+            name: $name,
+            path: concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/data/structures/",
+                $dir,
+                "/",
+                $file
+            ),
+            biomes: $biomes,
+            chance: $chance,
+            placement: $placement,
+        }
+    };
+}
+
+// Biome lists for reuse
+const DESERT_BIOMES: &[u32] = &[biome_id::DESERT, biome_id::DESERT_HILLS];
+const DESERT_SWAMP: &[u32] = &[
+    biome_id::DESERT,
+    biome_id::DESERT_HILLS,
+    biome_id::SWAMPLAND,
+];
+const OCEAN_BIOMES: &[u32] = &[
+    biome_id::OCEAN,
+    biome_id::DEEP_OCEAN,
+    biome_id::COLD_OCEAN,
+    biome_id::DEEP_COLD_OCEAN,
+    biome_id::LUKEWARM_OCEAN,
+    biome_id::DEEP_LUKEWARM_OCEAN,
+    biome_id::WARM_OCEAN,
+    biome_id::DEEP_WARM_OCEAN,
+    biome_id::FROZEN_OCEAN,
+    biome_id::DEEP_FROZEN_OCEAN,
+];
+const WARM_OCEAN: &[u32] = &[biome_id::WARM_OCEAN, biome_id::DEEP_WARM_OCEAN];
+const ICE_BIOMES: &[u32] = &[biome_id::ICE_PLAINS, biome_id::COLD_TAIGA];
+const ALL_OVERWORLD: &[u32] = &[
+    biome_id::PLAINS,
+    biome_id::FOREST,
+    biome_id::TAIGA,
+    biome_id::DESERT,
+    biome_id::SAVANNA,
+    biome_id::JUNGLE,
+    biome_id::EXTREME_HILLS,
+    biome_id::SWAMPLAND,
+    biome_id::BIRCH_FOREST,
+    biome_id::ROOFED_FOREST,
+    biome_id::MEGA_TAIGA,
+    biome_id::COLD_TAIGA,
+    biome_id::ICE_PLAINS,
+    biome_id::BEACH,
+    biome_id::OCEAN,
+    biome_id::DEEP_OCEAN,
+    biome_id::MESA,
+];
+const PLAINS_BIOMES: &[u32] = &[
+    biome_id::PLAINS,
+    biome_id::SUNFLOWER_PLAINS,
+    biome_id::SAVANNA,
+    biome_id::TAIGA,
+    biome_id::ICE_PLAINS,
+    biome_id::DESERT,
+];
+
 /// All registered structures.
+#[allow(clippy::vec_init_then_push)]
 pub fn get_structure_defs() -> Vec<StructureDef> {
+    let ug = Placement::Underground {
+        min_y: 15,
+        max_y: 40,
+    };
+    let sf = Placement::Surface;
+    let of = Placement::OceanFloor;
+
     vec![
-        StructureDef {
-            name: "fossil_skull_01",
-            path: concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/data/structures/fossils/fossil_skull_01.nbt"
-            ),
-            biomes: &[
-                biome_id::DESERT,
-                biome_id::DESERT_HILLS,
-                biome_id::SWAMPLAND,
-            ],
-            chance: 64,
-        },
-        StructureDef {
-            name: "fossil_skull_02",
-            path: concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/data/structures/fossils/fossil_skull_02.nbt"
-            ),
-            biomes: &[
-                biome_id::DESERT,
-                biome_id::DESERT_HILLS,
-                biome_id::SWAMPLAND,
-            ],
-            chance: 64,
-        },
-        StructureDef {
-            name: "fossil_spine_01",
-            path: concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/data/structures/fossils/fossil_spine_01.nbt"
-            ),
-            biomes: &[
-                biome_id::DESERT,
-                biome_id::DESERT_HILLS,
-                biome_id::SWAMPLAND,
-            ],
-            chance: 64,
-        },
-        StructureDef {
-            name: "fossil_spine_02",
-            path: concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/data/structures/fossils/fossil_spine_02.nbt"
-            ),
-            biomes: &[
-                biome_id::DESERT,
-                biome_id::DESERT_HILLS,
-                biome_id::SWAMPLAND,
-            ],
-            chance: 64,
-        },
+        // ── Fossils (desert, swamp — underground) ──
+        structure!(
+            "fossil_skull_01",
+            "fossils",
+            "fossil_skull_01.nbt",
+            DESERT_SWAMP,
+            64,
+            ug
+        ),
+        structure!(
+            "fossil_skull_02",
+            "fossils",
+            "fossil_skull_02.nbt",
+            DESERT_SWAMP,
+            64,
+            ug
+        ),
+        structure!(
+            "fossil_skull_03",
+            "fossils",
+            "fossil_skull_03.nbt",
+            DESERT_SWAMP,
+            64,
+            ug
+        ),
+        structure!(
+            "fossil_skull_04",
+            "fossils",
+            "fossil_skull_04.nbt",
+            DESERT_SWAMP,
+            64,
+            ug
+        ),
+        structure!(
+            "fossil_spine_01",
+            "fossils",
+            "fossil_spine_01.nbt",
+            DESERT_SWAMP,
+            64,
+            ug
+        ),
+        structure!(
+            "fossil_spine_02",
+            "fossils",
+            "fossil_spine_02.nbt",
+            DESERT_SWAMP,
+            64,
+            ug
+        ),
+        structure!(
+            "fossil_spine_03",
+            "fossils",
+            "fossil_spine_03.nbt",
+            DESERT_SWAMP,
+            64,
+            ug
+        ),
+        structure!(
+            "fossil_spine_04",
+            "fossils",
+            "fossil_spine_04.nbt",
+            DESERT_SWAMP,
+            64,
+            ug
+        ),
+        // ── Ocean Ruins (ocean — ocean floor) ──
+        // Small cold ruins
+        structure!(
+            "ruin1_brick",
+            "ruin",
+            "ruin1_brick.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin1_cracked",
+            "ruin",
+            "ruin1_cracked.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin1_mossy",
+            "ruin",
+            "ruin1_mossy.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin2_brick",
+            "ruin",
+            "ruin2_brick.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin2_cracked",
+            "ruin",
+            "ruin2_cracked.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin2_mossy",
+            "ruin",
+            "ruin2_mossy.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin3_brick",
+            "ruin",
+            "ruin3_brick.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin3_cracked",
+            "ruin",
+            "ruin3_cracked.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin3_mossy",
+            "ruin",
+            "ruin3_mossy.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin4_brick",
+            "ruin",
+            "ruin4_brick.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin4_cracked",
+            "ruin",
+            "ruin4_cracked.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin4_mossy",
+            "ruin",
+            "ruin4_mossy.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin5_brick",
+            "ruin",
+            "ruin5_brick.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin5_cracked",
+            "ruin",
+            "ruin5_cracked.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin5_mossy",
+            "ruin",
+            "ruin5_mossy.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin6_brick",
+            "ruin",
+            "ruin6_brick.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin6_cracked",
+            "ruin",
+            "ruin6_cracked.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin6_mossy",
+            "ruin",
+            "ruin6_mossy.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin7_brick",
+            "ruin",
+            "ruin7_brick.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin7_cracked",
+            "ruin",
+            "ruin7_cracked.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin7_mossy",
+            "ruin",
+            "ruin7_mossy.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin8_brick",
+            "ruin",
+            "ruin8_brick.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin8_cracked",
+            "ruin",
+            "ruin8_cracked.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        structure!(
+            "ruin8_mossy",
+            "ruin",
+            "ruin8_mossy.nbt",
+            OCEAN_BIOMES,
+            24,
+            of
+        ),
+        // Big cold ruins
+        structure!(
+            "big_ruin1_brick",
+            "ruin",
+            "big_ruin1_brick.nbt",
+            OCEAN_BIOMES,
+            48,
+            of
+        ),
+        structure!(
+            "big_ruin1_cracked",
+            "ruin",
+            "big_ruin1_cracked.nbt",
+            OCEAN_BIOMES,
+            48,
+            of
+        ),
+        structure!(
+            "big_ruin1_mossy",
+            "ruin",
+            "big_ruin1_mossy.nbt",
+            OCEAN_BIOMES,
+            48,
+            of
+        ),
+        structure!(
+            "big_ruin2_brick",
+            "ruin",
+            "big_ruin2_brick.nbt",
+            OCEAN_BIOMES,
+            48,
+            of
+        ),
+        structure!(
+            "big_ruin2_cracked",
+            "ruin",
+            "big_ruin2_cracked.nbt",
+            OCEAN_BIOMES,
+            48,
+            of
+        ),
+        structure!(
+            "big_ruin2_mossy",
+            "ruin",
+            "big_ruin2_mossy.nbt",
+            OCEAN_BIOMES,
+            48,
+            of
+        ),
+        structure!(
+            "big_ruin3_brick",
+            "ruin",
+            "big_ruin3_brick.nbt",
+            OCEAN_BIOMES,
+            48,
+            of
+        ),
+        structure!(
+            "big_ruin3_cracked",
+            "ruin",
+            "big_ruin3_cracked.nbt",
+            OCEAN_BIOMES,
+            48,
+            of
+        ),
+        structure!(
+            "big_ruin3_mossy",
+            "ruin",
+            "big_ruin3_mossy.nbt",
+            OCEAN_BIOMES,
+            48,
+            of
+        ),
+        structure!(
+            "big_ruin8_brick",
+            "ruin",
+            "big_ruin8_brick.nbt",
+            OCEAN_BIOMES,
+            48,
+            of
+        ),
+        structure!(
+            "big_ruin8_cracked",
+            "ruin",
+            "big_ruin8_cracked.nbt",
+            OCEAN_BIOMES,
+            48,
+            of
+        ),
+        structure!(
+            "big_ruin8_mossy",
+            "ruin",
+            "big_ruin8_mossy.nbt",
+            OCEAN_BIOMES,
+            48,
+            of
+        ),
+        // Warm ruins
+        structure!(
+            "big_ruin_warm4",
+            "ruin",
+            "big_ruin_warm4.nbt",
+            WARM_OCEAN,
+            48,
+            of
+        ),
+        structure!(
+            "big_ruin_warm5",
+            "ruin",
+            "big_ruin_warm5.nbt",
+            WARM_OCEAN,
+            48,
+            of
+        ),
+        structure!(
+            "big_ruin_warm6",
+            "ruin",
+            "big_ruin_warm6.nbt",
+            WARM_OCEAN,
+            48,
+            of
+        ),
+        structure!(
+            "big_ruin_warm7",
+            "ruin",
+            "big_ruin_warm7.nbt",
+            WARM_OCEAN,
+            48,
+            of
+        ),
+        structure!("ruin_warm1", "ruin", "ruin_warm1.nbt", WARM_OCEAN, 24, of),
+        structure!("ruin_warm2", "ruin", "ruin_warm2.nbt", WARM_OCEAN, 24, of),
+        structure!("ruin_warm3", "ruin", "ruin_warm3.nbt", WARM_OCEAN, 24, of),
+        structure!("ruin_warm4", "ruin", "ruin_warm4.nbt", WARM_OCEAN, 24, of),
+        structure!("ruin_warm5", "ruin", "ruin_warm5.nbt", WARM_OCEAN, 24, of),
+        structure!("ruin_warm6", "ruin", "ruin_warm6.nbt", WARM_OCEAN, 24, of),
+        structure!("ruin_warm7", "ruin", "ruin_warm7.nbt", WARM_OCEAN, 24, of),
+        structure!("ruin_warm8", "ruin", "ruin_warm8.nbt", WARM_OCEAN, 24, of),
+        // ── Shipwrecks (ocean — ocean floor) ──
+        structure!(
+            "sw_full",
+            "shipwreck",
+            "swrightsideupfull.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_full_deg",
+            "shipwreck",
+            "swrightsideupfulldegraded.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_front",
+            "shipwreck",
+            "swrightsideupfronthalf.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_front_deg",
+            "shipwreck",
+            "swrightsideupfronthalfdegraded.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_back",
+            "shipwreck",
+            "swrightsideupbackhalf.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_back_deg",
+            "shipwreck",
+            "swrightsideupbackhalfdegraded.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_side_full",
+            "shipwreck",
+            "swsidewaysfull.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_side_deg",
+            "shipwreck",
+            "swsidewaysfulldegraded.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_side_front",
+            "shipwreck",
+            "swsidewaysfronthalf.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_side_front_d",
+            "shipwreck",
+            "swsidewaysfronthalfdegraded.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_side_back",
+            "shipwreck",
+            "swsidewaysbackhalf.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_side_back_d",
+            "shipwreck",
+            "swsidewaysbackhalfdegraded.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_upside_full",
+            "shipwreck",
+            "swupsidedownfull.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_upside_deg",
+            "shipwreck",
+            "swupsidedownfulldegraded.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_upside_front",
+            "shipwreck",
+            "swupsidedownfronthalf.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_upside_fd",
+            "shipwreck",
+            "swupsidedownfronthalfdegraded.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_upside_back",
+            "shipwreck",
+            "swupsidedownbackhalf.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_upside_bd",
+            "shipwreck",
+            "swupsidedownbackhalfdegraded.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_mast",
+            "shipwreck",
+            "swwithmast.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        structure!(
+            "sw_mast_deg",
+            "shipwreck",
+            "swwithmastdegraded.nbt",
+            OCEAN_BIOMES,
+            100,
+            of
+        ),
+        // ── Ruined Portals (all biomes — surface) ──
+        structure!(
+            "portal_1",
+            "ruined_portal",
+            "portal_1.nbt",
+            ALL_OVERWORLD,
+            500,
+            sf
+        ),
+        structure!(
+            "portal_2",
+            "ruined_portal",
+            "portal_2.nbt",
+            ALL_OVERWORLD,
+            500,
+            sf
+        ),
+        structure!(
+            "portal_3",
+            "ruined_portal",
+            "portal_3.nbt",
+            ALL_OVERWORLD,
+            500,
+            sf
+        ),
+        structure!(
+            "portal_4",
+            "ruined_portal",
+            "portal_4.nbt",
+            ALL_OVERWORLD,
+            500,
+            sf
+        ),
+        structure!(
+            "portal_5",
+            "ruined_portal",
+            "portal_5.nbt",
+            ALL_OVERWORLD,
+            500,
+            sf
+        ),
+        structure!(
+            "portal_6",
+            "ruined_portal",
+            "portal_6.nbt",
+            ALL_OVERWORLD,
+            500,
+            sf
+        ),
+        structure!(
+            "portal_7",
+            "ruined_portal",
+            "portal_7.nbt",
+            ALL_OVERWORLD,
+            500,
+            sf
+        ),
+        structure!(
+            "portal_8",
+            "ruined_portal",
+            "portal_8.nbt",
+            ALL_OVERWORLD,
+            500,
+            sf
+        ),
+        structure!(
+            "portal_9",
+            "ruined_portal",
+            "portal_9.nbt",
+            ALL_OVERWORLD,
+            500,
+            sf
+        ),
+        structure!(
+            "portal_10",
+            "ruined_portal",
+            "portal_10.nbt",
+            ALL_OVERWORLD,
+            500,
+            sf
+        ),
+        structure!(
+            "giant_portal_1",
+            "ruined_portal",
+            "giant_portal_1.nbt",
+            ALL_OVERWORLD,
+            1500,
+            sf
+        ),
+        structure!(
+            "giant_portal_2",
+            "ruined_portal",
+            "giant_portal_2.nbt",
+            ALL_OVERWORLD,
+            1500,
+            sf
+        ),
+        structure!(
+            "giant_portal_3",
+            "ruined_portal",
+            "giant_portal_3.nbt",
+            ALL_OVERWORLD,
+            1500,
+            sf
+        ),
+        // ── Igloos (ice biomes — surface) ──
+        structure!(
+            "igloo_top",
+            "igloo",
+            "igloo_top_trapdoor.nbt",
+            ICE_BIOMES,
+            300,
+            sf
+        ),
+        // ── Coral (warm ocean — ocean floor) ──
+        structure!(
+            "coral_crust1",
+            "coralcrust",
+            "crust1.nbt",
+            WARM_OCEAN,
+            8,
+            of
+        ),
+        structure!(
+            "coral_crust2",
+            "coralcrust",
+            "crust2.nbt",
+            WARM_OCEAN,
+            8,
+            of
+        ),
+        structure!(
+            "coral_crust3",
+            "coralcrust",
+            "crust3.nbt",
+            WARM_OCEAN,
+            8,
+            of
+        ),
+        structure!(
+            "coral_crust4",
+            "coralcrust",
+            "crust4.nbt",
+            WARM_OCEAN,
+            8,
+            of
+        ),
+        structure!(
+            "coral_crust5",
+            "coralcrust",
+            "crust5.nbt",
+            WARM_OCEAN,
+            8,
+            of
+        ),
+        structure!(
+            "coral_out1",
+            "coralcrust",
+            "outcropping1.nbt",
+            WARM_OCEAN,
+            8,
+            of
+        ),
+        structure!(
+            "coral_out2",
+            "coralcrust",
+            "outcropping2.nbt",
+            WARM_OCEAN,
+            8,
+            of
+        ),
+        structure!(
+            "coral_out3",
+            "coralcrust",
+            "outcropping3.nbt",
+            WARM_OCEAN,
+            8,
+            of
+        ),
+        structure!(
+            "coral_out4",
+            "coralcrust",
+            "outcropping4.nbt",
+            WARM_OCEAN,
+            8,
+            of
+        ),
+        structure!(
+            "coral_out5",
+            "coralcrust",
+            "outcropping5.nbt",
+            WARM_OCEAN,
+            8,
+            of
+        ),
+        structure!(
+            "coral_out6",
+            "coralcrust",
+            "outcropping6.nbt",
+            WARM_OCEAN,
+            8,
+            of
+        ),
+        // ── Pillager Outpost (plains-like — surface) ──
+        structure!(
+            "watchtower",
+            "pillageroutpost",
+            "watchtower.nbt",
+            PLAINS_BIOMES,
+            800,
+            sf
+        ),
+        structure!(
+            "watchtower_og",
+            "pillageroutpost",
+            "watchtower_overgrown.nbt",
+            PLAINS_BIOMES,
+            800,
+            sf
+        ),
     ]
 }
 
@@ -366,15 +1182,23 @@ pub fn generate_structures(
             None => continue,
         };
 
-        // Place at chunk center, at surface level
+        // Determine Y placement based on type
         let center_surface = surfaces[8][8];
-        // Structures like fossils are placed underground
-        let place_y = if def.name.contains("fossil") {
-            // Underground: random depth between 15 and 40
-            let mut rng = Random::new(hash as i64);
-            rng.next_range(15, 40)
-        } else {
-            center_surface + 1
+        let place_y = match def.placement {
+            Placement::Surface => center_surface + 1,
+            Placement::Underground { min_y, max_y } => {
+                let mut rng = Random::new(hash as i64);
+                rng.next_range(min_y, max_y)
+            }
+            Placement::FixedY(y) => y,
+            Placement::OceanFloor => {
+                // Place on the ocean floor (surface is underwater)
+                if center_surface < 60 {
+                    center_surface + 1
+                } else {
+                    continue; // Not underwater, skip
+                }
+            }
         };
 
         // Place structure blocks (centered in chunk)
