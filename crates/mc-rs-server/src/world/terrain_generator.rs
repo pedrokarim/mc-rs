@@ -39,6 +39,19 @@ pub mod extra_blocks {
     pub const DIORITE: u32 = 415;
     pub const ANDESITE: u32 = 2530;
     pub const LAVA: u32 = 5406;
+    // Vegetation
+    pub const DANDELION: u32 = 15844;
+    pub const POPPY: u32 = 5298;
+    pub const BLUE_ORCHID: u32 = 6150;
+    pub const ALLIUM: u32 = 1787;
+    pub const AZURE_BLUET: u32 = 845;
+    pub const OXEYE_DAISY: u32 = 13916;
+    pub const CORNFLOWER: u32 = 8356;
+    pub const FERN: u32 = 11669;
+    pub const TALL_GRASS: u32 = 12319;
+    pub const LARGE_FERN: u32 = 12345;
+    pub const WATERLILY: u32 = 3605;
+    pub const SEAGRASS: u32 = 1301;
 }
 
 /// Water surface level (same as PocketMine-MP).
