@@ -821,6 +821,45 @@ impl SetActorData {
     }
 }
 
+// ── InventoryContent (S→C, 0x31) ──
+
+pub struct InventoryContent;
+
+impl InventoryContent {
+    /// Encode an empty inventory for a window (all air items).
+    pub fn encode_empty(window_id: u32, slot_count: u32, container_id: u8) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(128);
+        w.write_var_u32(window_id);
+        w.write_var_u32(slot_count);
+        for _ in 0..slot_count {
+            w.write_var_i32(0); // ItemStackWrapper: air (id=0)
+        }
+        // FullContainerName
+        w.write_u8(container_id);
+        w.write_bool(false); // no dynamicId
+        // Storage item (air)
+        w.write_var_i32(0);
+        w.into_bytes()
+    }
+}
+
+// ── MobEquipment (S→C, 0x1F) ──
+
+pub struct MobEquipment;
+
+impl MobEquipment {
+    /// Encode empty hand (air item).
+    pub fn encode_empty(runtime_entity_id: u64) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(16);
+        w.write_var_u64(runtime_entity_id);
+        w.write_var_i32(0); // ItemStackWrapper: air
+        w.write_u8(0);      // inventory_slot
+        w.write_u8(0);      // hotbar_slot
+        w.write_u8(0);      // container_id (inventory)
+        w.into_bytes()
+    }
+}
+
 // ── UpdateAdventureSettings (S→C, 0x12C) ──
 
 pub struct UpdateAdventureSettings {

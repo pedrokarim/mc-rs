@@ -891,7 +891,29 @@ impl Connection {
         responses
             .push(self.encode_compressed_packet(packet_id::SET_ACTOR_DATA, &actor_data.encode()));
 
-        // 9. CraftingData (empty)
+        // 9. Inventory sync (PMMP syncAll + syncSelectedHotbarSlot)
+        // Main inventory (window 0, 36 slots)
+        responses.push(self.encode_compressed_packet(
+            packet_id::INVENTORY_CONTENT,
+            &InventoryContent::encode_empty(0, 36, 0),
+        ));
+        // Armor inventory (window 120, 4 slots)
+        responses.push(self.encode_compressed_packet(
+            packet_id::INVENTORY_CONTENT,
+            &InventoryContent::encode_empty(120, 4, 120),
+        ));
+        // Offhand (window 119, 1 slot)
+        responses.push(self.encode_compressed_packet(
+            packet_id::INVENTORY_CONTENT,
+            &InventoryContent::encode_empty(119, 1, 119),
+        ));
+        // MobEquipment (selected hotbar slot = air)
+        responses.push(self.encode_compressed_packet(
+            packet_id::MOB_EQUIPMENT,
+            &MobEquipment::encode_empty(self.entity_runtime_id),
+        ));
+
+        // 10. CraftingData (empty)
         responses.push(
             self.encode_compressed_packet(packet_id::CRAFTING_DATA, &CraftingData::encode_empty()),
         );

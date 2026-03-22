@@ -45,5 +45,8 @@ pub mod packet_id {
     pub const ITEM_REGISTRY: u32 = 0x161;
     pub const AVAILABLE_COMMANDS: u32 = 0x4C;
     pub const COMMAND_REQUEST: u32 = 0x4D;
+    pub const MOB_EQUIPMENT: u32 = 0x1F;
+    pub const INVENTORY_CONTENT: u32 = 0x31;
+    pub const INVENTORY_SLOT: u32 = 0x32;
     pub const SERVERBOUND_LOADING_SCREEN: u32 = 0x138;
 }
