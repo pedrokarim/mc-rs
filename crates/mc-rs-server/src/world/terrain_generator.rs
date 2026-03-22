@@ -37,14 +37,44 @@ const NOISE_SAMPLING_RATE_Y: usize = 8;
 /// Gaussian smooth radius for biome elevation blending.
 const SMOOTH_SIZE: usize = 2;
 
+/// World-level generator state.
+/// In PMMP, the Normal generator creates the noise + biome selector ONCE
+/// in the constructor, then reuses them for all chunks.
+/// This ensures noise continuity across chunk boundaries.
+struct GeneratorState {
+    noise_base: Simplex,
+    selector: BiomeSelector,
+    gaussian: Gaussian,
+}
+
+impl GeneratorState {
+    fn new(seed: u64) -> Self {
+        // Matches PMMP Normal::__construct:
+        // 1. Create noiseBase with initial random state
+        let mut random = Random::new(seed as i64);
+        let noise_base = Simplex::new(&mut random, 4, 0.25, 1.0 / 32.0);
+
+        // 2. Reset random to world seed, then create biome selector
+        random.set_seed(seed as i64);
+        let selector = BiomeSelector::new(&mut random);
+
+        let gaussian = Gaussian::new(SMOOTH_SIZE);
+
+        Self {
+            noise_base,
+            selector,
+            gaussian,
+        }
+    }
+}
+
 /// Generate biome data for a chunk with Gaussian-smoothed elevations.
 /// Returns (biome_ids[16][16], min_heights[16][16], max_heights[16][16]).
 #[allow(clippy::type_complexity)]
 fn generate_biomes(
     base_x: i32,
     base_z: i32,
-    selector: &BiomeSelector,
-    gaussian: &Gaussian,
+    state: &GeneratorState,
     seed: u64,
 ) -> ([[u32; 16]; 16], [[f64; 16]; 16], [[f64; 16]; 16]) {
     let padding = SMOOTH_SIZE as i32;
@@ -59,7 +89,7 @@ fn generate_biomes(
         let abs_x = base_x + x;
         for z in start..end {
             let abs_z = base_z + z;
-            let biome_id = biome::pick_biome_with_jitter(selector, abs_x, abs_z, seed);
+            let biome_id = biome::pick_biome_with_jitter(&state.selector, abs_x, abs_z, seed);
             biome_cache.insert((x, z), biome_id);
 
             match first_biome {
@@ -91,9 +121,9 @@ fn generate_biomes(
             }
         }
     } else {
-        let smooth = &gaussian.kernel_1d;
-        let weight_sum = gaussian.weight_sum_1d;
-        let ss = gaussian.smooth_size as i32;
+        let smooth = &state.gaussian.kernel_1d;
+        let weight_sum = state.gaussian.weight_sum_1d;
+        let ss = state.gaussian.smooth_size as i32;
 
         let mut min_x: HashMap<(i32, i32), f64> = HashMap::new();
         let mut max_x: HashMap<(i32, i32), f64> = HashMap::new();
@@ -179,18 +209,11 @@ pub fn get_surface_height(world_x: i32, world_z: i32, seed: u64) -> i32 {
     let local_x = world_x.rem_euclid(16) as usize;
     let local_z = world_z.rem_euclid(16) as usize;
 
-    let mut random =
-        Random::new(0xdeadbeef_i64 ^ ((chunk_x as i64) << 8) ^ chunk_z as i64 ^ seed as i64);
-    let noise_base = Simplex::new(&mut random, 4, 0.25, 1.0 / 32.0);
-
-    let mut biome_random = Random::new(seed as i64);
-    let selector = BiomeSelector::new(&mut biome_random);
-    let gaussian = Gaussian::new(SMOOTH_SIZE);
+    let state = GeneratorState::new(seed);
 
     let base_x = chunk_x * 16;
     let base_z = chunk_z * 16;
-    let (_biome_ids, min_heights, max_heights) =
-        generate_biomes(base_x, base_z, &selector, &gaussian, seed);
+    let (_biome_ids, min_heights, max_heights) = generate_biomes(base_x, base_z, &state, seed);
 
     let mut global_min = f64::MAX;
     let mut global_max = f64::MIN;
@@ -207,7 +230,7 @@ pub fn get_surface_height(world_x: i32, world_z: i32, seed: u64) -> i32 {
         (global_max / NOISE_SAMPLING_RATE_Y as f64).ceil() as i32 * NOISE_SAMPLING_RATE_Y as i32;
     let y_size = ((noise_max - noise_min) as usize).max(NOISE_SAMPLING_RATE_Y);
 
-    let noise = noise_base.get_fast_noise_3d(
+    let noise = state.noise_base.get_fast_noise_3d(
         16,
         y_size,
         16,
@@ -268,18 +291,17 @@ fn block_at(
 pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<u8>) {
     let mut payload = Vec::with_capacity(16384);
 
-    let mut random =
-        Random::new(0xdeadbeef_i64 ^ ((chunk_x as i64) << 8) ^ chunk_z as i64 ^ seed as i64);
-    let noise_base = Simplex::new(&mut random, 4, 0.25, 1.0 / 32.0);
+    // Create generator state ONCE per world seed (same noise for all chunks)
+    // This is critical: PMMP creates noiseBase in the constructor, not per chunk
+    let state = GeneratorState::new(seed);
 
-    let mut biome_random = Random::new(seed as i64);
-    let selector = BiomeSelector::new(&mut biome_random);
-    let gaussian = Gaussian::new(SMOOTH_SIZE);
+    // Per-chunk RNG for randomized elements (ore, vegetation)
+    let mut chunk_random =
+        Random::new(0xdeadbeef_i64 ^ ((chunk_x as i64) << 8) ^ chunk_z as i64 ^ seed as i64);
 
     let base_x = chunk_x * 16;
     let base_z = chunk_z * 16;
-    let (biome_ids, min_heights, max_heights) =
-        generate_biomes(base_x, base_z, &selector, &gaussian, seed);
+    let (biome_ids, min_heights, max_heights) = generate_biomes(base_x, base_z, &state, seed);
 
     let mut global_min = f64::MAX;
     let mut global_max = f64::MIN;
@@ -296,7 +318,8 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
         (global_max / NOISE_SAMPLING_RATE_Y as f64).ceil() as i32 * NOISE_SAMPLING_RATE_Y as i32;
     let y_size = ((noise_max - noise_min) as usize).max(NOISE_SAMPLING_RATE_Y);
 
-    let noise = noise_base.get_fast_noise_3d(
+    // Generate 3D noise field — uses the WORLD-SEEDED noise (continuous across chunks)
+    let noise = state.noise_base.get_fast_noise_3d(
         16,
         y_size,
         16,
@@ -312,23 +335,15 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
     let surfaces =
         compute_surface_heights(&noise, &min_heights, &max_heights, noise_min, noise_max);
 
-    // Generate ore positions (uses chunk-seeded RNG separate from terrain)
-    let mut ore_random =
-        Random::new(0xdeadbeef_i64 ^ ((chunk_x as i64) << 8) ^ chunk_z as i64 ^ seed as i64);
-    // Advance RNG past terrain noise consumption
-    for _ in 0..10 {
-        ore_random.next_int();
-    }
-    let ore_map = ore::generate_ores(chunk_x, chunk_z, &mut ore_random);
+    // Generate ore positions (uses chunk-seeded RNG)
+    let ore_map = ore::generate_ores(chunk_x, chunk_z, &mut chunk_random);
 
     // Generate vegetation (trees, tall grass)
-    let mut veg_random =
-        Random::new(0xcafebabe_i64 ^ ((chunk_x as i64) << 8) ^ chunk_z as i64 ^ seed as i64);
-    let veg_map = vegetation::generate_vegetation(&biome_ids, &surfaces, &mut veg_random);
+    let veg_map = vegetation::generate_vegetation(&biome_ids, &surfaces, &mut chunk_random);
 
     // Pre-compute ground cover per column
     let mut covers: Vec<Vec<u32>> = Vec::with_capacity(256);
-    let mut non_solid_top = [false; 256]; // whether cover[0] is non-solid (e.g., snow_layer)
+    let mut non_solid_top = [false; 256];
     for x in 0..16 {
         for z in 0..16 {
             let biome_def = biome::get_biome(biome_ids[x][z]);
@@ -339,7 +354,7 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
         }
     }
 
-    let max_block_y = global_max.max(WATER_HEIGHT as f64) as i32 + 1; // +1 for snow_layer on top
+    let max_block_y = global_max.max(WATER_HEIGHT as f64) as i32 + 1;
     let sub_chunk_count = (((max_block_y + 64) / 16) + 1).clamp(1, 24) as usize;
     let min_noise_sub_chunk = ((noise_min + 64) as f64 / 16.0).floor() as i32;
 
@@ -492,14 +507,37 @@ mod tests {
     }
 
     #[test]
+    fn test_chunk_continuity() {
+        // Test that adjacent chunks have continuous terrain at boundaries
+        let seed = 42u64;
+
+        // Get surface heights at the boundary between chunk (0,0) and (1,0)
+        // Last column of chunk (0,0) = world_x=15
+        // First column of chunk (1,0) = world_x=16
+        let h_left = get_surface_height(15, 8, seed);
+        let h_right = get_surface_height(16, 8, seed);
+
+        // Adjacent columns should be within a few blocks of each other
+        let diff = (h_left - h_right).abs();
+        assert!(
+            diff <= 5,
+            "Chunk boundary discontinuity: left={h_left}, right={h_right}, diff={diff}"
+        );
+    }
+
+    #[test]
     fn test_different_biomes_exist() {
-        let mut rng = Random::new(42);
-        let selector = BiomeSelector::new(&mut rng);
+        let state = GeneratorState::new(42);
 
         let mut biomes = std::collections::HashSet::new();
         for x in -10..10 {
             for z in -10..10 {
-                biomes.insert(biome::pick_biome_with_jitter(&selector, x * 64, z * 64, 42));
+                biomes.insert(biome::pick_biome_with_jitter(
+                    &state.selector,
+                    x * 64,
+                    z * 64,
+                    42,
+                ));
             }
         }
         assert!(
