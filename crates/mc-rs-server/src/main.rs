@@ -1,5 +1,6 @@
 mod config;
 mod connection;
+pub mod player_registry;
 mod world;
 
 use std::collections::HashMap;
@@ -11,11 +12,14 @@ use mc_rs_raknet::motd::Motd;
 use mc_rs_raknet::protocol::datagram::Reliability;
 use mc_rs_raknet::session::SessionEvent;
 use mc_rs_raknet::RakNetServer;
+use mc_rs_proto::packets::packet_id;
+use mc_rs_proto::packets::player::*;
 use tokio::time::{interval, Duration};
 use tracing::{error, info};
 
 use crate::config::ServerConfig;
 use crate::connection::Connection;
+use crate::player_registry::PlayerRegistry;
 
 #[tokio::main]
 async fn main() {
@@ -72,6 +76,7 @@ async fn main() {
     // Connection tracking
     let mut connections: HashMap<SocketAddr, Connection> = HashMap::new();
     let mut peers: HashMap<SocketAddr, mc_rs_raknet::RakNetPeer> = HashMap::new();
+    let mut registry = PlayerRegistry::new();
 
     // Session tick interval (100 TPS = 10ms)
     let mut tick_timer = interval(Duration::from_millis(10));
@@ -94,7 +99,7 @@ async fn main() {
                 }
 
                 // Process events from all peers
-                process_peer_events(&mut peers, &mut connections, &mut raknet);
+                process_peer_events(&mut peers, &mut connections, &mut raknet, &mut registry);
             }
 
             // Tick sessions periodically
@@ -102,7 +107,7 @@ async fn main() {
                 raknet.tick_sessions().await;
 
                 // Also check for events after session ticks
-                process_peer_events(&mut peers, &mut connections, &mut raknet);
+                process_peer_events(&mut peers, &mut connections, &mut raknet, &mut registry);
             }
         }
     }
@@ -112,6 +117,7 @@ fn process_peer_events(
     peers: &mut HashMap<SocketAddr, mc_rs_raknet::RakNetPeer>,
     connections: &mut HashMap<SocketAddr, Connection>,
     raknet: &mut RakNetServer,
+    registry: &mut PlayerRegistry,
 ) {
     let addrs: Vec<SocketAddr> = peers.keys().copied().collect();
     for addr in addrs {
@@ -126,46 +132,158 @@ fn process_peer_events(
                         info!("[{}] RakNet session fully connected", addr);
                     }
                     SessionEvent::Packet(data) => {
-                        if let Some(conn) = connections.get_mut(&addr) {
+                        // Extract data from connection (scoped borrow)
+                        let (responses, broadcasts, join_info) = {
+                            let Some(conn) = connections.get_mut(&addr) else { continue };
+                            let was_in_game = conn.is_in_game();
+
                             let responses = conn.handle_raw_batch(&data);
-                            for response in responses {
-                                let prepared = conn.prepare_for_send(response);
-                                raknet.send_to_session(
-                                    &addr,
-                                    prepared,
-                                    Reliability::ReliableOrdered,
-                                    true,
-                                );
+                            let responses: Vec<Vec<u8>> = responses.into_iter()
+                                .map(|r| conn.prepare_for_send(r))
+                                .collect();
+
+                            let join_info = if !was_in_game && conn.is_in_game() {
+                                Some((
+                                    conn.display_name.clone().unwrap_or_default(),
+                                    conn.uuid.map(|u| *u.as_bytes()).unwrap_or([0u8; 16]),
+                                    conn.xuid.clone().unwrap_or_default(),
+                                    conn.entity_runtime_id,
+                                    conn.position,
+                                ))
+                            } else {
+                                None
+                            };
+
+                            registry.update_position(&addr, conn.position, conn.pitch, conn.yaw, conn.head_yaw);
+
+                            let broadcasts = conn.take_broadcasts();
+
+                            (responses, broadcasts, join_info)
+                        };
+                        // Borrow of conn dropped here
+
+                        // Send responses to this player
+                        for response in responses {
+                            raknet.send_to_session(&addr, response, Reliability::ReliableOrdered, true);
+                        }
+
+                        // If player just joined, broadcast to others
+                        if let Some((name, uuid, xuid, runtime_id, position)) = join_info {
+                            let entity_id = runtime_id as i64;
+
+                            registry.players.insert(addr, crate::player_registry::PlayerInfo {
+                                addr,
+                                name: name.clone(),
+                                uuid,
+                                xuid: xuid.clone(),
+                                entity_id,
+                                position,
+                                pitch: 0.0,
+                                yaw: 0.0,
+                                head_yaw: 0.0,
+                            });
+
+                            let add_player_bytes = AddPlayer {
+                                uuid,
+                                username: name.clone(),
+                                runtime_entity_id: runtime_id,
+                                platform_chat_id: String::new(),
+                                position,
+                                velocity: [0.0, 0.0, 0.0],
+                                pitch: 0.0, yaw: 0.0, head_yaw: 0.0,
+                                gamemode: 1,
+                                entity_unique_id: entity_id,
+                                permission_level: 2,
+                                command_permission: 1,
+                            }.encode();
+
+                            let player_list_add = PlayerList {
+                                action: 0,
+                                entries: vec![PlayerListAdd {
+                                    uuid,
+                                    entity_id,
+                                    username: name.clone(),
+                                    xuid: xuid.clone(),
+                                    platform_chat_id: String::new(),
+                                    build_platform: 0,
+                                    is_teacher: false,
+                                    is_host: false,
+                                    is_subclient: false,
+                                }],
+                            }.encode();
+
+                            for (other_addr, other_conn) in connections.iter_mut() {
+                                if *other_addr != addr {
+                                    let pkt = other_conn.encode_compressed_packet(packet_id::PLAYER_LIST, &player_list_add);
+                                    let prepared = other_conn.prepare_for_send(pkt);
+                                    raknet.send_to_session(other_addr, prepared, Reliability::ReliableOrdered, true);
+
+                                    let pkt = other_conn.encode_compressed_packet(packet_id::ADD_PLAYER, &add_player_bytes);
+                                    let prepared = other_conn.prepare_for_send(pkt);
+                                    raknet.send_to_session(other_addr, prepared, Reliability::ReliableOrdered, true);
+                                }
                             }
 
-                            // Broadcast packets to ALL other connections
-                            let broadcasts = conn.take_broadcasts();
-                            if !broadcasts.is_empty() {
-                                let other_addrs: Vec<SocketAddr> = connections
-                                    .keys()
-                                    .filter(|a| **a != addr)
-                                    .copied()
-                                    .collect();
+                            info!("[{}] {} joined the game (entity_id={})", addr, name, entity_id);
+                        }
 
-                                for broadcast in &broadcasts {
-                                    // Send to all OTHER players
-                                    for &other_addr in &other_addrs {
-                                        if let Some(other_conn) = connections.get_mut(&other_addr) {
-                                            let prepared = other_conn.prepare_for_send(broadcast.clone());
-                                            raknet.send_to_session(
-                                                &other_addr,
-                                                prepared,
-                                                Reliability::ReliableOrdered,
-                                                true,
-                                            );
-                                        }
+                        // Broadcast packets to all OTHER connections
+                        if !broadcasts.is_empty() {
+                            for broadcast in &broadcasts {
+                                for (other_addr, other_conn) in connections.iter_mut() {
+                                    if *other_addr != addr {
+                                        let prepared = other_conn.prepare_for_send(broadcast.clone());
+                                        raknet.send_to_session(other_addr, prepared, Reliability::ReliableOrdered, true);
                                     }
                                 }
                             }
                         }
                     }
                     SessionEvent::Disconnected => {
-                        info!("[{}] Disconnected", addr);
+                        // Broadcast RemoveEntity + PlayerList(REMOVE) to all others
+                        if let Some(player_info) = registry.remove(&addr) {
+                            info!("[{}] {} left the game", addr, player_info.name);
+
+                            let remove_entity = RemoveEntity {
+                                entity_unique_id: player_info.entity_id,
+                            }.encode();
+
+                            let player_list_remove = PlayerList {
+                                action: 1,
+                                entries: vec![PlayerListAdd {
+                                    uuid: player_info.uuid,
+                                    entity_id: player_info.entity_id,
+                                    username: String::new(),
+                                    xuid: String::new(),
+                                    platform_chat_id: String::new(),
+                                    build_platform: 0,
+                                    is_teacher: false,
+                                    is_host: false,
+                                    is_subclient: false,
+                                }],
+                            }.encode();
+
+                            for (other_addr, other_conn) in connections.iter_mut() {
+                                if *other_addr != addr {
+                                    let pkt = other_conn.encode_compressed_packet(
+                                        packet_id::REMOVE_ACTOR,
+                                        &remove_entity,
+                                    );
+                                    let prepared = other_conn.prepare_for_send(pkt);
+                                    raknet.send_to_session(other_addr, prepared, Reliability::ReliableOrdered, true);
+
+                                    let pkt = other_conn.encode_compressed_packet(
+                                        packet_id::PLAYER_LIST,
+                                        &player_list_remove,
+                                    );
+                                    let prepared = other_conn.prepare_for_send(pkt);
+                                    raknet.send_to_session(other_addr, prepared, Reliability::ReliableOrdered, true);
+                                }
+                            }
+                        } else {
+                            info!("[{}] Disconnected", addr);
+                        }
+
                         connections.remove(&addr);
                         peers.remove(&addr);
                         break;
@@ -173,6 +291,9 @@ fn process_peer_events(
                 },
                 Err(tokio::sync::mpsc::error::TryRecvError::Empty) => break,
                 Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
+                    if let Some(player_info) = registry.remove(&addr) {
+                        info!("[{}] {} connection lost", addr, player_info.name);
+                    }
                     connections.remove(&addr);
                     peers.remove(&addr);
                     break;

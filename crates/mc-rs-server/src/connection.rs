@@ -15,6 +15,7 @@ use mc_rs_proto::packets::packet_id;
 use mc_rs_proto::packets::player::*;
 use mc_rs_proto::packets::world::*;
 
+use crate::player_registry;
 use crate::world::flat_generator;
 
 /// Connection state for a single player.
@@ -76,7 +77,7 @@ impl Connection {
             pitch: 0.0,
             yaw: 0.0,
             head_yaw: 0.0,
-            entity_runtime_id: 1,
+            entity_runtime_id: player_registry::next_entity_id() as u64,
             tick: 0,
             broadcasts: Vec::new(),
             server_keypair,
@@ -617,7 +618,7 @@ impl Connection {
         let mut responses = Vec::new();
 
         // StartGame
-        let start_game = StartGame::default_flat();
+        let start_game = StartGame::default_flat_with_id(self.entity_runtime_id as i64);
         responses.push(self.encode_compressed_packet(
             packet_id::START_GAME,
             &start_game.encode(),
@@ -685,7 +686,11 @@ impl Connection {
     }
 
     /// Encode a compressed (and optionally encrypted) packet.
-    fn encode_compressed_packet(&self, pkt_id: u32, payload: &[u8]) -> Vec<u8> {
+    pub fn is_in_game(&self) -> bool {
+        self.state == ConnectionState::InGame
+    }
+
+    pub fn encode_compressed_packet(&self, pkt_id: u32, payload: &[u8]) -> Vec<u8> {
         let pkt_bytes = codec::encode_packet(pkt_id, payload);
         let batch_payload =
             batch::encode_batch(&[pkt_bytes], self.compression_algo, 7);

@@ -248,6 +248,103 @@ fn write_empty_skin(w: &mut ProtoWriter) {
     w.write_bool(false); // override_appearance (new)
 }
 
+// ── AddPlayer (S→C, 0x0C) ──
+
+pub struct AddPlayer {
+    pub uuid: [u8; 16],
+    pub username: String,
+    pub runtime_entity_id: u64,
+    pub platform_chat_id: String,
+    pub position: [f32; 3],
+    pub velocity: [f32; 3],
+    pub pitch: f32,
+    pub yaw: f32,
+    pub head_yaw: f32,
+    pub gamemode: i32,
+    pub entity_unique_id: i64,
+    pub permission_level: u8,
+    pub command_permission: u8,
+}
+
+impl AddPlayer {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(512);
+        w.write_raw(&self.uuid);
+        w.write_string(&self.username);
+        w.write_var_u64(self.runtime_entity_id);
+        w.write_string(&self.platform_chat_id);
+        // Position
+        w.write_f32_le(self.position[0]);
+        w.write_f32_le(self.position[1]);
+        w.write_f32_le(self.position[2]);
+        // Velocity
+        w.write_f32_le(self.velocity[0]);
+        w.write_f32_le(self.velocity[1]);
+        w.write_f32_le(self.velocity[2]);
+        // Rotation
+        w.write_f32_le(self.pitch);
+        w.write_f32_le(self.yaw);
+        w.write_f32_le(self.head_yaw);
+        // Held item (air = empty)
+        w.write_var_i32(0); // runtime_id = 0 = air/empty
+        // Gamemode
+        w.write_var_i32(self.gamemode);
+        // Entity metadata (5 entries)
+        w.write_var_u32(5);
+        // FLAGS (key=0, type=7=VarLong, value=0)
+        w.write_var_u32(0);
+        w.write_var_u32(7);
+        w.write_var_i64(0);
+        // NAMETAG (key=4, type=4=String)
+        w.write_var_u32(4);
+        w.write_var_u32(4);
+        w.write_string(&self.username);
+        // SCALE (key=23/0x17, type=3=Float, value=1.0)
+        w.write_var_u32(0x17);
+        w.write_var_u32(3);
+        w.write_f32_le(1.0);
+        // BOUNDING_BOX_WIDTH (key=38/0x26, type=3=Float, value=0.6)
+        w.write_var_u32(0x26);
+        w.write_var_u32(3);
+        w.write_f32_le(0.6);
+        // BOUNDING_BOX_HEIGHT (key=39/0x27, type=3=Float, value=1.8)
+        w.write_var_u32(0x27);
+        w.write_var_u32(3);
+        w.write_f32_le(1.8);
+        // AbilityData
+        w.write_u8(self.command_permission);
+        w.write_u8(self.permission_level);
+        w.write_i64_le(self.entity_unique_id);
+        // 1 ability layer (Base)
+        w.write_var_u32(1);
+        w.write_u16_le(1); // layer type = Base
+        w.write_u32_le(0x1BFFF); // abilities set
+        w.write_u32_le(0x18063); // abilities values (creative defaults)
+        w.write_f32_le(0.05); // fly speed
+        w.write_f32_le(0.1);  // walk speed
+        // Entity links (none)
+        w.write_var_u32(0);
+        // Device ID + OS
+        w.write_string(""); // device_id
+        w.write_i32_le(0);  // device_os
+        w.into_bytes()
+    }
+}
+
+// ── RemoveEntity (S→C, 0x0E) ──
+
+pub struct RemoveEntity {
+    pub entity_unique_id: i64,
+}
+
+impl RemoveEntity {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(8);
+        w.write_var_i64(self.entity_unique_id);
+        w.into_bytes()
+    }
+}
+
 // ── UpdateAbilities (S→C, 0x12B) ──
 
 pub struct UpdateAbilities {

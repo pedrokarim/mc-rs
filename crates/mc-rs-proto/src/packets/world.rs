@@ -266,10 +266,10 @@ impl StartGame {
         w.into_bytes()
     }
 
-    pub fn default_flat() -> Self {
+    pub fn default_flat_with_id(entity_id: i64) -> Self {
         Self {
-            actor_unique_id: 1,
-            actor_runtime_id: 1,
+            actor_unique_id: entity_id,
+            actor_runtime_id: entity_id as u64,
             player_gamemode: 1, // creative
             player_position: [0.5, -57.0, 0.5],
             pitch: 0.0,
