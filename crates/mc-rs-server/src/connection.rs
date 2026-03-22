@@ -45,6 +45,17 @@ pub struct Connection {
     pub xuid: Option<String>,
     pub client_pub_key_b64: Option<String>,
 
+    // Player state
+    pub position: [f32; 3],
+    pub pitch: f32,
+    pub yaw: f32,
+    pub head_yaw: f32,
+    pub entity_runtime_id: u64,
+    pub tick: u64,
+
+    // Packets to broadcast to ALL other players
+    pub broadcasts: Vec<Vec<u8>>,
+
     // Server keypair (shared across connections)
     server_keypair: std::sync::Arc<ServerKeyPair>,
 }
@@ -61,6 +72,13 @@ impl Connection {
             uuid: None,
             xuid: None,
             client_pub_key_b64: None,
+            position: [0.5, -57.0, 0.5],
+            pitch: 0.0,
+            yaw: 0.0,
+            head_yaw: 0.0,
+            entity_runtime_id: 1,
+            tick: 0,
+            broadcasts: Vec::new(),
             server_keypair,
         }
     }
@@ -165,10 +183,20 @@ impl Connection {
             }
 
             // ── Silently ignored packets ──
+            // ── InGame ──
+            (ConnectionState::InGame, packet_id::PLAYER_AUTH_INPUT) => {
+                self.handle_player_auth_input(reader)
+            }
+            (ConnectionState::InGame, packet_id::TEXT) => {
+                self.handle_text(reader)
+            }
+
+            // ── Silently ignored ──
             (_, packet_id::EMOTE_LIST)
             | (_, packet_id::SERVERBOUND_LOADING_SCREEN)
-            | (_, packet_id::PLAYER_AUTH_INPUT)
-            | (_, 0x081) => Vec::new(), // ClientCacheStatus
+            | (ConnectionState::PreSpawn, packet_id::PLAYER_AUTH_INPUT)
+            | (ConnectionState::SpawnResponse, packet_id::PLAYER_AUTH_INPUT)
+            | (_, 0x081) => Vec::new(),
 
             _ => {
                 debug!(
@@ -423,6 +451,113 @@ impl Connection {
         );
         self.state = ConnectionState::InGame;
         Vec::new()
+    }
+
+    // ── InGame handlers ──
+
+    fn handle_player_auth_input(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
+        let Ok(pkt) = mc_rs_proto::packets::player::PlayerAuthInput::decode(reader) else {
+            return Vec::new();
+        };
+
+        // Update player position
+        self.position = pkt.position;
+        self.pitch = pkt.pitch;
+        self.yaw = pkt.yaw;
+        self.head_yaw = pkt.head_yaw;
+        self.tick += 1;
+
+        // Broadcast MovePlayer to all other players
+        let move_pkt = mc_rs_proto::packets::player::MovePlayer {
+            runtime_entity_id: self.entity_runtime_id,
+            position: self.position,
+            pitch: self.pitch,
+            yaw: self.yaw,
+            head_yaw: self.head_yaw,
+            mode: 0, // normal
+            on_ground: true,
+            riding_runtime_id: 0,
+            tick: self.tick,
+        };
+        self.broadcasts.push(self.encode_compressed_packet(
+            packet_id::MOVE_PLAYER,
+            &move_pkt.encode(),
+        ));
+
+        Vec::new() // no response to the player itself
+    }
+
+    fn handle_text(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
+        let Ok(pkt) = mc_rs_proto::packets::player::Text::decode(reader) else {
+            return Vec::new();
+        };
+
+        let player_name = self.display_name.clone().unwrap_or_else(|| "Player".to_string());
+        let xuid = self.xuid.clone().unwrap_or_default();
+
+        // Check for commands
+        if pkt.message.starts_with('/') {
+            return self.handle_command(&pkt.message);
+        }
+
+        info!("[CHAT] {}: {}", player_name, pkt.message);
+
+        // Broadcast chat to all players (including self)
+        let chat = mc_rs_proto::packets::player::Text::chat(&player_name, &pkt.message, &xuid);
+        self.broadcasts.push(self.encode_compressed_packet(
+            packet_id::TEXT,
+            &chat,
+        ));
+
+        Vec::new()
+    }
+
+    fn handle_command(&mut self, command: &str) -> Vec<Vec<u8>> {
+        let parts: Vec<&str> = command.split_whitespace().collect();
+        let cmd = parts.first().map(|s| *s).unwrap_or("");
+
+        let response = match cmd {
+            "/help" => "Commands: /help, /list, /tp <x> <y> <z>, /gamemode <0-3>, /stop".to_string(),
+            "/list" => "Use the player list to see online players.".to_string(),
+            "/tp" if parts.len() >= 4 => {
+                if let (Ok(x), Ok(y), Ok(z)) = (
+                    parts[1].parse::<f32>(),
+                    parts[2].parse::<f32>(),
+                    parts[3].parse::<f32>(),
+                ) {
+                    self.position = [x, y, z];
+                    let move_pkt = mc_rs_proto::packets::player::MovePlayer {
+                        runtime_entity_id: self.entity_runtime_id,
+                        position: self.position,
+                        pitch: self.pitch,
+                        yaw: self.yaw,
+                        head_yaw: self.head_yaw,
+                        mode: 2, // teleport
+                        on_ground: true,
+                        riding_runtime_id: 0,
+                        tick: self.tick,
+                    };
+                    let tp_response = self.encode_compressed_packet(
+                        packet_id::MOVE_PLAYER,
+                        &move_pkt.encode(),
+                    );
+                    info!("[CMD] {} teleported to {}, {}, {}", self.display_name.as_deref().unwrap_or("?"), x, y, z);
+                    return vec![tp_response];
+                }
+                "Usage: /tp <x> <y> <z>".to_string()
+            }
+            "/tp" => "Usage: /tp <x> <y> <z>".to_string(),
+            _ => format!("Unknown command: {}", cmd),
+        };
+
+        // Send system message back to player
+        let msg = mc_rs_proto::packets::player::Text::system(&response);
+        vec![self.encode_compressed_packet(packet_id::TEXT, &msg)]
+    }
+
+    /// Take broadcast packets (to be sent to ALL other players).
+    pub fn take_broadcasts(&mut self) -> Vec<Vec<u8>> {
+        std::mem::take(&mut self.broadcasts)
     }
 
     // ── Resource pack helpers ──

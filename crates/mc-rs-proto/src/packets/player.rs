@@ -1,4 +1,157 @@
-use crate::io::ProtoWriter;
+use crate::io::{ProtoReader, ProtoWriter};
+
+// ── PlayerAuthInput (C→S, 0x90) ──
+
+/// Player movement and input — decoded minimally (position + rotation only).
+pub struct PlayerAuthInput {
+    pub pitch: f32,
+    pub yaw: f32,
+    pub position: [f32; 3],
+    pub move_vec_x: f32,
+    pub move_vec_z: f32,
+    pub head_yaw: f32,
+    // inputFlags, inputMode, playMode, etc. — skipped for now
+}
+
+impl PlayerAuthInput {
+    pub fn decode(reader: &mut ProtoReader) -> Result<Self, crate::io::reader::ProtoReadError> {
+        let pitch = reader.read_f32_le()?;
+        let yaw = reader.read_f32_le()?;
+        let pos_x = reader.read_f32_le()?;
+        let pos_y = reader.read_f32_le()?;
+        let pos_z = reader.read_f32_le()?;
+        let move_vec_x = reader.read_f32_le()?;
+        let move_vec_z = reader.read_f32_le()?;
+        let head_yaw = reader.read_f32_le()?;
+        // Don't read further — remaining fields are complex and not needed yet
+        Ok(Self {
+            pitch,
+            yaw,
+            position: [pos_x, pos_y, pos_z],
+            move_vec_x,
+            move_vec_z,
+            head_yaw,
+        })
+    }
+}
+
+// ── MovePlayer (S→C, 0x13) ──
+
+pub struct MovePlayer {
+    pub runtime_entity_id: u64,
+    pub position: [f32; 3],
+    pub pitch: f32,
+    pub yaw: f32,
+    pub head_yaw: f32,
+    pub mode: u8,           // 0=normal, 1=reset, 2=teleport, 3=rotation
+    pub on_ground: bool,
+    pub riding_runtime_id: u64,
+    pub tick: u64,
+}
+
+impl MovePlayer {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(64);
+        w.write_var_u64(self.runtime_entity_id);
+        w.write_f32_le(self.position[0]);
+        w.write_f32_le(self.position[1]);
+        w.write_f32_le(self.position[2]);
+        w.write_f32_le(self.pitch);
+        w.write_f32_le(self.yaw);
+        w.write_f32_le(self.head_yaw);
+        w.write_u8(self.mode);
+        w.write_bool(self.on_ground);
+        w.write_var_u64(self.riding_runtime_id);
+        if self.mode == 2 {
+            // Teleport: cause + source entity type
+            w.write_i32_le(0); // cause = unknown
+            w.write_i32_le(0); // source entity type
+        }
+        w.write_var_u64(self.tick);
+        w.into_bytes()
+    }
+}
+
+// ── Text (Bi-directional, 0x09) ──
+
+pub struct Text {
+    pub text_type: u8,
+    pub needs_translation: bool,
+    pub source_name: String,
+    pub message: String,
+    pub xuid: String,
+    pub platform_chat_id: String,
+}
+
+impl Text {
+    /// Decode a Text packet from the client (type=1 = chat).
+    pub fn decode(reader: &mut ProtoReader) -> Result<Self, crate::io::reader::ProtoReadError> {
+        let text_type = reader.read_u8()?;
+        let needs_translation = reader.read_bool()?;
+
+        let (source_name, message) = match text_type {
+            1 | 2 | 7 => {
+                // CHAT, WHISPER, ANNOUNCEMENT — has source + message
+                let source = reader.read_string()?;
+                let msg = reader.read_string()?;
+                (source, msg)
+            }
+            0 | 6 | 8 | 9 => {
+                // RAW, JUKEBOX_POPUP, SYSTEM, OBJECT_WHISPER — message only
+                let msg = reader.read_string()?;
+                (String::new(), msg)
+            }
+            3 | 4 | 5 => {
+                // TRANSLATION, POPUP, TIP — message + params
+                let msg = reader.read_string()?;
+                let count = reader.read_var_u32()?;
+                for _ in 0..count {
+                    let _ = reader.read_string()?; // skip params
+                }
+                (String::new(), msg)
+            }
+            _ => {
+                let msg = reader.read_string()?;
+                (String::new(), msg)
+            }
+        };
+
+        let xuid = reader.read_string().unwrap_or_default();
+        let platform_chat_id = reader.read_string().unwrap_or_default();
+
+        Ok(Self {
+            text_type,
+            needs_translation,
+            source_name,
+            message,
+            xuid,
+            platform_chat_id,
+        })
+    }
+
+    /// Encode a chat message to broadcast.
+    pub fn chat(source: &str, message: &str, xuid: &str) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(128);
+        w.write_u8(1); // type = CHAT
+        w.write_bool(false); // needs_translation
+        w.write_string(source);
+        w.write_string(message);
+        w.write_string(xuid);
+        w.write_string(""); // platform_chat_id
+        w.into_bytes()
+    }
+
+    /// Encode a system message (no source name).
+    pub fn system(message: &str) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(64);
+        w.write_u8(0); // type = RAW
+        w.write_bool(false);
+        w.write_string(message);
+        w.write_string(""); // xuid
+        w.write_string(""); // platform_chat_id
+        w.into_bytes()
+    }
+}
 
 // ── PlayerList (S→C, 0x3F) ──
 

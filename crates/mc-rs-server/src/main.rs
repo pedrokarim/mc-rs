@@ -137,6 +137,31 @@ fn process_peer_events(
                                     true,
                                 );
                             }
+
+                            // Broadcast packets to ALL other connections
+                            let broadcasts = conn.take_broadcasts();
+                            if !broadcasts.is_empty() {
+                                let other_addrs: Vec<SocketAddr> = connections
+                                    .keys()
+                                    .filter(|a| **a != addr)
+                                    .copied()
+                                    .collect();
+
+                                for broadcast in &broadcasts {
+                                    // Send to all OTHER players
+                                    for &other_addr in &other_addrs {
+                                        if let Some(other_conn) = connections.get_mut(&other_addr) {
+                                            let prepared = other_conn.prepare_for_send(broadcast.clone());
+                                            raknet.send_to_session(
+                                                &other_addr,
+                                                prepared,
+                                                Reliability::ReliableOrdered,
+                                                true,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     SessionEvent::Disconnected => {
