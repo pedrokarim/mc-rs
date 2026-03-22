@@ -1,4 +1,4 @@
-# 98 - Architecture Rust Cible
+# 98 - Architecture Rust (État actuel)
 
 ## Workspace Cargo
 
@@ -7,59 +7,35 @@ mc-rs/
 ├── Cargo.toml                    (workspace)
 ├── server.toml                   (config serveur)
 ├── crates/
-│   ├── mc-rs-server/             → Exécutable principal + boucle de jeu
-│   ├── mc-rs-proto/              → Protocole MCPE (paquets, sérialisation)
-│   ├── mc-rs-raknet/             → Transport RakNet sur UDP
-│   ├── mc-rs-network/            → Session réseau, state machine, encryption
-│   ├── mc-rs-crypto/             → AES-256-CTR, ECDSA P-384, JWT
-│   ├── mc-rs-nbt/                → Named Binary Tag (Network LE)
-│   ├── mc-rs-world/              → Mondes, chunks, LevelDB, génération
-│   ├── mc-rs-block/              → Blocs, états, registre, tiles
-│   ├── mc-rs-entity/             → Entités, Living, Human, Player
-│   ├── mc-rs-item/               → Items, durabilité, enchantements
-│   ├── mc-rs-inventory/          → Inventaires, transactions
-│   ├── mc-rs-crafting/           → Recettes, crafting grid
-│   ├── mc-rs-command/            → Commandes, dispatch, autocomplete
-│   ├── mc-rs-event/              → Système d'événements
-│   ├── mc-rs-plugin-api/         → API publique pour les plugins
-│   ├── mc-rs-plugin-lua/         → Loader de plugins Lua
-│   └── mc-rs-game/               → Game logic (permissions, chat, etc.)
-├── data/
-│   ├── biome_definitions.nbt     → Blobs NBT statiques
-│   ├── entity_identifiers.nbt
-│   ├── canonical_block_states.nbt
-│   ├── creative_items.json
-│   └── recipes/                  → Recettes JSON
-├── plugins/                      → Dossier plugins
-├── worlds/                       → Données de monde (LevelDB)
-└── .reference/                   → Code source PocketMine (gitignored)
+│   ├── mc-rs-server/             → Exécutable principal + boucle de jeu + state machine
+│   │   └── data/
+│   │       └── entity_identifiers.nbt  → NBT blob de PMMP
+│   ├── mc-rs-proto/              → Protocole MCPE (paquets, binary IO, batch codec)
+│   ├── mc-rs-raknet/             → Transport RakNet (UDP, sessions, reliability)
+│   ├── mc-rs-crypto/             → AES-256-CTR fakeGCM, ECDSA P-384, JWT
+│   └── mc-rs-command/            → Registre de commandes, dispatch, actions
+├── old_crates/                   → Ancien code (référence uniquement, NE PAS UTILISER)
+├── .reference/                   → Code source PocketMine-MP (gitignored)
+│   └── PocketMine-MP/            → Source PHP de référence
+└── new-docs/                     → Documentation
 ```
 
-## Dépendances entre crates
+## Dépendances entre crates (état actuel)
 
 ```
 mc-rs-server
-├── mc-rs-network
-│   ├── mc-rs-proto
-│   │   ├── mc-rs-nbt
-│   │   └── mc-rs-crypto (JWT parsing)
-│   ├── mc-rs-raknet
-│   └── mc-rs-crypto (AES, ECDSA)
-├── mc-rs-world
-│   ├── mc-rs-nbt
-│   └── mc-rs-block
-├── mc-rs-entity
-│   ├── mc-rs-item
-│   └── mc-rs-inventory
-├── mc-rs-game
-│   ├── mc-rs-command
-│   ├── mc-rs-crafting
-│   └── mc-rs-event
-├── mc-rs-plugin-api
-│   └── mc-rs-event
-└── mc-rs-plugin-lua
-    └── mc-rs-plugin-api
+├── mc-rs-proto        (packets, binary IO, batch codec)
+├── mc-rs-raknet       (UDP, sessions, reliability layers)
+├── mc-rs-crypto       (AES-256-CTR, ECDSA P-384, JWT)
+└── mc-rs-command      (commandes, dispatch, actions)
 ```
+
+## Crates futurs (à créer quand nécessaire)
+
+- `mc-rs-nbt` — NBT library (LE disk + Network VarInt)
+- `mc-rs-world` — Chunks, LevelDB persistence, génération terrain
+- `mc-rs-entity` — Système d'entités, mobs, AI
+- `mc-rs-inventory` — Inventaires, transactions, crafting
 
 ## Dépendances externes (crates.io)
 

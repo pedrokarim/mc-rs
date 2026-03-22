@@ -6,85 +6,34 @@ Avancer **phase par phase**, chaque phase est **testable et fonctionnelle** avan
 
 ---
 
-## Phase 1 : Foundation (réseau + login)
+## Phase 1 : Foundation (réseau + login) — ✅ TERMINÉE
 
 **Objectif :** Un client peut se connecter, voir le serveur dans la liste, et arriver au monde.
 
-### 1.1 - RakNet (`mc-rs-raknet`)
-- [ ] Socket UDP (tokio)
-- [ ] UnconnectedPing / UnconnectedPong (server list)
-- [ ] OpenConnectionRequest/Reply 1 & 2
-- [ ] ConnectionRequest / ConnectionRequestAccepted
-- [ ] Datagrams + EncapsulatedPacket
-- [ ] ACK / NACK
-- [ ] Reliability layers (reliable, ordered)
-- [ ] Split packet reassembly
-- [ ] ConnectedPing / ConnectedPong
+- [x] RakNet complet (UDP, sessions, reliability, ACK/NACK, split reassembly)
+- [x] Protocol base (VarInt, batch codec zlib/snappy, packet header)
+- [x] State machine (SessionStart → Login → Handshake → ResourcePacks → PreSpawn → InGame)
+- [x] Login Xbox Live (JWT parsing, ECDH P-384, AES-256-CTR fakeGCM)
+- [x] PreSpawn (StartGame, BiomeDefinitionList, ActorIdentifiers, CraftingData, CreativeContent)
+- [x] Flat world chunks (bedrock + dirt + grass, paletted sub-chunks)
+- [x] Le client se connecte et voit le monde plat !
 
-### 1.2 - Protocol base (`mc-rs-proto`)
-- [ ] Types de base : VarInt, VarUInt, String, Vec3, BlockPos, UUID
-- [ ] NBT Network LE (`mc-rs-nbt`)
-- [ ] Trait Packet + encode/decode
-- [ ] Batch compression/décompression (zlib)
-- [ ] Paquets login : RequestNetworkSettings, NetworkSettings, Login, PlayStatus
-- [ ] Paquets handshake : ServerToClientHandshake, ClientToServerHandshake
+## Phase 2 : Player basics — ✅ EN COURS
 
-### 1.3 - Network session (`mc-rs-network`)
-- [ ] State machine (SessionStart → Login → Handshake → ResourcePacks → PreSpawn → InGame)
-- [ ] SessionStartHandler (RequestNetworkSettings → NetworkSettings)
-- [ ] LoginHandler (Login → validation → ServerToClientHandshake)
-- [ ] JWT parsing (pas de validation Xbox pour l'instant, mode offline)
-- [ ] HandshakeHandler (encryption AES-256-CTR)
-- [ ] ResourcePacksHandler (envoyer liste vide → client accepte)
+**Objectif :** Le joueur peut se déplacer, voir les autres joueurs, et chatter.
 
-### 1.4 - PreSpawn minimal
-- [ ] StartGamePacket (minimal, hardcodé)
-- [ ] BiomeDefinitionListPacket (blob NBT)
-- [ ] AvailableActorIdentifiersPacket (blob NBT)
-- [ ] CreativeContentPacket (vide)
-- [ ] CraftingDataPacket (vide)
-- [ ] PlayStatusPacket (PLAYER_SPAWN)
-- [ ] RequestChunkRadius / ChunkRadiusUpdated
-
-### 1.5 - Chunks minimaux
-- [ ] Flat generator (bedrock + dirt + grass)
-- [ ] LevelChunkPacket (sub-chunks palettés)
-- [ ] Envoyer les chunks autour du spawn
-- [ ] Le client peut voir le monde !
-
-**Résultat Phase 1 :** Le joueur se connecte, voit un monde plat, mais ne peut rien faire.
-
----
-
-## Phase 2 : Player basics
-
-**Objectif :** Le joueur peut se déplacer, voir les autres joueurs, et avoir un inventaire basique.
-
-### 2.1 - Mouvement
-- [ ] PlayerAuthInputPacket (recevoir)
-- [ ] MovePlayerPacket (broadcast aux autres)
-- [ ] Validation de position (anti-fly basique)
-- [ ] Chunk loading/unloading basé sur la position du joueur
-
-### 2.2 - Multi-joueurs
-- [ ] PlayerListPacket (add/remove)
-- [ ] AddPlayerPacket (spawn d'un autre joueur)
-- [ ] RemoveActorPacket (despawn)
-- [ ] SetEntityDataPacket (métadonnées joueur)
-
-### 2.3 - Inventaire basique
-- [ ] PlayerInventory (36 slots)
-- [ ] ArmorInventory (4 slots)
-- [ ] InventoryContentPacket (envoyer l'inventaire)
-- [ ] ItemStackRequest / ItemStackResponse basique
-
-### 2.4 - Chat & commandes basiques
-- [ ] TextPacket (chat)
-- [ ] CommandRequestPacket
-- [ ] Commandes : /help, /list, /stop, /gamemode
-- [ ] AvailableCommandsPacket
-
-**Résultat Phase 2 :** Multi-joueurs fonctionnel, déplacement, chat, commandes basiques.
+- [x] PlayerAuthInput (mouvement, position, rotation)
+- [x] MovePlayer broadcast aux autres joueurs
+- [x] TextPacket (chat bidirectionnel, format category PMMP)
+- [x] CommandRequest handler (commandes via /)
+- [x] AvailableCommands (tab-complete)
+- [x] Player registry (entity ID unique par joueur)
+- [x] AddPlayer / RemoveEntity packets
+- [x] PlayerList sync (ADD/REMOVE)
+- [x] Crate mc-rs-command (11 commandes : help, list, tp, gamemode, say, time, kill, stop, seed, ping, difficulty)
+- [ ] Chunk loading dynamique (envoi de chunks au déplacement)
+- [ ] Inventaire basique
+- [ ] Validation mouvement (anti-cheat)
 
 ---
 
