@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 ///
 /// ```text
 /// aes_key = SHA256(salt + shared_secret)    // 32 bytes
-/// iv      = aes_key[0..16]                  // first 16 bytes
+/// iv      = aes_key[0..12] + 0x00000002     // fakeGCM IV (GCM counter starts at 2)
 /// ```
 pub fn derive_key(salt: &[u8; 16], shared_secret: &[u8]) -> ([u8; 32], [u8; 16]) {
     let mut hasher = Sha256::new();
@@ -17,8 +17,15 @@ pub fn derive_key(salt: &[u8; 16], shared_secret: &[u8]) -> ([u8; 32], [u8; 16])
     let mut aes_key = [0u8; 32];
     aes_key.copy_from_slice(&hash);
 
+    // fakeGCM IV: first 12 bytes of key + 0x00000002
+    // The 0x02 emulates GCM's internal counter starting at 2
+    // (counter 1 is used for auth tag generation, which we skip)
     let mut iv = [0u8; 16];
-    iv.copy_from_slice(&aes_key[..16]);
+    iv[..12].copy_from_slice(&aes_key[..12]);
+    iv[12] = 0x00;
+    iv[13] = 0x00;
+    iv[14] = 0x00;
+    iv[15] = 0x02;
 
     (aes_key, iv)
 }
@@ -40,12 +47,17 @@ mod tests {
     }
 
     #[test]
-    fn iv_is_first_16_bytes_of_key() {
+    fn iv_is_fakegcm_format() {
         let salt = [0x01u8; 16];
         let shared = [0x02u8; 48];
 
         let (key, iv) = derive_key(&salt, &shared);
-        assert_eq!(&key[..16], &iv);
+        // IV = key[0..12] + 0x00000002
+        assert_eq!(&iv[..12], &key[..12]);
+        assert_eq!(iv[12], 0x00);
+        assert_eq!(iv[13], 0x00);
+        assert_eq!(iv[14], 0x00);
+        assert_eq!(iv[15], 0x02);
     }
 
     #[test]

@@ -6,6 +6,9 @@ members = [
     "crates/mc-rs-crypto",
     "crates/mc-rs-server",
 ]
+exclude = [
+    "old_crates",
+]
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
