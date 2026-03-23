@@ -17,6 +17,7 @@ use mc_rs_proto::packets::packet_id;
 use mc_rs_proto::packets::player::*;
 use mc_rs_proto::packets::world::*;
 
+use crate::config::ConnectionConfig;
 use crate::inventory::PlayerInventory;
 use crate::player_data;
 use crate::player_registry;
@@ -81,6 +82,9 @@ pub struct Connection {
 
     // Shared chunk cache (world persistence)
     chunk_cache: Arc<Mutex<ChunkCache>>,
+
+    // Server config subset for this connection
+    config: Arc<ConnectionConfig>,
 }
 
 impl Connection {
@@ -88,6 +92,7 @@ impl Connection {
         addr: SocketAddr,
         server_keypair: std::sync::Arc<ServerKeyPair>,
         chunk_cache: Arc<Mutex<ChunkCache>>,
+        config: Arc<ConnectionConfig>,
     ) -> Self {
         Self {
             addr,
@@ -111,9 +116,9 @@ impl Connection {
             head_yaw: 0.0,
             entity_runtime_id: player_registry::next_entity_id() as u64,
             tick: 0,
-            gamemode: 0, // survival by default
+            gamemode: config.default_gamemode,
             sent_chunks: HashSet::new(),
-            view_distance: 8,
+            view_distance: config.max_view_distance,
             last_chunk_x: 0,
             last_chunk_z: 0,
             broadcasts: Vec::new(),
@@ -121,6 +126,7 @@ impl Connection {
             inventory: PlayerInventory::new(),
             server_keypair,
             chunk_cache,
+            config,
         }
     }
 
@@ -452,7 +458,7 @@ impl Connection {
 
     fn handle_request_chunk_radius(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
         let radius = reader.read_var_i32().unwrap_or(4);
-        let clamped = radius.clamp(2, 16);
+        let clamped = radius.clamp(2, self.config.max_view_distance);
         self.view_distance = clamped;
         info!(
             "[{}] RequestChunkRadius: {} (responding with {})",
@@ -1171,8 +1177,9 @@ impl Connection {
                 self.broadcasts
                     .push(self.encode_compressed_packet(packet_id::TEXT, &chat));
             }
-            mc_rs_command::CommandAction::SetGamemode { .. } => {
-                // TODO: implement gamemode switching
+            mc_rs_command::CommandAction::SetGamemode { mode } => {
+                let pkts = self.apply_gamemode(*mode);
+                responses.extend(pkts);
             }
             mc_rs_command::CommandAction::SetTime { .. }
             | mc_rs_command::CommandAction::SetWeather { .. }
@@ -1193,8 +1200,11 @@ impl Connection {
     }
 
     /// Change the player's gamemode (PMMP syncGameMode flow).
-    /// Sends: SetPlayerGameType + UpdateAbilities + UpdateAdventureSettings
+    /// Sends: SetPlayerGameType + UpdateAbilities + UpdateAdventureSettings + SetActorData
+    /// For spectator: broadcasts RemoveEntity to other players.
+    /// When leaving spectator: broadcasts AddPlayer to other players.
     fn apply_gamemode(&mut self, mode: i32) -> Vec<Vec<u8>> {
+        let old_mode = self.gamemode;
         self.gamemode = mode;
         let mut responses = Vec::new();
 
@@ -1205,11 +1215,11 @@ impl Connection {
             self.encode_compressed_packet(packet_id::SET_PLAYER_GAME_TYPE, gt_writer.as_bytes()),
         );
 
-        // 2. UpdateAbilities — survival vs creative flags
-        let abilities = if mode == 1 {
-            UpdateAbilities::default_creative(self.entity_runtime_id as i64)
-        } else {
-            UpdateAbilities::default_survival(self.entity_runtime_id as i64)
+        // 2. UpdateAbilities — per-gamemode
+        let abilities = match mode {
+            1 => UpdateAbilities::default_creative(self.entity_runtime_id as i64),
+            3 => UpdateAbilities::default_spectator(self.entity_runtime_id as i64),
+            _ => UpdateAbilities::default_survival(self.entity_runtime_id as i64),
         };
         responses
             .push(self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities.encode()));
@@ -1222,6 +1232,48 @@ impl Connection {
                 &adventure.encode(),
             ),
         );
+
+        // 4. SetActorData — update collision/silent flags for spectator
+        let player_name = self.display_name.clone().unwrap_or_default();
+        let actor_data = if mode == 3 {
+            SetActorData::player_spectator(self.entity_runtime_id, &player_name)
+        } else {
+            SetActorData::player_in_game(self.entity_runtime_id, &player_name)
+        };
+        responses
+            .push(self.encode_compressed_packet(packet_id::SET_ACTOR_DATA, &actor_data.encode()));
+
+        // 5. Broadcast despawn/respawn to other players
+        if mode == 3 && old_mode != 3 {
+            // Entering spectator → despawn from others
+            let remove = RemoveEntity {
+                entity_unique_id: self.entity_runtime_id as i64,
+            }
+            .encode();
+            self.broadcasts
+                .push(self.encode_compressed_packet(packet_id::REMOVE_ACTOR, &remove));
+        } else if mode != 3 && old_mode == 3 {
+            // Leaving spectator → respawn to others
+            let uuid = self.uuid.map(|u| *u.as_bytes()).unwrap_or([0u8; 16]);
+            let add = AddPlayer {
+                uuid,
+                username: player_name.clone(),
+                runtime_entity_id: self.entity_runtime_id,
+                platform_chat_id: String::new(),
+                position: self.position,
+                velocity: [0.0, 0.0, 0.0],
+                pitch: self.pitch,
+                yaw: self.yaw,
+                head_yaw: self.head_yaw,
+                gamemode: mode,
+                entity_unique_id: self.entity_runtime_id as i64,
+                permission_level: 1,
+                command_permission: 0,
+            }
+            .encode();
+            self.broadcasts
+                .push(self.encode_compressed_packet(packet_id::ADD_PLAYER, &add));
+        }
 
         info!(
             "[{}] Gamemode changed to {} for {}",
@@ -1292,6 +1344,10 @@ impl Connection {
         let mut start_game =
             StartGame::default_with_id(self.entity_runtime_id as i64, self.position);
         start_game.player_gamemode = self.gamemode;
+        start_game.world_gamemode = self.config.default_gamemode;
+        start_game.difficulty = self.config.difficulty;
+        start_game.world_name = self.config.world_name.clone();
+        start_game.generator = self.config.generator_id;
         responses.push(self.encode_compressed_packet(packet_id::START_GAME, &start_game.encode()));
 
         // ItemRegistry (empty) — test if this crashes

@@ -902,6 +902,45 @@ impl UpdateAbilities {
             }],
         }
     }
+
+    /// Spectator mode abilities — fly, noclip, no interactions (PMMP syncAbilities)
+    pub fn default_spectator(entity_id: i64) -> Self {
+        let set = ability::ALL;
+        // Spectator: fly + noclip + invulnerable, NO build/mine/attack
+        let values = ability::ALLOW_FLIGHT
+            | ability::FLYING
+            | ability::INVULNERABLE
+            | ability::NO_CLIP
+            | ability::FLY_SPEED
+            | ability::WALK_SPEED;
+
+        Self {
+            entity_id,
+            permission_level: 1,   // MEMBER
+            command_permission: 0, // NORMAL
+            layers: vec![
+                // BASE layer
+                AbilitiesLayer {
+                    layer_type: 1, // BASE
+                    abilities_set: set,
+                    abilities_values: values,
+                    fly_speed: 0.05,
+                    vertical_fly_speed: 1.0,
+                    walk_speed: 0.1,
+                },
+                // SPECTATOR layer — PMMP hack: forces FLYING=true so client
+                // doesn't fall when clipping into blocks
+                AbilitiesLayer {
+                    layer_type: 2, // SPECTATOR
+                    abilities_set: ability::FLYING,
+                    abilities_values: ability::FLYING,
+                    fly_speed: 0.0,
+                    vertical_fly_speed: 0.0,
+                    walk_speed: 0.0,
+                },
+            ],
+        }
+    }
 }
 
 // ── UpdateAttributes (S→C, 0x1D) ──
@@ -1039,20 +1078,22 @@ pub enum MetadataValue {
 
 /// Entity metadata flag bits (from PMMP EntityMetadataFlags.php)
 #[allow(dead_code)]
+/// Entity metadata flag bits (from PMMP EntityMetadataFlags.php)
 pub mod entity_flags {
     pub const ONFIRE: i64 = 1 << 0;
     pub const SNEAKING: i64 = 1 << 1;
     pub const RIDING: i64 = 1 << 2;
     pub const SPRINTING: i64 = 1 << 3;
     pub const USING_ITEM: i64 = 1 << 4;
-    pub const CAN_SHOW_NAMETAG: i64 = 1 << 5;
-    pub const ALWAYS_SHOW_NAMETAG: i64 = 1 << 6;
+    pub const INVISIBLE: i64 = 1 << 5; // PMMP INVISIBLE = 5
+    pub const CAN_SHOW_NAMETAG: i64 = 1 << 14; // PMMP = 14 (was wrongly at bit 5!)
     pub const NO_AI: i64 = 1 << 16; // aka IMMOBILE — disables client physics
+    pub const SILENT: i64 = 1 << 17; // no footstep/ambient sounds
     pub const CAN_CLIMB: i64 = 1 << 19;
     pub const CAN_FLY: i64 = 1 << 21;
     pub const BREATHING: i64 = 1 << 35; // NOT in water
     pub const HAS_COLLISION: i64 = 1 << 48;
-    pub const HAS_GRAVITY: i64 = 1 << 49; // AFFECTED_BY_GRAVITY (PMMP bit 49, NOT 47!)
+    pub const HAS_GRAVITY: i64 = 1 << 49; // AFFECTED_BY_GRAVITY
 }
 
 impl SetActorData {
@@ -1111,9 +1152,29 @@ impl SetActorData {
             metadata: vec![
                 (0, 7, MetadataValue::Long(flags)),
                 (4, 4, MetadataValue::String(name.to_string())),
-                (38, 3, MetadataValue::Float(1.0)), // SCALE (PMMP EntityMetadataProperties::SCALE = 38)
-                (53, 3, MetadataValue::Float(0.6)), // BOUNDING_BOX_WIDTH (PMMP = 53)
-                (54, 3, MetadataValue::Float(1.8)), // BOUNDING_BOX_HEIGHT (PMMP = 54)
+                (38, 3, MetadataValue::Float(1.0)), // SCALE
+                (53, 3, MetadataValue::Float(0.6)), // BOUNDING_BOX_WIDTH
+                (54, 3, MetadataValue::Float(1.8)), // BOUNDING_BOX_HEIGHT
+            ],
+            tick: 0,
+        }
+    }
+
+    /// Player metadata for spectator mode (no collision, silent, flying)
+    pub fn player_spectator(runtime_entity_id: u64, name: &str) -> Self {
+        let flags = entity_flags::CAN_SHOW_NAMETAG
+            | entity_flags::BREATHING
+            | entity_flags::HAS_GRAVITY
+            | entity_flags::SILENT; // no footstep sounds
+                                    // HAS_COLLISION is NOT set — noclip through blocks
+        Self {
+            runtime_entity_id,
+            metadata: vec![
+                (0, 7, MetadataValue::Long(flags)),
+                (4, 4, MetadataValue::String(name.to_string())),
+                (38, 3, MetadataValue::Float(1.0)), // SCALE
+                (53, 3, MetadataValue::Float(0.6)), // BOUNDING_BOX_WIDTH
+                (54, 3, MetadataValue::Float(1.8)), // BOUNDING_BOX_HEIGHT
             ],
             tick: 0,
         }

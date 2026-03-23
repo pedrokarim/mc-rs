@@ -49,8 +49,11 @@ pub mod packet_id {
     pub const INVENTORY_CONTENT: u32 = 0x31;
     pub const INVENTORY_SLOT: u32 = 0x32;
     pub const LEVEL_EVENT: u32 = 0x19;
+    pub const INTERACT: u32 = 0x21;
     pub const LEVEL_SOUND_EVENT: u32 = 0x7B;
     pub const ANIMATE: u32 = 0x2C;
+    pub const CONTAINER_OPEN: u32 = 0x2E;
+    pub const CONTAINER_CLOSE: u32 = 0x2F;
     pub const ITEM_STACK_RESPONSE: u32 = 0x94;
     pub const SERVERBOUND_LOADING_SCREEN: u32 = 0x138;
 }

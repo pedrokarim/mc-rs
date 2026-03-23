@@ -154,7 +154,7 @@ pub fn deserialize_sub_chunk_data(data: &[u8]) -> Option<(SubChunk, usize)> {
     let air_id = super::flat_generator::block_ids::AIR;
     let mut blocks = [air_id; 4096];
 
-    for _ in 0..storage_count {
+    if storage_count > 0 {
         let header = reader.read_u8().ok()?;
         let bits_per_block = header >> 1;
 
@@ -199,7 +199,6 @@ pub fn deserialize_sub_chunk_data(data: &[u8]) -> Option<(SubChunk, usize)> {
             }
         }
         // Only use the first storage layer (main blocks)
-        break;
     }
 
     Some((SubChunk { blocks }, reader.position()))

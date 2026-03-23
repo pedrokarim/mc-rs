@@ -1,0 +1,55 @@
+# ══════════════════════════════════════════════════
+#         MC-RS Server Configuration
+# ══════════════════════════════════════════════════
+
+[server]
+# Message affiché dans la liste des serveurs
+motd = "MC-RS Server"
+
+# Sous-titre du serveur (deuxième ligne dans la liste)
+sub_motd = "Powered by Rust"
+
+# Port UDP d'écoute
+port = 19132
+
+# Nombre maximum de joueurs simultanés
+max_players = 20
+
+# Authentification Xbox Live (true = online, false = cracké)
+online_mode = false
+
+# Distance de vue maximale en chunks (2-32)
+# Le client peut demander moins, mais jamais plus
+view_distance = 8
+
+# Intervalle de tick serveur en millisecondes (10 = 100 TPS)
+tick_rate = 10
+
+[world]
+# Nom du dossier monde (stocké dans worlds/<name>/)
+name = "world"
+
+# Générateur de terrain : "normal" ou "flat"
+generator = "normal"
+
+# Seed du monde (0 = aléatoire). Même seed = même terrain.
+seed = 0
+
+[gameplay]
+# Mode de jeu par défaut : "survival", "creative", "adventure", "spectator"
+gamemode = "creative"
+
+# Difficulté : "peaceful", "easy", "normal", "hard"
+difficulty = "normal"
+
+# Activer le PvP entre joueurs
+pvp = true
+
+# Activer le cycle jour/nuit (journées de 20 minutes)
+do_daylight_cycle = true
+
+# Activer les changements de météo (pluie, orage)
+do_weather_cycle = false
+
+# Rayon de protection du spawn en blocs (0 = désactivé)
+spawn_protection = 16

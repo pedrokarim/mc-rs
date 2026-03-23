@@ -578,6 +578,56 @@ impl SetSpawnPosition {
     }
 }
 
+// ── ContainerOpen (S→C, 0x2E) ──
+
+pub struct ContainerOpen {
+    pub window_id: u8,
+    pub window_type: u8, // -1 (0xFF) = player inventory
+    pub position: [i32; 3],
+    pub actor_unique_id: i64,
+}
+
+impl ContainerOpen {
+    /// Open the player's own inventory.
+    pub fn player_inventory(actor_unique_id: i64) -> Self {
+        Self {
+            window_id: 0,      // HARDCODED_INVENTORY_WINDOW_ID
+            window_type: 0xFF, // WindowTypes::INVENTORY = -1 as u8
+            position: [0, 0, 0],
+            actor_unique_id,
+        }
+    }
+
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(16);
+        w.write_u8(self.window_id);
+        w.write_u8(self.window_type);
+        w.write_var_i32(self.position[0]);
+        w.write_var_u32(self.position[1] as u32);
+        w.write_var_i32(self.position[2]);
+        w.write_var_i64(self.actor_unique_id);
+        w.into_bytes()
+    }
+}
+
+// ── ContainerClose (S→C / C→S, 0x2F) ──
+
+pub struct ContainerClose {
+    pub window_id: u8,
+    pub window_type: u8,
+    pub server: bool,
+}
+
+impl ContainerClose {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(4);
+        w.write_u8(self.window_id);
+        w.write_u8(self.window_type);
+        w.write_bool(self.server);
+        w.into_bytes()
+    }
+}
+
 // ── LevelEvent (S→C, 0x19) ──
 
 pub struct LevelEvent {
@@ -643,6 +693,85 @@ impl LevelSoundEvent {
         w.write_bool(self.disable_relative_volume);
         w.write_i64_le(self.actor_unique_id);
         w.into_bytes()
+    }
+}
+
+// ── ItemStackResponse (S→C, 0x94) ──
+
+pub struct ItemStackResponseSlot {
+    pub slot: u8,
+    pub hotbar_slot: u8,
+    pub count: u8,
+    pub stack_id: i32,
+    pub custom_name: String,
+    pub filtered_custom_name: String,
+    pub durability_correction: i32,
+}
+
+pub struct ItemStackResponseContainer {
+    pub container_id: u8,
+    pub slots: Vec<ItemStackResponseSlot>,
+}
+
+pub struct ItemStackResponseEntry {
+    pub result: u8, // 0 = OK, 1+ = error
+    pub request_id: i32,
+    pub containers: Vec<ItemStackResponseContainer>,
+}
+
+pub struct ItemStackResponse {
+    pub entries: Vec<ItemStackResponseEntry>,
+}
+
+impl ItemStackResponse {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(128);
+        w.write_var_u32(self.entries.len() as u32);
+        for entry in &self.entries {
+            w.write_u8(entry.result);
+            w.write_var_i32(entry.request_id);
+            if entry.result == 0 {
+                w.write_var_u32(entry.containers.len() as u32);
+                for container in &entry.containers {
+                    // FullContainerName
+                    w.write_u8(container.container_id);
+                    w.write_bool(false); // no dynamic ID
+                    w.write_var_u32(container.slots.len() as u32);
+                    for slot in &container.slots {
+                        w.write_u8(slot.slot);
+                        w.write_u8(slot.hotbar_slot);
+                        w.write_u8(slot.count);
+                        w.write_var_i32(slot.stack_id);
+                        w.write_string(&slot.custom_name);
+                        w.write_string(&slot.filtered_custom_name);
+                        w.write_var_i32(slot.durability_correction);
+                    }
+                }
+            }
+        }
+        w.into_bytes()
+    }
+
+    /// Create a simple OK response for a request.
+    pub fn ok(request_id: i32, containers: Vec<ItemStackResponseContainer>) -> Self {
+        Self {
+            entries: vec![ItemStackResponseEntry {
+                result: 0,
+                request_id,
+                containers,
+            }],
+        }
+    }
+
+    /// Create an error response for a request.
+    pub fn error(request_id: i32) -> Self {
+        Self {
+            entries: vec![ItemStackResponseEntry {
+                result: 2, // generic error
+                request_id,
+                containers: Vec::new(),
+            }],
+        }
     }
 }
 

@@ -41,11 +41,12 @@ pub struct ChunkCache {
     dirty: HashSet<(i32, i32)>,
     storage: Option<WorldStorage>,
     seed: u64,
+    generator: String,
 }
 
 impl ChunkCache {
     /// Create a new chunk cache backed by LevelDB storage.
-    pub fn new(world_dir: &Path, seed: u64) -> Self {
+    pub fn new(world_dir: &Path, seed: u64, generator: &str) -> Self {
         let storage = match WorldStorage::open(world_dir) {
             Ok(s) => {
                 info!("World storage opened at {:?}", world_dir);
@@ -62,6 +63,7 @@ impl ChunkCache {
             dirty: HashSet::new(),
             storage,
             seed,
+            generator: generator.to_lowercase(),
         }
     }
 
@@ -131,9 +133,12 @@ impl ChunkCache {
         };
 
         let column = loaded.unwrap_or_else(|| {
-            // Generate new chunk
-            let (sub_count, payload) =
-                terrain_generator::generate_terrain_chunk(cx, cz, self.seed);
+            // Generate new chunk using the configured generator
+            let (sub_count, payload) = if self.generator == "flat" {
+                super::flat_generator::generate_flat_chunk()
+            } else {
+                terrain_generator::generate_terrain_chunk(cx, cz, self.seed)
+            };
 
             let (sub_chunks, biome_data) =
                 chunk_serializer::parse_chunk_payload(&payload, sub_count, block_ids::AIR);
@@ -160,7 +165,7 @@ impl ChunkCache {
         let local_y_offset = world_y + 64;
         let local_z = world_z.rem_euclid(16) as usize;
 
-        if local_y_offset < 0 || local_y_offset >= 384 {
+        if !(0..384).contains(&local_y_offset) {
             return block_ids::AIR;
         }
 
@@ -186,7 +191,7 @@ impl ChunkCache {
         let local_y_offset = world_y + 64;
         let local_z = world_z.rem_euclid(16) as usize;
 
-        if local_y_offset < 0 || local_y_offset >= 384 {
+        if !(0..384).contains(&local_y_offset) {
             return;
         }
 

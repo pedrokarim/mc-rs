@@ -3,6 +3,8 @@ mod config;
 #[allow(dead_code)]
 mod connection;
 #[allow(dead_code)]
+pub mod inventory;
+#[allow(dead_code)]
 pub mod player_data;
 #[allow(dead_code)]
 pub mod player_registry;
@@ -43,10 +45,7 @@ async fn main() {
 
     // Load config
     let config = ServerConfig::load("server.toml");
-    info!(
-        "Config: port={}, motd={}",
-        config.server.port, config.server.motd
-    );
+    let conn_config = config.connection_config();
 
     // Generate server keypair (reused across all connections)
     let server_keypair = Arc::new(ServerKeyPair::generate());
@@ -64,7 +63,7 @@ async fn main() {
         max_players: config.server.max_players,
         server_guid,
         world_name: config.world.name.clone(),
-        gamemode: "Survival".to_string(),
+        gamemode: config.gameplay.gamemode_display().to_string(),
     };
 
     // Bind RakNet server
@@ -93,6 +92,7 @@ async fn main() {
     let chunk_cache = std::sync::Arc::new(std::sync::Mutex::new(ChunkCache::new(
         &world_dir,
         config.world.seed as u64,
+        &config.world.generator,
     )));
     let mut auto_save_counter: u32 = 0;
 
@@ -138,7 +138,7 @@ async fn main() {
                 while let Some(peer) = raknet.accept() {
                     let addr = peer.addr;
                     info!("New peer: {}", addr);
-                    let conn = Connection::new(addr, Arc::clone(&server_keypair), Arc::clone(&chunk_cache));
+                    let conn = Connection::new(addr, Arc::clone(&server_keypair), Arc::clone(&chunk_cache), Arc::clone(&conn_config));
                     connections.insert(addr, conn);
                     peers.insert(addr, peer);
                 }
@@ -262,6 +262,8 @@ fn process_peer_events(
                         if let Some((name, uuid, xuid, runtime_id, position)) = join_info {
                             let entity_id = runtime_id as i64;
 
+                            let player_gamemode =
+                                connections.get(&addr).map(|c| c.gamemode).unwrap_or(0);
                             registry.players.insert(
                                 addr,
                                 crate::player_registry::PlayerInfo {
@@ -274,6 +276,7 @@ fn process_peer_events(
                                     pitch: 0.0,
                                     yaw: 0.0,
                                     head_yaw: 0.0,
+                                    gamemode: player_gamemode,
                                 },
                             );
 
@@ -287,10 +290,10 @@ fn process_peer_events(
                                 pitch: 0.0,
                                 yaw: 0.0,
                                 head_yaw: 0.0,
-                                gamemode: 1,
+                                gamemode: player_gamemode,
                                 entity_unique_id: entity_id,
-                                permission_level: 2,
-                                command_permission: 1,
+                                permission_level: 1,   // MEMBER
+                                command_permission: 0, // NORMAL
                             }
                             .encode();
 
@@ -310,8 +313,10 @@ fn process_peer_events(
                             }
                             .encode();
 
+                            // Don't broadcast AddPlayer for spectators (they're invisible)
                             for (other_addr, other_conn) in connections.iter_mut() {
                                 if *other_addr != addr {
+                                    // Always send PlayerList (needed for tab list)
                                     let pkt = other_conn.encode_compressed_packet(
                                         packet_id::PLAYER_LIST,
                                         &player_list_add,
@@ -324,17 +329,20 @@ fn process_peer_events(
                                         true,
                                     );
 
-                                    let pkt = other_conn.encode_compressed_packet(
-                                        packet_id::ADD_PLAYER,
-                                        &add_player_bytes,
-                                    );
-                                    let prepared = other_conn.prepare_for_send(pkt);
-                                    raknet.send_to_session(
-                                        other_addr,
-                                        prepared,
-                                        Reliability::ReliableOrdered,
-                                        true,
-                                    );
+                                    // Only send AddPlayer if NOT spectator
+                                    if player_gamemode != 3 {
+                                        let pkt = other_conn.encode_compressed_packet(
+                                            packet_id::ADD_PLAYER,
+                                            &add_player_bytes,
+                                        );
+                                        let prepared = other_conn.prepare_for_send(pkt);
+                                        raknet.send_to_session(
+                                            other_addr,
+                                            prepared,
+                                            Reliability::ReliableOrdered,
+                                            true,
+                                        );
+                                    }
                                 }
                             }
 
@@ -407,7 +415,7 @@ fn process_peer_events(
                                         conn.position[2] as f64,
                                     ],
                                     rotation: [conn.yaw, conn.pitch],
-                                    gamemode: 0,
+                                    gamemode: conn.gamemode,
                                     health: 20.0,
                                     hunger: 20.0,
                                 };

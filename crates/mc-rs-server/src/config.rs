@@ -1,5 +1,64 @@
 use serde::Deserialize;
+use std::sync::Arc;
 use tracing::info;
+
+/// Default server.toml content with comments explaining each option.
+const DEFAULT_CONFIG_TOML: &str = r#"# ══════════════════════════════════════════════════
+#         MC-RS Server Configuration
+# ══════════════════════════════════════════════════
+
+[server]
+# Message affiché dans la liste des serveurs
+motd = "MC-RS Server"
+
+# Sous-titre du serveur (deuxième ligne dans la liste)
+sub_motd = "Powered by Rust"
+
+# Port UDP d'écoute
+port = 19132
+
+# Nombre maximum de joueurs simultanés
+max_players = 20
+
+# Authentification Xbox Live (true = online, false = cracké)
+online_mode = false
+
+# Distance de vue maximale en chunks (2-32)
+# Le client peut demander moins, mais jamais plus
+view_distance = 8
+
+# Intervalle de tick serveur en millisecondes (10 = 100 TPS)
+tick_rate = 10
+
+[world]
+# Nom du dossier monde (stocké dans worlds/<name>/)
+name = "world"
+
+# Générateur de terrain : "normal" ou "flat"
+generator = "normal"
+
+# Seed du monde (0 = aléatoire). Même seed = même terrain.
+seed = 0
+
+[gameplay]
+# Mode de jeu par défaut : "survival", "creative", "adventure", "spectator"
+gamemode = "creative"
+
+# Difficulté : "peaceful", "easy", "normal", "hard"
+difficulty = "normal"
+
+# Activer le PvP entre joueurs
+pvp = true
+
+# Activer le cycle jour/nuit (journées de 20 minutes)
+do_daylight_cycle = true
+
+# Activer les changements de météo (pluie, orage)
+do_weather_cycle = false
+
+# Rayon de protection du spawn en blocs (0 = désactivé)
+spawn_protection = 16
+"#;
 
 #[derive(Debug, Deserialize)]
 pub struct ServerConfig {
@@ -55,6 +114,16 @@ pub struct GameplaySection {
     pub spawn_protection: i32,
 }
 
+/// Subset of config values needed by each Connection.
+#[derive(Debug, Clone)]
+pub struct ConnectionConfig {
+    pub default_gamemode: i32,
+    pub difficulty: i32,
+    pub world_name: String,
+    pub max_view_distance: i32,
+    pub generator_id: i32, // 1=infinite, 2=flat for StartGame
+}
+
 fn default_server() -> ServerSection {
     ServerSection {
         motd: default_motd(),
@@ -89,7 +158,7 @@ fn default_world_name() -> String {
     "world".to_string()
 }
 fn default_generator() -> String {
-    "flat".to_string()
+    "normal".to_string()
 }
 fn default_gamemode() -> String {
     "creative".to_string()
@@ -148,6 +217,16 @@ impl GameplaySection {
         }
     }
 
+    pub fn gamemode_display(&self) -> &str {
+        match self.gamemode.to_lowercase().as_str() {
+            "survival" | "0" => "Survival",
+            "creative" | "1" => "Creative",
+            "adventure" | "2" => "Adventure",
+            "spectator" | "3" => "Spectator",
+            _ => "Creative",
+        }
+    }
+
     pub fn difficulty_id(&self) -> i32 {
         match self.difficulty.to_lowercase().as_str() {
             "peaceful" | "0" => 0,
@@ -161,15 +240,53 @@ impl GameplaySection {
 
 impl ServerConfig {
     pub fn load(path: &str) -> Self {
+        // Auto-generate default config if missing
+        if !std::path::Path::new(path).exists() {
+            if let Err(e) = std::fs::write(path, DEFAULT_CONFIG_TOML) {
+                info!("Could not write default {}: {}", path, e);
+            } else {
+                info!("Generated default {}", path);
+            }
+        }
+
         match std::fs::read_to_string(path) {
             Ok(content) => {
                 let config: Self = toml::from_str(&content).unwrap_or_default();
+                info!(
+                    "Config loaded from {}\n  Server: {}:{} (max {} players)\n  World: \"{}\" ({}, seed={})\n  Gameplay: {}, {}, daylight={}, weather={}",
+                    path,
+                    config.server.motd,
+                    config.server.port,
+                    config.server.max_players,
+                    config.world.name,
+                    config.world.generator,
+                    config.world.seed,
+                    config.gameplay.gamemode,
+                    config.gameplay.difficulty,
+                    if config.gameplay.do_daylight_cycle { "on" } else { "off" },
+                    if config.gameplay.do_weather_cycle { "on" } else { "off" },
+                );
                 config
             }
-            Err(_) => {
-                info!("No {} found, using defaults", path);
+            Err(e) => {
+                info!("Could not read {}: {}, using defaults", path, e);
                 Self::default()
             }
         }
+    }
+
+    /// Build a ConnectionConfig from the full server config.
+    pub fn connection_config(&self) -> Arc<ConnectionConfig> {
+        Arc::new(ConnectionConfig {
+            default_gamemode: self.gameplay.gamemode_id(),
+            difficulty: self.gameplay.difficulty_id(),
+            world_name: self.world.name.clone(),
+            max_view_distance: self.server.view_distance,
+            generator_id: match self.world.generator.to_lowercase().as_str() {
+                "normal" => 1, // infinite
+                "flat" => 2,   // flat
+                _ => 2,
+            },
+        })
     }
 }
