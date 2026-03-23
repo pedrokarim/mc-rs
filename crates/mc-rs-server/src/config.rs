@@ -122,6 +122,7 @@ pub struct ConnectionConfig {
     pub world_name: String,
     pub max_view_distance: i32,
     pub generator_id: i32, // 1=infinite, 2=flat for StartGame
+    pub world_seed: u64,
 }
 
 fn default_server() -> ServerSection {
@@ -287,6 +288,7 @@ impl ServerConfig {
                 "flat" => 2,   // flat
                 _ => 2,
             },
+            world_seed: self.world.seed as u64,
         })
     }
 }

@@ -704,12 +704,13 @@ mod tests {
         let state = GeneratorState::new(42);
 
         let mut biomes = std::collections::HashSet::new();
-        for x in -10..10 {
-            for z in -10..10 {
+        // With larger biomes (1/16384 expansion), need wider search area
+        for x in -50..50 {
+            for z in -50..50 {
                 biomes.insert(biome::pick_biome_with_jitter(
                     &state.selector,
-                    x * 64,
-                    z * 64,
+                    x * 256,
+                    z * 256,
                     42,
                 ));
             }

@@ -95,6 +95,7 @@ async fn main() {
         &config.world.generator,
     )));
     let mut auto_save_counter: u32 = 0;
+    let mut server_tick: u64 = 0;
 
     // Session tick interval (100 TPS = 10ms)
     let mut tick_timer = interval(Duration::from_millis(config.server.tick_rate));
@@ -167,6 +168,18 @@ async fn main() {
                                     raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, false);
                                 }
                             }
+                        }
+                    }
+                }
+
+                // Tick-based chunk sending (rate limited, spiral order)
+                server_tick += 1;
+                for (addr, conn) in connections.iter_mut() {
+                    if conn.is_in_game() {
+                        let chunk_responses = conn.send_queued_chunks(server_tick);
+                        for resp in chunk_responses {
+                            let prepared = conn.prepare_for_send(resp);
+                            raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, false);
                         }
                     }
                 }

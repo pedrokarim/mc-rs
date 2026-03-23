@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
@@ -67,6 +67,10 @@ pub struct Connection {
     pub view_distance: i32,
     pub last_chunk_x: i32,
     pub last_chunk_z: i32,
+    /// Queue of chunks to send, ordered by distance (nearest first).
+    pub chunk_load_queue: VecDeque<(i32, i32)>,
+    /// Tick at which to reorder chunks. u64::MAX = don't reorder.
+    pub next_chunk_order_tick: u64,
 
     // Packets to broadcast to ALL other players
     pub broadcasts: Vec<Vec<u8>>,
@@ -105,10 +109,12 @@ impl Connection {
             xuid: None,
             client_pub_key_b64: None,
             position: {
-                // Calculate spawn height from terrain
-                let surface_y = terrain_generator::get_surface_height(0, 0, 42) as f32;
-                let feet_y = surface_y + 1.0; // 1 block above surface
-                let eye_y = feet_y + 1.621; // PMMP eye offset
+                // PMMP-style safe spawn: find highest solid block, then 2 air blocks above
+                let seed = config.world_seed;
+                let surface_y = terrain_generator::get_surface_height(0, 0, seed);
+                // Place feet 1 block above surface, eyes at feet + 1.621
+                let feet_y = (surface_y + 1) as f32;
+                let eye_y = feet_y + 1.621;
                 [0.5, eye_y, 0.5]
             },
             pitch: 0.0,
@@ -121,6 +127,8 @@ impl Connection {
             view_distance: config.max_view_distance,
             last_chunk_x: 0,
             last_chunk_z: 0,
+            chunk_load_queue: VecDeque::new(),
+            next_chunk_order_tick: u64::MAX,
             broadcasts: Vec::new(),
             pending_actions: Vec::new(),
             inventory: PlayerInventory::new(),
@@ -128,6 +136,99 @@ impl Connection {
             chunk_cache,
             config,
         }
+    }
+
+    /// Reorder the chunk load queue: spiral from player position, unload distant chunks.
+    /// Called when the player changes chunk or periodically.
+    pub fn order_chunks(&mut self) {
+        self.chunk_load_queue.clear();
+        let cx = self.last_chunk_x;
+        let cz = self.last_chunk_z;
+        let r = self.view_distance;
+        let r_sq = r * r;
+
+        // Collect all chunks in circular view distance, sorted by distance
+        let mut candidates: Vec<(i32, i32, i32)> = Vec::new();
+        for dx in -r..=r {
+            for dz in -r..=r {
+                let dist_sq = dx * dx + dz * dz;
+                if dist_sq <= r_sq {
+                    let chunk = (cx + dx, cz + dz);
+                    if !self.sent_chunks.contains(&chunk) {
+                        candidates.push((cx + dx, cz + dz, dist_sq));
+                    }
+                }
+            }
+        }
+
+        // Sort by distance (nearest first = spiral-like)
+        candidates.sort_by_key(|&(_, _, d)| d);
+
+        for (x, z, _) in candidates {
+            self.chunk_load_queue.push_back((x, z));
+        }
+
+        // Unload chunks outside view distance (+2 margin)
+        let unload_r_sq = (r + 2) * (r + 2);
+        let old: Vec<(i32, i32)> = self
+            .sent_chunks
+            .iter()
+            .filter(|&&(sx, sz)| {
+                let dx = sx - cx;
+                let dz = sz - cz;
+                dx * dx + dz * dz > unload_r_sq
+            })
+            .copied()
+            .collect();
+        for chunk in old {
+            self.sent_chunks.remove(&chunk);
+        }
+    }
+
+    /// Send up to CHUNKS_PER_TICK chunks from the queue.
+    /// Called from the main tick loop, not from packet handlers.
+    /// Returns response packets to send to this player.
+    pub fn send_queued_chunks(&mut self, current_tick: u64) -> Vec<Vec<u8>> {
+        const CHUNKS_PER_TICK: usize = 8;
+
+        // Check if we need to reorder
+        if current_tick >= self.next_chunk_order_tick {
+            self.order_chunks();
+            self.next_chunk_order_tick = u64::MAX;
+        }
+
+        let mut responses = Vec::new();
+        let mut sent = 0;
+
+        while sent < CHUNKS_PER_TICK {
+            let Some((cx, cz)) = self.chunk_load_queue.pop_front() else {
+                break;
+            };
+            if self.sent_chunks.contains(&(cx, cz)) {
+                continue;
+            }
+
+            let (sub_count, payload) = {
+                let mut cache = self.chunk_cache.lock().unwrap();
+                let col = cache.get_chunk_mut(cx, cz);
+                (col.sub_chunk_count, col.get_network_payload().to_vec())
+            };
+
+            let chunk_pkt = LevelChunk {
+                chunk_x: cx,
+                chunk_z: cz,
+                dimension_id: 0,
+                sub_chunk_count: sub_count,
+                cache_enabled: false,
+                payload,
+            };
+            responses
+                .push(self.encode_compressed_packet(packet_id::LEVEL_CHUNK, &chunk_pkt.encode()));
+            self.sent_chunks.insert((cx, cz));
+            sent += 1;
+        }
+
+        responses
     }
 
     /// Handle a raw game packet (0xFE batch) from RakNet.
@@ -486,31 +587,40 @@ impl Connection {
             &publisher.encode(),
         ));
 
-        // Send flat chunks around spawn and track them
+        // Send initial chunks around spawn using spiral order (nearest first)
         let spawn_chunk_x = spawn_x >> 4;
         let spawn_chunk_z = spawn_z >> 4;
         self.last_chunk_x = spawn_chunk_x;
         self.last_chunk_z = spawn_chunk_z;
 
-        for cx in (spawn_chunk_x - clamped)..=(spawn_chunk_x + clamped) {
-            for cz in (spawn_chunk_z - clamped)..=(spawn_chunk_z + clamped) {
-                let (sub_chunk_count, chunk_payload) = {
-                    let mut cache = self.chunk_cache.lock().unwrap();
-                    let col = cache.get_chunk_mut(cx, cz);
-                    (col.sub_chunk_count, col.get_network_payload().to_vec())
-                };
-                let chunk = LevelChunk {
-                    chunk_x: cx,
-                    chunk_z: cz,
-                    dimension_id: 0,
-                    sub_chunk_count,
-                    cache_enabled: false,
-                    payload: chunk_payload,
-                };
-                responses
-                    .push(self.encode_compressed_packet(packet_id::LEVEL_CHUNK, &chunk.encode()));
-                self.sent_chunks.insert((cx, cz));
+        // Build spiral-ordered list of spawn chunks
+        let mut spawn_chunks: Vec<(i32, i32, i32)> = Vec::new();
+        for dx in -clamped..=clamped {
+            for dz in -clamped..=clamped {
+                let dist_sq = dx * dx + dz * dz;
+                if dist_sq <= clamped * clamped {
+                    spawn_chunks.push((spawn_chunk_x + dx, spawn_chunk_z + dz, dist_sq));
+                }
             }
+        }
+        spawn_chunks.sort_by_key(|&(_, _, d)| d);
+
+        for (cx, cz, _) in &spawn_chunks {
+            let (sub_chunk_count, chunk_payload) = {
+                let mut cache = self.chunk_cache.lock().unwrap();
+                let col = cache.get_chunk_mut(*cx, *cz);
+                (col.sub_chunk_count, col.get_network_payload().to_vec())
+            };
+            let chunk = LevelChunk {
+                chunk_x: *cx,
+                chunk_z: *cz,
+                dimension_id: 0,
+                sub_chunk_count,
+                cache_enabled: false,
+                payload: chunk_payload,
+            };
+            responses.push(self.encode_compressed_packet(packet_id::LEVEL_CHUNK, &chunk.encode()));
+            self.sent_chunks.insert((*cx, *cz));
         }
         info!(
             "[{}] Sent {} chunks (radius={})",
@@ -636,7 +746,7 @@ impl Connection {
         self.broadcasts
             .push(self.encode_compressed_packet(packet_id::MOVE_PLAYER, &move_pkt.encode()));
 
-        // Check if player moved to a new chunk — send new chunks dynamically
+        // Check if player moved to a new chunk — queue chunks for tick-based sending
         let mut responses = Vec::new();
         let chunk_x = (self.position[0] as i32) >> 4;
         let chunk_z = (self.position[2] as i32) >> 4;
@@ -659,123 +769,148 @@ impl Connection {
                 &ncpu.encode(),
             ));
 
-            // Send missing chunks in view distance
-            let mut new_chunks = 0;
-            for dx in -self.view_distance..=self.view_distance {
-                for dz in -self.view_distance..=self.view_distance {
-                    let cx = chunk_x + dx;
-                    let cz = chunk_z + dz;
-                    if !self.sent_chunks.contains(&(cx, cz)) {
-                        let (sub_count, payload) = {
-                            let mut cache = self.chunk_cache.lock().unwrap();
-                            let col = cache.get_chunk_mut(cx, cz);
-                            (col.sub_chunk_count, col.get_network_payload().to_vec())
-                        };
-                        let chunk_pkt = LevelChunk {
-                            chunk_x: cx,
-                            chunk_z: cz,
-                            dimension_id: 0,
-                            sub_chunk_count: sub_count,
-                            cache_enabled: false,
-                            payload,
-                        };
-                        responses.push(
-                            self.encode_compressed_packet(
-                                packet_id::LEVEL_CHUNK,
-                                &chunk_pkt.encode(),
-                            ),
-                        );
-                        self.sent_chunks.insert((cx, cz));
-                        new_chunks += 1;
-                    }
-                }
-            }
-
-            if new_chunks > 0 {
-                debug!(
-                    "[{}] Sent {} new chunks around ({}, {})",
-                    self.addr, new_chunks, chunk_x, chunk_z
-                );
-            }
+            // Trigger chunk reorder on next tick (don't send chunks here!)
+            self.next_chunk_order_tick = 0;
         }
 
         // Handle block actions (breaking/placing)
         for action in &pkt.block_actions {
-            // PREDICT_DESTROY_BLOCK (26) or CREATIVE_PLAYER_DESTROY_BLOCK
-            if action.action_type == 26 {
-                let air_id = flat_generator::block_ids::AIR;
-                let bx = action.position[0];
-                let by = action.position[1];
-                let bz = action.position[2];
+            let bx = action.position[0];
+            let by = action.position[1];
+            let bz = action.position[2];
+            let block_center = [bx as f32 + 0.5, by as f32 + 0.5, bz as f32 + 0.5];
 
-                // Get the old block ID and set to air
-                let old_block_id = if let Ok(mut cache) = self.chunk_cache.lock() {
-                    let old = cache.get_block(bx, by, bz);
-                    cache.set_block(bx, by, bz, air_id);
-                    old
-                } else {
-                    air_id
-                };
-
-                // Send UpdateBlock
-                let update = UpdateBlock {
-                    position: action.position,
-                    runtime_id: air_id,
-                    flags: 3, // FLAG_NEIGHBORS | FLAG_NETWORK
-                    layer: 0,
-                };
-                let update_bytes =
-                    self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &update.encode());
-                responses.push(update_bytes.clone());
-                self.broadcasts.push(update_bytes);
-
-                // Send block destroy particles
-                let block_center = [bx as f32 + 0.5, by as f32 + 0.5, bz as f32 + 0.5];
-                if old_block_id != air_id {
-                    let level_event = LevelEvent {
-                        event_id: LevelEvent::PARTICLE_DESTROY,
-                        position: block_center,
-                        event_data: old_block_id as i32,
+            match action.action_type {
+                // START_BREAK (0) or CONTINUE_DESTROY_BLOCK (27)
+                0 | 27 => {
+                    // Calculate break speed — simplified: 1.0 / (break_time_seconds * 20)
+                    // Default hardness for most blocks: ~1.5s with hand = 30 ticks
+                    let break_speed: f32 = {
+                        let block_id = if let Ok(mut cache) = self.chunk_cache.lock() {
+                            cache.get_block(bx, by, bz)
+                        } else {
+                            0
+                        };
+                        // Simple break speed based on block type
+                        match block_id {
+                            13079 => 0.0,         // bedrock — unbreakable
+                            12421 | 11669 => 1.0, // short grass/tall grass — instant
+                            _ => 1.0 / 30.0,      // default ~1.5s with hand
+                        }
                     };
-                    let event_bytes = self
-                        .encode_compressed_packet(packet_id::LEVEL_EVENT, &level_event.encode());
+
+                    let event = LevelEvent {
+                        event_id: LevelEvent::BLOCK_START_BREAK,
+                        position: block_center,
+                        event_data: (65535.0 * break_speed) as i32,
+                    };
+                    let event_bytes =
+                        self.encode_compressed_packet(packet_id::LEVEL_EVENT, &event.encode());
                     responses.push(event_bytes.clone());
                     self.broadcasts.push(event_bytes);
-
-                    // Send block break sound
-                    let sound = LevelSoundEvent::block_sound(
-                        LevelSoundEvent::BREAK,
-                        block_center,
-                        old_block_id as i32,
-                    );
-                    let sound_bytes = self
-                        .encode_compressed_packet(packet_id::LEVEL_SOUND_EVENT, &sound.encode());
-                    responses.push(sound_bytes.clone());
-                    self.broadcasts.push(sound_bytes);
                 }
 
-                // Add block drop to inventory
-                if old_block_id != air_id {
-                    if let Some(drop_item) = crate::inventory::block_drop(old_block_id) {
-                        if let Some(slot) = self.inventory.add_item(drop_item) {
-                            // Send inventory slot update
-                            let slot_pkt = InventorySlot::encode(
-                                0,
-                                slot as u32,
-                                &self.inventory.slots[slot],
-                                0,
-                            );
-                            responses.push(
-                                self.encode_compressed_packet(packet_id::INVENTORY_SLOT, &slot_pkt),
-                            );
+                // ABORT_BREAK (1) or STOP_BREAK (2)
+                1 | 2 => {
+                    let event = LevelEvent {
+                        event_id: LevelEvent::BLOCK_STOP_BREAK,
+                        position: block_center,
+                        event_data: 0,
+                    };
+                    let event_bytes =
+                        self.encode_compressed_packet(packet_id::LEVEL_EVENT, &event.encode());
+                    responses.push(event_bytes.clone());
+                    self.broadcasts.push(event_bytes);
+                }
+
+                // PREDICT_DESTROY_BLOCK (26)
+                26 => {
+                    let air_id = flat_generator::block_ids::AIR;
+
+                    // Send BLOCK_STOP_BREAK to clear crack animation
+                    let stop_event = LevelEvent {
+                        event_id: LevelEvent::BLOCK_STOP_BREAK,
+                        position: block_center,
+                        event_data: 0,
+                    };
+                    let stop_bytes =
+                        self.encode_compressed_packet(packet_id::LEVEL_EVENT, &stop_event.encode());
+                    responses.push(stop_bytes.clone());
+                    self.broadcasts.push(stop_bytes);
+
+                    // Get the old block ID and set to air
+                    let old_block_id = if let Ok(mut cache) = self.chunk_cache.lock() {
+                        let old = cache.get_block(bx, by, bz);
+                        cache.set_block(bx, by, bz, air_id);
+                        old
+                    } else {
+                        air_id
+                    };
+
+                    // Send UpdateBlock
+                    let update = UpdateBlock {
+                        position: action.position,
+                        runtime_id: air_id,
+                        flags: 3, // FLAG_NEIGHBORS | FLAG_NETWORK
+                        layer: 0,
+                    };
+                    let update_bytes =
+                        self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &update.encode());
+                    responses.push(update_bytes.clone());
+                    self.broadcasts.push(update_bytes);
+
+                    // Send block destroy particles + sound
+                    if old_block_id != air_id {
+                        let level_event = LevelEvent {
+                            event_id: LevelEvent::PARTICLE_DESTROY,
+                            position: block_center,
+                            event_data: old_block_id as i32,
+                        };
+                        let event_bytes = self.encode_compressed_packet(
+                            packet_id::LEVEL_EVENT,
+                            &level_event.encode(),
+                        );
+                        responses.push(event_bytes.clone());
+                        self.broadcasts.push(event_bytes);
+
+                        let sound = LevelSoundEvent::block_sound(
+                            LevelSoundEvent::BREAK,
+                            block_center,
+                            old_block_id as i32,
+                        );
+                        let sound_bytes = self.encode_compressed_packet(
+                            packet_id::LEVEL_SOUND_EVENT,
+                            &sound.encode(),
+                        );
+                        responses.push(sound_bytes.clone());
+                        self.broadcasts.push(sound_bytes);
+                    }
+
+                    // Add block drop to inventory
+                    if old_block_id != air_id {
+                        if let Some(drop_item) = crate::inventory::block_drop(old_block_id) {
+                            if let Some(slot) = self.inventory.add_item(drop_item) {
+                                let slot_pkt = InventorySlot::encode(
+                                    0,
+                                    slot as u32,
+                                    &self.inventory.slots[slot],
+                                    0,
+                                );
+                                responses.push(self.encode_compressed_packet(
+                                    packet_id::INVENTORY_SLOT,
+                                    &slot_pkt,
+                                ));
+                            }
                         }
                     }
+
+                    info!(
+                        "[{}] Block broken at ({}, {}, {}) old_id={}",
+                        self.addr, bx, by, bz, old_block_id
+                    );
                 }
 
-                info!(
-                    "[{}] Block broken at ({}, {}, {}) old_id={}",
-                    self.addr, bx, by, bz, old_block_id
-                );
+                _ => {}
             }
         }
 
@@ -1053,12 +1188,19 @@ impl Connection {
         };
         let _actor_runtime_id = reader.read_var_u64().unwrap_or(0);
 
+        info!("[{}] InteractPacket action={}", self.addr, action);
+
         if action == 6 {
-            // OPEN_INVENTORY
-            let container_open = ContainerOpen::player_inventory(self.entity_runtime_id as i64);
+            // OPEN_INVENTORY — use window_id=1 (not 0, which is HARDCODED for content sync)
+            let container_open = ContainerOpen {
+                window_id: 1,
+                window_type: 0xFF, // WindowTypes::INVENTORY = -1
+                position: [0, 0, 0],
+                actor_unique_id: self.entity_runtime_id as i64,
+            };
             let pkt =
                 self.encode_compressed_packet(packet_id::CONTAINER_OPEN, &container_open.encode());
-            debug!("[{}] Opening player inventory", self.addr);
+            info!("[{}] Opening player inventory (window_id=1)", self.addr);
             return vec![pkt];
         }
 
@@ -1069,6 +1211,11 @@ impl Connection {
         let window_id = reader.read_u8().unwrap_or(0);
         let window_type = reader.read_u8().unwrap_or(0);
         let _server = reader.read_bool().unwrap_or(false);
+
+        info!(
+            "[{}] ContainerClose window_id={} window_type={}",
+            self.addr, window_id, window_type
+        );
 
         // Echo back the close
         let close = ContainerClose {
@@ -1379,11 +1526,44 @@ impl Connection {
             self.encode_compressed_packet(packet_id::UPDATE_ATTRIBUTES, &attributes.encode()),
         );
 
-        // 6. AvailableCommands (BEFORE abilities per PMMP)
+        // 6. AvailableCommands with rich autocompletion (BEFORE abilities per PMMP)
         let cmd_registry = mc_rs_command::CommandRegistry::new();
-        let cmd_list = cmd_registry.all_commands();
-        let cmd_refs: Vec<(&str, &str)> = cmd_list.iter().map(|&(n, d)| (n, d)).collect();
-        let commands = AvailableCommands::encode_simple(&cmd_refs);
+        let cmd_defs = cmd_registry.all_command_defs();
+        let cmd_entries: Vec<CmdEntry<'_>> = cmd_defs
+            .iter()
+            .map(|def| {
+                let overloads = def
+                    .overloads
+                    .iter()
+                    .map(|ov| CmdOverload {
+                        params: ov
+                            .params
+                            .iter()
+                            .map(|p| CmdParam {
+                                name: p.name,
+                                param_type: match &p.param_type {
+                                    mc_rs_command::ParamType::HardEnum { name, values } => {
+                                        CmdParamType::HardEnum {
+                                            name,
+                                            values: values.as_slice(),
+                                        }
+                                    }
+                                    other => CmdParamType::Basic(other.type_id().unwrap()),
+                                },
+                                optional: p.optional,
+                            })
+                            .collect(),
+                    })
+                    .collect();
+                CmdEntry {
+                    name: def.name,
+                    description: def.description,
+                    aliases: def.aliases.clone(),
+                    overloads,
+                }
+            })
+            .collect();
+        let commands = AvailableCommands::encode_rich(&cmd_entries);
         responses.push(self.encode_compressed_packet(packet_id::AVAILABLE_COMMANDS, &commands));
 
         // 7. UpdateAbilities — based on player's gamemode
