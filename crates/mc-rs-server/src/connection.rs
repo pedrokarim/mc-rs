@@ -69,8 +69,8 @@ pub struct Connection {
     pub last_chunk_z: i32,
     /// Queue of chunks to send, ordered by distance (nearest first).
     pub chunk_load_queue: VecDeque<(i32, i32)>,
-    /// Tick at which to reorder chunks. u64::MAX = don't reorder.
-    pub next_chunk_order_tick: u64,
+    /// Countdown ticks until chunk reorder. 0 = reorder now. u32::MAX = idle.
+    pub chunk_order_countdown: u32,
 
     // Packets to broadcast to ALL other players
     pub broadcasts: Vec<Vec<u8>>,
@@ -128,7 +128,7 @@ impl Connection {
             last_chunk_x: 0,
             last_chunk_z: 0,
             chunk_load_queue: VecDeque::new(),
-            next_chunk_order_tick: u64::MAX,
+            chunk_order_countdown: 5, // reorder shortly after spawn (like PMMP)
             broadcasts: Vec::new(),
             pending_actions: Vec::new(),
             inventory: PlayerInventory::new(),
@@ -188,15 +188,45 @@ impl Connection {
     /// Send up to CHUNKS_PER_TICK chunks from the queue.
     /// Called from the main tick loop, not from packet handlers.
     /// Returns response packets to send to this player.
-    pub fn send_queued_chunks(&mut self, current_tick: u64) -> Vec<Vec<u8>> {
+    pub fn send_queued_chunks(&mut self) -> Vec<Vec<u8>> {
         const CHUNKS_PER_TICK: usize = 8;
 
-        // Check if we need to reorder
-        if current_tick >= self.next_chunk_order_tick {
-            self.order_chunks();
-            self.next_chunk_order_tick = u64::MAX;
+        // PMMP-style countdown: doChunkRequests() { if(nextChunkOrderRun-- <= 0) { orderChunks(); } }
+        if self.chunk_order_countdown != u32::MAX {
+            if self.chunk_order_countdown == 0 {
+                self.order_chunks();
+                self.chunk_order_countdown = u32::MAX; // idle until next trigger
+
+                // Send NetworkChunkPublisherUpdate when there are chunks to load/unload
+                if !self.chunk_load_queue.is_empty() {
+                    let ncpu = NetworkChunkPublisherUpdate {
+                        position: [
+                            self.position[0] as i32,
+                            self.position[1] as i32,
+                            self.position[2] as i32,
+                        ],
+                        radius: (self.view_distance * 16) as u32,
+                    };
+                    let mut responses = vec![self.encode_compressed_packet(
+                        packet_id::NETWORK_CHUNK_PUBLISHER_UPDATE,
+                        &ncpu.encode(),
+                    )];
+                    // Send chunks in same batch
+                    responses.extend(self.send_chunk_batch());
+                    return responses;
+                }
+            } else {
+                self.chunk_order_countdown -= 1;
+            }
         }
 
+        // Still send queued chunks even if no reorder happened
+        self.send_chunk_batch()
+    }
+
+    /// Send up to 8 chunks from the load queue.
+    fn send_chunk_batch(&mut self) -> Vec<Vec<u8>> {
+        const CHUNKS_PER_TICK: usize = 8;
         let mut responses = Vec::new();
         let mut sent = 0;
 
@@ -755,22 +785,13 @@ impl Connection {
             self.last_chunk_x = chunk_x;
             self.last_chunk_z = chunk_z;
 
-            // Send NetworkChunkPublisherUpdate with new position
-            let ncpu = NetworkChunkPublisherUpdate {
-                position: [
-                    self.position[0] as i32,
-                    self.position[1] as i32,
-                    self.position[2] as i32,
-                ],
-                radius: (self.view_distance * 16) as u32,
-            };
-            responses.push(self.encode_compressed_packet(
-                packet_id::NETWORK_CHUNK_PUBLISHER_UPDATE,
-                &ncpu.encode(),
-            ));
-
-            // Trigger chunk reorder on next tick (don't send chunks here!)
-            self.next_chunk_order_tick = 0;
+            // PMMP: nextChunkOrderRun = 0 on chunk change
+            self.chunk_order_countdown = 0;
+        } else {
+            // PMMP: nextChunkOrderRun = min(current, 20) on normal movement
+            if self.chunk_order_countdown > 20 {
+                self.chunk_order_countdown = 20;
+            }
         }
 
         // Handle block actions (breaking/placing)
