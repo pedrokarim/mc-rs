@@ -732,9 +732,9 @@ pub struct BiomeSelector {
 
 impl BiomeSelector {
     pub fn new(random: &mut Random) -> Self {
-        // Lower expansion = larger biomes. 1/16384 gives biomes ~2000-5000 blocks wide
-        let temperature = Simplex::new(random, 2, 1.0 / 16.0, 1.0 / 16384.0);
-        let rainfall = Simplex::new(random, 2, 1.0 / 16.0, 1.0 / 16384.0);
+        // Lower expansion = larger biomes. 1/4096 gives biomes ~500-1000 blocks wide (vanilla-like)
+        let temperature = Simplex::new(random, 2, 1.0 / 16.0, 1.0 / 4096.0);
+        let rainfall = Simplex::new(random, 2, 1.0 / 16.0, 1.0 / 4096.0);
 
         let mut map = vec![biome_id::OCEAN; 64 * 64];
         for i in 0..64 {

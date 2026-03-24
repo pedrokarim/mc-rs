@@ -197,6 +197,15 @@ impl Connection {
                 self.order_chunks();
                 self.chunk_order_countdown = u32::MAX; // idle until next trigger
 
+                debug!(
+                    "[{}] order_chunks: queue={}, sent_chunks={}, pos=({},{})",
+                    self.addr,
+                    self.chunk_load_queue.len(),
+                    self.sent_chunks.len(),
+                    self.last_chunk_x,
+                    self.last_chunk_z,
+                );
+
                 // Send NetworkChunkPublisherUpdate when there are chunks to load/unload
                 if !self.chunk_load_queue.is_empty() {
                     let ncpu = NetworkChunkPublisherUpdate {
@@ -229,6 +238,7 @@ impl Connection {
         const CHUNKS_PER_TICK: usize = 8;
         let mut responses = Vec::new();
         let mut sent = 0;
+        let queue_before = self.chunk_load_queue.len();
 
         while sent < CHUNKS_PER_TICK {
             let Some((cx, cz)) = self.chunk_load_queue.pop_front() else {
@@ -256,6 +266,16 @@ impl Connection {
                 .push(self.encode_compressed_packet(packet_id::LEVEL_CHUNK, &chunk_pkt.encode()));
             self.sent_chunks.insert((cx, cz));
             sent += 1;
+        }
+
+        if sent > 0 {
+            debug!(
+                "[{}] send_chunk_batch: sent={}, queue_remaining={} (was {})",
+                self.addr,
+                sent,
+                self.chunk_load_queue.len(),
+                queue_before,
+            );
         }
 
         responses
@@ -378,11 +398,14 @@ impl Connection {
             // ── Silently ignored ──
             (_, packet_id::EMOTE_LIST)
             | (_, packet_id::SERVERBOUND_LOADING_SCREEN)
+            | (_, packet_id::ANIMATE)        // Arm swing — client-side only
+            | (_, packet_id::INTERACT)       // InteractPacket outside InGame (e.g. SpawnResponse)
             | (ConnectionState::SpawnResponse, packet_id::PLAYER_AUTH_INPUT)
-            | (_, 0x081) => Vec::new(),
+            | (_, 0x081)
+            | (_, 0x024) => Vec::new(),      // BlockPickRequestPacket
 
             _ => {
-                debug!(
+                info!(
                     "[{}] Unhandled packet 0x{:03X} in state {:?}",
                     self.addr, pkt_id, self.state
                 );
@@ -403,9 +426,9 @@ impl Connection {
             self.addr, pkt.protocol_version
         );
 
-        if pkt.protocol_version != 924 {
+        if pkt.protocol_version != 944 {
             warn!(
-                "[{}] Incompatible protocol: {} (expected 924)",
+                "[{}] Incompatible protocol: {} (expected 944)",
                 self.addr, pkt.protocol_version
             );
             let disconnect = Disconnect {
@@ -499,9 +522,18 @@ impl Connection {
             return Vec::new();
         };
 
-        let Ok(client_pub_key) = ecdh::parse_client_public_key(client_pub_b64) else {
-            warn!("[{}] Failed to parse client public key", self.addr);
-            return Vec::new();
+        let client_pub_key = match ecdh::parse_client_public_key(client_pub_b64) {
+            Ok(key) => key,
+            Err(e) => {
+                warn!(
+                    "[{}] Failed to parse client public key: {} (key_b64_len={}, first_chars={})",
+                    self.addr,
+                    e,
+                    client_pub_b64.len(),
+                    &client_pub_b64[..client_pub_b64.len().min(40)]
+                );
+                return Vec::new();
+            }
         };
 
         // Generate salt
@@ -785,6 +817,32 @@ impl Connection {
             self.last_chunk_x = chunk_x;
             self.last_chunk_z = chunk_z;
 
+            // CRITICAL: Tell client the new center of the chunk render area.
+            // Without this, the client stops rendering chunks far from the old center.
+            let ncpu = NetworkChunkPublisherUpdate {
+                position: [
+                    self.position[0] as i32,
+                    self.position[1] as i32,
+                    self.position[2] as i32,
+                ],
+                radius: (self.view_distance * 16) as u32,
+            };
+            responses.push(self.encode_compressed_packet(
+                packet_id::NETWORK_CHUNK_PUBLISHER_UPDATE,
+                &ncpu.encode(),
+            ));
+
+            info!(
+                "[{}] NCPU sent: pos=({},{},{}), radius={} blocks, chunk=({},{})",
+                self.addr,
+                self.position[0] as i32,
+                self.position[1] as i32,
+                self.position[2] as i32,
+                self.view_distance * 16,
+                chunk_x,
+                chunk_z,
+            );
+
             // PMMP: nextChunkOrderRun = 0 on chunk change
             self.chunk_order_countdown = 0;
         } else {
@@ -799,20 +857,21 @@ impl Connection {
             let bx = action.position[0];
             let by = action.position[1];
             let bz = action.position[2];
+            // PMMP uses integer block position (cast to float), NOT +0.5 center
+            let block_pos = [bx as f32, by as f32, bz as f32];
             let block_center = [bx as f32 + 0.5, by as f32 + 0.5, bz as f32 + 0.5];
 
             match action.action_type {
                 // START_BREAK (0) or CONTINUE_DESTROY_BLOCK (27)
                 0 | 27 => {
-                    // Calculate break speed — simplified: 1.0 / (break_time_seconds * 20)
-                    // Default hardness for most blocks: ~1.5s with hand = 30 ticks
+                    // Calculate break speed: PMMP = 1.0 / (breakTime * 20)
+                    // breakTime comes from block hardness and tool efficiency
                     let break_speed: f32 = {
                         let block_id = if let Ok(mut cache) = self.chunk_cache.lock() {
                             cache.get_block(bx, by, bz)
                         } else {
                             0
                         };
-                        // Simple break speed based on block type
                         match block_id {
                             13079 => 0.0,         // bedrock — unbreakable
                             12421 | 11669 => 1.0, // short grass/tall grass — instant
@@ -820,9 +879,10 @@ impl Connection {
                         }
                     };
 
+                    // PMMP: broadcastPacketToViewers(blockPos, LevelEvent(BLOCK_START_BREAK, speed*65535, blockPos))
                     let event = LevelEvent {
                         event_id: LevelEvent::BLOCK_START_BREAK,
-                        position: block_center,
+                        position: block_pos,
                         event_data: (65535.0 * break_speed) as i32,
                     };
                     let event_bytes =
@@ -833,9 +893,10 @@ impl Connection {
 
                 // ABORT_BREAK (1) or STOP_BREAK (2)
                 1 | 2 => {
+                    // PMMP: broadcastPacketToViewers(blockPos, LevelEvent(BLOCK_STOP_BREAK, 0, blockPos))
                     let event = LevelEvent {
                         event_id: LevelEvent::BLOCK_STOP_BREAK,
-                        position: block_center,
+                        position: block_pos,
                         event_data: 0,
                     };
                     let event_bytes =
@@ -851,7 +912,7 @@ impl Connection {
                     // Send BLOCK_STOP_BREAK to clear crack animation
                     let stop_event = LevelEvent {
                         event_id: LevelEvent::BLOCK_STOP_BREAK,
-                        position: block_center,
+                        position: block_pos,
                         event_data: 0,
                     };
                     let stop_bytes =
@@ -910,18 +971,27 @@ impl Connection {
                     // Add block drop to inventory
                     if old_block_id != air_id {
                         if let Some(drop_item) = crate::inventory::block_drop(old_block_id) {
+                            let item_id = drop_item.id;
                             if let Some(slot) = self.inventory.add_item(drop_item) {
-                                let slot_pkt = InventorySlot::encode(
-                                    0,
-                                    slot as u32,
-                                    &self.inventory.slots[slot],
-                                    0,
+                                info!(
+                                    "[{}] Item drop: item_id={} → slot {} (stack_id={}, count={})",
+                                    self.addr,
+                                    item_id,
+                                    slot,
+                                    self.inventory.slots[slot].stack_id,
+                                    self.inventory.slots[slot].item.count
                                 );
+                                // Send full inventory content instead of single slot
+                                // (more reliable for initial sync)
+                                let content_pkt =
+                                    InventoryContent::encode_items(0, &self.inventory.slots, 0);
                                 responses.push(self.encode_compressed_packet(
-                                    packet_id::INVENTORY_SLOT,
-                                    &slot_pkt,
+                                    packet_id::INVENTORY_CONTENT,
+                                    &content_pkt,
                                 ));
                             }
+                        } else {
+                            info!("[{}] No drop for block {}", self.addr, old_block_id);
                         }
                     }
 
@@ -1305,8 +1375,11 @@ impl Connection {
 
     fn handle_command_request(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
         let Ok(command) = reader.read_string() else {
+            warn!("[{}] Failed to read command string", self.addr);
             return Vec::new();
         };
+
+        info!("[{}] CommandRequest received: {}", self.addr, command);
 
         let ctx = mc_rs_command::CommandContext {
             player_name: self
@@ -1495,7 +1568,7 @@ impl Connection {
         let mut writer = mc_rs_proto::io::ProtoWriter::with_capacity(64);
         writer.write_bool(false); // must_accept
         writer.write_var_u32(0); // resource_pack_stack count
-        writer.write_string("1.26.2"); // base_game_version
+        writer.write_string("1.26.10"); // base_game_version
         writer.write_u32_le(0); // experiments count
         writer.write_bool(false); // experiments_previously_toggled
         writer.write_bool(false); // use_vanilla_editor_packs

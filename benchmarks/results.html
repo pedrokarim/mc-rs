@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MC-RS Benchmark Results</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f0f;
+            color: #e0e0e0;
+            padding: 2rem;
+            line-height: 1.5;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+        .subtitle {
+            color: #888;
+            font-size: 0.95rem;
+            margin-bottom: 2rem;
+        }
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 2.5rem;
+        }
+        .card {
+            background: #1a1a1a;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .card.error { opacity: 0.5; }
+        .card-header {
+            padding: 1rem 1.25rem;
+            border-top: 3px solid;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .card-header h2 { font-size: 1.1rem; font-weight: 600; }
+        .server-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+        .card-body { padding: 0 1.25rem 1.25rem; }
+        .metric { margin-bottom: 1rem; }
+        .metric-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 0.3rem;
+        }
+        .metric-label { color: #999; font-size: 0.85rem; }
+        .metric-value { font-size: 1.1rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .metric-value.winner { color: #51cf66; }
+        .bar-bg {
+            height: 6px;
+            background: #2a2a2a;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.6s ease;
+        }
+        .ping-details {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: -0.5rem;
+        }
+        .error-msg { color: #ff6b6b; font-style: italic; }
+
+        /* Comparison table */
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 2.5rem;
+            font-variant-numeric: tabular-nums;
+        }
+        th {
+            text-align: left;
+            padding: 0.6rem 0.75rem;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #888;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        td {
+            padding: 0.6rem 0.75rem;
+            border-bottom: 1px solid #1a1a1a;
+            font-size: 0.95rem;
+        }
+        td.best {
+            color: #51cf66;
+            font-weight: 600;
+        }
+        tr:hover td { background: #1a1a1a; }
+
+        .footer {
+            text-align: center;
+            color: #555;
+            font-size: 0.8rem;
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid #1a1a1a;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MC-RS Benchmark</h1>
+        <p class="subtitle">mc-rs (Rust) vs PocketMine-MP (PHP) vs BDS (Mojang C++) &mdash; 2026-03-23 22:12:00</p>
+
+        <div class="cards">
+            
+            <div class="card">
+                <div class="card-header" style="border-color:#e8590c">
+                    <span class="server-dot" style="background:#e8590c"></span>
+                    <h2>mc-rs (Rust)</h2>
+                </div>
+                <div class="card-body">
+                    <div class="metric">
+                        <div class="metric-header">
+                            <span class="metric-label">Startup Time</span>
+                            <span class="metric-value winner">10 ms</span>
+                        </div>
+                        <div class="bar-bg"><div class="bar-fill" style="width:0.4%;background:#e8590c"></div></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-header">
+                            <span class="metric-label">Memory (idle)</span>
+                            <span class="metric-value winner">7.3 MB</span>
+                        </div>
+                        <div class="bar-bg"><div class="bar-fill" style="width:3.1%;background:#e8590c"></div></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-header">
+                            <span class="metric-label">CPU (idle)</span>
+                            <span class="metric-value">0.00 %</span>
+                        </div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-header">
+                            <span class="metric-label">Ping avg</span>
+                            <span class="metric-value">0.231 ms</span>
+                        </div>
+                        <div class="bar-bg"><div class="bar-fill" style="width:4.1%;background:#e8590c"></div></div>
+                    </div>
+                    <div class="ping-details">
+                        <span>min 0.048</span>
+                        <span>p99 1.181</span>
+                        <span>max 10.209</span>
+                        <span>100/100 ok</span>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header" style="border-color:#7048e8">
+                    <span class="server-dot" style="background:#7048e8"></span>
+                    <h2>PocketMine-MP</h2>
+                </div>
+                <div class="card-body">
+                    <div class="metric">
+                        <div class="metric-header">
+                            <span class="metric-label">Startup Time</span>
+                            <span class="metric-value">2703 ms</span>
+                        </div>
+                        <div class="bar-bg"><div class="bar-fill" style="width:100.0%;background:#7048e8"></div></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-header">
+                            <span class="metric-label">Memory (idle)</span>
+                            <span class="metric-value">23.8 MB</span>
+                        </div>
+                        <div class="bar-bg"><div class="bar-fill" style="width:10.0%;background:#7048e8"></div></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-header">
+                            <span class="metric-label">CPU (idle)</span>
+                            <span class="metric-value">0.00 %</span>
+                        </div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-header">
+                            <span class="metric-label">Ping avg</span>
+                            <span class="metric-value">5.670 ms</span>
+                        </div>
+                        <div class="bar-bg"><div class="bar-fill" style="width:100.0%;background:#7048e8"></div></div>
+                    </div>
+                    <div class="ping-details">
+                        <span>min 0.341</span>
+                        <span>p99 21.906</span>
+                        <span>max 22.319</span>
+                        <span>100/100 ok</span>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header" style="border-color:#2f9e44">
+                    <span class="server-dot" style="background:#2f9e44"></span>
+                    <h2>BDS (Mojang)</h2>
+                </div>
+                <div class="card-body">
+                    <div class="metric">
+                        <div class="metric-header">
+                            <span class="metric-label">Startup Time</span>
+                            <span class="metric-value">1333 ms</span>
+                        </div>
+                        <div class="bar-bg"><div class="bar-fill" style="width:49.3%;background:#2f9e44"></div></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-header">
+                            <span class="metric-label">Memory (idle)</span>
+                            <span class="metric-value">238.9 MB</span>
+                        </div>
+                        <div class="bar-bg"><div class="bar-fill" style="width:100.0%;background:#2f9e44"></div></div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-header">
+                            <span class="metric-label">CPU (idle)</span>
+                            <span class="metric-value">0.02 %</span>
+                        </div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-header">
+                            <span class="metric-label">Ping avg</span>
+                            <span class="metric-value winner">0.104 ms</span>
+                        </div>
+                        <div class="bar-bg"><div class="bar-fill" style="width:1.8%;background:#2f9e44"></div></div>
+                    </div>
+                    <div class="ping-details">
+                        <span>min 0.045</span>
+                        <span>p99 0.676</span>
+                        <span>max 1.613</span>
+                        <span>100/100 ok</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <h3 class="section-title">Comparison</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Server</th>
+                    <th>Startup</th>
+                    <th>Memory</th>
+                    <th>CPU</th>
+                    <th>Ping min</th>
+                    <th>Ping avg</th>
+                    <th>Ping max</th>
+                    <th>Ping p99</th>
+                </tr>
+            </thead>
+            <tbody>
+                
+                <tr>
+                    <td><span class="server-dot" style="background:#e8590c"></span> mc-rs (Rust)</td>
+                    <td class="best">10 ms</td>
+                    <td class="best">7.3 MB</td>
+                    <td>0.00 %</td>
+                    <td>0.048</td>
+                    <td class="">0.231</td>
+                    <td>10.209</td>
+                    <td>1.181</td>
+                </tr>
+                <tr>
+                    <td><span class="server-dot" style="background:#7048e8"></span> PocketMine-MP</td>
+                    <td class="">2703 ms</td>
+                    <td class="">23.8 MB</td>
+                    <td>0.00 %</td>
+                    <td>0.341</td>
+                    <td class="">5.670</td>
+                    <td>22.319</td>
+                    <td>21.906</td>
+                </tr>
+                <tr>
+                    <td><span class="server-dot" style="background:#2f9e44"></span> BDS (Mojang)</td>
+                    <td class="">1333 ms</td>
+                    <td class="">238.9 MB</td>
+                    <td>0.02 %</td>
+                    <td>0.045</td>
+                    <td class="best">0.104</td>
+                    <td>1.613</td>
+                    <td>0.676</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3 class="section-title">Relative Performance</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Server</th>
+                    <th>Startup</th>
+                    <th>Memory</th>
+                    <th>Ping</th>
+                </tr>
+            </thead>
+            <tbody>
+                
+                <tr>
+                    <td><span class="server-dot" style="background:#e8590c"></span> mc-rs (Rust)</td>
+                    <td>1x (best)</td>
+                    <td>1x (best)</td>
+                    <td>2.2x slower</td>
+                </tr>
+                <tr>
+                    <td><span class="server-dot" style="background:#7048e8"></span> PocketMine-MP</td>
+                    <td>281.6x slower</td>
+                    <td>3.3x more</td>
+                    <td>54.5x slower</td>
+                </tr>
+                <tr>
+                    <td><span class="server-dot" style="background:#2f9e44"></span> BDS (Mojang)</td>
+                    <td>138.8x slower</td>
+                    <td>32.7x more</td>
+                    <td>1x (best)</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="footer">
+            Generated by MC-RS Benchmark Suite &mdash; 100 pings per server, 10s idle sampling
+        </div>
+    </div>
+</body>
+</html>

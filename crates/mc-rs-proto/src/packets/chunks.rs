@@ -63,8 +63,9 @@ pub struct NetworkChunkPublisherUpdate {
 impl NetworkChunkPublisherUpdate {
     pub fn encode(&self) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(32);
+        // SignedBlockPosition: 3x VarInt32 (signed) — matches PMMP putSignedBlockPosition
         w.write_var_i32(self.position[0]);
-        w.write_var_u32(self.position[1] as u32);
+        w.write_var_i32(self.position[1]);
         w.write_var_i32(self.position[2]);
         w.write_var_u32(self.radius);
         // Saved chunks — empty list

@@ -315,7 +315,7 @@ impl StartGame {
             disable_persona: false,
             disable_custom_skins: false,
             mute_emote_announcements: false,
-            vanilla_version: "1.26.2".to_string(),
+            vanilla_version: "1.26.10".to_string(),
             limited_world_width: 0,
             limited_world_length: 0,
             is_new_nether: true,
@@ -334,7 +334,7 @@ impl StartGame {
             enchantment_seed: 0,
             multiplayer_correlation_id: String::new(),
             enable_new_inventory_system: true,
-            server_software_version: "1.26.2".to_string(),
+            server_software_version: "1.26.10".to_string(),
             // Empty NBT compound tag (network LE format):
             // tag_type=10 (compound), name_length=0 (VarUInt=0x00), end_tag=0x00
             player_actor_properties_nbt: vec![0x0A, 0x00, 0x00],
@@ -433,52 +433,187 @@ impl UpdateBlock {
 
 // ── AvailableCommands (S→C, 0x4C) ──
 
+// typeInfo flag constants
+const ARG_FLAG_VALID: u32 = 0x100000;
+const ARG_FLAG_ENUM: u32 = 0x200000;
+
+/// Parameter type for the AvailableCommands packet encoder.
+pub enum CmdParamType<'a> {
+    /// Basic type: Int(1), Float(3), String(56), Target(8), Position(65), Message(68), RawText(70)
+    Basic(u32),
+    /// Hard enum with name and values — client shows as dropdown suggestions
+    HardEnum {
+        name: &'a str,
+        values: &'a [&'a str],
+    },
+}
+
+/// A parameter entry for the packet encoder.
+pub struct CmdParam<'a> {
+    pub name: &'a str,
+    pub param_type: CmdParamType<'a>,
+    pub optional: bool,
+}
+
+/// An overload (syntax variant) for the packet encoder.
+pub struct CmdOverload<'a> {
+    pub params: Vec<CmdParam<'a>>,
+}
+
+/// A command entry for the packet encoder.
+pub struct CmdEntry<'a> {
+    pub name: &'a str,
+    pub description: &'a str,
+    pub aliases: Vec<&'a str>,
+    pub overloads: Vec<CmdOverload<'a>>,
+}
+
 pub struct AvailableCommands;
 
 impl AvailableCommands {
-    /// Encode a minimal AvailableCommands packet with simple commands.
-    /// Each command has 1 overload with 1 optional RAWTEXT arg.
-    /// Format matches PMMP AvailableCommandsPacketAssembler exactly.
-    pub fn encode_simple(commands: &[(&str, &str)]) -> Vec<u8> {
+    /// Encode a rich AvailableCommands packet with typed parameters and enums.
+    pub fn encode_rich(commands: &[CmdEntry<'_>]) -> Vec<u8> {
         use crate::io::ProtoWriter;
-        let mut w = ProtoWriter::with_capacity(512);
 
-        // Enum values (string pool) — empty
-        w.write_var_u32(0);
-        // Chained sub command values — empty
-        w.write_var_u32(0);
-        // Postfixes — empty
-        w.write_var_u32(0);
-        // Enums — empty
-        w.write_var_u32(0);
-        // Chained sub command data — empty
-        w.write_var_u32(0);
+        // ── Phase 1: Collect all enum values into a deduplicated global pool ──
+        let mut enum_value_pool: Vec<String> = Vec::new();
+        let mut enum_value_index = std::collections::HashMap::<String, u32>::new();
 
-        // Command data
-        w.write_var_u32(commands.len() as u32);
-        for &(name, description) in commands {
-            w.write_string(name); // command name (without /)
-            w.write_string(description); // description
-            w.write_u16_le(0); // flags
-            w.write_string("any"); // permission level string (PMMP uses string, not u8!)
-            w.write_i32_le(-1); // alias enum index (-1 = none)
-            w.write_var_u32(0); // chained sub command indices count
+        // Collect hard enums (name → list of value indices)
+        let mut hard_enums: Vec<(String, Vec<u32>)> = Vec::new();
+        let mut hard_enum_index = std::collections::HashMap::<String, u32>::new();
 
-            // 1 overload with 1 optional RAWTEXT param
-            w.write_var_u32(1); // overload count
-            w.write_bool(false); // chaining = false
-            w.write_var_u32(1); // parameter count
-                                // Parameter "args":
-            w.write_string("args");
-            // typeInfo = ARG_FLAG_VALID(0x100000) | RAWTEXT(70) = 0x00100046
-            w.write_u32_le(0x00100046);
-            w.write_bool(true); // optional = true
-            w.write_u8(0); // flags = 0
+        // Helper: add a value to the pool and return its index
+        let mut add_enum_value = |value: &str| -> u32 {
+            if let Some(&idx) = enum_value_index.get(value) {
+                idx
+            } else {
+                let idx = enum_value_pool.len() as u32;
+                enum_value_pool.push(value.to_string());
+                enum_value_index.insert(value.to_string(), idx);
+                idx
+            }
+        };
+
+        // First pass: collect all hard enums from parameters and aliases
+        for cmd in commands {
+            // Alias enum
+            if !cmd.aliases.is_empty() {
+                let alias_enum_name = format!("{}Aliases", cmd.name);
+                if !hard_enum_index.contains_key(&alias_enum_name) {
+                    let mut value_indices = Vec::new();
+                    // PMMP adds the command name itself as first alias (client bug workaround)
+                    value_indices.push(add_enum_value(cmd.name));
+                    for &alias in &cmd.aliases {
+                        value_indices.push(add_enum_value(alias));
+                    }
+                    let idx = hard_enums.len() as u32;
+                    hard_enum_index.insert(alias_enum_name.clone(), idx);
+                    hard_enums.push((alias_enum_name, value_indices));
+                }
+            }
+
+            // Parameter enums
+            for overload in &cmd.overloads {
+                for param in &overload.params {
+                    if let CmdParamType::HardEnum { name, values } = &param.param_type {
+                        let enum_name = name.to_string();
+                        if !hard_enum_index.contains_key(&enum_name) {
+                            let mut value_indices = Vec::new();
+                            for &v in *values {
+                                value_indices.push(add_enum_value(v));
+                            }
+                            let idx = hard_enums.len() as u32;
+                            hard_enum_index.insert(enum_name.clone(), idx);
+                            hard_enums.push((enum_name, value_indices));
+                        }
+                    }
+                }
+            }
         }
 
-        // Soft enums — empty
+        // ── Phase 2: Encode the packet ──
+        let mut w = ProtoWriter::with_capacity(2048);
+
+        // 1. Enum values (global string pool)
+        w.write_var_u32(enum_value_pool.len() as u32);
+        for val in &enum_value_pool {
+            w.write_string(val);
+        }
+
+        // 2. Chained sub command values — empty
         w.write_var_u32(0);
-        // Constraints — empty
+
+        // 3. Postfixes — empty
+        w.write_var_u32(0);
+
+        // 4. Hard enums
+        w.write_var_u32(hard_enums.len() as u32);
+        for (enum_name, value_indices) in &hard_enums {
+            w.write_string(enum_name);
+            w.write_var_u32(value_indices.len() as u32);
+            for &idx in value_indices {
+                // PMMP: LE::writeUnsignedInt — always 4-byte LE
+                w.write_u32_le(idx);
+            }
+        }
+
+        // 5. Chained sub command data — empty
+        w.write_var_u32(0);
+
+        // 6. Command data
+        w.write_var_u32(commands.len() as u32);
+        for cmd in commands {
+            w.write_string(cmd.name);
+            w.write_string(cmd.description);
+            w.write_u16_le(0); // flags
+            w.write_string("any"); // permission level
+
+            // Alias enum index
+            let alias_enum_name = format!("{}Aliases", cmd.name);
+            if let Some(&idx) = hard_enum_index.get(&alias_enum_name) {
+                w.write_i32_le(idx as i32);
+            } else {
+                w.write_i32_le(-1);
+            }
+
+            // Chained sub command indices — none
+            w.write_var_u32(0);
+
+            // Overloads
+            if cmd.overloads.is_empty() {
+                // No overloads defined → send 1 overload with 0 params
+                w.write_var_u32(1); // overload count
+                w.write_bool(false); // chaining
+                w.write_var_u32(0); // 0 parameters
+            } else {
+                w.write_var_u32(cmd.overloads.len() as u32);
+                for overload in &cmd.overloads {
+                    w.write_bool(false); // chaining = false
+                    w.write_var_u32(overload.params.len() as u32);
+                    for param in &overload.params {
+                        w.write_string(param.name);
+
+                        // typeInfo encoding
+                        let type_info = match &param.param_type {
+                            CmdParamType::Basic(type_id) => ARG_FLAG_VALID | type_id,
+                            CmdParamType::HardEnum { name, .. } => {
+                                let enum_idx = hard_enum_index.get(*name).copied().unwrap_or(0);
+                                ARG_FLAG_VALID | ARG_FLAG_ENUM | enum_idx
+                            }
+                        };
+                        w.write_u32_le(type_info);
+                        w.write_bool(param.optional);
+                        w.write_u8(0); // flags
+                    }
+                }
+            }
+        }
+
+        // 7. Soft enums — empty
+        w.write_var_u32(0);
+
+        // 8. Constraints — empty
         w.write_var_u32(0);
 
         w.into_bytes()
@@ -605,7 +740,7 @@ impl ContainerOpen {
         w.write_var_i32(self.position[0]);
         w.write_var_u32(self.position[1] as u32);
         w.write_var_i32(self.position[2]);
-        w.write_var_i64(self.actor_unique_id);
+        w.write_var_i64(self.actor_unique_id); // ActorUniqueId = VarI64 (CommonTypes::putActorUniqueId)
         w.into_bytes()
     }
 }
@@ -639,6 +774,12 @@ pub struct LevelEvent {
 impl LevelEvent {
     /// Block destroy particles.
     pub const PARTICLE_DESTROY: i32 = 2001;
+    /// Start block breaking crack animation (data = break speed * 65535).
+    pub const BLOCK_START_BREAK: i32 = 3600;
+    /// Stop/remove block breaking crack animation.
+    pub const BLOCK_STOP_BREAK: i32 = 3601;
+    /// Update block break speed mid-break.
+    pub const BLOCK_BREAK_SPEED: i32 = 3602;
 
     pub fn encode(&self) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(20);

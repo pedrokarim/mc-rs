@@ -25,7 +25,7 @@ online_mode = false
 
 # Distance de vue maximale en chunks (2-32)
 # Le client peut demander moins, mais jamais plus
-view_distance = 8
+view_distance = 16
 
 # Intervalle de tick serveur en millisecondes (10 = 100 TPS)
 tick_rate = 10
@@ -150,7 +150,7 @@ fn default_max_players() -> u32 {
     20
 }
 fn default_view_distance() -> i32 {
-    8
+    16
 }
 fn default_tick_rate() -> u64 {
     10

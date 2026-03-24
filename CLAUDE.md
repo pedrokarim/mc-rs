@@ -3,7 +3,7 @@
 ## Projet
 
 Réécriture complète de PocketMine-MP (serveur Minecraft Bedrock PHP) en Rust.
-Protocol version 924 (Minecraft Bedrock 1.26.x).
+Protocol version 944 (Minecraft Bedrock 1.26.10).
 
 ## Référence
 

@@ -1,6 +1,61 @@
 use std::collections::HashMap;
 use tracing::info;
 
+// ── Autocompletion metadata ──
+
+/// Parameter type for client-side autocompletion.
+pub enum ParamType {
+    /// Integer value (protocol type 1)
+    Int,
+    /// Float value (protocol type 3)
+    Float,
+    /// String value (protocol type 56)
+    String,
+    /// Target selector: @a, @p, @s, @e (protocol type 8)
+    Target,
+    /// Position x y z as floats (protocol type 65)
+    Position,
+    /// Message — rest of the line (protocol type 68)
+    Message,
+    /// Raw text — free-form (protocol type 70)
+    RawText,
+    /// Hard enum — fixed set of values sent at login
+    HardEnum {
+        name: &'static str,
+        values: Vec<&'static str>,
+    },
+}
+
+impl ParamType {
+    /// Protocol type ID for basic types (not enums).
+    pub fn type_id(&self) -> Option<u32> {
+        match self {
+            ParamType::Int => Some(1),
+            ParamType::Float => Some(3),
+            ParamType::String => Some(56),
+            ParamType::Target => Some(8),
+            ParamType::Position => Some(65),
+            ParamType::Message => Some(68),
+            ParamType::RawText => Some(70),
+            ParamType::HardEnum { .. } => None,
+        }
+    }
+}
+
+/// A command parameter for autocompletion.
+pub struct CommandParam {
+    pub name: &'static str,
+    pub param_type: ParamType,
+    pub optional: bool,
+}
+
+/// One syntax variant (overload) of a command.
+pub struct CommandOverload {
+    pub params: Vec<CommandParam>,
+}
+
+// ── Command system ──
+
 /// Result of executing a command.
 pub struct CommandResult {
     /// Message to send back to the command sender.
@@ -35,6 +90,8 @@ pub struct CommandDef {
     pub name: &'static str,
     pub description: &'static str,
     pub usage: &'static str,
+    pub aliases: Vec<&'static str>,
+    pub overloads: Vec<CommandOverload>,
     handler: fn(&[&str], &CommandContext) -> CommandResult,
 }
 
@@ -91,44 +148,54 @@ impl CommandRegistry {
         }
     }
 
-    /// Get all command definitions (for AvailableCommands packet).
-    pub fn all_commands(&self) -> Vec<(&str, &str)> {
-        self.commands
-            .values()
-            .map(|def| (def.name, def.description))
-            .collect()
+    /// Get all command definitions for AvailableCommands packet.
+    pub fn all_command_defs(&self) -> Vec<&CommandDef> {
+        self.commands.values().collect()
     }
 
     fn register_builtins(&mut self) {
+        // ── /help ──
         self.register(CommandDef {
             name: "help",
             description: "Show available commands",
             usage: "/help",
-            handler: |_, _| {
-                CommandResult {
-                    response: Some(
-                        "Commands: /help, /list, /tp <x> <y> <z>, /gamemode <mode>, /say <msg>, /time set <val>, /kill, /stop, /ping, /seed"
-                            .to_string(),
-                    ),
-                    action: CommandAction::None,
-                }
+            aliases: vec!["?"],
+            overloads: vec![],
+            handler: |_, _| CommandResult {
+                response: Some(
+                    "Commands: /help, /list, /tp <x> <y> <z>, /gamemode <mode>, /say <msg>, /time set <val>, /kill, /stop, /ping, /seed"
+                        .to_string(),
+                ),
+                action: CommandAction::None,
             },
         });
 
+        // ── /list ──
         self.register(CommandDef {
             name: "list",
             description: "List online players",
             usage: "/list",
+            aliases: vec![],
+            overloads: vec![],
             handler: |_, _| CommandResult {
                 response: Some("Use the player list (tab) to see online players.".to_string()),
                 action: CommandAction::None,
             },
         });
 
+        // ── /tp <x> <y> <z> ──
         self.register(CommandDef {
             name: "tp",
             description: "Teleport to coordinates",
             usage: "/tp <x> <y> <z>",
+            aliases: vec!["teleport"],
+            overloads: vec![CommandOverload {
+                params: vec![CommandParam {
+                    name: "x",
+                    param_type: ParamType::Position,
+                    optional: false,
+                }],
+            }],
             handler: |parts, ctx| {
                 if parts.len() >= 4 {
                     let x = parse_coord(parts[1], ctx.position[0]);
@@ -154,14 +221,32 @@ impl CommandRegistry {
             },
         });
 
+        // ── /gamemode <mode> ──
         self.register(CommandDef {
             name: "gamemode",
             description: "Change game mode",
             usage: "/gamemode <0-3|survival|creative|adventure|spectator>",
+            aliases: vec![],
+            overloads: vec![CommandOverload {
+                params: vec![CommandParam {
+                    name: "gameMode",
+                    param_type: ParamType::HardEnum {
+                        name: "GameMode",
+                        values: vec![
+                            "survival", "creative", "adventure", "spectator",
+                            "s", "c", "a", "sp", "0", "1", "2", "3",
+                        ],
+                    },
+                    optional: false,
+                }],
+            }],
             handler: |parts, ctx| {
                 if parts.len() < 2 {
                     return CommandResult {
-                        response: Some("Usage: /gamemode <0-3|survival|creative|adventure|spectator>".to_string()),
+                        response: Some(
+                            "Usage: /gamemode <0-3|survival|creative|adventure|spectator>"
+                                .to_string(),
+                        ),
                         action: CommandAction::None,
                     };
                 }
@@ -172,7 +257,10 @@ impl CommandRegistry {
                     "3" | "spectator" | "sp" => 3,
                     _ => {
                         return CommandResult {
-                            response: Some("Invalid gamemode. Use 0-3 or survival/creative/adventure/spectator.".to_string()),
+                            response: Some(
+                                "Invalid gamemode. Use 0-3 or survival/creative/adventure/spectator."
+                                    .to_string(),
+                            ),
                             action: CommandAction::None,
                         };
                     }
@@ -192,10 +280,19 @@ impl CommandRegistry {
             },
         });
 
+        // ── /say <message> ──
         self.register(CommandDef {
             name: "say",
             description: "Broadcast a message",
             usage: "/say <message>",
+            aliases: vec![],
+            overloads: vec![CommandOverload {
+                params: vec![CommandParam {
+                    name: "message",
+                    param_type: ParamType::Message,
+                    optional: false,
+                }],
+            }],
             handler: |parts, ctx| {
                 if parts.len() < 2 {
                     return CommandResult {
@@ -213,10 +310,55 @@ impl CommandRegistry {
             },
         });
 
+        // ── /time set <value> ──
         self.register(CommandDef {
             name: "time",
             description: "Set world time",
             usage: "/time set <value>",
+            aliases: vec![],
+            overloads: vec![
+                // /time set <preset>
+                CommandOverload {
+                    params: vec![
+                        CommandParam {
+                            name: "mode",
+                            param_type: ParamType::HardEnum {
+                                name: "TimeAction",
+                                values: vec!["set"],
+                            },
+                            optional: false,
+                        },
+                        CommandParam {
+                            name: "time",
+                            param_type: ParamType::HardEnum {
+                                name: "TimeSpec",
+                                values: vec![
+                                    "day", "noon", "sunset", "night", "midnight", "sunrise",
+                                ],
+                            },
+                            optional: false,
+                        },
+                    ],
+                },
+                // /time set <number>
+                CommandOverload {
+                    params: vec![
+                        CommandParam {
+                            name: "mode",
+                            param_type: ParamType::HardEnum {
+                                name: "TimeAction",
+                                values: vec!["set"],
+                            },
+                            optional: false,
+                        },
+                        CommandParam {
+                            name: "value",
+                            param_type: ParamType::Int,
+                            optional: false,
+                        },
+                    ],
+                },
+            ],
             handler: |parts, ctx| {
                 if parts.len() >= 3 && parts[1] == "set" {
                     let time = match parts[2] {
@@ -241,10 +383,13 @@ impl CommandRegistry {
             },
         });
 
+        // ── /kill ──
         self.register(CommandDef {
             name: "kill",
             description: "Kill yourself",
             usage: "/kill",
+            aliases: vec![],
+            overloads: vec![],
             handler: |_, ctx| {
                 info!("[CMD] {} killed themselves", ctx.player_name);
                 CommandResult {
@@ -254,10 +399,13 @@ impl CommandRegistry {
             },
         });
 
+        // ── /stop ──
         self.register(CommandDef {
             name: "stop",
             description: "Stop the server",
             usage: "/stop",
+            aliases: vec![],
+            overloads: vec![],
             handler: |_, ctx| {
                 info!("[CMD] Server stop requested by {}", ctx.player_name);
                 CommandResult {
@@ -267,30 +415,51 @@ impl CommandRegistry {
             },
         });
 
+        // ── /seed ──
         self.register(CommandDef {
             name: "seed",
             description: "Display world seed",
             usage: "/seed",
+            aliases: vec![],
+            overloads: vec![],
             handler: |_, _| CommandResult {
                 response: Some("Seed: 0 (flat world)".to_string()),
                 action: CommandAction::None,
             },
         });
 
+        // ── /ping ──
         self.register(CommandDef {
             name: "ping",
             description: "Check server connection",
             usage: "/ping",
+            aliases: vec![],
+            overloads: vec![],
             handler: |_, _| CommandResult {
                 response: Some("Pong!".to_string()),
                 action: CommandAction::None,
             },
         });
 
+        // ── /difficulty <level> ──
         self.register(CommandDef {
             name: "difficulty",
             description: "Set game difficulty",
             usage: "/difficulty <0-3|peaceful|easy|normal|hard>",
+            aliases: vec![],
+            overloads: vec![CommandOverload {
+                params: vec![CommandParam {
+                    name: "difficulty",
+                    param_type: ParamType::HardEnum {
+                        name: "Difficulty",
+                        values: vec![
+                            "peaceful", "easy", "normal", "hard", "p", "e", "n", "h", "0", "1",
+                            "2", "3",
+                        ],
+                    },
+                    optional: false,
+                }],
+            }],
             handler: |parts, ctx| {
                 if parts.len() < 2 {
                     return CommandResult {
@@ -320,10 +489,22 @@ impl CommandRegistry {
             },
         });
 
+        // ── /weather <type> ──
         self.register(CommandDef {
             name: "weather",
             description: "Set weather",
             usage: "/weather <clear|rain|thunder>",
+            aliases: vec![],
+            overloads: vec![CommandOverload {
+                params: vec![CommandParam {
+                    name: "type",
+                    param_type: ParamType::HardEnum {
+                        name: "Weather",
+                        values: vec!["clear", "rain", "thunder"],
+                    },
+                    optional: false,
+                }],
+            }],
             handler: |parts, ctx| {
                 if parts.len() < 2 {
                     return CommandResult {
@@ -350,10 +531,13 @@ impl CommandRegistry {
             },
         });
 
+        // ── /spawn ──
         self.register(CommandDef {
             name: "spawn",
             description: "Teleport to world spawn",
             usage: "/spawn",
+            aliases: vec![],
+            overloads: vec![],
             handler: |_, _| CommandResult {
                 response: Some("Teleported to spawn".to_string()),
                 action: CommandAction::Teleport {
@@ -364,10 +548,13 @@ impl CommandRegistry {
             },
         });
 
+        // ── /pos ──
         self.register(CommandDef {
             name: "pos",
             description: "Show your current position",
             usage: "/pos",
+            aliases: vec![],
+            overloads: vec![],
             handler: |_, ctx| CommandResult {
                 response: Some(format!(
                     "Position: {:.1}, {:.1}, {:.1}",
@@ -377,20 +564,32 @@ impl CommandRegistry {
             },
         });
 
+        // ── /clear ──
         self.register(CommandDef {
             name: "clear",
             description: "Clear inventory",
             usage: "/clear",
+            aliases: vec![],
+            overloads: vec![],
             handler: |_, _| CommandResult {
                 response: Some("Inventory cleared (not implemented yet)".to_string()),
                 action: CommandAction::None,
             },
         });
 
+        // ── /up [blocks] ──
         self.register(CommandDef {
             name: "up",
             description: "Teleport up by N blocks",
             usage: "/up [blocks]",
+            aliases: vec![],
+            overloads: vec![CommandOverload {
+                params: vec![CommandParam {
+                    name: "blocks",
+                    param_type: ParamType::Int,
+                    optional: true,
+                }],
+            }],
             handler: |parts, ctx| {
                 let amount = if parts.len() >= 2 {
                     parts[1].parse::<f32>().unwrap_or(10.0)

@@ -60,7 +60,7 @@ pub fn extract_login_identity(auth_info_json: &str) -> Result<LoginIdentity, Jwt
         .unwrap_or(1); // default to SELF_SIGNED
 
     if auth_type == 0 {
-        // FULL (Xbox/OpenID) — Token field has identity, Certificate has client key chain
+        // FULL (Xbox/OpenID) — Token field has identity data
         let token = auth_info
             .get("Token")
             .and_then(|v| v.as_str())
@@ -71,33 +71,29 @@ pub fn extract_login_identity(auth_info_json: &str) -> Result<LoginIdentity, Jwt
         let display_name = decoded.claims["xname"].as_str().unwrap_or("").to_string();
         let xuid = decoded.claims["xid"].as_str().unwrap_or("").to_string();
 
-        // The ECDH client public key comes from the Certificate chain.
-        // Walk the chain: the last identityPublicKey in claims is the client's key.
-        let mut pub_key = String::new();
-        if let Some(cert_str) = auth_info.get("Certificate").and_then(|v| v.as_str()) {
-            if let Ok(cert_json) = serde_json::from_str::<Value>(cert_str) {
-                if let Some(chain) = cert_json["chain"].as_array() {
-                    for jwt_str in chain.iter().filter_map(|v| v.as_str()) {
-                        if let Ok(jwt) = decode_jwt(jwt_str) {
-                            if let Some(key) =
-                                jwt.claims.get("identityPublicKey").and_then(|v| v.as_str())
-                            {
-                                pub_key = key.to_string();
+        // Client public key is in the Token JWT claims under "cpk" (PMMP: XboxAuthJwtBody.cpk)
+        let mut pub_key = decoded.claims["cpk"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+
+        // Fallback: walk the Certificate chain for identityPublicKey (legacy path)
+        if pub_key.is_empty() {
+            if let Some(cert_str) = auth_info.get("Certificate").and_then(|v| v.as_str()) {
+                if let Ok(cert_json) = serde_json::from_str::<Value>(cert_str) {
+                    if let Some(chain) = cert_json["chain"].as_array() {
+                        for jwt_str in chain.iter().filter_map(|v| v.as_str()) {
+                            if let Ok(jwt) = decode_jwt(jwt_str) {
+                                if let Some(key) =
+                                    jwt.claims.get("identityPublicKey").and_then(|v| v.as_str())
+                                {
+                                    pub_key = key.to_string();
+                                }
                             }
                         }
                     }
                 }
             }
-        }
-
-        // Fallback: use x5u from client data JWT if chain didn't yield a key
-        if pub_key.is_empty() {
-            pub_key = decoded
-                .header
-                .get("x5u")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string();
         }
 
         Ok(LoginIdentity {

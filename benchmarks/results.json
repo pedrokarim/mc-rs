@@ -1,0 +1,49 @@
+{
+  "timestamp": "2026-03-23 22:12:00",
+  "config": {
+    "startup_timeout_s": 120,
+    "idle_sample_duration_s": 10,
+    "ping_count": 100
+  },
+  "results": [
+    {
+      "server_name": "mc-rs (Rust)",
+      "startup_time_ms": 9.6,
+      "memory_mb": 7.3,
+      "cpu_percent": 0.0,
+      "ping_min_ms": 0.048,
+      "ping_avg_ms": 0.231,
+      "ping_max_ms": 10.209,
+      "ping_p99_ms": 1.181,
+      "ping_success": 100,
+      "ping_total": 100,
+      "error": null
+    },
+    {
+      "server_name": "PocketMine-MP",
+      "startup_time_ms": 2702.9,
+      "memory_mb": 23.8,
+      "cpu_percent": 0.0,
+      "ping_min_ms": 0.341,
+      "ping_avg_ms": 5.67,
+      "ping_max_ms": 22.319,
+      "ping_p99_ms": 21.906,
+      "ping_success": 100,
+      "ping_total": 100,
+      "error": null
+    },
+    {
+      "server_name": "BDS (Mojang)",
+      "startup_time_ms": 1332.8,
+      "memory_mb": 238.9,
+      "cpu_percent": 0.02,
+      "ping_min_ms": 0.045,
+      "ping_avg_ms": 0.104,
+      "ping_max_ms": 1.613,
+      "ping_p99_ms": 0.676,
+      "ping_success": 100,
+      "ping_total": 100,
+      "error": null
+    }
+  ]
+}
