@@ -2,78 +2,13 @@ use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
 use super::biome::{self, BiomeSelector, Gaussian};
+use super::block_registry::BLOCKS;
 use super::chunk_serializer;
-use super::flat_generator::block_ids;
 use super::noise::Simplex;
 use super::ore;
 use super::random::Random;
 use super::structure;
 use super::vegetation;
-
-/// Additional block IDs for terrain generation.
-/// Sequential indices from canonical_block_states.nbt (protocol 924).
-pub mod extra_blocks {
-    pub const STONE: u32 = 2532;
-    pub const WATER: u32 = 9268;
-    pub const SAND: u32 = 6234;
-    pub const SANDSTONE: u32 = 5213;
-    pub const GRAVEL: u32 = 15806;
-    pub const OAK_LOG: u32 = 1366;
-    pub const OAK_LEAVES: u32 = 2752;
-    pub const SNOW_LAYER: u32 = 1019;
-    pub const COAL_ORE: u32 = 6318;
-    pub const IRON_ORE: u32 = 7336;
-    pub const GOLD_ORE: u32 = 3203;
-    pub const DIAMOND_ORE: u32 = 6501;
-    pub const REDSTONE_ORE: u32 = 6356;
-    pub const LAPIS_ORE: u32 = 14583;
-    pub const SHORT_GRASS: u32 = 12421;
-    pub const MYCELIUM: u32 = 5240;
-    pub const RED_SAND: u32 = 2732;
-    pub const HARDENED_CLAY: u32 = 2086;
-    pub const SNOW_BLOCK: u32 = 6233;
-    pub const PODZOL: u32 = 7292;
-    pub const COARSE_DIRT: u32 = 6725;
-    pub const RED_SANDSTONE: u32 = 12454;
-    pub const DEEPSLATE: u32 = 1310;
-    pub const TUFF: u32 = 1763;
-    pub const GRANITE: u32 = 284;
-    pub const DIORITE: u32 = 415;
-    pub const ANDESITE: u32 = 2530;
-    pub const LAVA: u32 = 5406;
-    // Vegetation
-    pub const DANDELION: u32 = 15844;
-    pub const POPPY: u32 = 5298;
-    pub const BLUE_ORCHID: u32 = 6150;
-    pub const ALLIUM: u32 = 1787;
-    pub const AZURE_BLUET: u32 = 845;
-    pub const OXEYE_DAISY: u32 = 13916;
-    pub const CORNFLOWER: u32 = 8356;
-    pub const FERN: u32 = 11669;
-    pub const TALL_GRASS: u32 = 12319;
-    pub const LARGE_FERN: u32 = 12345;
-    pub const WATERLILY: u32 = 3605;
-    pub const SEAGRASS: u32 = 1301;
-    // Phase 1: simple vegetation
-    pub const CACTUS: u32 = 12880;
-    pub const DEADBUSH: u32 = 7319;
-    pub const BROWN_MUSHROOM: u32 = 4959;
-    pub const RED_MUSHROOM: u32 = 6797;
-    pub const PUMPKIN: u32 = 6763;
-    pub const REEDS: u32 = 11588;
-    pub const BAMBOO: u32 = 5253;
-    // Tree types
-    pub const BIRCH_LOG: u32 = 2535;
-    pub const BIRCH_LEAVES: u32 = 6160;
-    pub const SPRUCE_LOG: u32 = 6314;
-    pub const SPRUCE_LEAVES: u32 = 6578;
-    pub const ACACIA_LOG: u32 = 6466;
-    pub const ACACIA_LEAVES: u32 = 3810;
-    pub const DARK_OAK_LOG: u32 = 3989;
-    pub const DARK_OAK_LEAVES: u32 = 11647;
-    pub const JUNGLE_LOG: u32 = 1260;
-    pub const JUNGLE_LEAVES: u32 = 8677;
-}
 
 /// Water surface level (same as PocketMine-MP).
 const WATER_HEIGHT: i32 = 62;
@@ -324,41 +259,41 @@ fn underground_block(world_x: i32, world_y: i32, world_z: i32, seed: u64) -> u32
 
     if world_y <= -63 {
         // Y=-64, -63: 100% bedrock
-        block_ids::BEDROCK
+        BLOCKS.bedrock
     } else if world_y == -62 {
         // 75% bedrock, 25% deepslate
         if h < 75 {
-            block_ids::BEDROCK
+            BLOCKS.bedrock
         } else {
-            extra_blocks::DEEPSLATE
+            BLOCKS.deepslate
         }
     } else if world_y == -61 {
         // 50% bedrock, 50% deepslate
         if h < 50 {
-            block_ids::BEDROCK
+            BLOCKS.bedrock
         } else {
-            extra_blocks::DEEPSLATE
+            BLOCKS.deepslate
         }
     } else if world_y == -60 {
         // 25% bedrock, 75% deepslate
         if h < 25 {
-            block_ids::BEDROCK
+            BLOCKS.bedrock
         } else {
-            extra_blocks::DEEPSLATE
+            BLOCKS.deepslate
         }
     } else if world_y <= 0 {
         // Deepslate zone: 88% deepslate, 7% tuff, 5% other
         if h < 7 {
-            extra_blocks::TUFF
+            BLOCKS.tuff
         } else {
-            extra_blocks::DEEPSLATE
+            BLOCKS.deepslate
         }
     } else if world_y <= 8 {
         // Transition zone: linear blend deepslate → stone over 8 levels
         // Y=1: 70% deepslate, Y=4: 40%, Y=8: 0%
         let deepslate_pct = (80 - world_y * 10).max(0) as u32;
         if h < deepslate_pct {
-            extra_blocks::DEEPSLATE
+            BLOCKS.deepslate
         } else {
             // Stone with variants
             stone_with_variants(world_x, world_y, world_z, seed)
@@ -374,13 +309,13 @@ fn underground_block(world_x: i32, world_y: i32, world_z: i32, seed: u64) -> u32
 fn stone_with_variants(x: i32, y: i32, z: i32, seed: u64) -> u32 {
     let h = block_variety_hash(x, y, z, seed.wrapping_add(1));
     if h < 7 {
-        extra_blocks::GRANITE
+        BLOCKS.granite
     } else if h < 14 {
-        extra_blocks::DIORITE
+        BLOCKS.diorite
     } else if h < 21 {
-        extra_blocks::ANDESITE
+        BLOCKS.andesite
     } else {
-        extra_blocks::STONE
+        BLOCKS.stone
     }
 }
 
@@ -409,13 +344,13 @@ fn block_at(
         // Underground block with realistic layers
         underground_block(world_x, world_y, world_z, seed)
     } else if world_y <= WATER_HEIGHT {
-        extra_blocks::WATER
+        BLOCKS.water
     } else {
         // Air — check for snow_layer on top
         if is_non_solid_top && world_y == surface_y + 1 && !cover.is_empty() {
             return cover[0];
         }
-        block_ids::AIR
+        BLOCKS.air
     }
 }
 
@@ -483,8 +418,7 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
     let veg_map = vegetation::generate_vegetation(&biome_ids, &surfaces, &mut chunk_random);
 
     // Generate structures (fossils, etc.)
-    // Block mapping is cached — parsing canonical_block_states.nbt is expensive
-
+    // Block mapping is cached — structure loading should not rebuild it repeatedly.
     static BLOCK_MAPPING: LazyLock<std::collections::HashMap<String, u32>> =
         LazyLock::new(structure::build_block_mapping);
     let center_biome = biome_ids[8][8];
@@ -504,7 +438,7 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
         for z in 0..16 {
             let biome_def = biome::get_biome(biome_ids[x][z]);
             let is_non_solid = !biome_def.ground_cover.is_empty()
-                && biome_def.ground_cover[0] == extra_blocks::SNOW_LAYER;
+                && biome_def.ground_cover[0] == BLOCKS.snow_layer;
             non_solid_top[x * 16 + z] = is_non_solid;
             covers.push(biome_def.ground_cover);
         }
@@ -520,14 +454,14 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
         // Flood-fill with stone for sub-chunks above Y=0 but below noise range
         if sub_y_start >= 0 && (sub_idx as i32) < min_noise_sub_chunk {
             let blocks = [0u32; 4096];
-            let palette = vec![extra_blocks::STONE];
+            let palette = vec![BLOCKS.stone];
             let sub_chunk = chunk_serializer::serialize_sub_chunk(&blocks, &palette);
             payload.extend_from_slice(&sub_chunk);
             continue;
         }
 
         let mut blocks = [0u32; 4096];
-        let mut palette_map: Vec<u32> = vec![block_ids::AIR];
+        let mut palette_map: Vec<u32> = vec![BLOCKS.air];
 
         let get_palette_idx = |block_id: u32, map: &mut Vec<u32>| -> u32 {
             if let Some(idx) = map.iter().position(|&b| b == block_id) {
@@ -589,11 +523,11 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
                             seed,
                         )
                     } else {
-                        block_ids::AIR
+                        BLOCKS.air
                     };
 
                     // Replace stone/deepslate with ore if applicable
-                    if block == extra_blocks::STONE || block == extra_blocks::DEEPSLATE {
+                    if block == BLOCKS.stone || block == BLOCKS.deepslate {
                         if let Some(&ore_id) = ore_map.get(&(local_x as u8, world_y, local_z as u8))
                         {
                             block = ore_id;
@@ -614,7 +548,7 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
                         block = struct_id;
                     }
 
-                    if block != block_ids::AIR {
+                    if block != BLOCKS.air {
                         let pidx = get_palette_idx(block, &mut palette_map);
                         blocks[idx] = pidx;
                         has_blocks = true;

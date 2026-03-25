@@ -22,7 +22,6 @@ use crate::inventory::PlayerInventory;
 use crate::player_data;
 use crate::player_registry;
 use crate::world::chunk_cache::ChunkCache;
-use crate::world::flat_generator;
 use crate::world::terrain_generator;
 
 /// Connection state for a single player.
@@ -907,7 +906,7 @@ impl Connection {
 
                 // PREDICT_DESTROY_BLOCK (26)
                 26 => {
-                    let air_id = flat_generator::block_ids::AIR;
+                    let air_id = crate::world::block_registry::BLOCKS.air;
 
                     // Send BLOCK_STOP_BREAK to clear crack animation
                     let stop_event = LevelEvent {
@@ -1055,7 +1054,7 @@ impl Connection {
         // Set the block
         if let Ok(mut cache) = self.chunk_cache.lock() {
             let existing = cache.get_block(tx, ty, tz);
-            if existing != flat_generator::block_ids::AIR {
+            if existing != crate::world::block_registry::BLOCKS.air {
                 return; // Can't place on a non-air block
             }
             cache.set_block(tx, ty, tz, block_runtime_id);

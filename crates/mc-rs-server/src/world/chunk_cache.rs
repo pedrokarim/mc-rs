@@ -3,7 +3,7 @@ use std::path::Path;
 use tracing::{debug, info};
 
 use super::chunk_serializer::{self, SubChunk};
-use super::flat_generator::block_ids;
+use super::block_registry::BLOCKS;
 use super::storage::WorldStorage;
 use super::terrain_generator;
 
@@ -111,7 +111,7 @@ impl ChunkCache {
 
                     let sub_count = stored_sub_chunks.len() as u32;
                     let (sub_chunks, _) =
-                        chunk_serializer::parse_chunk_payload(&payload, sub_count, block_ids::AIR);
+                        chunk_serializer::parse_chunk_payload(&payload, sub_count, BLOCKS.air);
 
                     Some(ChunkColumn {
                         x: cx,
@@ -141,7 +141,7 @@ impl ChunkCache {
             };
 
             let (sub_chunks, biome_data) =
-                chunk_serializer::parse_chunk_payload(&payload, sub_count, block_ids::AIR);
+                chunk_serializer::parse_chunk_payload(&payload, sub_count, BLOCKS.air);
 
             ChunkColumn {
                 x: cx,
@@ -166,7 +166,7 @@ impl ChunkCache {
         let local_z = world_z.rem_euclid(16) as usize;
 
         if !(0..384).contains(&local_y_offset) {
-            return block_ids::AIR;
+            return BLOCKS.air;
         }
 
         let sub_idx = local_y_offset as usize / 16;
@@ -176,7 +176,7 @@ impl ChunkCache {
         let chunk = self.chunks.get(&(cx, cz)).unwrap();
 
         if sub_idx >= chunk.sub_chunks.len() {
-            return block_ids::AIR;
+            return BLOCKS.air;
         }
 
         chunk.sub_chunks[sub_idx].get_block(local_x, local_y, local_z)
@@ -203,7 +203,7 @@ impl ChunkCache {
 
         // Extend sub_chunks if needed
         while chunk.sub_chunks.len() <= sub_idx {
-            chunk.sub_chunks.push(SubChunk::new_air(block_ids::AIR));
+            chunk.sub_chunks.push(SubChunk::new_air(BLOCKS.air));
         }
         if sub_idx as u32 >= chunk.sub_chunk_count {
             chunk.sub_chunk_count = sub_idx as u32 + 1;

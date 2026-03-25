@@ -1,4 +1,6 @@
 pub mod biome;
+pub mod block_registry;
+pub mod block_registry_data;
 pub mod chunk_cache;
 pub mod chunk_serializer;
 pub mod flat_generator;

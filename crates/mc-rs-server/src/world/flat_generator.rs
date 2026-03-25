@@ -1,19 +1,5 @@
+use super::block_registry::BLOCKS;
 use super::chunk_serializer;
-
-/// Block runtime IDs (FNV1 hashes used when block_network_ids_are_hashes=true).
-/// These are the hashed values the client expects for each block state.
-/// Extracted from PMMP's canonical_block_states.nbt hash computation.
-///
-/// For Phase 1, we use known hash values for the 4 blocks we need.
-/// The client computes: FNV1_32(block_state_nbt) for each canonical state.
-/// Block runtime IDs from canonical_block_states.nbt (sequential index).
-/// Used when blockNetworkIdsAreHashes=false in StartGame.
-pub mod block_ids {
-    pub const AIR: u32 = 12530;
-    pub const BEDROCK: u32 = 13079;
-    pub const DIRT: u32 = 9852;
-    pub const GRASS_BLOCK: u32 = 11062;
-}
 
 /// Generate a flat chunk's serialized payload.
 ///
@@ -52,12 +38,7 @@ pub fn generate_flat_chunk() -> (u32, Vec<u8>) {
 /// - y=4 to y=15: air
 fn build_flat_sub_chunk() -> Vec<u8> {
     // Palette: [air, bedrock, dirt, grass_block]
-    let palette = vec![
-        block_ids::AIR,
-        block_ids::BEDROCK,
-        block_ids::DIRT,
-        block_ids::GRASS_BLOCK,
-    ];
+    let palette = vec![BLOCKS.air, BLOCKS.bedrock, BLOCKS.dirt, BLOCKS.grass_block];
 
     // Build block array: 4096 entries (16x16x16)
     // Index = (x << 8) | (z << 4) | y

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
+use super::block_registry::BLOCKS;
 use super::random::Random;
-use super::terrain_generator::extra_blocks;
 
 /// Ore type definition matching PMMP's OreType.
 pub struct OreType {
@@ -17,42 +17,42 @@ pub struct OreType {
 pub fn default_ore_types() -> Vec<OreType> {
     vec![
         OreType {
-            block_id: extra_blocks::COAL_ORE,
+            block_id: BLOCKS.coal_ore,
             cluster_count: 20,
             cluster_size: 16,
             min_height: 0,
             max_height: 128,
         },
         OreType {
-            block_id: extra_blocks::IRON_ORE,
+            block_id: BLOCKS.iron_ore,
             cluster_count: 20,
             cluster_size: 8,
             min_height: 0,
             max_height: 64,
         },
         OreType {
-            block_id: extra_blocks::REDSTONE_ORE,
+            block_id: BLOCKS.redstone_ore,
             cluster_count: 8,
             cluster_size: 7,
             min_height: 0,
             max_height: 16,
         },
         OreType {
-            block_id: extra_blocks::LAPIS_ORE,
+            block_id: BLOCKS.lapis_ore,
             cluster_count: 1,
             cluster_size: 6,
             min_height: 0,
             max_height: 32,
         },
         OreType {
-            block_id: extra_blocks::GOLD_ORE,
+            block_id: BLOCKS.gold_ore,
             cluster_count: 2,
             cluster_size: 8,
             min_height: 0,
             max_height: 32,
         },
         OreType {
-            block_id: extra_blocks::DIAMOND_ORE,
+            block_id: BLOCKS.diamond_ore,
             cluster_count: 1,
             cluster_size: 7,
             min_height: 0,
@@ -60,14 +60,14 @@ pub fn default_ore_types() -> Vec<OreType> {
         },
         // Dirt and gravel pockets in stone
         OreType {
-            block_id: block_ids::DIRT,
+            block_id: BLOCKS.dirt,
             cluster_count: 20,
             cluster_size: 32,
             min_height: 0,
             max_height: 128,
         },
         OreType {
-            block_id: extra_blocks::GRAVEL,
+            block_id: BLOCKS.gravel,
             cluster_count: 10,
             cluster_size: 16,
             min_height: 0,
@@ -75,8 +75,6 @@ pub fn default_ore_types() -> Vec<OreType> {
         },
     ]
 }
-
-use super::flat_generator::block_ids;
 
 /// Generate all ore positions for a chunk.
 /// Returns a map of (local_x, world_y, local_z) -> ore block ID.

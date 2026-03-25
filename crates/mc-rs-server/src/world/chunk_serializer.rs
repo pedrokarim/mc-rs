@@ -151,7 +151,7 @@ pub fn deserialize_sub_chunk_data(data: &[u8]) -> Option<(SubChunk, usize)> {
     }
 
     let storage_count = reader.read_u8().ok()?;
-    let air_id = super::flat_generator::block_ids::AIR;
+    let air_id = super::block_registry::BLOCKS.air;
     let mut blocks = [air_id; 4096];
 
     if storage_count > 0 {

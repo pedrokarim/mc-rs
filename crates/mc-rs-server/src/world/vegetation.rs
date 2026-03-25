@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
 use super::biome::biome_id;
-use super::flat_generator::block_ids;
+use super::block_registry::BLOCKS;
 use super::random::Random;
-use super::terrain_generator::extra_blocks;
 
 /// Generate all vegetation for a chunk: trees, grass, flowers, cactus, dead bush, etc.
 pub fn generate_vegetation(
@@ -44,7 +43,7 @@ pub fn generate_vegetation(
         }
         blocks
             .entry((gx as u8, sy + 1, gz as u8))
-            .or_insert(extra_blocks::SHORT_GRASS);
+            .or_insert(BLOCKS.short_grass);
     }
 
     // ── Flowers ──
@@ -73,7 +72,7 @@ pub fn generate_vegetation(
         }
         blocks
             .entry((fx as u8, sy + 1, fz as u8))
-            .or_insert(extra_blocks::FERN);
+            .or_insert(BLOCKS.fern);
     }
 
     // ── Tall grass (double plant) ──
@@ -87,7 +86,7 @@ pub fn generate_vegetation(
         }
         blocks
             .entry((gx as u8, sy + 1, gz as u8))
-            .or_insert(extra_blocks::TALL_GRASS);
+            .or_insert(BLOCKS.tall_grass);
     }
 
     // ── Cactus (desert, mesa) ──
@@ -108,7 +107,7 @@ pub fn generate_vegetation(
         let pos = (cx as u8, sy + 1, cz as u8);
         if !blocks.contains_key(&pos) {
             for h in 0..height {
-                blocks.insert((cx as u8, sy + 1 + h, cz as u8), extra_blocks::CACTUS);
+                blocks.insert((cx as u8, sy + 1 + h, cz as u8), BLOCKS.cactus);
             }
         }
     }
@@ -133,7 +132,7 @@ pub fn generate_vegetation(
         }
         blocks
             .entry((dx as u8, sy + 1, dz as u8))
-            .or_insert(extra_blocks::DEADBUSH);
+            .or_insert(BLOCKS.deadbush);
     }
 
     // ── Mushrooms (swamp, mega_taiga, taiga) ──
@@ -152,9 +151,9 @@ pub fn generate_vegetation(
             continue;
         }
         let mushroom = if random.next_bounded_int(4) == 0 {
-            extra_blocks::RED_MUSHROOM
+            BLOCKS.red_mushroom
         } else {
-            extra_blocks::BROWN_MUSHROOM
+            BLOCKS.brown_mushroom
         };
         blocks
             .entry((mx as u8, sy + 1, mz as u8))
@@ -169,7 +168,7 @@ pub fn generate_vegetation(
         if sy > 62 {
             blocks
                 .entry((px as u8, sy + 1, pz as u8))
-                .or_insert(extra_blocks::PUMPKIN);
+                .or_insert(BLOCKS.pumpkin);
         }
     }
 
@@ -196,7 +195,7 @@ pub fn generate_vegetation(
             for h in 0..height {
                 blocks
                     .entry((rx as u8, sy + 1 + h, rz as u8))
-                    .or_insert(extra_blocks::REEDS);
+                    .or_insert(BLOCKS.reeds);
             }
         }
     }
@@ -218,7 +217,7 @@ pub fn generate_vegetation(
         if !blocks.contains_key(&pos) {
             let height = random.next_range(5, 12);
             for h in 0..height {
-                blocks.insert((bx as u8, sy + 1 + h, bz as u8), extra_blocks::BAMBOO);
+                blocks.insert((bx as u8, sy + 1 + h, bz as u8), BLOCKS.bamboo);
             }
         }
     }
@@ -233,7 +232,7 @@ pub fn generate_vegetation(
             if sy < 62 {
                 blocks
                     .entry((wx as u8, 63, wz as u8))
-                    .or_insert(extra_blocks::WATERLILY);
+                    .or_insert(BLOCKS.waterlily);
             }
         }
     }
@@ -373,32 +372,32 @@ fn tall_grass_count_for_biome(biome: u32) -> i32 {
 fn pick_flower(biome: u32, random: &mut Random) -> u32 {
     match biome {
         biome_id::FLOWER_FOREST => match random.next_bounded_int(7) {
-            0 => extra_blocks::DANDELION,
-            1 => extra_blocks::POPPY,
-            2 => extra_blocks::ALLIUM,
-            3 => extra_blocks::AZURE_BLUET,
-            4 => extra_blocks::OXEYE_DAISY,
-            5 => extra_blocks::CORNFLOWER,
-            _ => extra_blocks::BLUE_ORCHID,
+            0 => BLOCKS.dandelion,
+            1 => BLOCKS.poppy,
+            2 => BLOCKS.allium,
+            3 => BLOCKS.azure_bluet,
+            4 => BLOCKS.oxeye_daisy,
+            5 => BLOCKS.cornflower,
+            _ => BLOCKS.blue_orchid,
         },
-        biome_id::SWAMPLAND => extra_blocks::BLUE_ORCHID,
+        biome_id::SWAMPLAND => BLOCKS.blue_orchid,
         biome_id::PLAINS | biome_id::SUNFLOWER_PLAINS => {
             if random.next_bounded_int(3) == 0 {
-                extra_blocks::DANDELION
+                BLOCKS.dandelion
             } else {
                 match random.next_bounded_int(4) {
-                    0 => extra_blocks::POPPY,
-                    1 => extra_blocks::AZURE_BLUET,
-                    2 => extra_blocks::OXEYE_DAISY,
-                    _ => extra_blocks::CORNFLOWER,
+                    0 => BLOCKS.poppy,
+                    1 => BLOCKS.azure_bluet,
+                    2 => BLOCKS.oxeye_daisy,
+                    _ => BLOCKS.cornflower,
                 }
             }
         }
         _ => {
             if random.next_bounded_int(2) == 0 {
-                extra_blocks::DANDELION
+                BLOCKS.dandelion
             } else {
-                extra_blocks::POPPY
+                BLOCKS.poppy
             }
         }
     }
@@ -422,8 +421,8 @@ fn place_tree_for_biome(
                 y,
                 z,
                 h,
-                extra_blocks::BIRCH_LOG,
-                extra_blocks::BIRCH_LEAVES,
+                BLOCKS.birch_log,
+                BLOCKS.birch_leaves,
                 random,
                 blocks,
             );
@@ -447,8 +446,8 @@ fn place_tree_for_biome(
                 y,
                 z,
                 h,
-                extra_blocks::ACACIA_LOG,
-                extra_blocks::ACACIA_LEAVES,
+                BLOCKS.acacia_log,
+                BLOCKS.acacia_leaves,
                 random,
                 blocks,
             );
@@ -463,8 +462,8 @@ fn place_tree_for_biome(
                 y,
                 z,
                 h,
-                extra_blocks::JUNGLE_LOG,
-                extra_blocks::JUNGLE_LEAVES,
+                BLOCKS.jungle_log,
+                BLOCKS.jungle_leaves,
                 random,
                 blocks,
             );
@@ -476,8 +475,8 @@ fn place_tree_for_biome(
                 y,
                 z,
                 h,
-                extra_blocks::DARK_OAK_LOG,
-                extra_blocks::DARK_OAK_LEAVES,
+                BLOCKS.dark_oak_log,
+                BLOCKS.dark_oak_leaves,
                 random,
                 blocks,
             );
@@ -496,8 +495,8 @@ fn place_tree_for_biome(
                     y,
                     z,
                     h,
-                    extra_blocks::OAK_LOG,
-                    extra_blocks::OAK_LEAVES,
+                    BLOCKS.oak_log,
+                    BLOCKS.oak_leaves,
                     random,
                     blocks,
                 );
@@ -511,8 +510,8 @@ fn place_tree_for_biome(
                 y,
                 z,
                 h,
-                extra_blocks::OAK_LOG,
-                extra_blocks::OAK_LEAVES,
+                BLOCKS.oak_log,
+                BLOCKS.oak_leaves,
                 random,
                 blocks,
             );
@@ -539,7 +538,7 @@ fn place_simple_tree(
     for yy in 0..height {
         blocks.insert((x as u8, y + yy, z as u8), log_id);
     }
-    blocks.insert((x as u8, y - 1, z as u8), block_ids::DIRT);
+    blocks.insert((x as u8, y - 1, z as u8), BLOCKS.dirt);
     // Canopy
     for yy in (y + height - 3)..=(y + height) {
         let y_off = yy - (y + height);
@@ -574,14 +573,14 @@ fn place_spruce_tree(
     if !(3..=12).contains(&x) || !(3..=12).contains(&z) || y + height + 2 > 256 {
         return;
     }
-    let log = extra_blocks::SPRUCE_LOG;
-    let leaf = extra_blocks::SPRUCE_LEAVES;
+    let log = BLOCKS.spruce_log;
+    let leaf = BLOCKS.spruce_leaves;
 
     // Trunk
     for yy in 0..height {
         blocks.insert((x as u8, y + yy, z as u8), log);
     }
-    blocks.insert((x as u8, y - 1, z as u8), block_ids::DIRT);
+    blocks.insert((x as u8, y - 1, z as u8), BLOCKS.dirt);
 
     // Triangular canopy: starts narrow at top, widens toward bottom
     // Top: single leaf on top
@@ -635,8 +634,8 @@ mod tests {
         let mut rng = Random::new(42);
         let veg = generate_vegetation(&biome_ids, &surfaces, &mut rng);
         assert!(!veg.is_empty());
-        assert!(veg.values().any(|&id| id == extra_blocks::OAK_LOG));
-        assert!(veg.values().any(|&id| id == extra_blocks::OAK_LEAVES));
+        assert!(veg.values().any(|&id| id == BLOCKS.oak_log));
+        assert!(veg.values().any(|&id| id == BLOCKS.oak_leaves));
     }
 
     #[test]
@@ -646,11 +645,11 @@ mod tests {
         let mut rng = Random::new(42);
         let veg = generate_vegetation(&biome_ids, &surfaces, &mut rng);
         assert!(
-            veg.values().any(|&id| id == extra_blocks::CACTUS),
+            veg.values().any(|&id| id == BLOCKS.cactus),
             "Desert should have cactus"
         );
         assert!(
-            veg.values().any(|&id| id == extra_blocks::DEADBUSH),
+            veg.values().any(|&id| id == BLOCKS.deadbush),
             "Desert should have dead bush"
         );
     }
@@ -662,10 +661,10 @@ mod tests {
         let mut rng = Random::new(42);
         let veg = generate_vegetation(&biome_ids, &surfaces, &mut rng);
         assert!(
-            veg.values().any(|&id| id == extra_blocks::SPRUCE_LOG),
+            veg.values().any(|&id| id == BLOCKS.spruce_log),
             "Taiga should have spruce"
         );
-        assert!(veg.values().any(|&id| id == extra_blocks::SPRUCE_LEAVES));
+        assert!(veg.values().any(|&id| id == BLOCKS.spruce_leaves));
     }
 
     #[test]
@@ -675,7 +674,7 @@ mod tests {
         let mut rng = Random::new(42);
         let veg = generate_vegetation(&biome_ids, &surfaces, &mut rng);
         assert!(
-            veg.values().any(|&id| id == extra_blocks::BIRCH_LOG),
+            veg.values().any(|&id| id == BLOCKS.birch_log),
             "Birch forest should have birch"
         );
     }
@@ -687,7 +686,7 @@ mod tests {
         let mut rng = Random::new(42);
         let veg = generate_vegetation(&biome_ids, &surfaces, &mut rng);
         assert!(
-            veg.values().any(|&id| id == extra_blocks::ACACIA_LOG),
+            veg.values().any(|&id| id == BLOCKS.acacia_log),
             "Savanna should have acacia"
         );
     }
@@ -699,11 +698,11 @@ mod tests {
         let mut rng = Random::new(42);
         let veg = generate_vegetation(&biome_ids, &surfaces, &mut rng);
         assert!(
-            veg.values().any(|&id| id == extra_blocks::BAMBOO),
+            veg.values().any(|&id| id == BLOCKS.bamboo),
             "Jungle should have bamboo"
         );
         assert!(
-            veg.values().any(|&id| id == extra_blocks::JUNGLE_LOG),
+            veg.values().any(|&id| id == BLOCKS.jungle_log),
             "Jungle should have jungle trees"
         );
     }
@@ -722,7 +721,7 @@ mod tests {
         let veg = generate_vegetation(&biome_ids, &surfaces, &mut rng);
         let has_mushroom = veg
             .values()
-            .any(|&id| id == extra_blocks::BROWN_MUSHROOM || id == extra_blocks::RED_MUSHROOM);
+            .any(|&id| id == BLOCKS.brown_mushroom || id == BLOCKS.red_mushroom);
         assert!(has_mushroom, "Swamp should have mushrooms");
     }
 
@@ -733,13 +732,13 @@ mod tests {
         let mut rng = Random::new(42);
         let veg = generate_vegetation(&biome_ids, &surfaces, &mut rng);
         let flower_ids = [
-            extra_blocks::DANDELION,
-            extra_blocks::POPPY,
-            extra_blocks::ALLIUM,
-            extra_blocks::AZURE_BLUET,
-            extra_blocks::OXEYE_DAISY,
-            extra_blocks::CORNFLOWER,
-            extra_blocks::BLUE_ORCHID,
+            BLOCKS.dandelion,
+            BLOCKS.poppy,
+            BLOCKS.allium,
+            BLOCKS.azure_bluet,
+            BLOCKS.oxeye_daisy,
+            BLOCKS.cornflower,
+            BLOCKS.blue_orchid,
         ];
         let count = veg.values().filter(|&&id| flower_ids.contains(&id)).count();
         assert!(

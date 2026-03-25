@@ -31,6 +31,10 @@ Pour le réseau, les blocs sont identifiés par des **runtime IDs** (pas les sta
 - Mappés via `BlockTranslator`
 - `block_network_ids_are_hashes = true` dans StartGame → le client utilise des hash FNV1 au lieu d'une palette envoyée
 
+### Extraction De La Palette Canonique
+
+Pour `mc-rs`, la source des runtime IDs séquentiels et la méthode d’extraction depuis BDS sont documentées dans `25-BLOCK-PALETTE-EXTRACTION.md`.
+
 ### Propriétés de blocs
 
 Exemples de propriétés d'état :

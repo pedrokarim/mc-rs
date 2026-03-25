@@ -6,7 +6,8 @@ use std::collections::HashMap;
 use std::io::Read;
 
 use super::biome::biome_id;
-use super::flat_generator::block_ids;
+use super::block_registry::BLOCKS;
+use super::block_registry_data::BLOCK_NAME_TO_FIRST_RUNTIME_ID;
 use super::random::Random;
 
 /// A loaded structure: dimensions + block data.
@@ -84,10 +85,10 @@ fn load_legacy_structure(
                     Some(mc_rs_nbt::tag::NbtTag::String(s)) => s.as_str(),
                     _ => "minecraft:air",
                 };
-                let runtime_id = block_mapping.get(name).copied().unwrap_or(block_ids::AIR);
+                let runtime_id = block_mapping.get(name).copied().unwrap_or(BLOCKS.air);
                 palette.push(runtime_id);
             }
-            _ => palette.push(block_ids::AIR),
+            _ => palette.push(BLOCKS.air),
         }
     }
 
@@ -114,8 +115,8 @@ fn load_legacy_structure(
                     None => continue,
                 };
 
-                let runtime_id = palette.get(state).copied().unwrap_or(block_ids::AIR);
-                if runtime_id != block_ids::AIR {
+                let runtime_id = palette.get(state).copied().unwrap_or(BLOCKS.air);
+                if runtime_id != BLOCKS.air {
                     blocks.insert((x, y, z), runtime_id);
                 }
             }
@@ -161,9 +162,9 @@ fn load_bedrock_structure(
                     Some(mc_rs_nbt::tag::NbtTag::String(s)) => s.as_str(),
                     _ => "minecraft:air",
                 };
-                palette.push(block_mapping.get(name).copied().unwrap_or(block_ids::AIR));
+                palette.push(block_mapping.get(name).copied().unwrap_or(BLOCKS.air));
             }
-            _ => palette.push(block_ids::AIR),
+            _ => palette.push(BLOCKS.air),
         }
     }
 
@@ -189,8 +190,8 @@ fn load_bedrock_structure(
         let runtime_id = palette
             .get(palette_idx as usize)
             .copied()
-            .unwrap_or(block_ids::AIR);
-        if runtime_id == block_ids::AIR {
+            .unwrap_or(BLOCKS.air);
+        if runtime_id == BLOCKS.air {
             continue;
         }
 
@@ -231,33 +232,12 @@ fn extract_int_list_3(tag: &mc_rs_nbt::tag::NbtTag) -> Option<(i32, i32, i32)> {
     }
 }
 
-/// Build the block name → first runtime ID mapping from canonical_block_states.nbt.
+/// Build the block name → first runtime ID mapping from generated registry data.
 pub fn build_block_mapping() -> HashMap<String, u32> {
-    let data = match std::fs::read(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/data/canonical_block_states.nbt"
-    )) {
-        Ok(d) => d,
-        Err(_) => return HashMap::new(),
-    };
-
-    let mut buf = &data[..];
-    let mut mapping = HashMap::new();
-    let mut index = 0u32;
-
-    while !buf.is_empty() {
-        match mc_rs_nbt::read_nbt_network(&mut buf) {
-            Ok(root) => {
-                if let Some(mc_rs_nbt::tag::NbtTag::String(name)) = root.compound.get("name") {
-                    mapping.entry(name.clone()).or_insert(index);
-                }
-                index += 1;
-            }
-            Err(_) => break,
-        }
-    }
-
-    mapping
+    BLOCK_NAME_TO_FIRST_RUNTIME_ID
+        .iter()
+        .map(|(name, runtime_id)| ((*name).to_string(), *runtime_id))
+        .collect()
 }
 
 /// How to place a structure vertically.
