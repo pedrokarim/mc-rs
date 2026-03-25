@@ -35,6 +35,15 @@ impl ChunkColumn {
     }
 }
 
+fn fallback_biome_data() -> Vec<u8> {
+    let biome = chunk_serializer::serialize_biome_section_single(1);
+    let mut biome_data = Vec::with_capacity(biome.len() * 24);
+    for _ in 0..24 {
+        biome_data.extend_from_slice(&biome);
+    }
+    biome_data
+}
+
 /// In-memory chunk cache with LevelDB persistence.
 pub struct ChunkCache {
     chunks: HashMap<(i32, i32), ChunkColumn>,
@@ -45,6 +54,22 @@ pub struct ChunkCache {
 }
 
 impl ChunkCache {
+    fn persist_chunk(storage: &mut WorldStorage, cx: i32, cz: i32, chunk: &ChunkColumn) {
+        storage.save_chunk_version(cx, cz);
+        storage.save_finalization(cx, cz);
+        storage.save_biome_data(cx, cz, &chunk.biome_data);
+
+        let kept_sub_chunks = usize::min(chunk.sub_chunks.len(), chunk.sub_chunk_count as usize);
+        for (i, sub) in chunk.sub_chunks.iter().take(kept_sub_chunks).enumerate() {
+            let serialized = sub.serialize();
+            storage.save_sub_chunk(cx, cz, i as u8, &serialized);
+        }
+
+        for y_index in kept_sub_chunks..24 {
+            storage.delete_sub_chunk(cx, cz, y_index as u8);
+        }
+    }
+
     /// Create a new chunk cache backed by LevelDB storage.
     pub fn new(world_dir: &Path, seed: u64, generator: &str) -> Self {
         let storage = match WorldStorage::open(world_dir) {
@@ -101,11 +126,7 @@ impl ChunkCache {
                     for (_y_idx, data) in &stored_sub_chunks {
                         payload.extend_from_slice(data);
                     }
-                    let biome = chunk_serializer::serialize_biome_section_single(1);
-                    let mut biome_data = Vec::with_capacity(biome.len() * 24);
-                    for _ in 0..24 {
-                        biome_data.extend_from_slice(&biome);
-                    }
+                    let biome_data = storage.load_biome_data(cx, cz).unwrap_or_else(fallback_biome_data);
                     payload.extend_from_slice(&biome_data);
                     payload.push(0); // border blocks
 
@@ -132,6 +153,7 @@ impl ChunkCache {
             None
         };
 
+        let generated = loaded.is_none();
         let column = loaded.unwrap_or_else(|| {
             // Generate new chunk using the configured generator
             let (sub_count, payload) = if self.generator == "flat" {
@@ -155,6 +177,10 @@ impl ChunkCache {
         });
 
         self.chunks.insert((cx, cz), column);
+
+        if generated && self.storage.is_some() {
+            self.dirty.insert((cx, cz));
+        }
     }
 
     /// Get a block's runtime ID at world coordinates.
@@ -214,6 +240,21 @@ impl ChunkCache {
         self.dirty.insert((cx, cz));
     }
 
+    /// Save one chunk immediately for durability-sensitive updates such as block edits.
+    pub fn save_chunk_now(&mut self, cx: i32, cz: i32) -> bool {
+        let Some(storage) = self.storage.as_mut() else {
+            return false;
+        };
+        let Some(chunk) = self.chunks.get(&(cx, cz)) else {
+            return false;
+        };
+
+        Self::persist_chunk(storage, cx, cz, chunk);
+        storage.flush();
+        self.dirty.remove(&(cx, cz));
+        true
+    }
+
     /// Mark a chunk as modified (needs saving).
     pub fn mark_dirty(&mut self, cx: i32, cz: i32) {
         self.dirty.insert((cx, cz));
@@ -235,13 +276,7 @@ impl ChunkCache {
 
         for (cx, cz) in &dirty_coords {
             if let Some(chunk) = self.chunks.get(&(*cx, *cz)) {
-                storage.save_chunk_version(*cx, *cz);
-                storage.save_finalization(*cx, *cz);
-                // Save each sub-chunk individually
-                for (i, sub) in chunk.sub_chunks.iter().enumerate() {
-                    let serialized = sub.serialize();
-                    storage.save_sub_chunk(*cx, *cz, i as u8, &serialized);
-                }
+                Self::persist_chunk(storage, *cx, *cz, chunk);
                 saved += 1;
             }
         }
@@ -260,5 +295,49 @@ impl ChunkCache {
     /// Get the number of dirty chunks.
     pub fn dirty_count(&self) -> usize {
         self.dirty.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use super::*;
+
+    fn temp_world_dir(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("mc-rs-{name}-{unique}"))
+    }
+
+    #[test]
+    fn test_chunk_persists_block_changes_and_biome_data() {
+        let world_dir = temp_world_dir("chunk-cache");
+        let original_payload = {
+            let mut cache = ChunkCache::new(&world_dir, 42, "normal");
+            cache.set_block(0, 80, 0, BLOCKS.pumpkin);
+            let payload = {
+                let chunk = cache.get_chunk_mut(0, 0);
+                chunk.get_network_payload().to_vec()
+            };
+            assert!(cache.save_chunk_now(0, 0));
+            payload
+        };
+
+        let mut reloaded = ChunkCache::new(&world_dir, 42, "normal");
+        let block = reloaded.get_block(0, 80, 0);
+        let reloaded_payload = {
+            let chunk = reloaded.get_chunk_mut(0, 0);
+            chunk.get_network_payload().to_vec()
+        };
+
+        assert_eq!(block, BLOCKS.pumpkin);
+        assert_eq!(reloaded_payload, original_payload);
+
+        fs::remove_dir_all(&world_dir).ok();
     }
 }

@@ -15,10 +15,9 @@ pub fn generate_flat_chunk() -> (u32, Vec<u8>) {
     payload.extend_from_slice(&sub_chunk);
 
     // All 24 biome sections (always required for overworld, index -4 to 19)
-    let biome_section = chunk_serializer::serialize_biome_section_single(1); // Plains
-    for _ in 0..24 {
-        payload.extend_from_slice(&biome_section);
-    }
+    let biome_ids = [[1u32; 16]; 16];
+    let biome_data = chunk_serializer::serialize_biome_sections_from_columns(&biome_ids, 24);
+    payload.extend_from_slice(&biome_data);
 
     // Border blocks count
     payload.push(0); // u8 = 0

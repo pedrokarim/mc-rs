@@ -8,6 +8,7 @@
 *.log
 .claude/
 worlds/
+players/
 .reference/
 tools/
 .tmp/

@@ -566,12 +566,9 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
         }
     }
 
-    // Biome sections — use center biome
-    let center_biome = biome_ids[8][8];
-    let biome_section = chunk_serializer::serialize_biome_section_single(center_biome);
-    for _ in 0..24 {
-        payload.extend_from_slice(&biome_section);
-    }
+    // Biome sections — preserve the chunk's real 16x16 biome layout.
+    let biome_data = chunk_serializer::serialize_biome_sections_from_columns(&biome_ids, 24);
+    payload.extend_from_slice(&biome_data);
 
     // Border blocks count
     payload.push(0);

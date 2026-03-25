@@ -6,6 +6,8 @@ mod chunk_tag {
     pub const SUBCHUNK: u8 = 0x2F;
     pub const VERSION: u8 = 0x2C;
     pub const FINALIZATION: u8 = 0x36;
+    // Custom mc-rs tag storing serialized biome palette data for a chunk column.
+    pub const BIOME_DATA: u8 = 0x90;
 }
 
 /// LevelDB-backed world storage for Bedrock Edition chunks.
@@ -78,9 +80,27 @@ impl WorldStorage {
         result
     }
 
+    /// Load serialized biome data for a chunk column.
+    pub fn load_biome_data(&mut self, x: i32, z: i32) -> Option<Vec<u8>> {
+        let key = Self::chunk_key(x, z, chunk_tag::BIOME_DATA);
+        self.db.get(&key)
+    }
+
     /// Save a sub-chunk's raw data.
     pub fn save_sub_chunk(&mut self, x: i32, z: i32, y_index: u8, data: &[u8]) {
         let key = Self::sub_chunk_key(x, z, y_index);
+        self.db.put(&key, data).ok();
+    }
+
+    /// Delete a sub-chunk entry.
+    pub fn delete_sub_chunk(&mut self, x: i32, z: i32, y_index: u8) {
+        let key = Self::sub_chunk_key(x, z, y_index);
+        self.db.delete(&key).ok();
+    }
+
+    /// Save serialized biome data for a chunk column.
+    pub fn save_biome_data(&mut self, x: i32, z: i32, data: &[u8]) {
+        let key = Self::chunk_key(x, z, chunk_tag::BIOME_DATA);
         self.db.put(&key, data).ok();
     }
 

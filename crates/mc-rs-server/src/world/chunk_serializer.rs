@@ -31,12 +31,76 @@ pub fn serialize_empty_sub_chunk() -> Vec<u8> {
 /// Serialize a single biome section (4x4x4 = 64 entries).
 /// For flat world: all Plains (biome ID = 1), single-value palette.
 pub fn serialize_biome_section_single(biome_id: u32) -> Vec<u8> {
+    serialize_biome_section(&[biome_id; 64])
+}
+
+/// Serialize a single 4x4x4 biome section.
+pub fn serialize_biome_section(biomes: &[u32; 64]) -> Vec<u8> {
+    let mut palette = Vec::new();
+    let mut palette_indices = [0u32; 64];
+
+    for (i, &biome) in biomes.iter().enumerate() {
+        let idx = if let Some(pos) = palette.iter().position(|&b| b == biome) {
+            pos as u32
+        } else {
+            palette.push(biome);
+            (palette.len() - 1) as u32
+        };
+        palette_indices[i] = idx;
+    }
+
     let mut w = ProtoWriter::with_capacity(4);
-    // header: bits=0, runtime flag set
-    w.write_u8(1); // header: bits=0, runtime flag=1
-                   // Single palette value (VarInt32 zigzag)
-    w.write_var_i32(biome_id as i32);
+    serialize_paletted_storage(&mut w, &palette_indices, &palette);
     w.into_bytes()
+}
+
+/// Serialize all biome sections for a chunk from its 16x16 biome columns.
+///
+/// Bedrock uses 4x4x4 biome paletted storages per sub-chunk. We do not yet
+/// model vertical biome variation, so the same 4x4 horizontal map is repeated
+/// across the 4 Y slices of each section and across all vertical sections.
+pub fn serialize_biome_sections_from_columns(
+    biome_ids: &[[u32; 16]; 16],
+    section_count: usize,
+) -> Vec<u8> {
+    let mut coarse = [0u32; 64];
+
+    for coarse_x in 0..4usize {
+        for coarse_z in 0..4usize {
+            let mut counts: Vec<(u32, usize)> = Vec::new();
+            for x in (coarse_x * 4)..(coarse_x * 4 + 4) {
+                for z in (coarse_z * 4)..(coarse_z * 4 + 4) {
+                    let biome = biome_ids[x][z];
+                    if let Some((_, count)) = counts.iter_mut().find(|(id, _)| *id == biome) {
+                        *count += 1;
+                    } else {
+                        counts.push((biome, 1));
+                    }
+                }
+            }
+
+            let mut selected = biome_ids[coarse_x * 4][coarse_z * 4];
+            let mut best_count = 0usize;
+            for (biome, count) in counts {
+                if count > best_count {
+                    selected = biome;
+                    best_count = count;
+                }
+            }
+
+            for coarse_y in 0..4usize {
+                let idx = (coarse_x << 4) | (coarse_z << 2) | coarse_y;
+                coarse[idx] = selected;
+            }
+        }
+    }
+
+    let section = serialize_biome_section(&coarse);
+    let mut data = Vec::with_capacity(section.len() * section_count);
+    for _ in 0..section_count {
+        data.extend_from_slice(&section);
+    }
+    data
 }
 
 /// Serialize a paletted storage (blocks or biomes).
@@ -289,8 +353,22 @@ mod tests {
     fn test_biome_section_plains() {
         let data = serialize_biome_section_single(1); // Plains
         assert_eq!(data[0], 1); // header: bits=0, runtime=1
-                                // VarInt32 zigzag(1) = 2 = [0x02]
+                                 // VarInt32 zigzag(1) = 2 = [0x02]
         assert_eq!(data[1], 0x02);
+    }
+
+    #[test]
+    fn test_biome_sections_from_columns_not_empty() {
+        let mut biome_ids = [[1u32; 16]; 16];
+        for row in biome_ids.iter_mut().skip(8) {
+            for cell in row.iter_mut() {
+                *cell = 2;
+            }
+        }
+
+        let data = serialize_biome_sections_from_columns(&biome_ids, 24);
+        assert!(!data.is_empty());
+        assert!(data.len() >= 24 * 2);
     }
 
     #[test]

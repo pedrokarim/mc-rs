@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use std::io::Read;
+use std::sync::{LazyLock, Mutex};
 
 use super::biome::biome_id;
 use super::block_registry::BLOCKS;
@@ -20,6 +21,9 @@ pub struct Structure {
     /// Only non-air blocks are stored.
     pub blocks: HashMap<(i32, i32, i32), u32>,
 }
+
+static STRUCTURE_CACHE: LazyLock<Mutex<HashMap<String, Option<Structure>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Load a structure from a gzip-compressed NBT file.
 /// Supports both formats:
@@ -59,6 +63,19 @@ pub fn load_structure(path: &str, block_mapping: &HashMap<String, u32>) -> Optio
     }
 
     None
+}
+
+fn load_structure_cached(path: &str, block_mapping: &HashMap<String, u32>) -> Option<Structure> {
+    if let Some(cached) = STRUCTURE_CACHE.lock().unwrap().get(path).cloned() {
+        return cached;
+    }
+
+    let loaded = load_structure(path, block_mapping);
+    STRUCTURE_CACHE
+        .lock()
+        .unwrap()
+        .insert(path.to_string(), loaded.clone());
+    loaded
 }
 
 /// Load legacy structure format (palette + blocks with pos/state).
@@ -331,8 +348,14 @@ const PLAINS_BIOMES: &[u32] = &[
 ];
 
 /// All registered structures.
+static STRUCTURE_DEFS: LazyLock<Vec<StructureDef>> = LazyLock::new(build_structure_defs);
+
+pub fn get_structure_defs() -> &'static [StructureDef] {
+    STRUCTURE_DEFS.as_slice()
+}
+
 #[allow(clippy::vec_init_then_push)]
-pub fn get_structure_defs() -> Vec<StructureDef> {
+fn build_structure_defs() -> Vec<StructureDef> {
     let ug = Placement::Underground {
         min_y: 15,
         max_y: 40,
@@ -1157,7 +1180,7 @@ pub fn generate_structures(
         }
 
         // Load structure
-        let structure = match load_structure(def.path, block_mapping) {
+        let structure = match load_structure_cached(def.path, block_mapping) {
             Some(s) => s,
             None => continue,
         };

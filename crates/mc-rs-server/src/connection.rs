@@ -923,6 +923,7 @@ impl Connection {
                     let old_block_id = if let Ok(mut cache) = self.chunk_cache.lock() {
                         let old = cache.get_block(bx, by, bz);
                         cache.set_block(bx, by, bz, air_id);
+                        cache.save_chunk_now(bx.div_euclid(16), bz.div_euclid(16));
                         old
                     } else {
                         air_id
@@ -1058,6 +1059,7 @@ impl Connection {
                 return; // Can't place on a non-air block
             }
             cache.set_block(tx, ty, tz, block_runtime_id);
+            cache.save_chunk_now(tx.div_euclid(16), tz.div_euclid(16));
         }
 
         // Send UpdateBlock
