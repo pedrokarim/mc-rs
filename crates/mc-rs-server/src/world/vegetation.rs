@@ -11,19 +11,19 @@ pub fn generate_vegetation(
     random: &mut Random,
 ) -> HashMap<(u8, i32, u8), u32> {
     let mut blocks: HashMap<(u8, i32, u8), u32> = HashMap::new();
-    let center_biome = biome_ids[8][8];
 
     // ── Trees (biome-specific type) ──
-    let tree_count = tree_count_for_biome(center_biome, random);
+    let tree_count = weighted_attempts(biome_ids, tree_density_for_biome);
     for _ in 0..tree_count {
         let tx = random.next_range(2, 13) as usize;
         let tz = random.next_range(2, 13) as usize;
+        let biome = biome_ids[tx][tz];
         let surface_y = surfaces[tx][tz];
         if surface_y <= 62 {
             continue;
         }
         place_tree_for_biome(
-            center_biome,
+            biome,
             tx as i32,
             surface_y + 1,
             tz as i32,
@@ -33,12 +33,13 @@ pub fn generate_vegetation(
     }
 
     // ── Short grass ──
-    let grass_count = grass_count_for_biome(center_biome);
+    let grass_count = weighted_attempts(biome_ids, grass_count_for_biome);
     for _ in 0..grass_count {
         let gx = random.next_range(0, 15) as usize;
         let gz = random.next_range(0, 15) as usize;
+        let biome = biome_ids[gx][gz];
         let sy = surfaces[gx][gz];
-        if sy <= 62 {
+        if sy <= 62 || grass_count_for_biome(biome) == 0 {
             continue;
         }
         blocks
@@ -47,27 +48,29 @@ pub fn generate_vegetation(
     }
 
     // ── Flowers ──
-    let flower_count = flower_count_for_biome(center_biome);
+    let flower_count = weighted_attempts(biome_ids, flower_count_for_biome);
     for _ in 0..flower_count {
         let fx = random.next_range(0, 15) as usize;
         let fz = random.next_range(0, 15) as usize;
+        let biome = biome_ids[fx][fz];
         let sy = surfaces[fx][fz];
-        if sy <= 62 {
+        if sy <= 62 || flower_count_for_biome(biome) == 0 {
             continue;
         }
         let pos = (fx as u8, sy + 1, fz as u8);
         blocks
             .entry(pos)
-            .or_insert_with(|| pick_flower(center_biome, random));
+            .or_insert_with(|| pick_flower(biome, random));
     }
 
     // ── Ferns ──
-    let fern_count = fern_count_for_biome(center_biome);
+    let fern_count = weighted_attempts(biome_ids, fern_count_for_biome);
     for _ in 0..fern_count {
         let fx = random.next_range(0, 15) as usize;
         let fz = random.next_range(0, 15) as usize;
+        let biome = biome_ids[fx][fz];
         let sy = surfaces[fx][fz];
-        if sy <= 62 {
+        if sy <= 62 || fern_count_for_biome(biome) == 0 {
             continue;
         }
         blocks
@@ -76,12 +79,13 @@ pub fn generate_vegetation(
     }
 
     // ── Tall grass (double plant) ──
-    let tall_count = tall_grass_count_for_biome(center_biome);
+    let tall_count = weighted_attempts(biome_ids, tall_grass_count_for_biome);
     for _ in 0..tall_count {
         let gx = random.next_range(0, 15) as usize;
         let gz = random.next_range(0, 15) as usize;
+        let biome = biome_ids[gx][gz];
         let sy = surfaces[gx][gz];
-        if sy <= 62 {
+        if sy <= 62 || tall_grass_count_for_biome(biome) == 0 {
             continue;
         }
         blocks
@@ -90,16 +94,13 @@ pub fn generate_vegetation(
     }
 
     // ── Cactus (desert, mesa) ──
-    let cactus_count = match center_biome {
-        biome_id::DESERT | biome_id::DESERT_HILLS => 10,
-        biome_id::MESA | biome_id::MESA_BRYCE => 5,
-        _ => 0,
-    };
+    let cactus_count = weighted_attempts(biome_ids, cactus_count_for_biome);
     for _ in 0..cactus_count {
         let cx = random.next_range(0, 15) as usize;
         let cz = random.next_range(0, 15) as usize;
+        let biome = biome_ids[cx][cz];
         let sy = surfaces[cx][cz];
-        if sy <= 62 {
+        if sy <= 62 || cactus_count_for_biome(biome) == 0 {
             continue;
         }
         // Cactus: 1-3 blocks tall
@@ -113,21 +114,13 @@ pub fn generate_vegetation(
     }
 
     // ── Dead bush (desert, mesa, mega_taiga, swamp) ──
-    let deadbush_count = match center_biome {
-        biome_id::MESA
-        | biome_id::MESA_BRYCE
-        | biome_id::MESA_PLATEAU
-        | biome_id::MESA_PLATEAU_STONE => 20,
-        biome_id::DESERT | biome_id::DESERT_HILLS => 2,
-        biome_id::MEGA_TAIGA | biome_id::MEGA_TAIGA_HILLS => 1,
-        biome_id::SWAMPLAND => 1,
-        _ => 0,
-    };
+    let deadbush_count = weighted_attempts(biome_ids, deadbush_count_for_biome);
     for _ in 0..deadbush_count {
         let dx = random.next_range(0, 15) as usize;
         let dz = random.next_range(0, 15) as usize;
+        let biome = biome_ids[dx][dz];
         let sy = surfaces[dx][dz];
-        if sy <= 62 {
+        if sy <= 62 || deadbush_count_for_biome(biome) == 0 {
             continue;
         }
         blocks
@@ -136,18 +129,13 @@ pub fn generate_vegetation(
     }
 
     // ── Mushrooms (swamp, mega_taiga, taiga) ──
-    let mushroom_count = match center_biome {
-        biome_id::SWAMPLAND => 8,
-        biome_id::MEGA_TAIGA | biome_id::MEGA_TAIGA_HILLS => 3,
-        biome_id::MUSHROOM_ISLAND => 1,
-        biome_id::TAIGA | biome_id::COLD_TAIGA => 1,
-        _ => 0,
-    };
+    let mushroom_count = weighted_attempts(biome_ids, mushroom_count_for_biome);
     for _ in 0..mushroom_count {
         let mx = random.next_range(0, 15) as usize;
         let mz = random.next_range(0, 15) as usize;
+        let biome = biome_ids[mx][mz];
         let sy = surfaces[mx][mz];
-        if sy <= 62 {
+        if sy <= 62 || mushroom_count_for_biome(biome) == 0 {
             continue;
         }
         let mushroom = if random.next_bounded_int(4) == 0 {
@@ -161,11 +149,12 @@ pub fn generate_vegetation(
     }
 
     // ── Pumpkin (très rare, tous biomes avec herbe) ──
-    if random.next_bounded_int(32) == 0 && is_grassy_biome(center_biome) {
+    if random.next_bounded_int(32) == 0 {
         let px = random.next_range(0, 15) as usize;
         let pz = random.next_range(0, 15) as usize;
+        let biome = biome_ids[px][pz];
         let sy = surfaces[px][pz];
-        if sy > 62 {
+        if sy > 62 && is_grassy_biome(biome) {
             blocks
                 .entry((px as u8, sy + 1, pz as u8))
                 .or_insert(BLOCKS.pumpkin);
@@ -173,19 +162,14 @@ pub fn generate_vegetation(
     }
 
     // ── Reeds / sugar cane (near water) ──
-    let reeds_count = match center_biome {
-        biome_id::DESERT | biome_id::DESERT_HILLS => 50,
-        biome_id::SWAMPLAND => 10,
-        biome_id::RIVER | biome_id::FROZEN_RIVER => 5,
-        _ if is_grassy_biome(center_biome) => 10,
-        _ => 0,
-    };
+    let reeds_count = weighted_attempts(biome_ids, reeds_count_for_biome);
     for _ in 0..reeds_count {
         let rx = random.next_range(0, 15) as usize;
         let rz = random.next_range(0, 15) as usize;
+        let biome = biome_ids[rx][rz];
         let sy = surfaces[rx][rz];
         // Reeds grow at water level +1 or just above water
-        if !(62..=64).contains(&sy) {
+        if !(62..=64).contains(&sy) || reeds_count_for_biome(biome) == 0 {
             continue;
         }
         // Check if adjacent to water (any neighbor at water level)
@@ -201,21 +185,22 @@ pub fn generate_vegetation(
     }
 
     // ── Bamboo (jungle, bamboo_jungle) ──
-    let bamboo_count = match center_biome {
-        biome_id::BAMBOO_JUNGLE => random.next_range(40, 80),
-        biome_id::JUNGLE | biome_id::JUNGLE_HILLS | biome_id::JUNGLE_EDGE => 16,
-        _ => 0,
-    };
+    let bamboo_count = weighted_attempts(biome_ids, bamboo_count_for_biome);
     for _ in 0..bamboo_count {
         let bx = random.next_range(0, 15) as usize;
         let bz = random.next_range(0, 15) as usize;
+        let biome = biome_ids[bx][bz];
         let sy = surfaces[bx][bz];
-        if sy <= 62 {
+        if sy <= 62 || bamboo_count_for_biome(biome) == 0 {
             continue;
         }
         let pos = (bx as u8, sy + 1, bz as u8);
         if !blocks.contains_key(&pos) {
-            let height = random.next_range(5, 12);
+            let height = if biome == biome_id::BAMBOO_JUNGLE {
+                random.next_range(5, 12)
+            } else {
+                random.next_range(4, 8)
+            };
             for h in 0..height {
                 blocks.insert((bx as u8, sy + 1 + h, bz as u8), BLOCKS.bamboo);
             }
@@ -223,21 +208,31 @@ pub fn generate_vegetation(
     }
 
     // ── Waterlily (swamp) ──
-    if center_biome == biome_id::SWAMPLAND {
-        for _ in 0..4 {
-            let wx = random.next_range(0, 15) as usize;
-            let wz = random.next_range(0, 15) as usize;
-            let sy = surfaces[wx][wz];
-            // Lily pads go on water surface
-            if sy < 62 {
-                blocks
-                    .entry((wx as u8, 63, wz as u8))
-                    .or_insert(BLOCKS.waterlily);
-            }
+    let waterlily_count = weighted_attempts(biome_ids, waterlily_count_for_biome);
+    for _ in 0..waterlily_count {
+        let wx = random.next_range(0, 15) as usize;
+        let wz = random.next_range(0, 15) as usize;
+        let biome = biome_ids[wx][wz];
+        let sy = surfaces[wx][wz];
+        // Lily pads go on water surface
+        if waterlily_count_for_biome(biome) > 0 && sy < 62 {
+            blocks
+                .entry((wx as u8, 63, wz as u8))
+                .or_insert(BLOCKS.waterlily);
         }
     }
 
     blocks
+}
+
+fn weighted_attempts(biome_ids: &[[u32; 16]; 16], count_for_biome: fn(u32) -> i32) -> i32 {
+    let mut total = 0i32;
+    for row in biome_ids {
+        for &biome in row {
+            total += count_for_biome(biome);
+        }
+    }
+    total / 256
 }
 
 /// Check if any adjacent column is at water level (for reed placement).
@@ -280,38 +275,77 @@ fn is_grassy_biome(biome: u32) -> bool {
 
 // ── Tree counts ──
 
-fn tree_count_for_biome(biome: u32, random: &mut Random) -> i32 {
+fn tree_density_for_biome(biome: u32) -> i32 {
     match biome {
         biome_id::ROOFED_FOREST => 16,
-        biome_id::JUNGLE | biome_id::BAMBOO_JUNGLE => random.next_range(8, 14),
-        biome_id::FOREST | biome_id::BIRCH_FOREST => random.next_range(6, 10),
-        biome_id::FOREST_HILLS | biome_id::BIRCH_FOREST_HILLS => random.next_range(5, 9),
-        biome_id::FLOWER_FOREST => random.next_range(4, 8),
-        biome_id::JUNGLE_HILLS => random.next_range(6, 10),
-        biome_id::JUNGLE_EDGE => random.next_range(4, 7),
-        biome_id::TAIGA | biome_id::COLD_TAIGA | biome_id::MEGA_TAIGA => random.next_range(5, 8),
-        biome_id::TAIGA_HILLS | biome_id::COLD_TAIGA_HILLS | biome_id::MEGA_TAIGA_HILLS => {
-            random.next_range(4, 7)
-        }
-        biome_id::SAVANNA | biome_id::SAVANNA_PLATEAU => random.next_range(1, 3),
-        biome_id::SWAMPLAND => random.next_range(2, 4),
-        biome_id::EXTREME_HILLS | biome_id::EXTREME_HILLS_PLUS_TREES => random.next_range(0, 3),
-        biome_id::PLAINS | biome_id::SUNFLOWER_PLAINS => {
-            if random.next_bounded_int(5) == 0 {
-                1
-            } else {
-                0
-            }
-        }
-        biome_id::ICE_PLAINS => {
-            if random.next_bounded_int(3) == 0 {
-                1
-            } else {
-                0
-            }
-        }
+        biome_id::JUNGLE | biome_id::BAMBOO_JUNGLE => 11,
+        biome_id::FOREST | biome_id::BIRCH_FOREST => 8,
+        biome_id::FOREST_HILLS | biome_id::BIRCH_FOREST_HILLS => 7,
+        biome_id::FLOWER_FOREST => 6,
+        biome_id::JUNGLE_HILLS => 8,
+        biome_id::JUNGLE_EDGE => 5,
+        biome_id::TAIGA | biome_id::COLD_TAIGA | biome_id::MEGA_TAIGA => 6,
+        biome_id::TAIGA_HILLS | biome_id::COLD_TAIGA_HILLS | biome_id::MEGA_TAIGA_HILLS => 5,
+        biome_id::SAVANNA | biome_id::SAVANNA_PLATEAU => 2,
+        biome_id::SWAMPLAND => 3,
+        biome_id::EXTREME_HILLS | biome_id::EXTREME_HILLS_PLUS_TREES => 1,
+        biome_id::PLAINS | biome_id::SUNFLOWER_PLAINS => 0,
+        biome_id::ICE_PLAINS => 0,
         _ => 0,
     }
+}
+
+fn cactus_count_for_biome(biome: u32) -> i32 {
+    match biome {
+        biome_id::DESERT | biome_id::DESERT_HILLS => 10,
+        biome_id::MESA | biome_id::MESA_BRYCE => 5,
+        _ => 0,
+    }
+}
+
+fn deadbush_count_for_biome(biome: u32) -> i32 {
+    match biome {
+        biome_id::MESA
+        | biome_id::MESA_BRYCE
+        | biome_id::MESA_PLATEAU
+        | biome_id::MESA_PLATEAU_STONE => 20,
+        biome_id::DESERT | biome_id::DESERT_HILLS => 2,
+        biome_id::MEGA_TAIGA | biome_id::MEGA_TAIGA_HILLS => 1,
+        biome_id::SWAMPLAND => 1,
+        _ => 0,
+    }
+}
+
+fn mushroom_count_for_biome(biome: u32) -> i32 {
+    match biome {
+        biome_id::SWAMPLAND => 8,
+        biome_id::MEGA_TAIGA | biome_id::MEGA_TAIGA_HILLS => 3,
+        biome_id::MUSHROOM_ISLAND => 1,
+        biome_id::TAIGA | biome_id::COLD_TAIGA => 1,
+        _ => 0,
+    }
+}
+
+fn reeds_count_for_biome(biome: u32) -> i32 {
+    match biome {
+        biome_id::DESERT | biome_id::DESERT_HILLS => 50,
+        biome_id::SWAMPLAND => 10,
+        biome_id::RIVER | biome_id::FROZEN_RIVER => 5,
+        _ if is_grassy_biome(biome) => 10,
+        _ => 0,
+    }
+}
+
+fn bamboo_count_for_biome(biome: u32) -> i32 {
+    match biome {
+        biome_id::BAMBOO_JUNGLE => 60,
+        biome_id::JUNGLE | biome_id::JUNGLE_HILLS | biome_id::JUNGLE_EDGE => 16,
+        _ => 0,
+    }
+}
+
+fn waterlily_count_for_biome(biome: u32) -> i32 {
+    if biome == biome_id::SWAMPLAND { 4 } else { 0 }
 }
 
 // ── Vegetation counts (from BDS feature_rules) ──

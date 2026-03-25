@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::path::Path;
 use std::sync::Arc;
 use tracing::info;
 
@@ -276,8 +277,41 @@ impl ServerConfig {
         }
     }
 
+    /// Resolve the effective world seed.
+    ///
+    /// If `world.seed` is non-zero, it is used as the source of truth for new
+    /// worlds. If it is zero, a random seed is generated once and persisted in
+    /// the world directory so the same world stays stable across restarts until
+    /// the directory is deleted.
+    pub fn resolve_world_seed(&self, world_dir: &Path) -> u64 {
+        let seed_path = world_dir.join("level_seed.txt");
+
+        if let Ok(contents) = std::fs::read_to_string(&seed_path) {
+            if let Ok(parsed) = contents.trim().parse::<u64>() {
+                info!("Using persisted world seed {} from {:?}", parsed, seed_path);
+                return parsed;
+            }
+        }
+
+        let seed = if self.world.seed != 0 {
+            self.world.seed as u64
+        } else {
+            rand::random::<u64>()
+        };
+
+        if let Err(e) = std::fs::create_dir_all(world_dir) {
+            info!("Could not create world dir {:?}: {}", world_dir, e);
+        } else if let Err(e) = std::fs::write(&seed_path, format!("{seed}\n")) {
+            info!("Could not persist world seed to {:?}: {}", seed_path, e);
+        } else {
+            info!("Persisted world seed {} to {:?}", seed, seed_path);
+        }
+
+        seed
+    }
+
     /// Build a ConnectionConfig from the full server config.
-    pub fn connection_config(&self) -> Arc<ConnectionConfig> {
+    pub fn connection_config(&self, world_seed: u64) -> Arc<ConnectionConfig> {
         Arc::new(ConnectionConfig {
             default_gamemode: self.gameplay.gamemode_id(),
             difficulty: self.gameplay.difficulty_id(),
@@ -288,7 +322,7 @@ impl ServerConfig {
                 "flat" => 2,   // flat
                 _ => 2,
             },
-            world_seed: self.world.seed as u64,
+            world_seed,
         })
     }
 }

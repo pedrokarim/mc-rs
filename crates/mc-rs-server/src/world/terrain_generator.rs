@@ -327,21 +327,21 @@ fn block_at(
     world_z: i32,
     surface_y: i32,
     cover: &[u32],
-    noise_value_positive: bool,
     is_non_solid_top: bool,
     seed: u64,
 ) -> u32 {
-    if noise_value_positive || world_y <= 0 {
-        // Solid block
-        if !cover.is_empty() && noise_value_positive {
-            let diff_y = if is_non_solid_top { 1 } else { 0 };
-            let cover_start = surface_y + diff_y;
-            let depth = cover_start - world_y;
-            if depth >= 0 && (depth as usize) < cover.len() {
-                return cover[depth as usize];
-            }
+    let diff_y = if is_non_solid_top { 1 } else { 0 };
+    let cover_start = surface_y + diff_y;
+    let depth = cover_start - world_y;
+
+    if world_y <= surface_y {
+        if depth >= 0 && (depth as usize) < cover.len() {
+            return cover[depth as usize];
         }
-        // Underground block with realistic layers
+
+        // Fill the full terrain column below the sampled surface. This avoids
+        // the thin floating-shell artifacts produced by the current density
+        // approximation while we still lack Bedrock-style cave carving.
         underground_block(world_x, world_y, world_z, seed)
     } else if world_y <= WATER_HEIGHT {
         BLOCKS.water
@@ -477,9 +477,7 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
         #[allow(clippy::needless_range_loop)]
         for local_x in 0..16usize {
             for local_z in 0..16usize {
-                let col_min = min_heights[local_x][local_z];
                 let col_max = max_heights[local_x][local_z];
-                let smooth_height = (col_max - col_min) / 2.0;
                 let col_max_block = col_max.max(WATER_HEIGHT as f64) as i32 + 1;
                 let surface_y = surfaces[local_x][local_z];
                 let col_idx = local_x * 16 + local_z;
@@ -493,35 +491,19 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
                     let world_x = base_x + local_x as i32;
                     let world_z = base_z + local_z as i32;
 
-                    let mut block = if world_y < 0 || world_y < noise_min {
-                        // Underground: use realistic layers
-                        underground_block(world_x, world_y, world_z, seed)
-                    } else if world_y <= col_max_block {
-                        // Noise-sculpted zone
-                        let noise_positive = if world_y > noise_max || smooth_height == 0.0 {
-                            false
-                        } else {
-                            let yi = (world_y - noise_min) as usize;
-                            if yi < noise[local_x][local_z].len() {
-                                let nv = noise[local_x][local_z][yi]
-                                    - 1.0 / smooth_height
-                                        * (world_y as f64 - smooth_height - col_min);
-                                nv > 0.0
-                            } else {
-                                false
-                            }
-                        };
-
-                        block_at(
-                            world_x,
-                            world_y,
-                            world_z,
-                            surface_y,
-                            cover,
-                            noise_positive,
-                            is_non_solid_top,
-                            seed,
-                        )
+                        let mut block = if world_y < 0 || world_y < noise_min {
+                            // Underground: use realistic layers
+                            underground_block(world_x, world_y, world_z, seed)
+                        } else if world_y <= col_max_block {
+                            block_at(
+                                world_x,
+                                world_y,
+                                world_z,
+                                surface_y,
+                                cover,
+                                is_non_solid_top,
+                                seed,
+                            )
                     } else {
                         BLOCKS.air
                     };

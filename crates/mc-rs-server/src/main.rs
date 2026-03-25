@@ -45,7 +45,9 @@ async fn main() {
 
     // Load config
     let config = ServerConfig::load("server.toml");
-    let conn_config = config.connection_config();
+    let world_dir = std::path::Path::new("worlds").join(&config.world.name);
+    let world_seed = config.resolve_world_seed(&world_dir);
+    let conn_config = config.connection_config(world_seed);
 
     // Generate server keypair (reused across all connections)
     let server_keypair = Arc::new(ServerKeyPair::generate());
@@ -88,10 +90,9 @@ async fn main() {
     );
 
     // World chunk cache with LevelDB persistence
-    let world_dir = std::path::Path::new("worlds").join(&config.world.name);
     let chunk_cache = std::sync::Arc::new(std::sync::Mutex::new(ChunkCache::new(
         &world_dir,
-        config.world.seed as u64,
+        world_seed,
         &config.world.generator,
     )));
     let mut auto_save_counter: u32 = 0;

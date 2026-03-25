@@ -747,7 +747,7 @@ impl Connection {
 
         // Void kill check
         if pkt.position[1] < -128.0 {
-            let surface = terrain_generator::get_surface_height(0, 0, 42) as f32;
+            let surface = terrain_generator::get_surface_height(0, 0, self.config.world_seed) as f32;
             self.position = [0.5, surface + 2.621, 0.5];
             let reset = mc_rs_proto::packets::player::MovePlayer {
                 runtime_entity_id: self.entity_runtime_id,
