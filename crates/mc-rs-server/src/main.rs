@@ -1,13 +1,21 @@
 #[allow(dead_code)]
+mod commands;
+#[allow(dead_code)]
 mod config;
 #[allow(dead_code)]
 mod connection;
 #[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
+mod item_registry;
+#[allow(dead_code)]
+mod item_entities;
+#[allow(dead_code)]
 pub mod player_data;
 #[allow(dead_code)]
 pub mod player_registry;
+#[allow(dead_code)]
+mod server_state;
 #[allow(dead_code)]
 mod world;
 
@@ -22,12 +30,19 @@ use mc_rs_raknet::motd::Motd;
 use mc_rs_raknet::protocol::datagram::Reliability;
 use mc_rs_raknet::session::SessionEvent;
 use mc_rs_raknet::RakNetServer;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::time::{interval, Duration};
 use tracing::{error, info, warn};
 
+use crate::commands::{
+    build_command_system, dispatch_command_line, CommandSource, ExecutionContext,
+    ServerCommandRuntime, ServerCommandSystem,
+};
 use crate::config::ServerConfig;
 use crate::connection::Connection;
+use crate::item_entities::ItemEntityManager;
 use crate::player_registry::PlayerRegistry;
+use crate::server_state::ServerState;
 use crate::world::chunk_cache::ChunkCache;
 use crate::world::tick::{encode_set_time, WorldPacket, WorldState};
 
@@ -48,6 +63,13 @@ async fn main() {
     let world_dir = std::path::Path::new("worlds").join(&config.world.name);
     let world_seed = config.resolve_world_seed(&world_dir);
     let conn_config = config.connection_config(world_seed);
+    let mut server_state = ServerState::load(
+        config.server.motd.clone(),
+        config.world.name.clone(),
+        world_seed,
+        config.server.max_players,
+    );
+    let command_system = build_command_system();
 
     // Generate server keypair (reused across all connections)
     let server_keypair = Arc::new(ServerKeyPair::generate());
@@ -84,6 +106,7 @@ async fn main() {
     let mut connections: HashMap<SocketAddr, Connection> = HashMap::new();
     let mut peers: HashMap<SocketAddr, mc_rs_raknet::RakNetPeer> = HashMap::new();
     let mut registry = PlayerRegistry::new();
+    let mut item_entities = ItemEntityManager::new();
     let mut world_state = WorldState::new(
         config.gameplay.do_daylight_cycle,
         config.gameplay.do_weather_cycle,
@@ -96,10 +119,39 @@ async fn main() {
         &config.world.generator,
     )));
     let mut auto_save_counter: u32 = 0;
+    let (console_tx, mut console_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    tokio::spawn(async move {
+        let mut lines = BufReader::new(tokio::io::stdin()).lines();
+        loop {
+            match lines.next_line().await {
+                Ok(Some(line)) => {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    if console_tx.send(trimmed.to_string()).is_err() {
+                        break;
+                    }
+                }
+                Ok(None) => {
+                    info!("Local console input closed; server will continue running.");
+                    break;
+                }
+                Err(error) => {
+                    warn!(
+                        "Local console input stopped after a read error: {}. Server will continue running.",
+                        error
+                    );
+                    break;
+                }
+            }
+        }
+    });
 
     // Session tick interval (100 TPS = 10ms)
     let mut tick_timer = interval(Duration::from_millis(config.server.tick_rate));
     let mut should_stop = false;
+    let mut console_input_open = true;
 
     loop {
         if should_stop {
@@ -111,17 +163,15 @@ async fn main() {
             // Save all connected players
             for (_, conn) in connections.iter() {
                 if let Some(ref xuid) = conn.xuid {
-                    let save = player_data::PlayerSaveData {
-                        position: [
-                            conn.position[0] as f64,
-                            conn.position[1] as f64,
-                            conn.position[2] as f64,
-                        ],
-                        rotation: [conn.yaw, conn.pitch],
-                        gamemode: 0,
-                        health: 20.0,
-                        hunger: 20.0,
-                    };
+                    let save = player_data::PlayerSaveData::from_runtime(
+                        conn.position,
+                        [conn.yaw, conn.pitch],
+                        conn.gamemode,
+                        20.0,
+                        20.0,
+                        conn.spawn_position,
+                        &conn.inventory,
+                    );
                     let _ = player_data::save_player(xuid, &save);
                 }
             }
@@ -139,13 +189,33 @@ async fn main() {
                 while let Some(peer) = raknet.accept() {
                     let addr = peer.addr;
                     info!("New peer: {}", addr);
-                    let conn = Connection::new(addr, Arc::clone(&server_keypair), Arc::clone(&chunk_cache), Arc::clone(&conn_config));
+                    let conn = Connection::new(
+                        addr,
+                        Arc::clone(&server_keypair),
+                        Arc::clone(&chunk_cache),
+                        Arc::clone(&conn_config),
+                        server_state.persistent.world_spawn,
+                        server_state.effective_default_gamemode(conn_config.default_gamemode),
+                        server_state.effective_difficulty(conn_config.difficulty),
+                        false,
+                    );
                     connections.insert(addr, conn);
                     peers.insert(addr, peer);
                 }
 
                 // Process events from all peers
-                process_peer_events(&mut peers, &mut connections, &mut raknet, &mut registry, &mut world_state, &mut should_stop);
+                process_peer_events(
+                    &mut peers,
+                    &mut connections,
+                    &mut raknet,
+                    &mut registry,
+                    &mut item_entities,
+                    &mut world_state,
+                    &mut server_state,
+                    &command_system,
+                    &chunk_cache,
+                    &mut should_stop,
+                );
             }
 
             // Tick sessions periodically
@@ -174,7 +244,7 @@ async fn main() {
 
                 // Tick-based chunk sending (rate limited, spiral order)
                 for (addr, conn) in connections.iter_mut() {
-                    if conn.is_in_game() {
+                    if conn.should_stream_chunks() {
                         let chunk_responses = conn.send_queued_chunks();
                         for resp in chunk_responses {
                             let prepared = conn.prepare_for_send(resp);
@@ -183,9 +253,111 @@ async fn main() {
                     }
                 }
 
+                let tick_result = item_entities.tick(&registry);
+                for entity in tick_result.despawned {
+                    let remove_bytes = entity.remove_packet();
+                    for (addr, conn) in connections.iter_mut() {
+                        if conn.is_in_game() {
+                            let pkt = conn.encode_compressed_packet(
+                                packet_id::REMOVE_ACTOR,
+                                &remove_bytes,
+                            );
+                            let prepared = conn.prepare_for_send(pkt);
+                            raknet.send_to_session(
+                                addr,
+                                prepared,
+                                Reliability::ReliableOrdered,
+                                true,
+                            );
+                        }
+                    }
+                }
+
+                for pickup in tick_result.pickup_candidates {
+                    let Some(entity) = item_entities
+                        .all()
+                        .find(|entity| entity.entity_runtime_id == pickup.entity_runtime_id)
+                        .cloned()
+                    else {
+                        continue;
+                    };
+
+                    let collected = if let Some(conn) = connections.get_mut(&pickup.player_addr) {
+                        if conn.inventory.add_item(entity.item.clone()).is_some() {
+                            Some((
+                                conn.entity_runtime_id,
+                                conn.prepared_inventory_sync_packets(),
+                            ))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    let Some((collector_runtime_id, sync_packets)) = collected else {
+                        continue;
+                    };
+
+                    let Some(removed_entity) = item_entities.remove(pickup.entity_runtime_id) else {
+                        continue;
+                    };
+
+                    info!(
+                        "[{}] Picked up item entity {} (item_id={})",
+                        pickup.player_addr,
+                        removed_entity.entity_runtime_id,
+                        removed_entity.item.id,
+                    );
+
+                    for packet in sync_packets {
+                        raknet.send_to_session(
+                            &pickup.player_addr,
+                            packet,
+                            Reliability::ReliableOrdered,
+                            true,
+                        );
+                    }
+
+                    let take_bytes = TakeItemActor {
+                        item_actor_runtime_id: removed_entity.entity_runtime_id,
+                        taker_actor_runtime_id: collector_runtime_id,
+                    }
+                    .encode();
+                    let remove_bytes = removed_entity.remove_packet();
+
+                    for (addr, conn) in connections.iter_mut() {
+                        if conn.is_in_game() {
+                            let take_pkt = conn.encode_compressed_packet(
+                                packet_id::TAKE_ITEM_ACTOR,
+                                &take_bytes,
+                            );
+                            let take_prepared = conn.prepare_for_send(take_pkt);
+                            raknet.send_to_session(
+                                addr,
+                                take_prepared,
+                                Reliability::ReliableOrdered,
+                                true,
+                            );
+
+                            let remove_pkt = conn.encode_compressed_packet(
+                                packet_id::REMOVE_ACTOR,
+                                &remove_bytes,
+                            );
+                            let remove_prepared = conn.prepare_for_send(remove_pkt);
+                            raknet.send_to_session(
+                                addr,
+                                remove_prepared,
+                                Reliability::ReliableOrdered,
+                                true,
+                            );
+                        }
+                    }
+                }
+
                 // Auto-save every 30000 ticks (~5 minutes at 100 TPS)
                 auto_save_counter += 1;
-                if auto_save_counter >= 30000 {
+                if server_state.auto_save_enabled && auto_save_counter >= 30000 {
                     auto_save_counter = 0;
                     if let Ok(mut cache) = chunk_cache.lock() {
                         cache.save_dirty();
@@ -193,7 +365,42 @@ async fn main() {
                 }
 
                 // Also check for events after session ticks
-                process_peer_events(&mut peers, &mut connections, &mut raknet, &mut registry, &mut world_state, &mut should_stop);
+                process_peer_events(
+                    &mut peers,
+                    &mut connections,
+                    &mut raknet,
+                    &mut registry,
+                    &mut item_entities,
+                    &mut world_state,
+                    &mut server_state,
+                    &command_system,
+                    &chunk_cache,
+                    &mut should_stop,
+                );
+            }
+
+            console_line = console_rx.recv(), if console_input_open => {
+                match console_line {
+                    Some(line) => {
+                        dispatch_command_line(
+                            CommandSource::Console,
+                            &line,
+                            &command_system,
+                            &mut connections,
+                            &mut peers,
+                            &mut raknet,
+                            &mut registry,
+                            &mut item_entities,
+                            &mut world_state,
+                            &mut server_state,
+                            &chunk_cache,
+                            &mut should_stop,
+                        );
+                    }
+                    None => {
+                        console_input_open = false;
+                    }
+                }
             }
         }
     }
@@ -204,134 +411,168 @@ fn process_peer_events(
     connections: &mut HashMap<SocketAddr, Connection>,
     raknet: &mut RakNetServer,
     registry: &mut PlayerRegistry,
+    item_entities: &mut ItemEntityManager,
     world_state: &mut WorldState,
+    server_state: &mut ServerState,
+    command_system: &ServerCommandSystem,
+    chunk_cache: &std::sync::Arc<std::sync::Mutex<ChunkCache>>,
     should_stop: &mut bool,
 ) {
     let addrs: Vec<SocketAddr> = peers.keys().copied().collect();
     for addr in addrs {
-        let Some(peer) = peers.get_mut(&addr) else {
-            continue;
+        let (pending_events, receiver_disconnected) = {
+            let Some(peer) = peers.get_mut(&addr) else {
+                continue;
+            };
+            let mut pending_events = Vec::new();
+            let receiver_disconnected = loop {
+                match peer.event_rx.try_recv() {
+                    Ok(event) => pending_events.push(event),
+                    Err(tokio::sync::mpsc::error::TryRecvError::Empty) => break false,
+                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break true,
+                }
+            };
+            (pending_events, receiver_disconnected)
         };
 
-        loop {
-            match peer.event_rx.try_recv() {
-                Ok(event) => match event {
-                    SessionEvent::Connected => {
-                        info!("[{}] RakNet session fully connected", addr);
-                    }
-                    SessionEvent::Packet(data) => {
-                        // Extract data from connection (scoped borrow)
-                        let (responses, broadcasts, join_info, actions) = {
-                            let Some(conn) = connections.get_mut(&addr) else {
-                                continue;
-                            };
-                            let was_in_game = conn.is_in_game();
-
-                            let responses = conn.handle_raw_batch(&data);
-                            let responses: Vec<Vec<u8>> = responses
-                                .into_iter()
-                                .map(|r| conn.prepare_for_send(r))
-                                .collect();
-
-                            let join_info = if !was_in_game && conn.is_in_game() {
-                                Some((
-                                    conn.display_name.clone().unwrap_or_default(),
-                                    conn.uuid.map(|u| *u.as_bytes()).unwrap_or([0u8; 16]),
-                                    conn.xuid.clone().unwrap_or_default(),
-                                    conn.entity_runtime_id,
-                                    conn.position,
-                                ))
-                            } else {
-                                None
-                            };
-
-                            registry.update_position(
-                                &addr,
-                                conn.position,
-                                conn.pitch,
-                                conn.yaw,
-                                conn.head_yaw,
-                            );
-
-                            let broadcasts = conn.take_broadcasts();
-                            let actions = std::mem::take(&mut conn.pending_actions);
-
-                            (responses, broadcasts, join_info, actions)
+        for event in pending_events {
+            match event {
+                SessionEvent::Connected => {
+                    info!("[{}] RakNet session fully connected", addr);
+                }
+                SessionEvent::Packet(data) => {
+                    // Extract data from connection (scoped borrow)
+                    let (responses, broadcasts, join_info, pending_commands, item_spawns) = {
+                        let Some(conn) = connections.get_mut(&addr) else {
+                            continue;
                         };
-                        // Borrow of conn dropped here
+                        let was_in_game = conn.is_in_game();
 
-                        // Send responses to this player
-                        for response in responses {
-                            raknet.send_to_session(
-                                &addr,
-                                response,
-                                Reliability::ReliableOrdered,
-                                true,
-                            );
+                        let responses = conn.handle_raw_batch(&data);
+                        let responses: Vec<Vec<u8>> = responses
+                            .into_iter()
+                            .map(|r| conn.prepare_for_send(r))
+                            .collect();
+
+                        let join_info = if !was_in_game && conn.is_in_game() {
+                            Some((
+                                conn.display_name.clone().unwrap_or_default(),
+                                conn.uuid.map(|u| *u.as_bytes()).unwrap_or([0u8; 16]),
+                                conn.xuid.clone().unwrap_or_default(),
+                                conn.entity_runtime_id,
+                                conn.position,
+                            ))
+                        } else {
+                            None
+                        };
+
+                        registry.update_position(
+                            &addr,
+                            conn.position,
+                            conn.pitch,
+                            conn.yaw,
+                            conn.head_yaw,
+                        );
+
+                        let broadcasts = conn.take_broadcasts();
+                        let pending_commands = conn.take_pending_commands();
+                        let item_spawns = std::mem::take(&mut conn.pending_item_spawns);
+
+                        (
+                            responses,
+                            broadcasts,
+                            join_info,
+                            pending_commands,
+                            item_spawns,
+                        )
+                    };
+                    // Borrow of conn dropped here
+
+                    // Send responses to this player
+                    for response in responses {
+                        raknet.send_to_session(&addr, response, Reliability::ReliableOrdered, true);
+                    }
+
+                    // If player just joined, broadcast to others
+                    if let Some((name, uuid, xuid, runtime_id, position)) = join_info {
+                        let entity_id = runtime_id as i64;
+
+                        let player_gamemode =
+                            connections.get(&addr).map(|c| c.gamemode).unwrap_or(0);
+                        let is_op = server_state.is_op(&name);
+                        if let Some(connection) = connections.get_mut(&addr) {
+                            connection.is_op = is_op;
                         }
-
-                        // If player just joined, broadcast to others
-                        if let Some((name, uuid, xuid, runtime_id, position)) = join_info {
-                            let entity_id = runtime_id as i64;
-
-                            let player_gamemode =
-                                connections.get(&addr).map(|c| c.gamemode).unwrap_or(0);
-                            registry.players.insert(
+                        registry.players.insert(
+                            addr,
+                            crate::player_registry::PlayerInfo {
                                 addr,
-                                crate::player_registry::PlayerInfo {
-                                    addr,
-                                    name: name.clone(),
-                                    uuid,
-                                    xuid: xuid.clone(),
-                                    entity_id,
-                                    position,
-                                    pitch: 0.0,
-                                    yaw: 0.0,
-                                    head_yaw: 0.0,
-                                    gamemode: player_gamemode,
-                                },
-                            );
-
-                            let add_player_bytes = AddPlayer {
+                                name: name.clone(),
                                 uuid,
-                                username: name.clone(),
-                                runtime_entity_id: runtime_id,
-                                platform_chat_id: String::new(),
+                                xuid: xuid.clone(),
+                                entity_id,
                                 position,
-                                velocity: [0.0, 0.0, 0.0],
                                 pitch: 0.0,
                                 yaw: 0.0,
                                 head_yaw: 0.0,
                                 gamemode: player_gamemode,
-                                entity_unique_id: entity_id,
-                                permission_level: 1,   // MEMBER
-                                command_permission: 0, // NORMAL
-                            }
-                            .encode();
+                            },
+                        );
 
-                            let player_list_add = PlayerList {
-                                action: 0,
-                                entries: vec![PlayerListAdd {
-                                    uuid,
-                                    entity_id,
-                                    username: name.clone(),
-                                    xuid: xuid.clone(),
-                                    platform_chat_id: String::new(),
-                                    build_platform: 0,
-                                    is_teacher: false,
-                                    is_host: false,
-                                    is_subclient: false,
-                                }],
-                            }
-                            .encode();
+                        let add_player_bytes = AddPlayer {
+                            uuid,
+                            username: name.clone(),
+                            runtime_entity_id: runtime_id,
+                            platform_chat_id: String::new(),
+                            position,
+                            velocity: [0.0, 0.0, 0.0],
+                            pitch: 0.0,
+                            yaw: 0.0,
+                            head_yaw: 0.0,
+                            gamemode: player_gamemode,
+                            entity_unique_id: entity_id,
+                            permission_level: if is_op { 2 } else { 1 },
+                            command_permission: if is_op { 1 } else { 0 },
+                        }
+                        .encode();
 
-                            // Don't broadcast AddPlayer for spectators (they're invisible)
-                            for (other_addr, other_conn) in connections.iter_mut() {
-                                if *other_addr != addr {
-                                    // Always send PlayerList (needed for tab list)
+                        let player_list_add = PlayerList {
+                            action: 0,
+                            entries: vec![PlayerListAdd {
+                                uuid,
+                                entity_id,
+                                username: name.clone(),
+                                xuid: xuid.clone(),
+                                platform_chat_id: String::new(),
+                                build_platform: 0,
+                                is_teacher: false,
+                                is_host: false,
+                                is_subclient: false,
+                            }],
+                        }
+                        .encode();
+
+                        // Don't broadcast AddPlayer for spectators (they're invisible)
+                        for (other_addr, other_conn) in connections.iter_mut() {
+                            if *other_addr != addr {
+                                // Always send PlayerList (needed for tab list)
+                                let pkt = other_conn.encode_compressed_packet(
+                                    packet_id::PLAYER_LIST,
+                                    &player_list_add,
+                                );
+                                let prepared = other_conn.prepare_for_send(pkt);
+                                raknet.send_to_session(
+                                    other_addr,
+                                    prepared,
+                                    Reliability::ReliableOrdered,
+                                    true,
+                                );
+
+                                // Only send AddPlayer if NOT spectator
+                                if player_gamemode != 3 {
                                     let pkt = other_conn.encode_compressed_packet(
-                                        packet_id::PLAYER_LIST,
-                                        &player_list_add,
+                                        packet_id::ADD_PLAYER,
+                                        &add_player_bytes,
                                     );
                                     let prepared = other_conn.prepare_for_send(pkt);
                                     raknet.send_to_session(
@@ -340,174 +581,206 @@ fn process_peer_events(
                                         Reliability::ReliableOrdered,
                                         true,
                                     );
-
-                                    // Only send AddPlayer if NOT spectator
-                                    if player_gamemode != 3 {
-                                        let pkt = other_conn.encode_compressed_packet(
-                                            packet_id::ADD_PLAYER,
-                                            &add_player_bytes,
-                                        );
-                                        let prepared = other_conn.prepare_for_send(pkt);
-                                        raknet.send_to_session(
-                                            other_addr,
-                                            prepared,
-                                            Reliability::ReliableOrdered,
-                                            true,
-                                        );
-                                    }
                                 }
                             }
+                        }
 
-                            info!(
-                                "[{}] {} joined the game (entity_id={})",
-                                addr, name, entity_id
+                        info!(
+                            "[{}] {} joined the game (entity_id={})",
+                            addr, name, entity_id
+                        );
+
+                        if let Some(joined_conn) = connections.get_mut(&addr) {
+                            for entity in item_entities.all() {
+                                let pkt = joined_conn.encode_compressed_packet(
+                                    packet_id::ADD_ITEM_ACTOR,
+                                    &entity.add_actor_packet(),
+                                );
+                                let prepared = joined_conn.prepare_for_send(pkt);
+                                raknet.send_to_session(
+                                    &addr,
+                                    prepared,
+                                    Reliability::ReliableOrdered,
+                                    true,
+                                );
+                            }
+                        }
+
+                        let mut command_runtime = ExecutionContext::new(
+                            CommandSource::Console,
+                            command_system,
+                            connections,
+                            peers,
+                            raknet,
+                            registry,
+                            item_entities,
+                            world_state,
+                            server_state,
+                            chunk_cache,
+                            should_stop,
+                        );
+                        command_runtime.sync_available_commands_for_all();
+                    }
+
+                    // Broadcast packets to all OTHER connections
+                    if !broadcasts.is_empty() {
+                        for broadcast in &broadcasts {
+                            for (other_addr, other_conn) in connections.iter_mut() {
+                                if *other_addr != addr {
+                                    let prepared = other_conn.prepare_for_send(broadcast.clone());
+                                    raknet.send_to_session(
+                                        other_addr,
+                                        prepared,
+                                        Reliability::ReliableOrdered,
+                                        true,
+                                    );
+                                }
+                            }
+                        }
+                    }
+
+                    for command in pending_commands {
+                        if !connections.contains_key(&addr) {
+                            break;
+                        }
+                        dispatch_command_line(
+                            CommandSource::Player(addr),
+                            &command,
+                            command_system,
+                            connections,
+                            peers,
+                            raknet,
+                            registry,
+                            item_entities,
+                            world_state,
+                            server_state,
+                            chunk_cache,
+                            should_stop,
+                        );
+                    }
+
+                    for spawn in item_spawns {
+                        let entity = item_entities.spawn(spawn);
+                        let add_item_bytes = entity.add_actor_packet();
+                        for (other_addr, other_conn) in connections.iter_mut() {
+                            if other_conn.is_in_game() {
+                                let pkt = other_conn.encode_compressed_packet(
+                                    packet_id::ADD_ITEM_ACTOR,
+                                    &add_item_bytes,
+                                );
+                                let prepared = other_conn.prepare_for_send(pkt);
+                                raknet.send_to_session(
+                                    other_addr,
+                                    prepared,
+                                    Reliability::ReliableOrdered,
+                                    true,
+                                );
+                            }
+                        }
+                    }
+                }
+                SessionEvent::Disconnected => {
+                    // Save player data before removing
+                    if let Some(conn) = connections.get(&addr) {
+                        if let Some(ref xuid) = conn.xuid {
+                            let save_data = player_data::PlayerSaveData::from_runtime(
+                                conn.position,
+                                [conn.yaw, conn.pitch],
+                                conn.gamemode,
+                                20.0,
+                                20.0,
+                                conn.spawn_position,
+                                &conn.inventory,
                             );
-                        }
-
-                        // Broadcast packets to all OTHER connections
-                        if !broadcasts.is_empty() {
-                            for broadcast in &broadcasts {
-                                for (other_addr, other_conn) in connections.iter_mut() {
-                                    if *other_addr != addr {
-                                        let prepared =
-                                            other_conn.prepare_for_send(broadcast.clone());
-                                        raknet.send_to_session(
-                                            other_addr,
-                                            prepared,
-                                            Reliability::ReliableOrdered,
-                                            true,
-                                        );
-                                    }
-                                }
-                            }
-                        }
-
-                        // Process server-side actions from commands
-                        for action in actions {
-                            match action {
-                                mc_rs_command::CommandAction::SetTime { time } => {
-                                    world_state.set_time(time);
-                                    // Broadcast immediately
-                                    let time_bytes = encode_set_time(time);
-                                    for (a, c) in connections.iter_mut() {
-                                        if c.is_in_game() {
-                                            let pkt = c.encode_compressed_packet(
-                                                packet_id::SET_TIME,
-                                                &time_bytes,
-                                            );
-                                            let prepared = c.prepare_for_send(pkt);
-                                            raknet.send_to_session(
-                                                a,
-                                                prepared,
-                                                Reliability::ReliableOrdered,
-                                                true,
-                                            );
-                                        }
-                                    }
-                                }
-                                mc_rs_command::CommandAction::SetWeather { rain, thunder } => {
-                                    world_state.set_weather(rain, thunder);
-                                    info!("Weather changed: rain={}, thunder={}", rain, thunder);
-                                }
-                                mc_rs_command::CommandAction::Stop => {
-                                    *should_stop = true;
-                                }
-                                _ => {} // Other actions handled in connection.rs
+                            if let Err(e) = player_data::save_player(xuid, &save_data) {
+                                warn!("Failed to save player data: {}", e);
                             }
                         }
                     }
-                    SessionEvent::Disconnected => {
-                        // Save player data before removing
-                        if let Some(conn) = connections.get(&addr) {
-                            if let Some(ref xuid) = conn.xuid {
-                                let save_data = player_data::PlayerSaveData {
-                                    position: [
-                                        conn.position[0] as f64,
-                                        conn.position[1] as f64,
-                                        conn.position[2] as f64,
-                                    ],
-                                    rotation: [conn.yaw, conn.pitch],
-                                    gamemode: conn.gamemode,
-                                    health: 20.0,
-                                    hunger: 20.0,
-                                };
-                                if let Err(e) = player_data::save_player(xuid, &save_data) {
-                                    warn!("Failed to save player data: {}", e);
-                                }
-                            }
-                        }
 
-                        // Broadcast RemoveEntity + PlayerList(REMOVE) to all others
-                        if let Some(player_info) = registry.remove(&addr) {
-                            info!("[{}] {} left the game", addr, player_info.name);
-
-                            let remove_entity = RemoveEntity {
-                                entity_unique_id: player_info.entity_id,
-                            }
-                            .encode();
-
-                            let player_list_remove = PlayerList {
-                                action: 1,
-                                entries: vec![PlayerListAdd {
-                                    uuid: player_info.uuid,
-                                    entity_id: player_info.entity_id,
-                                    username: String::new(),
-                                    xuid: String::new(),
-                                    platform_chat_id: String::new(),
-                                    build_platform: 0,
-                                    is_teacher: false,
-                                    is_host: false,
-                                    is_subclient: false,
-                                }],
-                            }
-                            .encode();
-
-                            for (other_addr, other_conn) in connections.iter_mut() {
-                                if *other_addr != addr {
-                                    let pkt = other_conn.encode_compressed_packet(
-                                        packet_id::REMOVE_ACTOR,
-                                        &remove_entity,
-                                    );
-                                    let prepared = other_conn.prepare_for_send(pkt);
-                                    raknet.send_to_session(
-                                        other_addr,
-                                        prepared,
-                                        Reliability::ReliableOrdered,
-                                        true,
-                                    );
-
-                                    let pkt = other_conn.encode_compressed_packet(
-                                        packet_id::PLAYER_LIST,
-                                        &player_list_remove,
-                                    );
-                                    let prepared = other_conn.prepare_for_send(pkt);
-                                    raknet.send_to_session(
-                                        other_addr,
-                                        prepared,
-                                        Reliability::ReliableOrdered,
-                                        true,
-                                    );
-                                }
-                            }
-                        } else {
-                            info!("[{}] Disconnected", addr);
-                        }
-
-                        connections.remove(&addr);
-                        peers.remove(&addr);
-                        break;
-                    }
-                },
-                Err(tokio::sync::mpsc::error::TryRecvError::Empty) => break,
-                Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
+                    // Broadcast RemoveEntity + PlayerList(REMOVE) to all others
                     if let Some(player_info) = registry.remove(&addr) {
-                        info!("[{}] {} connection lost", addr, player_info.name);
+                        info!("[{}] {} left the game", addr, player_info.name);
+
+                        let remove_entity = RemoveEntity {
+                            entity_unique_id: player_info.entity_id,
+                        }
+                        .encode();
+
+                        let player_list_remove = PlayerList {
+                            action: 1,
+                            entries: vec![PlayerListAdd {
+                                uuid: player_info.uuid,
+                                entity_id: player_info.entity_id,
+                                username: String::new(),
+                                xuid: String::new(),
+                                platform_chat_id: String::new(),
+                                build_platform: 0,
+                                is_teacher: false,
+                                is_host: false,
+                                is_subclient: false,
+                            }],
+                        }
+                        .encode();
+
+                        for (other_addr, other_conn) in connections.iter_mut() {
+                            if *other_addr != addr {
+                                let pkt = other_conn.encode_compressed_packet(
+                                    packet_id::REMOVE_ACTOR,
+                                    &remove_entity,
+                                );
+                                let prepared = other_conn.prepare_for_send(pkt);
+                                raknet.send_to_session(
+                                    other_addr,
+                                    prepared,
+                                    Reliability::ReliableOrdered,
+                                    true,
+                                );
+
+                                let pkt = other_conn.encode_compressed_packet(
+                                    packet_id::PLAYER_LIST,
+                                    &player_list_remove,
+                                );
+                                let prepared = other_conn.prepare_for_send(pkt);
+                                raknet.send_to_session(
+                                    other_addr,
+                                    prepared,
+                                    Reliability::ReliableOrdered,
+                                    true,
+                                );
+                            }
+                        }
+                        let mut command_runtime = ExecutionContext::new(
+                            CommandSource::Console,
+                            command_system,
+                            connections,
+                            peers,
+                            raknet,
+                            registry,
+                            item_entities,
+                            world_state,
+                            server_state,
+                            chunk_cache,
+                            should_stop,
+                        );
+                        command_runtime.sync_available_commands_for_all();
+                    } else {
+                        info!("[{}] Disconnected", addr);
                     }
+
                     connections.remove(&addr);
                     peers.remove(&addr);
                     break;
                 }
             }
+        }
+
+        if receiver_disconnected && peers.contains_key(&addr) {
+            if let Some(player_info) = registry.remove(&addr) {
+                info!("[{}] {} connection lost", addr, player_info.name);
+            }
+            connections.remove(&addr);
+            peers.remove(&addr);
         }
     }
 }

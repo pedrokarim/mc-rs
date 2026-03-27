@@ -353,7 +353,7 @@ mod tests {
     fn test_biome_section_plains() {
         let data = serialize_biome_section_single(1); // Plains
         assert_eq!(data[0], 1); // header: bits=0, runtime=1
-                                 // VarInt32 zigzag(1) = 2 = [0x02]
+                                // VarInt32 zigzag(1) = 2 = [0x02]
         assert_eq!(data[1], 0x02);
     }
 

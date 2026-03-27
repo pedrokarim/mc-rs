@@ -1,67 +1,72 @@
+use crate::item_registry;
 use crate::world::block_registry::BLOCKS;
 use mc_rs_proto::packets::player::{ItemStack, ItemStackWrapper};
 
+fn required_item_id(name: &str) -> i32 {
+    item_registry::required_item_id(name)
+}
+
 /// Block runtime ID → (item network ID, item block runtime ID) mapping.
-/// Item network IDs from PMMP required_item_list.json.
+/// Item network IDs come from Bedrock's required_item_list.json for protocol 944.
 /// Block runtime IDs resolved dynamically from block registry.
 pub fn block_to_item(block_runtime_id: u32) -> Option<(i32, i32)> {
     let b = &*BLOCKS;
     let item_id: i32 = if block_runtime_id == b.dirt {
-        3
+        required_item_id("minecraft:dirt")
     } else if block_runtime_id == b.grass_block {
-        2
+        required_item_id("minecraft:grass_block")
     } else if block_runtime_id == b.bedrock {
-        7
+        required_item_id("minecraft:bedrock")
     } else if block_runtime_id == b.stone {
-        1
+        required_item_id("minecraft:stone")
     } else if block_runtime_id == b.sand {
-        12
+        required_item_id("minecraft:sand")
     } else if block_runtime_id == b.sandstone {
-        24
+        required_item_id("minecraft:sandstone")
     } else if block_runtime_id == b.gravel {
-        13
+        required_item_id("minecraft:gravel")
     } else if block_runtime_id == b.oak_log {
-        17
+        required_item_id("minecraft:oak_log")
     } else if block_runtime_id == b.oak_leaves {
-        18
+        required_item_id("minecraft:oak_leaves")
     } else if block_runtime_id == b.snow_layer {
-        78
+        required_item_id("minecraft:snow_layer")
     } else if block_runtime_id == b.coal_ore {
-        16
+        required_item_id("minecraft:coal_ore")
     } else if block_runtime_id == b.iron_ore {
-        15
+        required_item_id("minecraft:iron_ore")
     } else if block_runtime_id == b.gold_ore {
-        14
+        required_item_id("minecraft:gold_ore")
     } else if block_runtime_id == b.diamond_ore {
-        56
+        required_item_id("minecraft:diamond_ore")
     } else if block_runtime_id == b.redstone_ore {
-        73
+        required_item_id("minecraft:redstone_ore")
     } else if block_runtime_id == b.lapis_ore {
-        21
+        required_item_id("minecraft:lapis_ore")
     } else if block_runtime_id == b.mycelium {
-        110
+        required_item_id("minecraft:mycelium")
     } else if block_runtime_id == b.red_sand {
-        12
+        required_item_id("minecraft:red_sand")
     } else if block_runtime_id == b.hardened_clay {
-        172
+        required_item_id("minecraft:hardened_clay")
     } else if block_runtime_id == b.snow_block {
-        80
+        required_item_id("minecraft:snow")
     } else if block_runtime_id == b.podzol {
-        3
+        required_item_id("minecraft:podzol")
     } else if block_runtime_id == b.coarse_dirt {
-        3
+        required_item_id("minecraft:coarse_dirt")
     } else if block_runtime_id == b.red_sandstone {
-        179
+        required_item_id("minecraft:red_sandstone")
     } else if block_runtime_id == b.deepslate {
-        -378
+        required_item_id("minecraft:deepslate")
     } else if block_runtime_id == b.tuff {
-        -333
+        required_item_id("minecraft:tuff")
     } else if block_runtime_id == b.granite {
-        -590
+        required_item_id("minecraft:granite")
     } else if block_runtime_id == b.diorite {
-        -592
+        required_item_id("minecraft:diorite")
     } else if block_runtime_id == b.andesite {
-        -594
+        required_item_id("minecraft:andesite")
     } else {
         return None;
     };
@@ -73,9 +78,13 @@ pub fn block_to_item(block_runtime_id: u32) -> Option<(i32, i32)> {
 pub fn block_drop(block_runtime_id: u32) -> Option<ItemStack> {
     let b = &*BLOCKS;
     if block_runtime_id == b.stone {
-        Some(ItemStack::new(4, 1, b.cobblestone as i32))
+        Some(ItemStack::new(
+            required_item_id("minecraft:cobblestone"),
+            1,
+            b.cobblestone as i32,
+        ))
     } else if block_runtime_id == b.grass_block {
-        Some(ItemStack::new(3, 1, b.dirt as i32))
+        Some(ItemStack::new(required_item_id("minecraft:dirt"), 1, b.dirt as i32))
     } else if block_runtime_id == b.oak_leaves {
         None
     } else if block_runtime_id == b.short_grass {
@@ -91,29 +100,35 @@ pub fn block_drop(block_runtime_id: u32) -> Option<ItemStack> {
 pub fn item_to_block(item_id: i32) -> Option<u32> {
     let b = &*BLOCKS;
     match item_id {
-        3 => Some(b.dirt),
-        2 => Some(b.grass_block),
-        7 => Some(b.bedrock),
-        1 => Some(b.stone),
-        4 => Some(b.cobblestone),
-        12 => Some(b.sand),
-        24 => Some(b.sandstone),
-        13 => Some(b.gravel),
-        17 => Some(b.oak_log),
-        18 => Some(b.oak_leaves),
-        16 => Some(b.coal_ore),
-        15 => Some(b.iron_ore),
-        14 => Some(b.gold_ore),
-        56 => Some(b.diamond_ore),
-        73 => Some(b.redstone_ore),
-        21 => Some(b.lapis_ore),
-        80 => Some(b.snow_block),
-        172 => Some(b.hardened_clay),
-        -378 => Some(b.deepslate),
-        -333 => Some(b.tuff),
-        -590 => Some(b.granite),
-        -592 => Some(b.diorite),
-        -594 => Some(b.andesite),
+        id if id == required_item_id("minecraft:dirt") => Some(b.dirt),
+        id if id == required_item_id("minecraft:grass_block") => Some(b.grass_block),
+        id if id == required_item_id("minecraft:bedrock") => Some(b.bedrock),
+        id if id == required_item_id("minecraft:stone") => Some(b.stone),
+        id if id == required_item_id("minecraft:cobblestone") => Some(b.cobblestone),
+        id if id == required_item_id("minecraft:sand") => Some(b.sand),
+        id if id == required_item_id("minecraft:sandstone") => Some(b.sandstone),
+        id if id == required_item_id("minecraft:gravel") => Some(b.gravel),
+        id if id == required_item_id("minecraft:oak_log") => Some(b.oak_log),
+        id if id == required_item_id("minecraft:oak_leaves") => Some(b.oak_leaves),
+        id if id == required_item_id("minecraft:coal_ore") => Some(b.coal_ore),
+        id if id == required_item_id("minecraft:iron_ore") => Some(b.iron_ore),
+        id if id == required_item_id("minecraft:gold_ore") => Some(b.gold_ore),
+        id if id == required_item_id("minecraft:diamond_ore") => Some(b.diamond_ore),
+        id if id == required_item_id("minecraft:redstone_ore") => Some(b.redstone_ore),
+        id if id == required_item_id("minecraft:lapis_ore") => Some(b.lapis_ore),
+        id if id == required_item_id("minecraft:mycelium") => Some(b.mycelium),
+        id if id == required_item_id("minecraft:red_sand") => Some(b.red_sand),
+        id if id == required_item_id("minecraft:podzol") => Some(b.podzol),
+        id if id == required_item_id("minecraft:coarse_dirt") => Some(b.coarse_dirt),
+        id if id == required_item_id("minecraft:red_sandstone") => Some(b.red_sandstone),
+        id if id == required_item_id("minecraft:snow_layer") => Some(b.snow_layer),
+        id if id == required_item_id("minecraft:snow") => Some(b.snow_block),
+        id if id == required_item_id("minecraft:hardened_clay") => Some(b.hardened_clay),
+        id if id == required_item_id("minecraft:deepslate") => Some(b.deepslate),
+        id if id == required_item_id("minecraft:tuff") => Some(b.tuff),
+        id if id == required_item_id("minecraft:granite") => Some(b.granite),
+        id if id == required_item_id("minecraft:diorite") => Some(b.diorite),
+        id if id == required_item_id("minecraft:andesite") => Some(b.andesite),
         _ => None,
     }
 }
@@ -144,6 +159,32 @@ impl PlayerInventory {
         }
     }
 
+    pub fn from_parts(
+        mut slots: Vec<ItemStackWrapper>,
+        mut armor: Vec<ItemStackWrapper>,
+        offhand: ItemStackWrapper,
+        held_slot: u8,
+    ) -> Self {
+        slots.resize(36, ItemStackWrapper::air());
+        armor.resize(4, ItemStackWrapper::air());
+
+        let max_stack_id = slots
+            .iter()
+            .chain(armor.iter())
+            .chain(std::iter::once(&offhand))
+            .map(|slot| slot.stack_id)
+            .max()
+            .unwrap_or(0);
+
+        Self {
+            slots,
+            armor,
+            offhand,
+            held_slot: held_slot.min(8),
+            next_stack_id: max_stack_id.max(0) + 1,
+        }
+    }
+
     /// Get the next unique stack ID.
     pub fn next_stack_id(&mut self) -> i32 {
         let id = self.next_stack_id;
@@ -154,6 +195,14 @@ impl PlayerInventory {
     /// Get the item in the currently held hotbar slot.
     pub fn held_item(&self) -> &ItemStackWrapper {
         &self.slots[self.held_slot as usize]
+    }
+
+    pub fn clear(&mut self) {
+        self.slots.fill(ItemStackWrapper::air());
+        self.armor.fill(ItemStackWrapper::air());
+        self.offhand = ItemStackWrapper::air();
+        self.held_slot = 0;
+        self.next_stack_id = 1;
     }
 
     /// Add an item to the first available slot.

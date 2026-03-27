@@ -10,6 +10,7 @@ pub struct BlockAction {
 }
 
 /// Item interaction data from PlayerAuthInput (UseItemTransactionData).
+#[derive(Clone, Debug)]
 pub struct ItemInteractionData {
     pub action_type: u32, // 0=CLICK_BLOCK, 1=CLICK_AIR, 2=BREAK_BLOCK
     pub block_position: [i32; 3],
@@ -22,6 +23,7 @@ pub struct ItemInteractionData {
 }
 
 /// Slot info from ItemStackRequest actions.
+#[derive(Clone, Debug)]
 pub struct SlotInfo {
     pub container_id: u8,
     pub slot_id: u8,
@@ -29,6 +31,7 @@ pub struct SlotInfo {
 }
 
 /// A single action in an ItemStackRequest.
+#[derive(Clone, Debug)]
 pub enum StackRequestAction {
     /// Take/Place: move `count` items from source to destination.
     Take {
@@ -59,6 +62,7 @@ pub enum StackRequestAction {
 }
 
 /// An ItemStackRequest decoded from PlayerAuthInput.
+#[derive(Clone, Debug)]
 pub struct ItemStackRequest {
     pub request_id: i32,
     pub actions: Vec<StackRequestAction>,
@@ -75,6 +79,68 @@ pub struct PlayerAuthInput {
     pub block_actions: Vec<BlockAction>,
     pub item_interaction: Option<ItemInteractionData>,
     pub item_stack_request: Option<ItemStackRequest>,
+}
+
+/// Container/slot resync hint carried by InventoryTransaction when request_id != 0.
+#[derive(Clone, Debug)]
+pub struct InventoryTransactionChangedSlots {
+    pub container_id: u8,
+    pub changed_slots: Vec<u8>,
+}
+
+/// A single low-level inventory action from InventoryTransaction.
+#[derive(Clone, Debug)]
+pub struct NetworkInventoryAction {
+    pub source_type: u32,
+    pub window_id: Option<i32>,
+    pub source_flags: Option<u32>,
+    pub inventory_slot: u32,
+    pub old_item: ItemStackWrapper,
+    pub new_item: ItemStackWrapper,
+}
+
+/// InventoryTransaction payload variants we care about server-side.
+#[derive(Clone, Debug)]
+pub enum InventoryTransactionData {
+    Normal {
+        actions: Vec<NetworkInventoryAction>,
+    },
+    Mismatch {
+        actions: Vec<NetworkInventoryAction>,
+    },
+    UseItem {
+        actions: Vec<NetworkInventoryAction>,
+        data: ItemInteractionData,
+    },
+    UseItemOnEntity {
+        actions: Vec<NetworkInventoryAction>,
+        actor_runtime_id: u64,
+        action_type: u32,
+        hotbar_slot: i32,
+        item_in_hand: ItemStackWrapper,
+        player_position: [f32; 3],
+        click_position: [f32; 3],
+    },
+    ReleaseItem {
+        actions: Vec<NetworkInventoryAction>,
+        action_type: u32,
+        hotbar_slot: i32,
+        item_in_hand: ItemStackWrapper,
+        head_position: [f32; 3],
+    },
+    Unknown {
+        transaction_type: u32,
+        actions: Vec<NetworkInventoryAction>,
+        remaining_data: Vec<u8>,
+    },
+}
+
+/// InventoryTransaction packet (0x1E).
+#[derive(Clone, Debug)]
+pub struct InventoryTransaction {
+    pub request_id: i32,
+    pub changed_slots: Vec<InventoryTransactionChangedSlots>,
+    pub data: InventoryTransactionData,
 }
 
 // PlayerAuthInput flag bits (from PMMP PlayerAuthInputFlags.php)
@@ -101,68 +167,103 @@ fn read_bitset(reader: &mut ProtoReader) -> Result<u128, crate::io::reader::Prot
 }
 
 /// Skip an ItemStackWrapper in the reader.
+fn decode_item_stack_wrapper(
+    reader: &mut ProtoReader,
+) -> Result<ItemStackWrapper, crate::io::reader::ProtoReadError> {
+    let id = reader.read_var_i32()?;
+    if id == 0 {
+        return Ok(ItemStackWrapper::air());
+    }
+    let count = reader.read_u16_le()?;
+    let meta = reader.read_var_u32()?;
+    let has_net_id = reader.read_bool()?;
+    let stack_id = if has_net_id {
+        reader.read_var_i32()?
+    } else {
+        0
+    };
+    let block_runtime_id = reader.read_var_i32()?;
+    let extra_data = reader.read_byte_array()?;
+    Ok(ItemStackWrapper::new(
+        ItemStack {
+            id,
+            count,
+            meta,
+            block_runtime_id,
+            extra_data,
+        },
+        stack_id,
+    ))
+}
+
+/// Skip an ItemStackWrapper in the reader.
 fn skip_item_stack_wrapper(
     reader: &mut ProtoReader,
 ) -> Result<(), crate::io::reader::ProtoReadError> {
-    let id = reader.read_var_i32()?;
-    if id == 0 {
-        return Ok(());
-    }
-    let _count = reader.read_u16_le()?;
-    let _meta = reader.read_var_u32()?;
-    let has_net_id = reader.read_bool()?;
-    if has_net_id {
-        let _stack_id = reader.read_var_i32()?;
-    }
-    let _block_runtime_id = reader.read_var_i32()?;
-    let _extra_data = reader.read_string()?;
+    let _ = decode_item_stack_wrapper(reader)?;
     Ok(())
 }
 
-/// Skip a NetworkInventoryAction in the reader.
-fn skip_network_inventory_action(
+/// Decode a NetworkInventoryAction from the reader.
+fn decode_network_inventory_action(
     reader: &mut ProtoReader,
-) -> Result<(), crate::io::reader::ProtoReadError> {
+) -> Result<NetworkInventoryAction, crate::io::reader::ProtoReadError> {
     let source_type = reader.read_var_u32()?;
-    match source_type {
-        0 => {
-            let _window_id = reader.read_var_i32()?;
-        } // SOURCE_CONTAINER
-        1 => {
-            let _flags = reader.read_var_u32()?;
-        } // SOURCE_WORLD
-        2 => {} // SOURCE_CREATIVE
-        _ => {}
-    }
-    let _slot = reader.read_var_u32()?;
-    skip_item_stack_wrapper(reader)?; // old item
-    skip_item_stack_wrapper(reader)?; // new item
-    Ok(())
+    let (window_id, source_flags) = match source_type {
+        0 => (Some(reader.read_var_i32()?), None), // SOURCE_CONTAINER
+        2 => (None, Some(reader.read_var_u32()?)), // SOURCE_WORLD
+        3 => (None, None),                         // SOURCE_CREATIVE
+        99999 => (Some(reader.read_var_i32()?), None), // SOURCE_TODO
+        _ => (None, None),
+    };
+    let inventory_slot = reader.read_var_u32()?;
+    let old_item = decode_item_stack_wrapper(reader)?;
+    let new_item = decode_item_stack_wrapper(reader)?;
+
+    Ok(NetworkInventoryAction {
+        source_type,
+        window_id,
+        source_flags,
+        inventory_slot,
+        old_item,
+        new_item,
+    })
 }
 
-/// Decode the ItemInteractionData from PlayerAuthInput.
-fn decode_item_interaction(
+fn decode_inventory_actions(
+    reader: &mut ProtoReader,
+) -> Result<Vec<NetworkInventoryAction>, crate::io::reader::ProtoReadError> {
+    let action_count = reader.read_var_u32()?;
+    let mut actions = Vec::new();
+    for _ in 0..action_count.min(100) {
+        actions.push(decode_network_inventory_action(reader)?);
+    }
+    Ok(actions)
+}
+
+fn decode_changed_slots_hack(
+    reader: &mut ProtoReader,
+) -> Result<Vec<InventoryTransactionChangedSlots>, crate::io::reader::ProtoReadError> {
+    let changed_slots_count = reader.read_var_u32()?;
+    let mut changed_slots = Vec::new();
+    for _ in 0..changed_slots_count.min(32) {
+        let container_id = reader.read_u8()?;
+        let slot_count = reader.read_var_u32()?;
+        let mut slots = Vec::new();
+        for _ in 0..slot_count.min(128) {
+            slots.push(reader.read_u8()?);
+        }
+        changed_slots.push(InventoryTransactionChangedSlots {
+            container_id,
+            changed_slots: slots,
+        });
+    }
+    Ok(changed_slots)
+}
+
+fn decode_use_item_transaction_data(
     reader: &mut ProtoReader,
 ) -> Result<ItemInteractionData, crate::io::reader::ProtoReadError> {
-    // Legacy request ID
-    let request_id = reader.read_var_i32()?;
-    if request_id != 0 {
-        let changed_slots_count = reader.read_var_u32()?;
-        for _ in 0..changed_slots_count {
-            let _container_id = reader.read_u8()?;
-            let slot_count = reader.read_var_u32()?;
-            for _ in 0..slot_count {
-                let _slot = reader.read_u8()?;
-            }
-        }
-    }
-
-    // UseItemTransactionData
-    let action_count = reader.read_var_u32()?;
-    for _ in 0..action_count.min(100) {
-        skip_network_inventory_action(reader)?;
-    }
-
     let action_type = reader.read_var_u32()?;
     let trigger_type = reader.read_var_u32()?;
     let _ = trigger_type;
@@ -197,6 +298,124 @@ fn decode_item_interaction(
         block_runtime_id,
         client_prediction,
     })
+}
+
+fn decode_use_item_on_entity_transaction_data(
+    reader: &mut ProtoReader,
+) -> Result<InventoryTransactionData, crate::io::reader::ProtoReadError> {
+    let actor_runtime_id = reader.read_var_u64()?;
+    let action_type = reader.read_var_u32()?;
+    let hotbar_slot = reader.read_var_i32()?;
+    let item_in_hand = decode_item_stack_wrapper(reader)?;
+    let player_position = [
+        reader.read_f32_le()?,
+        reader.read_f32_le()?,
+        reader.read_f32_le()?,
+    ];
+    let click_position = [
+        reader.read_f32_le()?,
+        reader.read_f32_le()?,
+        reader.read_f32_le()?,
+    ];
+    Ok(InventoryTransactionData::UseItemOnEntity {
+        actions: Vec::new(),
+        actor_runtime_id,
+        action_type,
+        hotbar_slot,
+        item_in_hand,
+        player_position,
+        click_position,
+    })
+}
+
+fn decode_release_item_transaction_data(
+    reader: &mut ProtoReader,
+) -> Result<InventoryTransactionData, crate::io::reader::ProtoReadError> {
+    let action_type = reader.read_var_u32()?;
+    let hotbar_slot = reader.read_var_i32()?;
+    let item_in_hand = decode_item_stack_wrapper(reader)?;
+    let head_position = [
+        reader.read_f32_le()?,
+        reader.read_f32_le()?,
+        reader.read_f32_le()?,
+    ];
+    Ok(InventoryTransactionData::ReleaseItem {
+        actions: Vec::new(),
+        action_type,
+        hotbar_slot,
+        item_in_hand,
+        head_position,
+    })
+}
+
+impl InventoryTransaction {
+    pub fn decode(reader: &mut ProtoReader) -> Result<Self, crate::io::reader::ProtoReadError> {
+        let request_id = reader.read_var_i32()?;
+        let changed_slots = if request_id != 0 {
+            decode_changed_slots_hack(reader)?
+        } else {
+            Vec::new()
+        };
+
+        let transaction_type = reader.read_var_u32()?;
+        let actions = decode_inventory_actions(reader)?;
+
+        let data = match transaction_type {
+            0 => InventoryTransactionData::Normal { actions },
+            1 => InventoryTransactionData::Mismatch { actions },
+            2 => InventoryTransactionData::UseItem {
+                actions,
+                data: decode_use_item_transaction_data(reader)?,
+            },
+            3 => {
+                let mut data = decode_use_item_on_entity_transaction_data(reader)?;
+                if let InventoryTransactionData::UseItemOnEntity {
+                    actions: tx_actions,
+                    ..
+                } = &mut data
+                {
+                    *tx_actions = actions;
+                }
+                data
+            }
+            4 => {
+                let mut data = decode_release_item_transaction_data(reader)?;
+                if let InventoryTransactionData::ReleaseItem {
+                    actions: tx_actions,
+                    ..
+                } = &mut data
+                {
+                    *tx_actions = actions;
+                }
+                data
+            }
+            _ => InventoryTransactionData::Unknown {
+                transaction_type,
+                actions,
+                remaining_data: reader.read_remaining(),
+            },
+        };
+
+        Ok(Self {
+            request_id,
+            changed_slots,
+            data,
+        })
+    }
+}
+
+/// Decode the ItemInteractionData from PlayerAuthInput.
+fn decode_item_interaction(
+    reader: &mut ProtoReader,
+) -> Result<ItemInteractionData, crate::io::reader::ProtoReadError> {
+    // Legacy request ID
+    let request_id = reader.read_var_i32()?;
+    if request_id != 0 {
+        let _ = decode_changed_slots_hack(reader)?;
+    }
+
+    let _ = decode_inventory_actions(reader)?;
+    decode_use_item_transaction_data(reader)
 }
 
 /// Read a SlotInfo from the reader.
@@ -565,6 +784,85 @@ impl Text {
     }
 }
 
+// ── Transfer (S→C, 0x55) ──
+
+pub struct Transfer {
+    pub address: String,
+    pub port: u16,
+    pub reload_world: bool,
+}
+
+impl Transfer {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(64);
+        w.write_string(&self.address);
+        w.write_u16_le(self.port);
+        w.write_bool(self.reload_world);
+        w.into_bytes()
+    }
+}
+
+// ── SetTitle (S→C, 0x58) ──
+
+pub struct SetTitle {
+    pub action_type: i32,
+    pub text: String,
+    pub fade_in_time: i32,
+    pub stay_time: i32,
+    pub fade_out_time: i32,
+    pub xuid: String,
+    pub platform_online_id: String,
+    pub filtered_text: String,
+}
+
+impl SetTitle {
+    pub const TYPE_CLEAR: i32 = 0;
+    pub const TYPE_RESET: i32 = 1;
+    pub const TYPE_TITLE: i32 = 2;
+    pub const TYPE_SUBTITLE: i32 = 3;
+    pub const TYPE_ACTIONBAR: i32 = 4;
+    pub const TYPE_TIMES: i32 = 5;
+
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(96);
+        w.write_var_i32(self.action_type);
+        w.write_string(&self.text);
+        w.write_var_i32(self.fade_in_time);
+        w.write_var_i32(self.stay_time);
+        w.write_var_i32(self.fade_out_time);
+        w.write_string(&self.xuid);
+        w.write_string(&self.platform_online_id);
+        w.write_string(&self.filtered_text);
+        w.into_bytes()
+    }
+
+    pub fn simple(action_type: i32, text: impl Into<String>) -> Self {
+        Self {
+            action_type,
+            text: text.into(),
+            fade_in_time: 0,
+            stay_time: 0,
+            fade_out_time: 0,
+            xuid: String::new(),
+            platform_online_id: String::new(),
+            filtered_text: String::new(),
+        }
+    }
+
+    pub fn times(fade_in_time: i32, stay_time: i32, fade_out_time: i32) -> Self {
+        Self {
+            action_type: Self::TYPE_TIMES,
+            text: String::new(),
+            fade_in_time,
+            stay_time,
+            fade_out_time,
+            xuid: String::new(),
+            platform_online_id: String::new(),
+            filtered_text: String::new(),
+        }
+    }
+}
+
 // ── PlayerList (S→C, 0x3F) ──
 
 pub struct PlayerListAdd {
@@ -753,6 +1051,52 @@ impl RemoveEntity {
     pub fn encode(&self) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(8);
         w.write_var_i64(self.entity_unique_id);
+        w.into_bytes()
+    }
+}
+
+// ── AddItemActor (S→C, 0x0F) ──
+
+pub struct AddItemActor {
+    pub entity_unique_id: i64,
+    pub entity_runtime_id: u64,
+    pub item: ItemStackWrapper,
+    pub position: [f32; 3],
+    pub velocity: [f32; 3],
+    pub metadata: Vec<(u32, u32, MetadataValue)>,
+    pub is_from_fishing: bool,
+}
+
+impl AddItemActor {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(128);
+        w.write_var_i64(self.entity_unique_id);
+        w.write_var_u64(self.entity_runtime_id);
+        self.item.encode(&mut w);
+        w.write_f32_le(self.position[0]);
+        w.write_f32_le(self.position[1]);
+        w.write_f32_le(self.position[2]);
+        w.write_f32_le(self.velocity[0]);
+        w.write_f32_le(self.velocity[1]);
+        w.write_f32_le(self.velocity[2]);
+        write_actor_metadata(&mut w, &self.metadata);
+        w.write_bool(self.is_from_fishing);
+        w.into_bytes()
+    }
+}
+
+// ── TakeItemActor (S→C, 0x11) ──
+
+pub struct TakeItemActor {
+    pub item_actor_runtime_id: u64,
+    pub taker_actor_runtime_id: u64,
+}
+
+impl TakeItemActor {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(16);
+        w.write_var_u64(self.item_actor_runtime_id);
+        w.write_var_u64(self.taker_actor_runtime_id);
         w.into_bytes()
     }
 }
@@ -1076,6 +1420,22 @@ pub enum MetadataValue {
     Long(i64),
 }
 
+fn write_actor_metadata(w: &mut ProtoWriter, metadata: &[(u32, u32, MetadataValue)]) {
+    w.write_var_u32(metadata.len() as u32);
+    for (key, data_type, value) in metadata {
+        w.write_var_u32(*key);
+        w.write_var_u32(*data_type);
+        match value {
+            MetadataValue::Byte(v) => w.write_u8(*v),
+            MetadataValue::Short(v) => w.write_i16_le(*v),
+            MetadataValue::Int(v) => w.write_var_i32(*v),
+            MetadataValue::Float(v) => w.write_f32_le(*v),
+            MetadataValue::String(v) => w.write_string(v),
+            MetadataValue::Long(v) => w.write_var_i64(*v),
+        }
+    }
+}
+
 /// Entity metadata flag bits (from PMMP EntityMetadataFlags.php)
 #[allow(dead_code)]
 /// Entity metadata flag bits (from PMMP EntityMetadataFlags.php)
@@ -1100,19 +1460,7 @@ impl SetActorData {
     pub fn encode(&self) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(128);
         w.write_var_u64(self.runtime_entity_id);
-        w.write_var_u32(self.metadata.len() as u32);
-        for (key, data_type, value) in &self.metadata {
-            w.write_var_u32(*key);
-            w.write_var_u32(*data_type);
-            match value {
-                MetadataValue::Byte(v) => w.write_u8(*v),
-                MetadataValue::Short(v) => w.write_i16_le(*v),
-                MetadataValue::Int(v) => w.write_var_i32(*v),
-                MetadataValue::Float(v) => w.write_f32_le(*v),
-                MetadataValue::String(v) => w.write_string(v),
-                MetadataValue::Long(v) => w.write_var_i64(*v),
-            }
-        }
+        write_actor_metadata(&mut w, &self.metadata);
         // PropertySyncData (PMMP) — BEFORE tick!
         w.write_var_u32(0); // property_int_count
         w.write_var_u32(0); // property_float_count
@@ -1232,11 +1580,19 @@ impl ItemStackWrapper {
         }
     }
 
+    pub fn legacy(item: ItemStack) -> Self {
+        let stack_id = if item.is_air() { 0 } else { 1 };
+        Self { stack_id, item }
+    }
+
     pub fn new(item: ItemStack, stack_id: i32) -> Self {
         Self { stack_id, item }
     }
 
-    /// Encode to network bytes (PMMP CommonTypes::writeItemStackWrapper).
+    /// Encode to network bytes.
+    ///
+    /// The current server still runs Bedrock with ItemStackNetManager disabled,
+    /// so clientbound wrappers must use legacy stack IDs: 0 for air, 1 for non-air.
     pub fn encode(&self, w: &mut ProtoWriter) {
         w.write_var_i32(self.item.id);
         if self.item.id == 0 {
@@ -1244,10 +1600,11 @@ impl ItemStackWrapper {
         }
         w.write_u16_le(self.item.count);
         w.write_var_u32(self.item.meta);
-        let has_net_id = self.stack_id != 0;
+        let stack_id = if self.item.is_air() { 0 } else { 1 };
+        let has_net_id = stack_id != 0;
         w.write_bool(has_net_id);
         if has_net_id {
-            w.write_var_i32(self.stack_id);
+            w.write_var_i32(stack_id);
         }
         w.write_var_i32(self.item.block_runtime_id);
         // Extra data as length-prefixed string
@@ -1258,36 +1615,65 @@ impl ItemStackWrapper {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct FullContainerName {
+    pub container_id: u8,
+    pub dynamic_id: Option<u32>,
+}
+
+impl FullContainerName {
+    pub fn new(container_id: u8) -> Self {
+        Self {
+            container_id,
+            dynamic_id: None,
+        }
+    }
+
+    pub fn encode(&self, w: &mut ProtoWriter) {
+        w.write_u8(self.container_id);
+        w.write_bool(self.dynamic_id.is_some());
+        if let Some(dynamic_id) = self.dynamic_id {
+            w.write_u32_le(dynamic_id);
+        }
+    }
+}
+
 // ── InventoryContent (S→C, 0x31) ──
 
 pub struct InventoryContent;
 
 impl InventoryContent {
     /// Encode an empty inventory for a window (all air items).
-    pub fn encode_empty(window_id: u32, slot_count: u32, container_id: u8) -> Vec<u8> {
+    pub fn encode_empty(
+        window_id: u32,
+        slot_count: u32,
+        full_container_name: &FullContainerName,
+    ) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(128);
         w.write_var_u32(window_id);
         w.write_var_u32(slot_count);
         for _ in 0..slot_count {
             w.write_var_i32(0); // air
         }
-        w.write_u8(container_id);
-        w.write_bool(false);
-        w.write_var_i32(0);
+        full_container_name.encode(&mut w);
+        ItemStackWrapper::air().encode(&mut w);
         w.into_bytes()
     }
 
     /// Encode inventory with actual items.
-    pub fn encode_items(window_id: u32, items: &[ItemStackWrapper], container_id: u8) -> Vec<u8> {
+    pub fn encode_items(
+        window_id: u32,
+        items: &[ItemStackWrapper],
+        full_container_name: &FullContainerName,
+    ) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(256);
         w.write_var_u32(window_id);
         w.write_var_u32(items.len() as u32);
         for item in items {
             item.encode(&mut w);
         }
-        w.write_u8(container_id);
-        w.write_bool(false);
-        w.write_var_i32(0);
+        full_container_name.encode(&mut w);
+        ItemStackWrapper::air().encode(&mut w);
         w.into_bytes()
     }
 }
@@ -1298,16 +1684,17 @@ pub struct InventorySlot;
 
 impl InventorySlot {
     /// Encode a single slot update.
-    pub fn encode(window_id: u32, slot: u32, item: &ItemStackWrapper, container_id: u8) -> Vec<u8> {
+    pub fn encode(
+        window_id: u32,
+        slot: u32,
+        item: &ItemStackWrapper,
+        full_container_name: &FullContainerName,
+    ) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(64);
         w.write_var_u32(window_id);
         w.write_var_u32(slot);
-        // FullContainerName
-        w.write_u8(container_id);
-        w.write_bool(false);
-        // Storage item
-        w.write_var_i32(0);
-        // Item
+        full_container_name.encode(&mut w);
+        ItemStackWrapper::air().encode(&mut w);
         item.encode(&mut w);
         w.into_bytes()
     }

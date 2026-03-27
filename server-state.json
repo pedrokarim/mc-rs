@@ -1,0 +1,12 @@
+{
+  "ops": [
+    "pedrokarim64"
+  ],
+  "banned_names": [],
+  "banned_ips": [],
+  "whitelist_enabled": false,
+  "whitelist": [],
+  "world_spawn": null,
+  "default_gamemode": null,
+  "difficulty": null
+}

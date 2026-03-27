@@ -14,8 +14,14 @@ fn default_output_path() -> PathBuf {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = env::args().skip(1);
-    let input = args.next().map(PathBuf::from).unwrap_or_else(default_input_path);
-    let output = args.next().map(PathBuf::from).unwrap_or_else(default_output_path);
+    let input = args
+        .next()
+        .map(PathBuf::from)
+        .unwrap_or_else(default_input_path);
+    let output = args
+        .next()
+        .map(PathBuf::from)
+        .unwrap_or_else(default_output_path);
 
     if args.next().is_some() {
         eprintln!(
@@ -32,7 +38,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     while !cursor.is_empty() {
         let root = mc_rs_nbt::read_nbt_network(&mut cursor)?;
         if let Some(mc_rs_nbt::tag::NbtTag::String(name)) = root.compound.get("name") {
-            first_runtime_ids.entry(name.clone()).or_insert(total_states);
+            first_runtime_ids
+                .entry(name.clone())
+                .or_insert(total_states);
         }
         total_states += 1;
     }

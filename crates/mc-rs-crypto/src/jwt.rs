@@ -72,10 +72,7 @@ pub fn extract_login_identity(auth_info_json: &str) -> Result<LoginIdentity, Jwt
         let xuid = decoded.claims["xid"].as_str().unwrap_or("").to_string();
 
         // Client public key is in the Token JWT claims under "cpk" (PMMP: XboxAuthJwtBody.cpk)
-        let mut pub_key = decoded.claims["cpk"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
+        let mut pub_key = decoded.claims["cpk"].as_str().unwrap_or("").to_string();
 
         // Fallback: walk the Certificate chain for identityPublicKey (legacy path)
         if pub_key.is_empty() {

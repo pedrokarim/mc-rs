@@ -1,4 +1,4 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
@@ -12,15 +12,21 @@ use mc_rs_proto::batch::{self, CompressionAlgorithm};
 use mc_rs_proto::codec;
 use mc_rs_proto::io::ProtoReader;
 use mc_rs_proto::packets::chunks::*;
+use mc_rs_proto::packets::forms::*;
 use mc_rs_proto::packets::login::*;
 use mc_rs_proto::packets::packet_id;
 use mc_rs_proto::packets::player::*;
 use mc_rs_proto::packets::world::*;
+use serde_json::json;
 
 use crate::config::ConnectionConfig;
 use crate::inventory::PlayerInventory;
+use crate::item_entities::PendingItemEntitySpawn;
+use crate::item_registry;
 use crate::player_data;
 use crate::player_registry;
+use crate::world::biome;
+use crate::world::block_registry::BLOCKS;
 use crate::world::chunk_cache::ChunkCache;
 use crate::world::terrain_generator;
 
@@ -35,6 +41,16 @@ pub enum ConnectionState {
     PreSpawn,
     SpawnResponse,
     InGame,
+}
+
+const CHUNKS_PER_TICK: usize = 4;
+const HUB_MENU_SLOT: usize = 0;
+const PLAYER_INVENTORY_SCREEN_ID: u8 = 1;
+const PLAYER_INVENTORY_WINDOW_TYPE: u8 = 0xFF;
+
+#[derive(Debug, Clone, Copy)]
+enum PendingForm {
+    HubMenu,
 }
 
 /// Manages a single client connection's protocol state machine.
@@ -53,6 +69,7 @@ pub struct Connection {
     pub client_pub_key_b64: Option<String>,
 
     // Player state
+    pub spawn_position: [f32; 3],
     pub position: [f32; 3],
     pub pitch: f32,
     pub yaw: f32,
@@ -60,6 +77,9 @@ pub struct Connection {
     pub entity_runtime_id: u64,
     pub tick: u64,
     pub gamemode: i32, // 0=survival, 1=creative, 2=adventure, 3=spectator
+    pub world_gamemode: i32,
+    pub current_difficulty: i32,
+    pub is_op: bool,
 
     // Chunk tracking
     pub sent_chunks: HashSet<(i32, i32)>,
@@ -74,14 +94,20 @@ pub struct Connection {
     // Packets to broadcast to ALL other players
     pub broadcasts: Vec<Vec<u8>>,
 
-    // Server-side actions from commands (read by main.rs)
-    pub pending_actions: Vec<mc_rs_command::CommandAction>,
+    pub pending_commands: Vec<String>,
+    pub pending_item_spawns: Vec<PendingItemEntitySpawn>,
+
+    // Server-driven Bedrock forms
+    next_form_id: u32,
+    pending_forms: HashMap<u32, PendingForm>,
 
     // Server keypair (shared across connections)
     server_keypair: std::sync::Arc<ServerKeyPair>,
 
     // Player inventory
     pub inventory: PlayerInventory,
+    player_inventory_window_id: u8,
+    player_inventory_open: bool,
 
     // Shared chunk cache (world persistence)
     chunk_cache: Arc<Mutex<ChunkCache>>,
@@ -90,13 +116,97 @@ pub struct Connection {
     config: Arc<ConnectionConfig>,
 }
 
+fn make_spawn_position(world_x: i32, world_y: i32, world_z: i32) -> [f32; 3] {
+    let feet_y = (world_y + 1) as f32;
+    [world_x as f32 + 0.5, feet_y + 1.621, world_z as f32 + 0.5]
+}
+
+fn hub_menu_item_id() -> i32 {
+    item_registry::required_item_id("minecraft:compass")
+}
+
+fn find_surface_in_loaded_world(cache: &mut ChunkCache, world_x: i32, world_z: i32) -> Option<i32> {
+    for world_y in (-64..=319).rev() {
+        let block_id = cache.get_block(world_x, world_y, world_z);
+        if block_id != BLOCKS.air && block_id != BLOCKS.water {
+            let head = cache.get_block(world_x, world_y + 1, world_z);
+            let head_above = cache.get_block(world_x, world_y + 2, world_z);
+            if head == BLOCKS.air && head_above == BLOCKS.air {
+                return Some(world_y);
+            }
+        }
+    }
+
+    None
+}
+
+fn find_spawn_position(chunk_cache: &Arc<Mutex<ChunkCache>>, seed: u64) -> [f32; 3] {
+    const SEARCH_STEP: i32 = 8;
+    const MAX_RADIUS: i32 = 128;
+
+    let mut fallback = None;
+    if let Ok(mut cache) = chunk_cache.lock() {
+        for radius in (0..=MAX_RADIUS).step_by(SEARCH_STEP as usize) {
+            if radius == 0 {
+                if let Some(surface_y) = find_surface_in_loaded_world(&mut cache, 0, 0) {
+                    if surface_y > 62 {
+                        return make_spawn_position(0, surface_y, 0);
+                    }
+                    fallback = Some((0, surface_y, 0));
+                }
+                continue;
+            }
+
+            for edge in (-radius..=radius).step_by(SEARCH_STEP as usize) {
+                let perimeter_points = [
+                    (-radius, edge),
+                    (radius, edge),
+                    (edge, -radius),
+                    (edge, radius),
+                ];
+
+                for (world_x, world_z) in perimeter_points {
+                    if let Some(surface_y) =
+                        find_surface_in_loaded_world(&mut cache, world_x, world_z)
+                    {
+                        if fallback.is_none_or(|(_, best_y, _)| surface_y > best_y) {
+                            fallback = Some((world_x, surface_y, world_z));
+                        }
+
+                        if surface_y > 62 {
+                            return make_spawn_position(world_x, surface_y, world_z);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some((world_x, surface_y, world_z)) = fallback {
+        make_spawn_position(world_x, surface_y, world_z)
+    } else {
+        terrain_generator::find_spawn_position(seed)
+    }
+}
+
 impl Connection {
     pub fn new(
         addr: SocketAddr,
         server_keypair: std::sync::Arc<ServerKeyPair>,
         chunk_cache: Arc<Mutex<ChunkCache>>,
         config: Arc<ConnectionConfig>,
+        world_spawn_override: Option<[f32; 3]>,
+        world_gamemode: i32,
+        current_difficulty: i32,
+        is_op: bool,
     ) -> Self {
+        let spawn_position = world_spawn_override
+            .unwrap_or_else(|| find_spawn_position(&chunk_cache, config.world_seed));
+        let mut inventory = PlayerInventory::new();
+        let menu_stack_id = inventory.next_stack_id();
+        inventory.slots[HUB_MENU_SLOT] =
+            ItemStackWrapper::new(ItemStack::new(hub_menu_item_id(), 1, 0), menu_stack_id);
+
         Self {
             addr,
             state: ConnectionState::SessionStart,
@@ -107,21 +217,17 @@ impl Connection {
             uuid: None,
             xuid: None,
             client_pub_key_b64: None,
-            position: {
-                // PMMP-style safe spawn: find highest solid block, then 2 air blocks above
-                let seed = config.world_seed;
-                let surface_y = terrain_generator::get_surface_height(0, 0, seed);
-                // Place feet 1 block above surface, eyes at feet + 1.621
-                let feet_y = (surface_y + 1) as f32;
-                let eye_y = feet_y + 1.621;
-                [0.5, eye_y, 0.5]
-            },
+            spawn_position,
+            position: spawn_position,
             pitch: 0.0,
             yaw: 0.0,
             head_yaw: 0.0,
             entity_runtime_id: player_registry::next_entity_id() as u64,
             tick: 0,
             gamemode: config.default_gamemode,
+            world_gamemode,
+            current_difficulty,
+            is_op,
             sent_chunks: HashSet::new(),
             view_distance: config.max_view_distance,
             last_chunk_x: 0,
@@ -129,8 +235,13 @@ impl Connection {
             chunk_load_queue: VecDeque::new(),
             chunk_order_countdown: 5, // reorder shortly after spawn (like PMMP)
             broadcasts: Vec::new(),
-            pending_actions: Vec::new(),
-            inventory: PlayerInventory::new(),
+            pending_commands: Vec::new(),
+            pending_item_spawns: Vec::new(),
+            inventory,
+            player_inventory_window_id: PLAYER_INVENTORY_SCREEN_ID,
+            player_inventory_open: false,
+            next_form_id: 1,
+            pending_forms: HashMap::new(),
             server_keypair,
             chunk_cache,
             config,
@@ -188,8 +299,6 @@ impl Connection {
     /// Called from the main tick loop, not from packet handlers.
     /// Returns response packets to send to this player.
     pub fn send_queued_chunks(&mut self) -> Vec<Vec<u8>> {
-        const CHUNKS_PER_TICK: usize = 8;
-
         // PMMP-style countdown: doChunkRequests() { if(nextChunkOrderRun-- <= 0) { orderChunks(); } }
         if self.chunk_order_countdown != u32::MAX {
             if self.chunk_order_countdown == 0 {
@@ -232,9 +341,8 @@ impl Connection {
         self.send_chunk_batch()
     }
 
-    /// Send up to 8 chunks from the load queue.
+    /// Send a small batch of chunks from the load queue.
     fn send_chunk_batch(&mut self) -> Vec<Vec<u8>> {
-        const CHUNKS_PER_TICK: usize = 8;
         let mut responses = Vec::new();
         let mut sent = 0;
         let queue_before = self.chunk_load_queue.len();
@@ -278,6 +386,121 @@ impl Connection {
         }
 
         responses
+    }
+
+    pub fn should_stream_chunks(&self) -> bool {
+        matches!(
+            self.state,
+            ConnectionState::PreSpawn | ConnectionState::SpawnResponse | ConnectionState::InGame
+        )
+    }
+
+    fn ensure_hub_menu_item(&mut self) {
+        if self
+            .inventory
+            .slots
+            .iter()
+            .any(|slot| slot.item.id == hub_menu_item_id() && !slot.item.is_air())
+        {
+            return;
+        }
+
+        let menu_item = ItemStack::new(hub_menu_item_id(), 1, 0);
+        if self.inventory.slots[HUB_MENU_SLOT].item.is_air() {
+            let stack_id = self.inventory.next_stack_id();
+            self.inventory.slots[HUB_MENU_SLOT] = ItemStackWrapper::new(menu_item, stack_id);
+        } else {
+            let _ = self.inventory.add_item(menu_item);
+        }
+    }
+
+    fn open_form(&mut self, form: PendingForm, form_data: String) -> Vec<Vec<u8>> {
+        let form_id = self.next_form_id;
+        self.next_form_id = self.next_form_id.wrapping_add(1).max(1);
+        self.pending_forms.insert(form_id, form);
+
+        let request = ModalFormRequest { form_id, form_data };
+        vec![self.encode_compressed_packet(packet_id::MODAL_FORM_REQUEST, &request.encode())]
+    }
+
+    fn open_hub_menu(&mut self) -> Vec<Vec<u8>> {
+        let form_json = json!({
+            "type": "form",
+            "title": "§l§bMC-RS Hub",
+            "content": "§7Prototype de menu Bedrock inspire des hubs type Hive.\n§fCompass: slot 1\n§8Version simple sans resource pack custom.",
+            "buttons": [
+                { "text": "§lSpawn Plaza\n§r§7Retourner au spawn" },
+                { "text": "§lCreative Flight\n§r§7Passer en creatif" },
+                { "text": "§lSurvival Loop\n§r§7Revenir en survie" },
+                { "text": "§lBiome Scanner\n§r§7Afficher le biome courant" }
+            ]
+        });
+
+        self.open_form(PendingForm::HubMenu, form_json.to_string())
+    }
+
+    fn handle_hub_menu_selection(&mut self, button_index: u32) -> Vec<Vec<u8>> {
+        match button_index {
+            0 => {
+                self.position = self.spawn_position;
+                let move_pkt = mc_rs_proto::packets::player::MovePlayer {
+                    runtime_entity_id: self.entity_runtime_id,
+                    position: self.position,
+                    pitch: self.pitch,
+                    yaw: self.yaw,
+                    head_yaw: self.head_yaw,
+                    mode: 2,
+                    on_ground: true,
+                    riding_runtime_id: 0,
+                    tick: self.tick,
+                };
+                let mut responses =
+                    vec![self.encode_compressed_packet(packet_id::MOVE_PLAYER, &move_pkt.encode())];
+                self.push_system_message(&mut responses, "Teleported to spawn plaza.");
+                responses
+            }
+            1 => {
+                let mut responses = self.apply_gamemode(1);
+                self.push_system_message(
+                    &mut responses,
+                    "Creative mode enabled from the hub menu.",
+                );
+                responses
+            }
+            2 => {
+                let mut responses = self.apply_gamemode(0);
+                self.push_system_message(&mut responses, "Back to survival mode.");
+                responses
+            }
+            3 => {
+                let world_x = self.position[0].floor() as i32;
+                let world_z = self.position[2].floor() as i32;
+                let debug = terrain_generator::get_biome_debug_info(
+                    world_x,
+                    world_z,
+                    self.config.world_seed,
+                );
+                let biome_def = biome::get_biome(debug.biome_id);
+                let mut responses = Vec::new();
+                self.push_system_message(
+                    &mut responses,
+                    format!(
+                        "Biome: {} (id={}) | temp={:.3} rain={:.3} | surface_y={} | terrain={:.0}..{:.0} | chunk=({}, {})",
+                        biome::biome_name(debug.biome_id),
+                        debug.biome_id,
+                        debug.temperature,
+                        debug.rainfall,
+                        debug.surface_y,
+                        biome_def.min_elevation,
+                        biome_def.max_elevation,
+                        world_x.div_euclid(16),
+                        world_z.div_euclid(16),
+                    ),
+                );
+                responses
+            }
+            _ => Vec::new(),
+        }
     }
 
     /// Handle a raw game packet (0xFE batch) from RakNet.
@@ -382,12 +605,18 @@ impl Connection {
             (ConnectionState::InGame, packet_id::PLAYER_AUTH_INPUT) => {
                 self.handle_player_auth_input(reader)
             }
+            (ConnectionState::InGame, packet_id::INVENTORY_TRANSACTION) => {
+                self.handle_inventory_transaction(reader)
+            }
             (ConnectionState::InGame, packet_id::INTERACT) => self.handle_interact(reader),
             (ConnectionState::InGame, packet_id::CONTAINER_CLOSE) => {
                 self.handle_container_close(reader)
             }
             (ConnectionState::InGame, packet_id::MOB_EQUIPMENT) => {
                 self.handle_mob_equipment(reader)
+            }
+            (ConnectionState::InGame, packet_id::MODAL_FORM_RESPONSE) => {
+                self.handle_modal_form_response(reader)
             }
             (ConnectionState::InGame, packet_id::TEXT) => self.handle_text(reader),
             (ConnectionState::InGame, packet_id::COMMAND_REQUEST) => {
@@ -478,6 +707,14 @@ impl Connection {
                         self.yaw = save.rotation[0];
                         self.pitch = save.rotation[1];
                         self.gamemode = save.gamemode;
+                        if let Some(spawn_position) = save.spawn_position {
+                            self.spawn_position = [
+                                spawn_position[0] as f32,
+                                spawn_position[1] as f32,
+                                spawn_position[2] as f32,
+                            ];
+                        }
+                        self.inventory = save.inventory.into_runtime();
                         info!(
                             "[{}] Restored position: {:.1}, {:.1}, {:.1} (gamemode={})",
                             self.addr,
@@ -488,6 +725,7 @@ impl Connection {
                         );
                     }
                 }
+                self.ensure_hub_menu_item();
 
                 info!(
                     "[{}] Player: {} (xuid={}, auth={})",
@@ -605,6 +843,7 @@ impl Connection {
                 // COMPLETED → transition to PreSpawn
                 info!("[{}] Resource packs completed", self.addr);
                 self.state = ConnectionState::PreSpawn;
+                self.ensure_hub_menu_item();
                 debug!("[{}] → PreSpawn state", self.addr);
                 self.send_pre_spawn_packets()
             }
@@ -648,46 +887,19 @@ impl Connection {
             &publisher.encode(),
         ));
 
-        // Send initial chunks around spawn using spiral order (nearest first)
         let spawn_chunk_x = spawn_x >> 4;
         let spawn_chunk_z = spawn_z >> 4;
         self.last_chunk_x = spawn_chunk_x;
         self.last_chunk_z = spawn_chunk_z;
-
-        // Build spiral-ordered list of spawn chunks
-        let mut spawn_chunks: Vec<(i32, i32, i32)> = Vec::new();
-        for dx in -clamped..=clamped {
-            for dz in -clamped..=clamped {
-                let dist_sq = dx * dx + dz * dz;
-                if dist_sq <= clamped * clamped {
-                    spawn_chunks.push((spawn_chunk_x + dx, spawn_chunk_z + dz, dist_sq));
-                }
-            }
-        }
-        spawn_chunks.sort_by_key(|&(_, _, d)| d);
-
-        for (cx, cz, _) in &spawn_chunks {
-            let (sub_chunk_count, chunk_payload) = {
-                let mut cache = self.chunk_cache.lock().unwrap();
-                let col = cache.get_chunk_mut(*cx, *cz);
-                (col.sub_chunk_count, col.get_network_payload().to_vec())
-            };
-            let chunk = LevelChunk {
-                chunk_x: *cx,
-                chunk_z: *cz,
-                dimension_id: 0,
-                sub_chunk_count,
-                cache_enabled: false,
-                payload: chunk_payload,
-            };
-            responses.push(self.encode_compressed_packet(packet_id::LEVEL_CHUNK, &chunk.encode()));
-            self.sent_chunks.insert((*cx, *cz));
-        }
+        self.order_chunks();
+        self.chunk_order_countdown = u32::MAX;
+        responses.extend(self.send_chunk_batch());
         info!(
-            "[{}] Sent {} chunks (radius={})",
+            "[{}] Queued spawn chunks (radius={}), first batch={}, remaining_queue={}",
             self.addr,
+            clamped,
             self.sent_chunks.len(),
-            clamped
+            self.chunk_load_queue.len()
         );
 
         // PLAYER_SPAWN — send after chunks
@@ -727,7 +939,9 @@ impl Connection {
 
         // Gravity works from PreSpawn (correct bit 49). No extra packets needed here.
         // Sending a second SetActorData after init breaks skin rendering.
-        vec![]
+        let welcome =
+            Text::system("Use /menu or right-click the compass in slot 1 to open the hub menu.");
+        vec![self.encode_compressed_packet(packet_id::TEXT, &welcome)]
     }
 
     // ── InGame handlers ──
@@ -747,8 +961,7 @@ impl Connection {
 
         // Void kill check
         if pkt.position[1] < -128.0 {
-            let surface = terrain_generator::get_surface_height(0, 0, self.config.world_seed) as f32;
-            self.position = [0.5, surface + 2.621, 0.5];
+            self.position = self.spawn_position;
             let reset = mc_rs_proto::packets::player::MovePlayer {
                 runtime_entity_id: self.entity_runtime_id,
                 position: self.position,
@@ -968,28 +1181,19 @@ impl Connection {
                         self.broadcasts.push(sound_bytes);
                     }
 
-                    // Add block drop to inventory
+                    // Spawn a dropped item entity instead of inserting directly into inventory.
                     if old_block_id != air_id {
                         if let Some(drop_item) = crate::inventory::block_drop(old_block_id) {
                             let item_id = drop_item.id;
-                            if let Some(slot) = self.inventory.add_item(drop_item) {
-                                info!(
-                                    "[{}] Item drop: item_id={} → slot {} (stack_id={}, count={})",
-                                    self.addr,
-                                    item_id,
-                                    slot,
-                                    self.inventory.slots[slot].stack_id,
-                                    self.inventory.slots[slot].item.count
-                                );
-                                // Send full inventory content instead of single slot
-                                // (more reliable for initial sync)
-                                let content_pkt =
-                                    InventoryContent::encode_items(0, &self.inventory.slots, 0);
-                                responses.push(self.encode_compressed_packet(
-                                    packet_id::INVENTORY_CONTENT,
-                                    &content_pkt,
+                            self.pending_item_spawns
+                                .push(PendingItemEntitySpawn::stationary(
+                                    drop_item,
+                                    [bx as f32 + 0.5, by as f32 + 0.75, bz as f32 + 0.5],
                                 ));
-                            }
+                            info!(
+                                "[{}] Queued dropped item entity: item_id={} at ({}, {}, {})",
+                                self.addr, item_id, bx, by, bz
+                            );
                         } else {
                             info!("[{}] No drop for block {}", self.addr, old_block_id);
                         }
@@ -1007,7 +1211,11 @@ impl Connection {
 
         // Handle block placement (item interaction with ACTION_CLICK_BLOCK)
         if let Some(ref interaction) = pkt.item_interaction {
-            if interaction.action_type == 0 {
+            let held_item_id = self.inventory.held_item().item.id;
+
+            if interaction.action_type == 1 && held_item_id == hub_menu_item_id() {
+                responses.extend(self.open_hub_menu());
+            } else if interaction.action_type == 0 {
                 // ACTION_CLICK_BLOCK
                 self.handle_block_place(interaction, &mut responses);
             }
@@ -1094,7 +1302,12 @@ impl Connection {
         }
 
         // Send inventory slot update
-        let slot_pkt = InventorySlot::encode(0, slot as u32, &self.inventory.slots[slot], 0);
+        let slot_pkt = InventorySlot::encode(
+            0,
+            slot as u32,
+            &self.inventory.slots[slot],
+            &self.inventory_screen_container_name(),
+        );
         responses.push(self.encode_compressed_packet(packet_id::INVENTORY_SLOT, &slot_pkt));
 
         info!(
@@ -1110,6 +1323,13 @@ impl Connection {
     ) {
         use mc_rs_proto::packets::player::StackRequestAction;
         use mc_rs_proto::packets::world::{ItemStackResponse, ItemStackResponseContainer};
+
+        debug!(
+            "[{}] ItemStackRequest id={} actions={}",
+            self.addr,
+            request.request_id,
+            request.actions.len()
+        );
 
         let mut changed_containers: Vec<ItemStackResponseContainer> = Vec::new();
 
@@ -1200,10 +1420,23 @@ impl Connection {
                         );
                     }
                 }
-                StackRequestAction::Destroy { source, .. }
-                | StackRequestAction::Drop { source, .. } => {
+                StackRequestAction::Destroy { source, .. } => {
                     if let Some(slot_idx) = self.resolve_slot(source.container_id, source.slot_id) {
                         self.inventory.slots[slot_idx] = ItemStackWrapper::air();
+                        self.add_slot_to_response(
+                            &mut changed_containers,
+                            source.container_id,
+                            source.slot_id,
+                            slot_idx,
+                        );
+                    }
+                }
+                StackRequestAction::Drop { source, .. } => {
+                    if let Some(slot_idx) = self.resolve_slot(source.container_id, source.slot_id) {
+                        debug!(
+                            "[{}] Ignoring drop request for slot {} until item entities are implemented",
+                            self.addr, slot_idx
+                        );
                         self.add_slot_to_response(
                             &mut changed_containers,
                             source.container_id,
@@ -1223,11 +1456,115 @@ impl Connection {
         );
     }
 
+    fn inventory_screen_container_name(&self) -> FullContainerName {
+        FullContainerName::new(self.player_inventory_window_id)
+    }
+
+    fn advance_player_inventory_window_id(&mut self) -> u8 {
+        self.player_inventory_window_id = if self.player_inventory_window_id >= 99 {
+            PLAYER_INVENTORY_SCREEN_ID
+        } else {
+            self.player_inventory_window_id + 1
+        };
+        self.player_inventory_window_id
+    }
+
+    fn push_inventory_sync(&self, responses: &mut Vec<Vec<u8>>) {
+        let full_container_name = self.inventory_screen_container_name();
+        responses.push(self.encode_compressed_packet(
+            packet_id::INVENTORY_CONTENT,
+            &InventoryContent::encode_items(0, &self.inventory.slots, &full_container_name),
+        ));
+        responses.push(self.encode_compressed_packet(
+            packet_id::INVENTORY_CONTENT,
+            &InventoryContent::encode_items(120, &self.inventory.armor, &full_container_name),
+        ));
+        responses.push(self.encode_compressed_packet(
+            packet_id::INVENTORY_CONTENT,
+            &InventoryContent::encode_items(
+                119,
+                std::slice::from_ref(&self.inventory.offhand),
+                &full_container_name,
+            ),
+        ));
+        responses.push(self.encode_compressed_packet(
+            packet_id::MOB_EQUIPMENT,
+            &MobEquipment::encode_item(
+                self.entity_runtime_id,
+                self.inventory.held_item(),
+                self.inventory.held_slot,
+            ),
+        ));
+    }
+
+    pub fn prepared_inventory_sync_packets(&mut self) -> Vec<Vec<u8>> {
+        let mut responses = Vec::new();
+        self.push_inventory_sync(&mut responses);
+        responses
+            .into_iter()
+            .map(|response| self.prepare_for_send(response))
+            .collect()
+    }
+
+    fn push_open_inventory_window_sync(&self, _responses: &mut Vec<Vec<u8>>) {
+        // Bedrock opens the main player inventory from ContainerOpen alone.
+        // The inventory/backing containers are synced separately on login and slot updates.
+    }
+
+    fn handle_inventory_transaction(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
+        use mc_rs_proto::packets::player::InventoryTransactionData;
+
+        let Ok(transaction) = mc_rs_proto::packets::player::InventoryTransaction::decode(reader)
+        else {
+            warn!("[{}] Failed to decode InventoryTransaction", self.addr);
+            let mut responses = Vec::new();
+            self.push_inventory_sync(&mut responses);
+            return responses;
+        };
+        let mc_rs_proto::packets::player::InventoryTransaction {
+            request_id: _request_id,
+            changed_slots,
+            data,
+        } = transaction;
+
+        let mut responses = Vec::new();
+
+        match data {
+            InventoryTransactionData::Normal { actions } => {
+                let is_drop_attempt = actions.iter().any(|action| {
+                    action.source_type == 2
+                        && action.source_flags == Some(0)
+                        && !action.new_item.item.is_air()
+                });
+                if is_drop_attempt {
+                    debug!(
+                        "[{}] Rejecting legacy drop transaction until item entities are implemented",
+                        self.addr
+                    );
+                    self.push_inventory_sync(&mut responses);
+                }
+            }
+            InventoryTransactionData::Mismatch { .. } => {
+                self.push_inventory_sync(&mut responses);
+            }
+            InventoryTransactionData::UseItem { .. }
+            | InventoryTransactionData::UseItemOnEntity { .. }
+            | InventoryTransactionData::ReleaseItem { .. }
+            | InventoryTransactionData::Unknown { .. } => {}
+        }
+
+        if !changed_slots.is_empty() && responses.is_empty() {
+            self.push_inventory_sync(&mut responses);
+        }
+
+        responses
+    }
+
     /// Resolve a container_id + slot_id to an index in self.inventory.slots.
     fn resolve_slot(&self, container_id: u8, slot_id: u8) -> Option<usize> {
         match container_id {
-            0 | 28 => {
-                // Inventory / hotbar (container 0 or 28 for hotbar)
+            0 | 12 | 28 | 29 => {
+                // Inventory / hotbar / combined inventory UI containers.
                 let idx = slot_id as usize;
                 if idx < 36 {
                     Some(idx)
@@ -1254,7 +1591,7 @@ impl Connection {
             slot: slot_id,
             hotbar_slot: slot_id,
             count: item.item.count as u8,
-            stack_id: item.stack_id,
+            stack_id: if item.item.is_air() { 0 } else { 1 },
             custom_name: String::new(),
             filtered_custom_name: String::new(),
             durability_correction: 0,
@@ -1283,37 +1620,100 @@ impl Connection {
         info!("[{}] InteractPacket action={}", self.addr, action);
 
         if action == 6 {
-            // OPEN_INVENTORY — use window_id=1 (not 0, which is HARDCODED for content sync)
-            let container_open = ContainerOpen {
-                window_id: 1,
-                window_type: 0xFF, // WindowTypes::INVENTORY = -1
-                position: [0, 0, 0],
-                actor_unique_id: self.entity_runtime_id as i64,
-            };
-            let pkt =
-                self.encode_compressed_packet(packet_id::CONTAINER_OPEN, &container_open.encode());
-            info!("[{}] Opening player inventory (window_id=1)", self.addr);
-            return vec![pkt];
+            if self.player_inventory_open {
+                return Vec::new();
+            }
+
+            let window_id = self.advance_player_inventory_window_id();
+            let container_open =
+                ContainerOpen::entity_inventory(window_id, self.entity_runtime_id as i64);
+            let mut responses = Vec::new();
+            responses.push(
+                self.encode_compressed_packet(packet_id::CONTAINER_OPEN, &container_open.encode()),
+            );
+            self.player_inventory_open = true;
+            self.push_open_inventory_window_sync(&mut responses);
+            info!(
+                "[{}] Opening player inventory (window_id={})",
+                self.addr, container_open.window_id
+            );
+            return responses;
         }
 
         Vec::new()
     }
 
+    fn handle_modal_form_response(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
+        let Ok(response) = ModalFormResponse::decode(reader) else {
+            warn!("[{}] Failed to decode ModalFormResponse", self.addr);
+            return Vec::new();
+        };
+
+        let Some(form) = self.pending_forms.remove(&response.form_id) else {
+            debug!(
+                "[{}] Ignoring response for unknown form_id={}",
+                self.addr, response.form_id
+            );
+            return Vec::new();
+        };
+
+        if let Some(reason) = response.cancel_reason {
+            debug!(
+                "[{}] Form {} closed with cancel_reason={}",
+                self.addr, response.form_id, reason
+            );
+            return Vec::new();
+        }
+
+        match form {
+            PendingForm::HubMenu => {
+                let Some(raw) = response.response_data else {
+                    return Vec::new();
+                };
+
+                let button_index = serde_json::from_str::<u32>(&raw)
+                    .ok()
+                    .or_else(|| raw.trim().parse::<u32>().ok());
+
+                if let Some(button_index) = button_index {
+                    self.handle_hub_menu_selection(button_index)
+                } else {
+                    warn!("[{}] Invalid hub menu response payload: {}", self.addr, raw);
+                    Vec::new()
+                }
+            }
+        }
+    }
+
     fn handle_container_close(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
-        let window_id = reader.read_u8().unwrap_or(0);
+        let raw_window_id = reader.read_u8().unwrap_or(0);
         let window_type = reader.read_u8().unwrap_or(0);
         let _server = reader.read_bool().unwrap_or(false);
+
+        let window_id = if raw_window_id == u8::MAX {
+            self.player_inventory_window_id
+        } else {
+            raw_window_id
+        };
 
         info!(
             "[{}] ContainerClose window_id={} window_type={}",
             self.addr, window_id, window_type
         );
 
+        if window_id == self.player_inventory_window_id {
+            self.player_inventory_open = false;
+        }
+
         // Echo back the close
         let close = ContainerClose {
             window_id,
-            window_type,
-            server: true,
+            window_type: if window_id == self.player_inventory_window_id {
+                PLAYER_INVENTORY_WINDOW_TYPE
+            } else {
+                window_type
+            },
+            server: false,
         };
         vec![self.encode_compressed_packet(packet_id::CONTAINER_CLOSE, &close.encode())]
     }
@@ -1351,16 +1751,7 @@ impl Connection {
 
         // Check for commands (in case client sends via Text instead of CommandRequest)
         if pkt.message.starts_with('/') {
-            let ctx = mc_rs_command::CommandContext {
-                player_name: player_name.clone(),
-                position: self.position,
-            };
-            let registry = mc_rs_command::CommandRegistry::new();
-            let result = registry.execute(&pkt.message, &ctx);
-            if let Some(ref response) = result.response {
-                let msg = mc_rs_proto::packets::player::Text::system(response);
-                return vec![self.encode_compressed_packet(packet_id::TEXT, &msg)];
-            }
+            self.pending_commands.push(pkt.message);
             return Vec::new();
         }
 
@@ -1381,64 +1772,45 @@ impl Connection {
         };
 
         info!("[{}] CommandRequest received: {}", self.addr, command);
+        self.pending_commands.push(command);
+        Vec::new()
+    }
 
-        let ctx = mc_rs_command::CommandContext {
-            player_name: self
-                .display_name
-                .clone()
-                .unwrap_or_else(|| "Player".to_string()),
+    pub fn take_pending_commands(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.pending_commands)
+    }
+
+    pub fn encode_system_message(&self, message: impl Into<String>) -> Vec<u8> {
+        let msg = mc_rs_proto::packets::player::Text::system(&message.into());
+        self.encode_compressed_packet(packet_id::TEXT, &msg)
+    }
+
+    fn push_system_message(&self, responses: &mut Vec<Vec<u8>>, message: impl Into<String>) {
+        responses.push(self.encode_system_message(message));
+    }
+
+    pub fn teleport_to(&mut self, position: [f32; 3]) -> Vec<Vec<u8>> {
+        self.position = position;
+        let move_pkt = mc_rs_proto::packets::player::MovePlayer {
+            runtime_entity_id: self.entity_runtime_id,
             position: self.position,
+            pitch: self.pitch,
+            yaw: self.yaw,
+            head_yaw: self.head_yaw,
+            mode: 2,
+            on_ground: true,
+            riding_runtime_id: 0,
+            tick: self.tick,
         };
+        vec![self.encode_compressed_packet(packet_id::MOVE_PLAYER, &move_pkt.encode())]
+    }
 
-        let registry = mc_rs_command::CommandRegistry::new();
-        let result = registry.execute(&command, &ctx);
+    pub fn open_hub_menu_packets(&mut self) -> Vec<Vec<u8>> {
+        self.open_hub_menu()
+    }
 
-        let mut responses = Vec::new();
-
-        // Handle action
-        match &result.action {
-            mc_rs_command::CommandAction::Teleport { x, y, z } => {
-                self.position = [*x, *y, *z];
-                let move_pkt = mc_rs_proto::packets::player::MovePlayer {
-                    runtime_entity_id: self.entity_runtime_id,
-                    position: self.position,
-                    pitch: self.pitch,
-                    yaw: self.yaw,
-                    head_yaw: self.head_yaw,
-                    mode: 2,
-                    on_ground: true,
-                    riding_runtime_id: 0,
-                    tick: self.tick,
-                };
-                responses.push(
-                    self.encode_compressed_packet(packet_id::MOVE_PLAYER, &move_pkt.encode()),
-                );
-            }
-            mc_rs_command::CommandAction::Broadcast { message } => {
-                let chat = mc_rs_proto::packets::player::Text::chat("Server", message, "");
-                self.broadcasts
-                    .push(self.encode_compressed_packet(packet_id::TEXT, &chat));
-            }
-            mc_rs_command::CommandAction::SetGamemode { mode } => {
-                let pkts = self.apply_gamemode(*mode);
-                responses.extend(pkts);
-            }
-            mc_rs_command::CommandAction::SetTime { .. }
-            | mc_rs_command::CommandAction::SetWeather { .. }
-            | mc_rs_command::CommandAction::Stop
-            | mc_rs_command::CommandAction::Kill => {
-                self.pending_actions.push(result.action);
-            }
-            mc_rs_command::CommandAction::None => {}
-        }
-
-        // Send text response
-        if let Some(ref response) = result.response {
-            let msg = mc_rs_proto::packets::player::Text::system(response);
-            responses.push(self.encode_compressed_packet(packet_id::TEXT, &msg));
-        }
-
-        responses
+    pub fn apply_gamemode_packets(&mut self, mode: i32) -> Vec<Vec<u8>> {
+        self.apply_gamemode(mode)
     }
 
     /// Change the player's gamemode (PMMP syncGameMode flow).
@@ -1586,16 +1958,16 @@ impl Connection {
         let mut start_game =
             StartGame::default_with_id(self.entity_runtime_id as i64, self.position);
         start_game.player_gamemode = self.gamemode;
-        start_game.world_gamemode = self.config.default_gamemode;
-        start_game.difficulty = self.config.difficulty;
+        start_game.world_gamemode = self.world_gamemode;
+        start_game.difficulty = self.current_difficulty;
         start_game.world_name = self.config.world_name.clone();
         start_game.generator = self.config.generator_id;
         responses.push(self.encode_compressed_packet(packet_id::START_GAME, &start_game.encode()));
 
-        // ItemRegistry (empty) — test if this crashes
-        responses.push(
-            self.encode_compressed_packet(packet_id::ITEM_REGISTRY, &ItemRegistry::encode_empty()),
-        );
+        responses.push(self.encode_compressed_packet(
+            packet_id::ITEM_REGISTRY,
+            item_registry::payload(),
+        ));
 
         // AvailableActorIdentifiers — real NBT from PMMP
         static ENTITY_IDENTIFIERS_NBT: &[u8] = include_bytes!("../data/entity_identifiers.nbt");
@@ -1621,45 +1993,7 @@ impl Connection {
             self.encode_compressed_packet(packet_id::UPDATE_ATTRIBUTES, &attributes.encode()),
         );
 
-        // 6. AvailableCommands with rich autocompletion (BEFORE abilities per PMMP)
-        let cmd_registry = mc_rs_command::CommandRegistry::new();
-        let cmd_defs = cmd_registry.all_command_defs();
-        let cmd_entries: Vec<CmdEntry<'_>> = cmd_defs
-            .iter()
-            .map(|def| {
-                let overloads = def
-                    .overloads
-                    .iter()
-                    .map(|ov| CmdOverload {
-                        params: ov
-                            .params
-                            .iter()
-                            .map(|p| CmdParam {
-                                name: p.name,
-                                param_type: match &p.param_type {
-                                    mc_rs_command::ParamType::HardEnum { name, values } => {
-                                        CmdParamType::HardEnum {
-                                            name,
-                                            values: values.as_slice(),
-                                        }
-                                    }
-                                    other => CmdParamType::Basic(other.type_id().unwrap()),
-                                },
-                                optional: p.optional,
-                            })
-                            .collect(),
-                    })
-                    .collect();
-                CmdEntry {
-                    name: def.name,
-                    description: def.description,
-                    aliases: def.aliases.clone(),
-                    overloads,
-                }
-            })
-            .collect();
-        let commands = AvailableCommands::encode_rich(&cmd_entries);
-        responses.push(self.encode_compressed_packet(packet_id::AVAILABLE_COMMANDS, &commands));
+        // 6. AvailableCommands are synced after spawn from the shared command map.
 
         // 7. UpdateAbilities — based on player's gamemode
         let abilities = if self.gamemode == 1 {
@@ -1686,34 +2020,7 @@ impl Connection {
             .push(self.encode_compressed_packet(packet_id::SET_ACTOR_DATA, &actor_data.encode()));
 
         // 9. Inventory sync (PMMP syncAll + syncSelectedHotbarSlot)
-        // Main inventory (window 0, 36 slots)
-        responses.push(self.encode_compressed_packet(
-            packet_id::INVENTORY_CONTENT,
-            &InventoryContent::encode_items(0, &self.inventory.slots, 0),
-        ));
-        // Armor inventory (window 120, 4 slots)
-        responses.push(self.encode_compressed_packet(
-            packet_id::INVENTORY_CONTENT,
-            &InventoryContent::encode_items(120, &self.inventory.armor, 120),
-        ));
-        // Offhand (window 119, 1 slot)
-        responses.push(self.encode_compressed_packet(
-            packet_id::INVENTORY_CONTENT,
-            &InventoryContent::encode_items(
-                119,
-                std::slice::from_ref(&self.inventory.offhand),
-                119,
-            ),
-        ));
-        // MobEquipment (selected hotbar slot)
-        responses.push(self.encode_compressed_packet(
-            packet_id::MOB_EQUIPMENT,
-            &MobEquipment::encode_item(
-                self.entity_runtime_id,
-                self.inventory.held_item(),
-                self.inventory.held_slot,
-            ),
-        ));
+        self.push_inventory_sync(&mut responses);
 
         // 10. CraftingData (empty)
         responses.push(

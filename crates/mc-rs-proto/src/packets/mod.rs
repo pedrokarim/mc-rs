@@ -1,4 +1,5 @@
 pub mod chunks;
+pub mod forms;
 pub mod login;
 pub mod player;
 pub mod world;
@@ -13,15 +14,20 @@ pub mod packet_id {
     pub const RESOURCE_PACKS_INFO: u32 = 0x06;
     pub const RESOURCE_PACK_STACK: u32 = 0x07;
     pub const RESOURCE_PACK_CLIENT_RESPONSE: u32 = 0x08;
+    pub const MODAL_FORM_REQUEST: u32 = 0x64;
+    pub const MODAL_FORM_RESPONSE: u32 = 0x65;
     pub const TEXT: u32 = 0x09;
     pub const SET_TIME: u32 = 0x0A;
     pub const START_GAME: u32 = 0x0B;
     pub const ADD_PLAYER: u32 = 0x0C;
     pub const ADD_ACTOR: u32 = 0x0D;
     pub const REMOVE_ACTOR: u32 = 0x0E;
+    pub const ADD_ITEM_ACTOR: u32 = 0x0F;
+    pub const TAKE_ITEM_ACTOR: u32 = 0x11;
     pub const MOVE_PLAYER: u32 = 0x13;
     pub const UPDATE_BLOCK: u32 = 0x15;
     pub const UPDATE_ATTRIBUTES: u32 = 0x1D;
+    pub const INVENTORY_TRANSACTION: u32 = 0x1E;
     pub const SET_ACTOR_DATA: u32 = 0x27;
     pub const SET_PLAYER_GAME_TYPE: u32 = 0x3E;
     pub const SET_SPAWN_POSITION: u32 = 0x2B;
@@ -45,6 +51,8 @@ pub mod packet_id {
     pub const ITEM_REGISTRY: u32 = 0x161;
     pub const AVAILABLE_COMMANDS: u32 = 0x4C;
     pub const COMMAND_REQUEST: u32 = 0x4D;
+    pub const TRANSFER: u32 = 0x55;
+    pub const SET_TITLE: u32 = 0x58;
     pub const MOB_EQUIPMENT: u32 = 0x1F;
     pub const INVENTORY_CONTENT: u32 = 0x31;
     pub const INVENTORY_SLOT: u32 = 0x32;

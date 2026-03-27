@@ -19,6 +19,13 @@ const NOISE_SAMPLING_RATE_Y: usize = 8;
 /// Gaussian smooth radius for biome elevation blending.
 const SMOOTH_SIZE: usize = 2;
 
+pub struct BiomeDebugInfo {
+    pub biome_id: u32,
+    pub temperature: f64,
+    pub rainfall: f64,
+    pub surface_y: i32,
+}
+
 /// World-level generator state.
 /// In PMMP, the Normal generator creates the noise + biome selector ONCE
 /// in the constructor, then reuses them for all chunks.
@@ -27,6 +34,9 @@ struct GeneratorState {
     noise_base: Simplex,
     selector: BiomeSelector,
     gaussian: Gaussian,
+    cave_shape: Simplex,
+    cave_tunnel: Simplex,
+    cave_detail: Simplex,
 }
 
 impl GeneratorState {
@@ -39,6 +49,9 @@ impl GeneratorState {
         // 2. Reset random to world seed, then create biome selector
         random.set_seed(seed as i64);
         let selector = BiomeSelector::new(&mut random);
+        let cave_shape = Simplex::new(&mut random, 3, 0.5, 1.0 / 48.0);
+        let cave_tunnel = Simplex::new(&mut random, 2, 0.55, 1.0 / 28.0);
+        let cave_detail = Simplex::new(&mut random, 1, 1.0, 1.0 / 18.0);
 
         let gaussian = Gaussian::new(SMOOTH_SIZE);
 
@@ -46,6 +59,9 @@ impl GeneratorState {
             noise_base,
             selector,
             gaussian,
+            cave_shape,
+            cave_tunnel,
+            cave_detail,
         }
     }
 }
@@ -237,6 +253,104 @@ pub fn get_surface_height(world_x: i32, world_z: i32, seed: u64) -> i32 {
     surfaces[local_x][local_z]
 }
 
+/// Get the biome at a specific world position.
+pub fn get_biome_at(world_x: i32, world_z: i32, seed: u64) -> u32 {
+    static BIOME_GEN: LazyLock<Mutex<(u64, GeneratorState)>> =
+        LazyLock::new(|| Mutex::new((0, GeneratorState::new(0))));
+    let mut guard = BIOME_GEN.lock().unwrap();
+    if guard.0 != seed {
+        *guard = (seed, GeneratorState::new(seed));
+    }
+
+    biome::pick_biome_with_jitter(&guard.1.selector, world_x, world_z, seed)
+}
+
+pub fn get_biome_debug_info(world_x: i32, world_z: i32, seed: u64) -> BiomeDebugInfo {
+    static BIOME_GEN: LazyLock<Mutex<(u64, GeneratorState)>> =
+        LazyLock::new(|| Mutex::new((0, GeneratorState::new(0))));
+    let mut guard = BIOME_GEN.lock().unwrap();
+    if guard.0 != seed {
+        *guard = (seed, GeneratorState::new(seed));
+    }
+
+    let biome_id = biome::pick_biome_with_jitter(&guard.1.selector, world_x, world_z, seed);
+    let (temperature, rainfall) = guard.1.selector.climate_at(world_x as f64, world_z as f64);
+    let surface_y = get_surface_height(world_x, world_z, seed);
+
+    BiomeDebugInfo {
+        biome_id,
+        temperature,
+        rainfall,
+        surface_y,
+    }
+}
+
+fn is_spawn_friendly_biome(biome_id: u32) -> bool {
+    !matches!(
+        biome_id,
+        biome::biome_id::OCEAN
+            | biome::biome_id::DEEP_OCEAN
+            | biome::biome_id::WARM_OCEAN
+            | biome::biome_id::DEEP_WARM_OCEAN
+            | biome::biome_id::LUKEWARM_OCEAN
+            | biome::biome_id::DEEP_LUKEWARM_OCEAN
+            | biome::biome_id::COLD_OCEAN
+            | biome::biome_id::DEEP_COLD_OCEAN
+            | biome::biome_id::FROZEN_OCEAN
+            | biome::biome_id::DEEP_FROZEN_OCEAN
+            | biome::biome_id::RIVER
+            | biome::biome_id::FROZEN_RIVER
+            | biome::biome_id::SWAMPLAND
+            | biome::biome_id::SWAMPLAND_MUTATED
+    )
+}
+
+fn make_spawn_position(world_x: i32, world_z: i32, surface_y: i32) -> [f32; 3] {
+    let feet_y = (surface_y + 1) as f32;
+    [world_x as f32 + 0.5, feet_y + 1.621, world_z as f32 + 0.5]
+}
+
+/// Find a dry spawn near the world origin.
+pub fn find_spawn_position(seed: u64) -> [f32; 3] {
+    const SEARCH_STEP: i32 = 8;
+    const MAX_RADIUS: i32 = 128;
+
+    let mut fallback = (0, get_surface_height(0, 0, seed), 0);
+
+    for radius in (0..=MAX_RADIUS).step_by(SEARCH_STEP as usize) {
+        if radius == 0 {
+            let biome_id = get_biome_at(0, 0, seed);
+            if fallback.1 > WATER_HEIGHT && is_spawn_friendly_biome(biome_id) {
+                return make_spawn_position(0, 0, fallback.1);
+            }
+            continue;
+        }
+
+        for edge in (-radius..=radius).step_by(SEARCH_STEP as usize) {
+            let perimeter_points = [
+                (-radius, edge),
+                (radius, edge),
+                (edge, -radius),
+                (edge, radius),
+            ];
+
+            for (x, z) in perimeter_points {
+                let surface_y = get_surface_height(x, z, seed);
+                if surface_y > fallback.1 {
+                    fallback = (x, surface_y, z);
+                }
+
+                let biome_id = get_biome_at(x, z, seed);
+                if surface_y > WATER_HEIGHT && is_spawn_friendly_biome(biome_id) {
+                    return make_spawn_position(x, z, surface_y);
+                }
+            }
+        }
+    }
+
+    make_spawn_position(fallback.0, fallback.2, fallback.1)
+}
+
 /// Deterministic hash for block variety (bedrock dégradé, stone variants).
 /// Returns a value 0..99 for percentage-based decisions.
 #[inline]
@@ -316,6 +430,98 @@ fn stone_with_variants(x: i32, y: i32, z: i32, seed: u64) -> u32 {
         BLOCKS.andesite
     } else {
         BLOCKS.stone
+    }
+}
+
+fn swamp_cover(surface_y: i32, world_x: i32, world_z: i32, seed: u64) -> Vec<u32> {
+    let h = block_variety_hash(world_x, surface_y, world_z, seed.wrapping_add(0x51C3));
+    let mud = BLOCKS.get("minecraft:mud");
+    let packed_mud = BLOCKS.get("minecraft:packed_mud");
+    let clay = BLOCKS.get("minecraft:clay");
+
+    if surface_y <= WATER_HEIGHT {
+        let top = if h < 45 {
+            mud
+        } else if h < 75 {
+            clay
+        } else {
+            BLOCKS.gravel
+        };
+        let mid = if h < 35 {
+            packed_mud
+        } else if h < 70 {
+            mud
+        } else {
+            BLOCKS.gravel
+        };
+        vec![top, mid, BLOCKS.dirt, BLOCKS.dirt]
+    } else {
+        let top = if h < 55 {
+            BLOCKS.grass_block
+        } else if h < 80 {
+            mud
+        } else if h < 92 {
+            clay
+        } else {
+            BLOCKS.coarse_dirt
+        };
+        let sub = if h < 40 { mud } else { BLOCKS.dirt };
+        vec![top, sub, BLOCKS.dirt, BLOCKS.dirt]
+    }
+}
+
+fn cover_for_column(
+    biome_id: u32,
+    surface_y: i32,
+    world_x: i32,
+    world_z: i32,
+    seed: u64,
+) -> Vec<u32> {
+    match biome_id {
+        biome::biome_id::SWAMPLAND | biome::biome_id::SWAMPLAND_MUTATED => {
+            swamp_cover(surface_y, world_x, world_z, seed)
+        }
+        _ => biome::get_biome(biome_id).ground_cover,
+    }
+}
+
+fn should_carve_cave(
+    state: &GeneratorState,
+    world_x: i32,
+    world_y: i32,
+    world_z: i32,
+    surface_y: i32,
+) -> bool {
+    if world_y >= surface_y - 4 || world_y <= -62 {
+        return false;
+    }
+
+    let xf = world_x as f64;
+    let yf = world_y as f64;
+    let zf = world_z as f64;
+
+    let chamber = state.cave_shape.noise_3d(xf, yf * 0.85, zf, true).abs();
+    let tunnel = state.cave_tunnel.noise_3d(xf, yf * 0.55, zf, true).abs();
+    let detail = state.cave_detail.noise_3d(xf, yf * 1.2, zf, true);
+
+    let threshold = if world_y < 0 {
+        0.69
+    } else if world_y < 32 {
+        0.73
+    } else {
+        0.78
+    };
+
+    (chamber > threshold && detail > -0.25) || (tunnel > threshold + 0.08 && detail > -0.05)
+}
+
+fn cave_fill_block(surface_y: i32, world_y: i32) -> u32 {
+    if world_y <= -54 {
+        BLOCKS.lava
+    } else if surface_y <= WATER_HEIGHT && world_y >= WATER_HEIGHT - 3 {
+        BLOCKS.water
+    } else {
+        BLOCKS.air
     }
 }
 
@@ -421,12 +627,11 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
     // Block mapping is cached — structure loading should not rebuild it repeatedly.
     static BLOCK_MAPPING: LazyLock<std::collections::HashMap<String, u32>> =
         LazyLock::new(structure::build_block_mapping);
-    let center_biome = biome_ids[8][8];
     let struct_map = structure::generate_structures(
         chunk_x,
         chunk_z,
         seed,
-        center_biome,
+        &biome_ids,
         &surfaces,
         &BLOCK_MAPPING,
     );
@@ -436,11 +641,12 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
     let mut non_solid_top = [false; 256];
     for x in 0..16 {
         for z in 0..16 {
-            let biome_def = biome::get_biome(biome_ids[x][z]);
-            let is_non_solid = !biome_def.ground_cover.is_empty()
-                && biome_def.ground_cover[0] == BLOCKS.snow_layer;
+            let world_x = base_x + x as i32;
+            let world_z = base_z + z as i32;
+            let cover = cover_for_column(biome_ids[x][z], surfaces[x][z], world_x, world_z, seed);
+            let is_non_solid = !cover.is_empty() && cover[0] == BLOCKS.snow_layer;
             non_solid_top[x * 16 + z] = is_non_solid;
-            covers.push(biome_def.ground_cover);
+            covers.push(cover);
         }
     }
 
@@ -491,22 +697,31 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
                     let world_x = base_x + local_x as i32;
                     let world_z = base_z + local_z as i32;
 
-                        let mut block = if world_y < 0 || world_y < noise_min {
-                            // Underground: use realistic layers
-                            underground_block(world_x, world_y, world_z, seed)
-                        } else if world_y <= col_max_block {
-                            block_at(
-                                world_x,
-                                world_y,
-                                world_z,
-                                surface_y,
-                                cover,
-                                is_non_solid_top,
-                                seed,
-                            )
+                    let mut block = if world_y < 0 || world_y < noise_min {
+                        // Underground: use realistic layers
+                        underground_block(world_x, world_y, world_z, seed)
+                    } else if world_y <= col_max_block {
+                        block_at(
+                            world_x,
+                            world_y,
+                            world_z,
+                            surface_y,
+                            cover,
+                            is_non_solid_top,
+                            seed,
+                        )
                     } else {
                         BLOCKS.air
                     };
+
+                    if block != BLOCKS.air
+                        && block != BLOCKS.water
+                        && block != BLOCKS.lava
+                        && block != BLOCKS.bedrock
+                        && should_carve_cave(state, world_x, world_y, world_z, surface_y)
+                    {
+                        block = cave_fill_block(surface_y, world_y);
+                    }
 
                     // Replace stone/deepslate with ore if applicable
                     if block == BLOCKS.stone || block == BLOCKS.deepslate {
@@ -633,6 +848,33 @@ mod tests {
             "Expected biome variety, got {} biomes: {:?}",
             biomes.len(),
             biomes
+        );
+    }
+
+    #[test]
+    fn test_swamp_underwater_cover_is_not_grass() {
+        let cover = swamp_cover(60, 0, 0, 42);
+        assert_ne!(cover[0], BLOCKS.grass_block);
+    }
+
+    #[test]
+    fn test_caves_exist_in_noise_field() {
+        let state = GeneratorState::new(42);
+        let mut carved_positions = 0;
+
+        for x in (0..64).step_by(4) {
+            for z in (0..64).step_by(4) {
+                for y in -32..40 {
+                    if should_carve_cave(&state, x, y, z, 80) {
+                        carved_positions += 1;
+                    }
+                }
+            }
+        }
+
+        assert!(
+            carved_positions >= 20,
+            "Expected caves to be carved, got {carved_positions} candidate positions"
         );
     }
 }

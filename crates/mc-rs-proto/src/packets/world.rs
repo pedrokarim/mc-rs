@@ -333,7 +333,9 @@ impl StartGame {
             current_tick: 0,
             enchantment_seed: 0,
             multiplayer_correlation_id: String::new(),
-            enable_new_inventory_system: true,
+            // We currently run Bedrock in the legacy/disabled ItemStackNetManager mode.
+            // The client expects ContainerOpen + legacy InventoryContent/Slot semantics in this mode.
+            enable_new_inventory_system: false,
             server_software_version: "1.26.10".to_string(),
             // Empty NBT compound tag (network LE format):
             // tag_type=10 (compound), name_length=0 (VarUInt=0x00), end_tag=0x00
@@ -436,43 +438,43 @@ impl UpdateBlock {
 // typeInfo flag constants
 const ARG_FLAG_VALID: u32 = 0x100000;
 const ARG_FLAG_ENUM: u32 = 0x200000;
+const ARG_FLAG_SOFT_ENUM: u32 = 0x4000000;
 
 /// Parameter type for the AvailableCommands packet encoder.
-pub enum CmdParamType<'a> {
+pub enum CmdParamType {
     /// Basic type: Int(1), Float(3), String(56), Target(8), Position(65), Message(68), RawText(70)
     Basic(u32),
     /// Hard enum with name and values — client shows as dropdown suggestions
-    HardEnum {
-        name: &'a str,
-        values: &'a [&'a str],
-    },
+    HardEnum { name: String, values: Vec<String> },
+    /// Soft enum with dynamic values — player names etc.
+    SoftEnum { name: String, values: Vec<String> },
 }
 
 /// A parameter entry for the packet encoder.
-pub struct CmdParam<'a> {
-    pub name: &'a str,
-    pub param_type: CmdParamType<'a>,
+pub struct CmdParam {
+    pub name: String,
+    pub param_type: CmdParamType,
     pub optional: bool,
 }
 
 /// An overload (syntax variant) for the packet encoder.
-pub struct CmdOverload<'a> {
-    pub params: Vec<CmdParam<'a>>,
+pub struct CmdOverload {
+    pub params: Vec<CmdParam>,
 }
 
 /// A command entry for the packet encoder.
-pub struct CmdEntry<'a> {
-    pub name: &'a str,
-    pub description: &'a str,
-    pub aliases: Vec<&'a str>,
-    pub overloads: Vec<CmdOverload<'a>>,
+pub struct CmdEntry {
+    pub name: String,
+    pub description: String,
+    pub aliases: Vec<String>,
+    pub overloads: Vec<CmdOverload>,
 }
 
 pub struct AvailableCommands;
 
 impl AvailableCommands {
     /// Encode a rich AvailableCommands packet with typed parameters and enums.
-    pub fn encode_rich(commands: &[CmdEntry<'_>]) -> Vec<u8> {
+    pub fn encode_rich(commands: &[CmdEntry]) -> Vec<u8> {
         use crate::io::ProtoWriter;
 
         // ── Phase 1: Collect all enum values into a deduplicated global pool ──
@@ -482,6 +484,8 @@ impl AvailableCommands {
         // Collect hard enums (name → list of value indices)
         let mut hard_enums: Vec<(String, Vec<u32>)> = Vec::new();
         let mut hard_enum_index = std::collections::HashMap::<String, u32>::new();
+        let mut soft_enums: Vec<(String, Vec<String>)> = Vec::new();
+        let mut soft_enum_index = std::collections::HashMap::<String, u32>::new();
 
         // Helper: add a value to the pool and return its index
         let mut add_enum_value = |value: &str| -> u32 {
@@ -503,8 +507,8 @@ impl AvailableCommands {
                 if !hard_enum_index.contains_key(&alias_enum_name) {
                     let mut value_indices = Vec::new();
                     // PMMP adds the command name itself as first alias (client bug workaround)
-                    value_indices.push(add_enum_value(cmd.name));
-                    for &alias in &cmd.aliases {
+                    value_indices.push(add_enum_value(&cmd.name));
+                    for alias in &cmd.aliases {
                         value_indices.push(add_enum_value(alias));
                     }
                     let idx = hard_enums.len() as u32;
@@ -520,12 +524,19 @@ impl AvailableCommands {
                         let enum_name = name.to_string();
                         if !hard_enum_index.contains_key(&enum_name) {
                             let mut value_indices = Vec::new();
-                            for &v in *values {
+                            for v in values {
                                 value_indices.push(add_enum_value(v));
                             }
                             let idx = hard_enums.len() as u32;
                             hard_enum_index.insert(enum_name.clone(), idx);
                             hard_enums.push((enum_name, value_indices));
+                        }
+                    } else if let CmdParamType::SoftEnum { name, values } = &param.param_type {
+                        let enum_name = name.to_string();
+                        if !soft_enum_index.contains_key(&enum_name) {
+                            let idx = soft_enums.len() as u32;
+                            soft_enum_index.insert(enum_name.clone(), idx);
+                            soft_enums.push((enum_name, values.clone()));
                         }
                     }
                 }
@@ -564,8 +575,8 @@ impl AvailableCommands {
         // 6. Command data
         w.write_var_u32(commands.len() as u32);
         for cmd in commands {
-            w.write_string(cmd.name);
-            w.write_string(cmd.description);
+            w.write_string(&cmd.name);
+            w.write_string(&cmd.description);
             w.write_u16_le(0); // flags
             w.write_string("any"); // permission level
 
@@ -592,14 +603,18 @@ impl AvailableCommands {
                     w.write_bool(false); // chaining = false
                     w.write_var_u32(overload.params.len() as u32);
                     for param in &overload.params {
-                        w.write_string(param.name);
+                        w.write_string(&param.name);
 
                         // typeInfo encoding
                         let type_info = match &param.param_type {
                             CmdParamType::Basic(type_id) => ARG_FLAG_VALID | type_id,
                             CmdParamType::HardEnum { name, .. } => {
-                                let enum_idx = hard_enum_index.get(*name).copied().unwrap_or(0);
+                                let enum_idx = hard_enum_index.get(name).copied().unwrap_or(0);
                                 ARG_FLAG_VALID | ARG_FLAG_ENUM | enum_idx
+                            }
+                            CmdParamType::SoftEnum { name, .. } => {
+                                let enum_idx = soft_enum_index.get(name).copied().unwrap_or(0);
+                                ARG_FLAG_VALID | ARG_FLAG_SOFT_ENUM | enum_idx
                             }
                         };
                         w.write_u32_le(type_info);
@@ -610,8 +625,15 @@ impl AvailableCommands {
             }
         }
 
-        // 7. Soft enums — empty
-        w.write_var_u32(0);
+        // 7. Soft enums
+        w.write_var_u32(soft_enums.len() as u32);
+        for (enum_name, values) in &soft_enums {
+            w.write_string(enum_name);
+            w.write_var_u32(values.len() as u32);
+            for value in values {
+                w.write_string(value);
+            }
+        }
 
         // 8. Constraints — empty
         w.write_var_u32(0);
@@ -723,14 +745,19 @@ pub struct ContainerOpen {
 }
 
 impl ContainerOpen {
-    /// Open the player's own inventory.
-    pub fn player_inventory(actor_unique_id: i64) -> Self {
+    /// Open an entity-backed inventory window, like PocketMine does for the main inventory.
+    pub fn entity_inventory(window_id: u8, actor_unique_id: i64) -> Self {
         Self {
-            window_id: 0,      // HARDCODED_INVENTORY_WINDOW_ID
+            window_id,
             window_type: 0xFF, // WindowTypes::INVENTORY = -1 as u8
             position: [0, 0, 0],
             actor_unique_id,
         }
+    }
+
+    /// Open the player's own inventory UI.
+    pub fn player_inventory(actor_unique_id: i64) -> Self {
+        Self::entity_inventory(1, actor_unique_id)
     }
 
     pub fn encode(&self) -> Vec<u8> {

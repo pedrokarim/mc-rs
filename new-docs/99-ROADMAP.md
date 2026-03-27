@@ -132,10 +132,10 @@ Avancer **phase par phase**, chaque phase est **testable et fonctionnelle** avan
 - [ ] Anvil
 
 ### 5.3 - Permissions
-- [ ] Permission system (hiérarchique)
-- [ ] Operator status
-- [ ] Ban list (player + IP)
-- [ ] Whitelist
+- [x] Permission system (string permissions, defaults true/false/op, héritage via enfants)
+- [x] Operator status
+- [x] Ban list (player + IP)
+- [x] Whitelist
 
 ### 5.4 - World generation améliorée — ✅ TERMINÉE
 - [x] Normal generator (Simplex 3D noise, port PMMP)
@@ -175,10 +175,15 @@ Avancer **phase par phase**, chaque phase est **testable et fonctionnelle** avan
 - [ ] Exemples de plugins
 
 ### 6.4 - Commandes avancées
-- [ ] Toutes les commandes vanilla (~40)
+- [x] Moteur de commandes serveur partagé (registre unique, dispatch joueur + console)
+- [x] Command autocomplete (AvailableCommandsPacket filtré par permissions + soft enums dynamiques)
+- [x] Target selectors (@a, @p, @r, @s, @e)
+- [x] Commandes admin / communication / world / player principales
+- [ ] Toutes les commandes vanilla restantes
 - [ ] Plugin commands
-- [ ] Command autocomplete (AvailableCommandsPacket)
-- [ ] Target selectors (@a, @p, @r, @s, @e)
+- [ ] Commandes gameplay restantes (xp, effect, enchant, particle)
+
+Note 6.4 : le socle PocketMine-like est maintenant en place (permissions, visibilité par sender, sélecteurs, console locale, commandes serveur partagées). Il reste surtout les commandes plugin et les briques gameplay avancées.
 
 **Résultat Phase 6 :** Serveur extensible via plugins Lua.
 
@@ -200,11 +205,11 @@ Avancer **phase par phase**, chaque phase est **testable et fonctionnelle** avan
 - [ ] Skins custom
 - [ ] Scoreboard
 - [ ] Boss bar
-- [ ] Title/subtitle/actionbar
+- [x] Title/subtitle/actionbar
 - [ ] Particles
 
 ### 7.3 - Administration
-- [ ] Console interactive
+- [x] Console interactive (locale via stdin, toujours op)
 - [ ] RCON
 - [ ] Query protocol
 - [ ] Server status

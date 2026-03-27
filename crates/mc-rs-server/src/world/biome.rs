@@ -83,6 +83,80 @@ pub struct BiomeDef {
     pub ground_cover: Vec<u32>,
 }
 
+pub fn biome_name(id: u32) -> &'static str {
+    match id {
+        biome_id::OCEAN => "Ocean",
+        biome_id::PLAINS => "Plains",
+        biome_id::DESERT => "Desert",
+        biome_id::EXTREME_HILLS => "Extreme Hills",
+        biome_id::FOREST => "Forest",
+        biome_id::TAIGA => "Taiga",
+        biome_id::SWAMPLAND => "Swampland",
+        biome_id::RIVER => "River",
+        biome_id::FROZEN_RIVER => "Frozen River",
+        biome_id::ICE_PLAINS => "Ice Plains",
+        biome_id::ICE_MOUNTAINS => "Ice Mountains",
+        biome_id::MUSHROOM_ISLAND => "Mushroom Island",
+        biome_id::MUSHROOM_ISLAND_SHORE => "Mushroom Island Shore",
+        biome_id::BEACH => "Beach",
+        biome_id::DESERT_HILLS => "Desert Hills",
+        biome_id::FOREST_HILLS => "Forest Hills",
+        biome_id::TAIGA_HILLS => "Taiga Hills",
+        biome_id::EXTREME_HILLS_EDGE => "Extreme Hills Edge",
+        biome_id::JUNGLE => "Jungle",
+        biome_id::JUNGLE_HILLS => "Jungle Hills",
+        biome_id::JUNGLE_EDGE => "Jungle Edge",
+        biome_id::DEEP_OCEAN => "Deep Ocean",
+        biome_id::STONE_BEACH => "Stone Beach",
+        biome_id::COLD_BEACH => "Cold Beach",
+        biome_id::BIRCH_FOREST => "Birch Forest",
+        biome_id::BIRCH_FOREST_HILLS => "Birch Forest Hills",
+        biome_id::ROOFED_FOREST => "Roofed Forest",
+        biome_id::COLD_TAIGA => "Cold Taiga",
+        biome_id::COLD_TAIGA_HILLS => "Cold Taiga Hills",
+        biome_id::MEGA_TAIGA => "Mega Taiga",
+        biome_id::MEGA_TAIGA_HILLS => "Mega Taiga Hills",
+        biome_id::EXTREME_HILLS_PLUS_TREES => "Extreme Hills+",
+        biome_id::SAVANNA => "Savanna",
+        biome_id::SAVANNA_PLATEAU => "Savanna Plateau",
+        biome_id::MESA => "Mesa",
+        biome_id::MESA_PLATEAU_STONE => "Mesa Plateau Stone",
+        biome_id::MESA_PLATEAU => "Mesa Plateau",
+        biome_id::WARM_OCEAN => "Warm Ocean",
+        biome_id::DEEP_WARM_OCEAN => "Deep Warm Ocean",
+        biome_id::LUKEWARM_OCEAN => "Lukewarm Ocean",
+        biome_id::DEEP_LUKEWARM_OCEAN => "Deep Lukewarm Ocean",
+        biome_id::COLD_OCEAN => "Cold Ocean",
+        biome_id::DEEP_COLD_OCEAN => "Deep Cold Ocean",
+        biome_id::FROZEN_OCEAN => "Frozen Ocean",
+        biome_id::DEEP_FROZEN_OCEAN => "Deep Frozen Ocean",
+        biome_id::BAMBOO_JUNGLE => "Bamboo Jungle",
+        biome_id::SUNFLOWER_PLAINS => "Sunflower Plains",
+        biome_id::ICE_PLAINS_SPIKES => "Ice Plains Spikes",
+        biome_id::DESERT_MUTATED => "Desert M",
+        biome_id::EXTREME_HILLS_MUTATED => "Extreme Hills M",
+        biome_id::FLOWER_FOREST => "Flower Forest",
+        biome_id::TAIGA_MUTATED => "Taiga M",
+        biome_id::SWAMPLAND_MUTATED => "Swampland M",
+        biome_id::JUNGLE_MUTATED => "Jungle M",
+        biome_id::JUNGLE_EDGE_MUTATED => "Jungle Edge M",
+        biome_id::BIRCH_FOREST_MUTATED => "Birch Forest M",
+        biome_id::BIRCH_FOREST_HILLS_MUTATED => "Birch Forest Hills M",
+        biome_id::ROOFED_FOREST_MUTATED => "Roofed Forest M",
+        biome_id::COLD_TAIGA_MUTATED => "Cold Taiga M",
+        biome_id::REDWOOD_TAIGA_MUTATED => "Redwood Taiga M",
+        biome_id::REDWOOD_TAIGA_HILLS_MUTATED => "Redwood Taiga Hills M",
+        biome_id::EXTREME_HILLS_PLUS_TREES_MUTATED => "Extreme Hills+ M",
+        biome_id::SAVANNA_MUTATED => "Savanna M",
+        biome_id::SAVANNA_PLATEAU_MUTATED => "Savanna Plateau M",
+        biome_id::MESA_BRYCE => "Mesa Bryce",
+        biome_id::MESA_PLATEAU_STONE_MUTATED => "Mesa Plateau Stone M",
+        biome_id::MESA_PLATEAU_MUTATED => "Mesa Plateau M",
+        biome_id::BAMBOO_JUNGLE_HILLS => "Bamboo Jungle Hills",
+        _ => "Unknown",
+    }
+}
+
 /// Convert noise_type string to (min_elevation, max_elevation).
 /// Based on BDS biome JSON files + BetterVanillaGenerator depth/scale mapping.
 /// min_elevation = 62 + depth * 17, max_elevation = min_elevation + scale * 35
@@ -127,11 +201,7 @@ fn grassy() -> Vec<u32> {
 
 /// Snowy cover: snow_layer, grass, dirt
 fn snowy() -> Vec<u32> {
-    vec![
-        BLOCKS.snow_layer,
-        BLOCKS.grass_block,
-        BLOCKS.dirt,
-    ]
+    vec![BLOCKS.snow_layer, BLOCKS.grass_block, BLOCKS.dirt]
 }
 
 /// Sandy cover for beach: sand x3
@@ -170,11 +240,7 @@ fn mesa() -> Vec<u32> {
 
 /// Gravel cover (ocean floor): 3 blocks
 fn gravelly() -> Vec<u32> {
-    vec![
-        BLOCKS.gravel,
-        BLOCKS.gravel,
-        BLOCKS.gravel,
-    ]
+    vec![BLOCKS.gravel, BLOCKS.gravel, BLOCKS.gravel]
 }
 
 /// Dirt cover (river bed)
@@ -194,20 +260,12 @@ fn podzol() -> Vec<u32> {
 
 /// Stone cover (stone beach)
 fn stony() -> Vec<u32> {
-    vec![
-        BLOCKS.stone,
-        BLOCKS.stone,
-        BLOCKS.stone,
-    ]
+    vec![BLOCKS.stone, BLOCKS.stone, BLOCKS.stone]
 }
 
 /// Snow block cover (ice plains spikes)
 fn snow_block() -> Vec<u32> {
-    vec![
-        BLOCKS.snow_block,
-        BLOCKS.snow_block,
-        BLOCKS.dirt,
-    ]
+    vec![BLOCKS.snow_block, BLOCKS.snow_block, BLOCKS.dirt]
 }
 
 /// Get a biome definition by ID.
@@ -757,6 +815,10 @@ impl BiomeSelector {
 
     fn get_rainfall(&self, x: f64, z: f64) -> f64 {
         (self.rainfall.noise_2d(x, z, true) + 1.0) / 2.0
+    }
+
+    pub fn climate_at(&self, x: f64, z: f64) -> (f64, f64) {
+        (self.get_temperature(x, z), self.get_rainfall(x, z))
     }
 
     pub fn pick_biome(&self, x: f64, z: f64) -> u32 {

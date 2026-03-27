@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use tracing::{debug, info};
 
-use super::chunk_serializer::{self, SubChunk};
 use super::block_registry::BLOCKS;
+use super::chunk_serializer::{self, SubChunk};
 use super::storage::WorldStorage;
 use super::terrain_generator;
 
@@ -126,7 +126,9 @@ impl ChunkCache {
                     for (_y_idx, data) in &stored_sub_chunks {
                         payload.extend_from_slice(data);
                     }
-                    let biome_data = storage.load_biome_data(cx, cz).unwrap_or_else(fallback_biome_data);
+                    let biome_data = storage
+                        .load_biome_data(cx, cz)
+                        .unwrap_or_else(fallback_biome_data);
                     payload.extend_from_slice(&biome_data);
                     payload.push(0); // border blocks
 

@@ -2,7 +2,7 @@
 //! Loads Bedrock Edition .nbt structure files (gzip-compressed NBT LE)
 //! and places them in the world during terrain generation.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::Read;
 use std::sync::{LazyLock, Mutex};
 
@@ -10,6 +10,8 @@ use super::biome::biome_id;
 use super::block_registry::BLOCKS;
 use super::block_registry_data::BLOCK_NAME_TO_FIRST_RUNTIME_ID;
 use super::random::Random;
+
+const SEA_LEVEL: i32 = 62;
 
 /// A loaded structure: dimensions + block data.
 #[derive(Debug, Clone)]
@@ -277,6 +279,277 @@ pub struct StructureDef {
     pub biomes: &'static [u32],
     pub chance: u32, // 1 in N chunks
     pub placement: Placement,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+enum StructureGroup {
+    Fossil,
+    OceanRuinColdSmall,
+    OceanRuinColdBig,
+    OceanRuinWarmSmall,
+    OceanRuinWarmBig,
+    Shipwreck,
+    RuinedPortal,
+    GiantRuinedPortal,
+    Igloo,
+    CoralCrust,
+    PillagerOutpost,
+}
+
+#[derive(Clone, Copy)]
+struct StructureGroupRules {
+    spacing: i32,
+    separation: i32,
+    max_terrain_delta: i32,
+    min_biome_coverage_pct: usize,
+    require_dry_land: bool,
+    require_underwater: bool,
+}
+
+fn structure_group(def: &StructureDef) -> StructureGroup {
+    if def.path.contains("/fossils/") {
+        StructureGroup::Fossil
+    } else if def.path.contains("/shipwreck/") {
+        StructureGroup::Shipwreck
+    } else if def.path.contains("/ruined_portal/") {
+        if def.name.starts_with("giant_portal_") {
+            StructureGroup::GiantRuinedPortal
+        } else {
+            StructureGroup::RuinedPortal
+        }
+    } else if def.path.contains("/igloo/") {
+        StructureGroup::Igloo
+    } else if def.path.contains("/coralcrust/") {
+        StructureGroup::CoralCrust
+    } else if def.path.contains("/pillageroutpost/") {
+        StructureGroup::PillagerOutpost
+    } else if def.name.starts_with("big_ruin_warm") {
+        StructureGroup::OceanRuinWarmBig
+    } else if def.name.starts_with("ruin_warm") {
+        StructureGroup::OceanRuinWarmSmall
+    } else if def.name.starts_with("big_ruin") {
+        StructureGroup::OceanRuinColdBig
+    } else {
+        StructureGroup::OceanRuinColdSmall
+    }
+}
+
+fn structure_group_rules(group: StructureGroup) -> StructureGroupRules {
+    match group {
+        StructureGroup::Fossil => StructureGroupRules {
+            spacing: 48,
+            separation: 16,
+            max_terrain_delta: i32::MAX,
+            min_biome_coverage_pct: 60,
+            require_dry_land: false,
+            require_underwater: false,
+        },
+        StructureGroup::OceanRuinColdSmall | StructureGroup::OceanRuinWarmSmall => {
+            StructureGroupRules {
+                spacing: 28,
+                separation: 10,
+                max_terrain_delta: 4,
+                min_biome_coverage_pct: 75,
+                require_dry_land: false,
+                require_underwater: true,
+            }
+        }
+        StructureGroup::OceanRuinColdBig | StructureGroup::OceanRuinWarmBig => {
+            StructureGroupRules {
+                spacing: 40,
+                separation: 12,
+                max_terrain_delta: 4,
+                min_biome_coverage_pct: 80,
+                require_dry_land: false,
+                require_underwater: true,
+            }
+        }
+        StructureGroup::Shipwreck => StructureGroupRules {
+            spacing: 36,
+            separation: 12,
+            max_terrain_delta: 5,
+            min_biome_coverage_pct: 80,
+            require_dry_land: false,
+            require_underwater: true,
+        },
+        StructureGroup::RuinedPortal => StructureGroupRules {
+            spacing: 64,
+            separation: 20,
+            max_terrain_delta: 3,
+            min_biome_coverage_pct: 0,
+            require_dry_land: true,
+            require_underwater: false,
+        },
+        StructureGroup::GiantRuinedPortal => StructureGroupRules {
+            spacing: 96,
+            separation: 32,
+            max_terrain_delta: 3,
+            min_biome_coverage_pct: 0,
+            require_dry_land: true,
+            require_underwater: false,
+        },
+        StructureGroup::Igloo => StructureGroupRules {
+            spacing: 64,
+            separation: 20,
+            max_terrain_delta: 2,
+            min_biome_coverage_pct: 70,
+            require_dry_land: true,
+            require_underwater: false,
+        },
+        StructureGroup::CoralCrust => StructureGroupRules {
+            spacing: 48,
+            separation: 16,
+            max_terrain_delta: 4,
+            min_biome_coverage_pct: 85,
+            require_dry_land: false,
+            require_underwater: true,
+        },
+        StructureGroup::PillagerOutpost => StructureGroupRules {
+            spacing: 96,
+            separation: 32,
+            max_terrain_delta: 2,
+            min_biome_coverage_pct: 75,
+            require_dry_land: true,
+            require_underwater: false,
+        },
+    }
+}
+
+fn is_candidate_chunk(chunk_x: i32, chunk_z: i32, seed: u64, group: StructureGroup) -> bool {
+    let rules = structure_group_rules(group);
+    let region_x = chunk_x.div_euclid(rules.spacing);
+    let region_z = chunk_z.div_euclid(rules.spacing);
+    let margin = rules.separation / 2;
+    let inner = (rules.spacing - rules.separation).max(1);
+    let hash = group_hash(region_x, region_z, seed ^ 0x517C_C1B7_2722_0A95, group);
+    let candidate_x = region_x * rules.spacing + margin + (hash % inner as u64) as i32;
+    let candidate_z = region_z * rules.spacing + margin + ((hash >> 32) % inner as u64) as i32;
+    chunk_x == candidate_x && chunk_z == candidate_z
+}
+
+fn choose_variant<'a>(
+    variants: &[&'a StructureDef],
+    chunk_x: i32,
+    chunk_z: i32,
+    seed: u64,
+    group: StructureGroup,
+) -> &'a StructureDef {
+    let variant_idx = structure_hash(chunk_x, chunk_z, seed ^ 0xA5A5_A5A5_A5A5_A5A5, group as u32)
+        as usize
+        % variants.len();
+    variants[variant_idx]
+}
+
+fn choose_offset(
+    chunk_x: i32,
+    chunk_z: i32,
+    seed: u64,
+    group: StructureGroup,
+    structure: &Structure,
+) -> (i32, i32) {
+    let mut offset_rng =
+        Random::new(
+            structure_hash(chunk_x, chunk_z, seed ^ 0xC6BC_2796_92B5_C323, group as u32) as i64,
+        );
+    (
+        offset_rng.next_range(0, 16 - structure.size_x),
+        offset_rng.next_range(0, 16 - structure.size_z),
+    )
+}
+
+fn biome_coverage_pct(
+    biome_ids: &[[u32; 16]; 16],
+    allowed_biomes: &[u32],
+    offset_x: i32,
+    offset_z: i32,
+    size_x: i32,
+    size_z: i32,
+) -> usize {
+    let mut total = 0usize;
+    let mut matching = 0usize;
+
+    for x in offset_x..offset_x + size_x {
+        for z in offset_z..offset_z + size_z {
+            total += 1;
+            if allowed_biomes.contains(&biome_ids[x as usize][z as usize]) {
+                matching += 1;
+            }
+        }
+    }
+
+    if total == 0 {
+        0
+    } else {
+        matching * 100 / total
+    }
+}
+
+fn chunk_biome_coverage_pct(biome_ids: &[[u32; 16]; 16], allowed_biomes: &[u32]) -> usize {
+    biome_coverage_pct(biome_ids, allowed_biomes, 0, 0, 16, 16)
+}
+
+fn footprint_surface_stats(
+    surfaces: &[[i32; 16]; 16],
+    offset_x: i32,
+    offset_z: i32,
+    size_x: i32,
+    size_z: i32,
+) -> (i32, i32, i32) {
+    let mut min_surface = i32::MAX;
+    let mut max_surface = i32::MIN;
+    let mut sum = 0i32;
+    let mut count = 0i32;
+
+    for x in offset_x..offset_x + size_x {
+        for z in offset_z..offset_z + size_z {
+            let surface = surfaces[x as usize][z as usize];
+            min_surface = min_surface.min(surface);
+            max_surface = max_surface.max(surface);
+            sum += surface;
+            count += 1;
+        }
+    }
+
+    let avg_surface = if count == 0 { SEA_LEVEL } else { sum / count };
+    (min_surface, max_surface, avg_surface)
+}
+
+fn placement_y_for_footprint(
+    def: &StructureDef,
+    rules: StructureGroupRules,
+    group_roll: u64,
+    surfaces: &[[i32; 16]; 16],
+    offset_x: i32,
+    offset_z: i32,
+    size_x: i32,
+    size_z: i32,
+) -> Option<i32> {
+    let (min_surface, max_surface, avg_surface) =
+        footprint_surface_stats(surfaces, offset_x, offset_z, size_x, size_z);
+
+    if max_surface - min_surface > rules.max_terrain_delta {
+        return None;
+    }
+
+    match def.placement {
+        Placement::Surface => {
+            if rules.require_dry_land && min_surface <= SEA_LEVEL {
+                return None;
+            }
+            Some(avg_surface + 1)
+        }
+        Placement::Underground { min_y, max_y } => {
+            let mut rng = Random::new(group_roll as i64);
+            Some(rng.next_range(min_y, max_y))
+        }
+        Placement::FixedY(y) => Some(y),
+        Placement::OceanFloor => {
+            if !rules.require_underwater || max_surface >= SEA_LEVEL - 1 {
+                return None;
+            }
+            Some(avg_surface + 1)
+        }
+    }
 }
 
 /// Helper macro to define structures concisely.
@@ -1154,30 +1427,41 @@ fn structure_hash(chunk_x: i32, chunk_z: i32, seed: u64, structure_idx: u32) -> 
     h.wrapping_mul(h.wrapping_add(223))
 }
 
+fn group_hash(chunk_x: i32, chunk_z: i32, seed: u64, group: StructureGroup) -> u64 {
+    structure_hash(chunk_x, chunk_z, seed ^ 0x9E37_79B9_7F4A_7C15, group as u32)
+}
+
 /// Generate structure blocks for a chunk.
 /// Returns a map of (local_x, world_y, local_z) -> runtime block ID.
 pub fn generate_structures(
     chunk_x: i32,
     chunk_z: i32,
     seed: u64,
-    center_biome: u32,
+    biome_ids: &[[u32; 16]; 16],
     surfaces: &[[i32; 16]; 16],
     block_mapping: &HashMap<String, u32>,
 ) -> HashMap<(u8, i32, u8), u32> {
     let mut blocks = HashMap::new();
     let defs = get_structure_defs();
 
-    for (idx, def) in defs.iter().enumerate() {
-        // Check biome
-        if !def.biomes.contains(&center_biome) {
+    let mut grouped_defs: BTreeMap<StructureGroup, Vec<&StructureDef>> = BTreeMap::new();
+    for def in defs.iter() {
+        if chunk_biome_coverage_pct(biome_ids, def.biomes) > 0 {
+            grouped_defs
+                .entry(structure_group(def))
+                .or_default()
+                .push(def);
+        }
+    }
+
+    for (group, variants) in grouped_defs {
+        if !is_candidate_chunk(chunk_x, chunk_z, seed, group) {
             continue;
         }
 
-        // Check chance
-        let hash = structure_hash(chunk_x, chunk_z, seed, idx as u32);
-        if !hash.is_multiple_of(def.chance as u64) {
-            continue;
-        }
+        let rules = structure_group_rules(group);
+        let group_roll = group_hash(chunk_x, chunk_z, seed, group);
+        let def = choose_variant(&variants, chunk_x, chunk_z, seed, group);
 
         // Load structure
         let structure = match load_structure_cached(def.path, block_mapping) {
@@ -1185,28 +1469,37 @@ pub fn generate_structures(
             None => continue,
         };
 
-        // Determine Y placement based on type
-        let center_surface = surfaces[8][8];
-        let place_y = match def.placement {
-            Placement::Surface => center_surface + 1,
-            Placement::Underground { min_y, max_y } => {
-                let mut rng = Random::new(hash as i64);
-                rng.next_range(min_y, max_y)
-            }
-            Placement::FixedY(y) => y,
-            Placement::OceanFloor => {
-                // Place on the ocean floor (surface is underwater)
-                if center_surface < 60 {
-                    center_surface + 1
-                } else {
-                    continue; // Not underwater, skip
-                }
-            }
-        };
+        // Large multi-chunk structures need world-space assembly to avoid
+        // being sliced into nonsense. Skip them until that pipeline exists.
+        if structure.size_x > 16 || structure.size_z > 16 {
+            continue;
+        }
 
-        // Place structure blocks (centered in chunk)
-        let offset_x = (16 - structure.size_x) / 2;
-        let offset_z = (16 - structure.size_z) / 2;
+        let (offset_x, offset_z) = choose_offset(chunk_x, chunk_z, seed, group, &structure);
+        let biome_coverage = biome_coverage_pct(
+            biome_ids,
+            def.biomes,
+            offset_x,
+            offset_z,
+            structure.size_x,
+            structure.size_z,
+        );
+        if biome_coverage < rules.min_biome_coverage_pct {
+            continue;
+        }
+
+        let Some(place_y) = placement_y_for_footprint(
+            def,
+            rules,
+            group_roll,
+            surfaces,
+            offset_x,
+            offset_z,
+            structure.size_x,
+            structure.size_z,
+        ) else {
+            continue;
+        };
 
         for (&(sx, sy, sz), &block_id) in &structure.blocks {
             let world_x = offset_x + sx;
@@ -1271,9 +1564,10 @@ mod tests {
     fn test_structure_placement_deterministic() {
         let mapping = build_block_mapping();
         let surfaces = [[65i32; 16]; 16];
+        let biome_ids = [[biome_id::DESERT; 16]; 16];
 
-        let blocks1 = generate_structures(0, 0, 42, biome_id::DESERT, &surfaces, &mapping);
-        let blocks2 = generate_structures(0, 0, 42, biome_id::DESERT, &surfaces, &mapping);
+        let blocks1 = generate_structures(0, 0, 42, &biome_ids, &surfaces, &mapping);
+        let blocks2 = generate_structures(0, 0, 42, &biome_ids, &surfaces, &mapping);
 
         assert_eq!(
             blocks1.len(),
@@ -1285,13 +1579,38 @@ mod tests {
     #[test]
     fn test_no_structures_in_wrong_biome() {
         let mapping = build_block_mapping();
-        let surfaces = [[65i32; 16]; 16];
+        let surfaces = [[50i32; 16]; 16];
+        let biome_ids = [[biome_id::FOREST; 16]; 16];
 
-        // Forest should not have fossils
-        let blocks = generate_structures(0, 0, 42, biome_id::FOREST, &surfaces, &mapping);
+        // A submerged forest chunk should reject all current structure rules.
+        let blocks = generate_structures(0, 0, 42, &biome_ids, &surfaces, &mapping);
         assert!(
             blocks.is_empty(),
-            "Forest should not have fossil structures"
+            "Unexpected structures generated in an invalid biome/terrain setup"
+        );
+    }
+
+    #[test]
+    fn test_ocean_structure_density_is_bounded() {
+        let mapping = build_block_mapping();
+        let surfaces = [[50i32; 16]; 16];
+        let biome_ids = [[biome_id::WARM_OCEAN; 16]; 16];
+
+        let mut populated_chunks = 0usize;
+        for chunk_x in 0..32 {
+            for chunk_z in 0..32 {
+                let blocks =
+                    generate_structures(chunk_x, chunk_z, 42, &biome_ids, &surfaces, &mapping);
+                if !blocks.is_empty() {
+                    populated_chunks += 1;
+                }
+            }
+        }
+
+        assert!(
+            populated_chunks <= 8,
+            "Ocean structure density is still too high: {} populated chunks",
+            populated_chunks
         );
     }
 }
