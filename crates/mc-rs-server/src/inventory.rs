@@ -84,7 +84,11 @@ pub fn block_drop(block_runtime_id: u32) -> Option<ItemStack> {
             b.cobblestone as i32,
         ))
     } else if block_runtime_id == b.grass_block {
-        Some(ItemStack::new(required_item_id("minecraft:dirt"), 1, b.dirt as i32))
+        Some(ItemStack::new(
+            required_item_id("minecraft:dirt"),
+            1,
+            b.dirt as i32,
+        ))
     } else if block_runtime_id == b.oak_leaves {
         None
     } else if block_runtime_id == b.short_grass {

@@ -9,6 +9,7 @@
 .claude/
 worlds/
 players/
+plugin_data/
 .reference/
 tools/
 .tmp/

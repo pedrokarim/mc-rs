@@ -24,11 +24,13 @@ pub mod packet_id {
     pub const REMOVE_ACTOR: u32 = 0x0E;
     pub const ADD_ITEM_ACTOR: u32 = 0x0F;
     pub const TAKE_ITEM_ACTOR: u32 = 0x11;
+    pub const MOVE_ACTOR_ABSOLUTE: u32 = 0x12;
     pub const MOVE_PLAYER: u32 = 0x13;
     pub const UPDATE_BLOCK: u32 = 0x15;
     pub const UPDATE_ATTRIBUTES: u32 = 0x1D;
     pub const INVENTORY_TRANSACTION: u32 = 0x1E;
     pub const SET_ACTOR_DATA: u32 = 0x27;
+    pub const SET_ACTOR_MOTION: u32 = 0x28;
     pub const SET_PLAYER_GAME_TYPE: u32 = 0x3E;
     pub const SET_SPAWN_POSITION: u32 = 0x2B;
     pub const CRAFTING_DATA: u32 = 0x34;

@@ -53,6 +53,12 @@ enum PendingForm {
     HubMenu,
 }
 
+#[derive(Debug, Clone)]
+pub struct PendingEntityAttack {
+    pub target_runtime_id: u64,
+    pub action_type: u32,
+}
+
 /// Manages a single client connection's protocol state machine.
 pub struct Connection {
     pub addr: SocketAddr,
@@ -96,6 +102,7 @@ pub struct Connection {
 
     pub pending_commands: Vec<String>,
     pub pending_item_spawns: Vec<PendingItemEntitySpawn>,
+    pub pending_entity_attacks: Vec<PendingEntityAttack>,
 
     // Server-driven Bedrock forms
     next_form_id: u32,
@@ -237,6 +244,7 @@ impl Connection {
             broadcasts: Vec::new(),
             pending_commands: Vec::new(),
             pending_item_spawns: Vec::new(),
+            pending_entity_attacks: Vec::new(),
             inventory,
             player_inventory_window_id: PLAYER_INVENTORY_SCREEN_ID,
             player_inventory_open: false,
@@ -1548,9 +1556,26 @@ impl Connection {
                 self.push_inventory_sync(&mut responses);
             }
             InventoryTransactionData::UseItem { .. }
-            | InventoryTransactionData::UseItemOnEntity { .. }
             | InventoryTransactionData::ReleaseItem { .. }
             | InventoryTransactionData::Unknown { .. } => {}
+            InventoryTransactionData::UseItemOnEntity {
+                actor_runtime_id,
+                action_type,
+                hotbar_slot,
+                ..
+            } => {
+                if (0..=8).contains(&hotbar_slot) {
+                    self.inventory.held_slot = hotbar_slot as u8;
+                }
+                self.pending_entity_attacks.push(PendingEntityAttack {
+                    target_runtime_id: actor_runtime_id,
+                    action_type,
+                });
+                debug!(
+                    "[{}] Queued entity interaction: target_runtime_id={} action_type={}",
+                    self.addr, actor_runtime_id, action_type
+                );
+            }
         }
 
         if !changed_slots.is_empty() && responses.is_empty() {
@@ -1780,6 +1805,10 @@ impl Connection {
         std::mem::take(&mut self.pending_commands)
     }
 
+    pub fn take_pending_entity_attacks(&mut self) -> Vec<PendingEntityAttack> {
+        std::mem::take(&mut self.pending_entity_attacks)
+    }
+
     pub fn encode_system_message(&self, message: impl Into<String>) -> Vec<u8> {
         let msg = mc_rs_proto::packets::player::Text::system(&message.into());
         self.encode_compressed_packet(packet_id::TEXT, &msg)
@@ -1964,10 +1993,9 @@ impl Connection {
         start_game.generator = self.config.generator_id;
         responses.push(self.encode_compressed_packet(packet_id::START_GAME, &start_game.encode()));
 
-        responses.push(self.encode_compressed_packet(
-            packet_id::ITEM_REGISTRY,
-            item_registry::payload(),
-        ));
+        responses.push(
+            self.encode_compressed_packet(packet_id::ITEM_REGISTRY, item_registry::payload()),
+        );
 
         // AvailableActorIdentifiers — real NBT from PMMP
         static ENTITY_IDENTIFIERS_NBT: &[u8] = include_bytes!("../data/entity_identifiers.nbt");

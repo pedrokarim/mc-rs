@@ -1,0 +1,20 @@
+name: ExampleLua
+version: 1.0.0
+main: main.lua
+api: 1.0.0
+description: "Example Lua plugin for mc-rs"
+authors: ["mc-rs"]
+load: POSTWORLD
+prefix: "ExampleLua"
+
+commands:
+  hello:
+    description: "Say hello from a Lua plugin"
+    usage: "/hello [name]"
+    aliases: ["hi"]
+    permission: "examplelua.command.hello"
+
+permissions:
+  examplelua.command.hello:
+    description: "Use /hello from the example Lua plugin"
+    default: true

@@ -164,15 +164,18 @@ Avancer **phase par phase**, chaque phase est **testable et fonctionnelle** avan
 - [ ] Événements serveur (start, stop)
 
 ### 6.2 - Plugin API
-- [ ] PluginManifest (plugin.yml)
-- [ ] Plugin lifecycle (load, enable, disable)
-- [ ] Dependency resolution
-- [ ] Plugin data folder + config
+- [x] PluginManifest (plugin.yml)
+- [x] Discover du dossier `plugins/` + chargement des manifests
+- [x] Dependency resolution basique (`depend`, `softdepend`, `loadbefore`, ordre `STARTUP`/`POSTWORLD`)
+- [x] Plugin data folder
+- [x] Plugin lifecycle (load, enable, disable)
+- [x] Plugin config
 
 ### 6.3 - Lua plugins
-- [ ] LuaPluginLoader
-- [ ] API Lua : events, commands, scheduler
-- [ ] Exemples de plugins
+- [x] LuaPluginLoader
+- [x] API Lua : lifecycle, commands, config
+- [ ] API Lua : events, scheduler
+- [x] Exemples de plugins
 
 ### 6.4 - Commandes avancées
 - [x] Moteur de commandes serveur partagé (registre unique, dispatch joueur + console)
@@ -180,10 +183,10 @@ Avancer **phase par phase**, chaque phase est **testable et fonctionnelle** avan
 - [x] Target selectors (@a, @p, @r, @s, @e)
 - [x] Commandes admin / communication / world / player principales
 - [ ] Toutes les commandes vanilla restantes
-- [ ] Plugin commands
+- [x] Plugin commands
 - [ ] Commandes gameplay restantes (xp, effect, enchant, particle)
 
-Note 6.4 : le socle PocketMine-like est maintenant en place (permissions, visibilité par sender, sélecteurs, console locale, commandes serveur partagées). Il reste surtout les commandes plugin et les briques gameplay avancées.
+Note 6.4 : le socle PocketMine-like est maintenant en place (permissions, visibilité par sender, sélecteurs, console locale, commandes serveur partagées, commandes plugin Lua). Il reste surtout les briques gameplay avancées et l'API plugin autour des events/scheduler.
 
 **Résultat Phase 6 :** Serveur extensible via plugins Lua.
 

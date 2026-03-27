@@ -5,15 +5,21 @@ mod config;
 #[allow(dead_code)]
 mod connection;
 #[allow(dead_code)]
+mod entity;
+#[allow(dead_code)]
 pub mod inventory;
+#[allow(dead_code)]
+mod item_entities;
 #[allow(dead_code)]
 mod item_registry;
 #[allow(dead_code)]
-mod item_entities;
+mod mob_entities;
 #[allow(dead_code)]
 pub mod player_data;
 #[allow(dead_code)]
 pub mod player_registry;
+#[allow(dead_code)]
+mod plugin;
 #[allow(dead_code)]
 mod server_state;
 #[allow(dead_code)]
@@ -21,7 +27,7 @@ mod world;
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use mc_rs_crypto::ecdh::ServerKeyPair;
 use mc_rs_proto::packets::packet_id;
@@ -41,7 +47,9 @@ use crate::commands::{
 use crate::config::ServerConfig;
 use crate::connection::Connection;
 use crate::item_entities::ItemEntityManager;
+use crate::mob_entities::MobEntityManager;
 use crate::player_registry::PlayerRegistry;
+use crate::plugin::{PluginLoadOrder, PluginManager};
 use crate::server_state::ServerState;
 use crate::world::chunk_cache::ChunkCache;
 use crate::world::tick::{encode_set_time, WorldPacket, WorldState};
@@ -69,7 +77,16 @@ async fn main() {
         world_seed,
         config.server.max_players,
     );
-    let command_system = build_command_system();
+    let plugin_manager = Arc::new(Mutex::new(PluginManager::load_from_dir(
+        std::path::Path::new("plugins"),
+    )));
+    let mut command_system = build_command_system();
+    if let Ok(mut manager) = plugin_manager.lock() {
+        manager.register_permissions(&mut command_system.permissions);
+        manager.enable_plugins(PluginLoadOrder::Startup, &mut command_system);
+    } else {
+        warn!("Plugin manager lock is poisoned during startup; plugins are disabled.");
+    }
 
     // Generate server keypair (reused across all connections)
     let server_keypair = Arc::new(ServerKeyPair::generate());
@@ -107,6 +124,7 @@ async fn main() {
     let mut peers: HashMap<SocketAddr, mc_rs_raknet::RakNetPeer> = HashMap::new();
     let mut registry = PlayerRegistry::new();
     let mut item_entities = ItemEntityManager::new();
+    let mut mob_entities = MobEntityManager::new();
     let mut world_state = WorldState::new(
         config.gameplay.do_daylight_cycle,
         config.gameplay.do_weather_cycle,
@@ -118,6 +136,11 @@ async fn main() {
         world_seed,
         &config.world.generator,
     )));
+    if let Ok(mut manager) = plugin_manager.lock() {
+        manager.enable_plugins(PluginLoadOrder::PostWorld, &mut command_system);
+    } else {
+        warn!("Plugin manager lock is poisoned before POSTWORLD enable; plugins are disabled.");
+    }
     let mut auto_save_counter: u32 = 0;
     let (console_tx, mut console_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     tokio::spawn(async move {
@@ -156,6 +179,11 @@ async fn main() {
     loop {
         if should_stop {
             info!("Server stopping...");
+            if let Ok(mut manager) = plugin_manager.lock() {
+                manager.disable_all(&mut command_system);
+            } else {
+                warn!("Plugin manager lock is poisoned during shutdown.");
+            }
             // Save all dirty chunks
             if let Ok(mut cache) = chunk_cache.lock() {
                 cache.save_dirty();
@@ -210,8 +238,10 @@ async fn main() {
                     &mut raknet,
                     &mut registry,
                     &mut item_entities,
+                    &mut mob_entities,
                     &mut world_state,
                     &mut server_state,
+                    &plugin_manager,
                     &command_system,
                     &chunk_cache,
                     &mut should_stop,
@@ -253,8 +283,46 @@ async fn main() {
                     }
                 }
 
-                let tick_result = item_entities.tick(&registry);
-                for entity in tick_result.despawned {
+                let mut item_tick_result = if let Ok(mut cache) = chunk_cache.lock() {
+                    item_entities.tick(&registry, &mut cache)
+                } else {
+                    crate::item_entities::TickResult {
+                        despawned: Vec::new(),
+                        pickup_candidates: Vec::new(),
+                        movement_updates: Vec::new(),
+                    }
+                };
+                for (move_bytes, motion_bytes) in item_tick_result.movement_updates.drain(..) {
+                    for (addr, conn) in connections.iter_mut() {
+                        if conn.is_in_game() {
+                            let move_pkt = conn.encode_compressed_packet(
+                                packet_id::MOVE_ACTOR_ABSOLUTE,
+                                &move_bytes,
+                            );
+                            let move_prepared = conn.prepare_for_send(move_pkt);
+                            raknet.send_to_session(
+                                addr,
+                                move_prepared,
+                                Reliability::ReliableOrdered,
+                                false,
+                            );
+
+                            let motion_pkt = conn.encode_compressed_packet(
+                                packet_id::SET_ACTOR_MOTION,
+                                &motion_bytes,
+                            );
+                            let motion_prepared = conn.prepare_for_send(motion_pkt);
+                            raknet.send_to_session(
+                                addr,
+                                motion_prepared,
+                                Reliability::ReliableOrdered,
+                                false,
+                            );
+                        }
+                    }
+                }
+
+                for entity in item_tick_result.despawned {
                     let remove_bytes = entity.remove_packet();
                     for (addr, conn) in connections.iter_mut() {
                         if conn.is_in_game() {
@@ -273,7 +341,7 @@ async fn main() {
                     }
                 }
 
-                for pickup in tick_result.pickup_candidates {
+                for pickup in item_tick_result.pickup_candidates {
                     let Some(entity) = item_entities
                         .all()
                         .find(|entity| entity.entity_runtime_id == pickup.entity_runtime_id)
@@ -355,6 +423,39 @@ async fn main() {
                     }
                 }
 
+                if let Ok(mut cache) = chunk_cache.lock() {
+                    let tick_result = mob_entities.tick(&mut cache);
+                    for update in tick_result.movement_updates {
+                        for (addr, conn) in connections.iter_mut() {
+                            if conn.is_in_game() {
+                                let move_pkt = conn.encode_compressed_packet(
+                                    packet_id::MOVE_ACTOR_ABSOLUTE,
+                                    &update.move_packet,
+                                );
+                                let move_prepared = conn.prepare_for_send(move_pkt);
+                                raknet.send_to_session(
+                                    addr,
+                                    move_prepared,
+                                    Reliability::ReliableOrdered,
+                                    false,
+                                );
+
+                                let motion_pkt = conn.encode_compressed_packet(
+                                    packet_id::SET_ACTOR_MOTION,
+                                    &update.motion_packet,
+                                );
+                                let motion_prepared = conn.prepare_for_send(motion_pkt);
+                                raknet.send_to_session(
+                                    addr,
+                                    motion_prepared,
+                                    Reliability::ReliableOrdered,
+                                    false,
+                                );
+                            }
+                        }
+                    }
+                }
+
                 // Auto-save every 30000 ticks (~5 minutes at 100 TPS)
                 auto_save_counter += 1;
                 if server_state.auto_save_enabled && auto_save_counter >= 30000 {
@@ -371,8 +472,10 @@ async fn main() {
                     &mut raknet,
                     &mut registry,
                     &mut item_entities,
+                    &mut mob_entities,
                     &mut world_state,
                     &mut server_state,
+                    &plugin_manager,
                     &command_system,
                     &chunk_cache,
                     &mut should_stop,
@@ -391,8 +494,10 @@ async fn main() {
                             &mut raknet,
                             &mut registry,
                             &mut item_entities,
+                            &mut mob_entities,
                             &mut world_state,
                             &mut server_state,
+                            &plugin_manager,
                             &chunk_cache,
                             &mut should_stop,
                         );
@@ -412,8 +517,10 @@ fn process_peer_events(
     raknet: &mut RakNetServer,
     registry: &mut PlayerRegistry,
     item_entities: &mut ItemEntityManager,
+    mob_entities: &mut MobEntityManager,
     world_state: &mut WorldState,
     server_state: &mut ServerState,
+    plugin_manager: &Arc<Mutex<PluginManager>>,
     command_system: &ServerCommandSystem,
     chunk_cache: &std::sync::Arc<std::sync::Mutex<ChunkCache>>,
     should_stop: &mut bool,
@@ -442,7 +549,14 @@ fn process_peer_events(
                 }
                 SessionEvent::Packet(data) => {
                     // Extract data from connection (scoped borrow)
-                    let (responses, broadcasts, join_info, pending_commands, item_spawns) = {
+                    let (
+                        responses,
+                        broadcasts,
+                        join_info,
+                        pending_commands,
+                        item_spawns,
+                        pending_entity_attacks,
+                    ) = {
                         let Some(conn) = connections.get_mut(&addr) else {
                             continue;
                         };
@@ -477,6 +591,7 @@ fn process_peer_events(
                         let broadcasts = conn.take_broadcasts();
                         let pending_commands = conn.take_pending_commands();
                         let item_spawns = std::mem::take(&mut conn.pending_item_spawns);
+                        let pending_entity_attacks = conn.take_pending_entity_attacks();
 
                         (
                             responses,
@@ -484,6 +599,7 @@ fn process_peer_events(
                             join_info,
                             pending_commands,
                             item_spawns,
+                            pending_entity_attacks,
                         )
                     };
                     // Borrow of conn dropped here
@@ -604,6 +720,19 @@ fn process_peer_events(
                                     true,
                                 );
                             }
+                            for entity in mob_entities.all() {
+                                let pkt = joined_conn.encode_compressed_packet(
+                                    packet_id::ADD_ACTOR,
+                                    &entity.add_actor_packet(),
+                                );
+                                let prepared = joined_conn.prepare_for_send(pkt);
+                                raknet.send_to_session(
+                                    &addr,
+                                    prepared,
+                                    Reliability::ReliableOrdered,
+                                    true,
+                                );
+                            }
                         }
 
                         let mut command_runtime = ExecutionContext::new(
@@ -614,8 +743,10 @@ fn process_peer_events(
                             raknet,
                             registry,
                             item_entities,
+                            mob_entities,
                             world_state,
                             server_state,
+                            plugin_manager,
                             chunk_cache,
                             should_stop,
                         );
@@ -652,8 +783,10 @@ fn process_peer_events(
                             raknet,
                             registry,
                             item_entities,
+                            mob_entities,
                             world_state,
                             server_state,
+                            plugin_manager,
                             chunk_cache,
                             should_stop,
                         );
@@ -675,6 +808,53 @@ fn process_peer_events(
                                     Reliability::ReliableOrdered,
                                     true,
                                 );
+                            }
+                        }
+                    }
+
+                    for attack in pending_entity_attacks {
+                        const ACTION_ATTACK: u32 = 1;
+                        if attack.action_type != ACTION_ATTACK {
+                            continue;
+                        }
+
+                        if let Some(result) =
+                            mob_entities.apply_attack(attack.target_runtime_id, 4.0)
+                        {
+                            if let Some(update_bytes) = result.update_attributes_packet {
+                                for (other_addr, other_conn) in connections.iter_mut() {
+                                    if other_conn.is_in_game() {
+                                        let pkt = other_conn.encode_compressed_packet(
+                                            packet_id::UPDATE_ATTRIBUTES,
+                                            &update_bytes,
+                                        );
+                                        let prepared = other_conn.prepare_for_send(pkt);
+                                        raknet.send_to_session(
+                                            other_addr,
+                                            prepared,
+                                            Reliability::ReliableOrdered,
+                                            true,
+                                        );
+                                    }
+                                }
+                            }
+
+                            if let Some(remove_bytes) = result.remove_packet {
+                                for (other_addr, other_conn) in connections.iter_mut() {
+                                    if other_conn.is_in_game() {
+                                        let pkt = other_conn.encode_compressed_packet(
+                                            packet_id::REMOVE_ACTOR,
+                                            &remove_bytes,
+                                        );
+                                        let prepared = other_conn.prepare_for_send(pkt);
+                                        raknet.send_to_session(
+                                            other_addr,
+                                            prepared,
+                                            Reliability::ReliableOrdered,
+                                            true,
+                                        );
+                                    }
+                                }
                             }
                         }
                     }
@@ -758,8 +938,10 @@ fn process_peer_events(
                             raknet,
                             registry,
                             item_entities,
+                            mob_entities,
                             world_state,
                             server_state,
+                            plugin_manager,
                             chunk_cache,
                             should_stop,
                         );

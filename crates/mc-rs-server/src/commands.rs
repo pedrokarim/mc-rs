@@ -25,8 +25,10 @@ use tracing::info;
 use crate::connection::Connection;
 use crate::inventory;
 use crate::item_entities::ItemEntityManager;
+use crate::mob_entities::{MobEntityManager, MobKind};
 use crate::player_data;
 use crate::player_registry::PlayerRegistry;
+use crate::plugin::PluginManager;
 use crate::server_state::{normalize_name, ServerState};
 use crate::world::biome;
 use crate::world::block_registry::BLOCKS;
@@ -68,6 +70,7 @@ pub trait ServerCommandRuntime: CommandSender + SoftEnumSource {
     fn player_gamemode(&self, addr: SocketAddr) -> Option<i32>;
     fn clear_inventory(&mut self, addr: SocketAddr);
     fn give_item(&mut self, addr: SocketAddr, item: ItemStack) -> Result<(), String>;
+    fn spawn_mob(&mut self, mob_name: &str, position: [f32; 3]) -> Result<u64, String>;
     fn kill_player(&mut self, addr: SocketAddr);
     fn remove_entity(&mut self, entity_id: u64) -> Result<(), String>;
     fn set_time(&mut self, time: i32);
@@ -109,6 +112,12 @@ pub trait ServerCommandRuntime: CommandSender + SoftEnumSource {
     fn world_seed(&self) -> u64;
     fn online_players(&self) -> usize;
     fn max_players(&self) -> u32;
+    fn execute_plugin_command(
+        &mut self,
+        plugin_name: &str,
+        command_name: &str,
+        invocation: &CommandInvocation,
+    ) -> Result<(), CommandDispatchError>;
     fn plugin_names(&self) -> Vec<String>;
     fn visible_command_names(&self) -> Vec<String>;
 }
@@ -214,6 +223,27 @@ impl ServerCommandMap {
         Some(removed.definition)
     }
 
+    pub fn unregister_owner(&mut self, owner: &str) -> Vec<CommandDefinition> {
+        let owner = owner.to_ascii_lowercase();
+        let mut removed = Vec::new();
+        self.commands.retain(|entry| {
+            let should_remove = entry
+                .definition
+                .owner
+                .as_deref()
+                .map(|value| value.eq_ignore_ascii_case(&owner))
+                .unwrap_or(false);
+            if should_remove {
+                removed.push(entry.definition.clone());
+            }
+            !should_remove
+        });
+        if !removed.is_empty() {
+            self.rebuild_name_index();
+        }
+        removed
+    }
+
     pub fn dispatch(
         &self,
         runtime: &mut (dyn ServerCommandRuntime + '_),
@@ -295,8 +325,10 @@ pub struct ExecutionContext<'a> {
     pub raknet: &'a mut RakNetServer,
     pub registry: &'a mut PlayerRegistry,
     pub item_entities: &'a mut ItemEntityManager,
+    pub mob_entities: &'a mut MobEntityManager,
     pub world_state: &'a mut WorldState,
     pub server_state: &'a mut ServerState,
+    pub plugin_manager: &'a Arc<Mutex<PluginManager>>,
     pub chunk_cache: &'a Arc<Mutex<ChunkCache>>,
     pub should_stop: &'a mut bool,
 }
@@ -338,8 +370,10 @@ pub fn dispatch_command_line(
     raknet: &mut RakNetServer,
     registry: &mut PlayerRegistry,
     item_entities: &mut ItemEntityManager,
+    mob_entities: &mut MobEntityManager,
     world_state: &mut WorldState,
     server_state: &mut ServerState,
+    plugin_manager: &Arc<Mutex<PluginManager>>,
     chunk_cache: &Arc<Mutex<ChunkCache>>,
     should_stop: &mut bool,
 ) {
@@ -356,8 +390,10 @@ pub fn dispatch_command_line(
         raknet,
         registry,
         item_entities,
+        mob_entities,
         world_state,
         server_state,
+        plugin_manager,
         chunk_cache,
         should_stop,
     );
@@ -375,8 +411,10 @@ impl ExecutionContext<'_> {
         raknet: &'a mut RakNetServer,
         registry: &'a mut PlayerRegistry,
         item_entities: &'a mut ItemEntityManager,
+        mob_entities: &'a mut MobEntityManager,
         world_state: &'a mut WorldState,
         server_state: &'a mut ServerState,
+        plugin_manager: &'a Arc<Mutex<PluginManager>>,
         chunk_cache: &'a Arc<Mutex<ChunkCache>>,
         should_stop: &'a mut bool,
     ) -> ExecutionContext<'a> {
@@ -388,8 +426,10 @@ impl ExecutionContext<'_> {
             raknet,
             registry,
             item_entities,
+            mob_entities,
             world_state,
             server_state,
+            plugin_manager,
             chunk_cache,
             should_stop,
         }
@@ -890,6 +930,13 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
             position: entity.position,
             gamemode: None,
         }));
+        entities.extend(self.mob_entities.all().map(|entity| SelectorEntity {
+            id: entity.base.entity_runtime_id,
+            name: Some(entity.base.display_name.clone()),
+            entity_type: entity.base.selector_type.clone(),
+            position: entity.base.position,
+            gamemode: None,
+        }));
         entities
     }
 
@@ -981,6 +1028,14 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
         }
     }
 
+    fn spawn_mob(&mut self, mob_name: &str, position: [f32; 3]) -> Result<u64, String> {
+        let kind =
+            MobKind::parse(mob_name).ok_or_else(|| format!("Unknown mob type: {mob_name}"))?;
+        let entity = self.mob_entities.spawn(kind, position);
+        self.broadcast_compressed(packet_id::ADD_ACTOR, &entity.add_actor_packet());
+        Ok(entity.base.entity_runtime_id)
+    }
+
     fn kill_player(&mut self, addr: SocketAddr) {
         if let Some(connection) = self.connections.get_mut(&addr) {
             connection.position = connection.spawn_position;
@@ -993,12 +1048,17 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
     }
 
     fn remove_entity(&mut self, entity_id: u64) -> Result<(), String> {
-        let Some(entity) = self.item_entities.remove(entity_id) else {
-            return Err("Entity could not be removed.".to_string());
-        };
-        let remove_packet = entity.remove_packet();
-        self.broadcast_compressed(packet_id::REMOVE_ACTOR, &remove_packet);
-        Ok(())
+        if let Some(entity) = self.item_entities.remove(entity_id) {
+            let remove_packet = entity.remove_packet();
+            self.broadcast_compressed(packet_id::REMOVE_ACTOR, &remove_packet);
+            return Ok(());
+        }
+        if let Some(entity) = self.mob_entities.remove(entity_id) {
+            let remove_packet = entity.remove_packet();
+            self.broadcast_compressed(packet_id::REMOVE_ACTOR, &remove_packet);
+            return Ok(());
+        }
+        Err("Entity could not be removed.".to_string())
     }
 
     fn set_time(&mut self, time: i32) {
@@ -1282,8 +1342,26 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
         self.server_state.max_players
     }
 
+    fn execute_plugin_command(
+        &mut self,
+        plugin_name: &str,
+        command_name: &str,
+        invocation: &CommandInvocation,
+    ) -> Result<(), CommandDispatchError> {
+        let plugin_manager = Arc::clone(self.plugin_manager);
+        let mut manager = plugin_manager.lock().map_err(|_| {
+            CommandDispatchError::Message("Plugin manager lock is poisoned.".to_string())
+        })?;
+        manager
+            .execute_command(plugin_name, command_name, invocation, self)
+            .map_err(CommandDispatchError::Message)
+    }
+
     fn plugin_names(&self) -> Vec<String> {
-        Vec::new()
+        self.plugin_manager
+            .lock()
+            .map(|manager| manager.plugin_names())
+            .unwrap_or_default()
     }
 
     fn visible_command_names(&self) -> Vec<String> {
@@ -1427,7 +1505,9 @@ fn parse_item_stack(token: &str, count: u16) -> Result<ItemStack, CommandDispatc
         format!("minecraft:{normalized}")
     };
     let Some(item_id) = crate::item_registry::network_id(&item_name) else {
-        return Err(CommandDispatchError::Message(format!("Unknown item: {token}")));
+        return Err(CommandDispatchError::Message(format!(
+            "Unknown item: {token}"
+        )));
     };
 
     let runtime_id = BLOCKS.get(&item_name);
@@ -2427,6 +2507,66 @@ pub fn build_command_system() -> ServerCommandSystem {
         },
     );
 
+    let mut summon = CommandDefinition::new("summon", "Summon a basic mob entity");
+    summon.usage = "/summon <entity> [x y z]".into();
+    summon.permissions = vec!["server.command.summon".into()];
+    summon.overloads.push(CommandOverload {
+        parameters: vec![param("entity", ParamType::String, false)],
+    });
+    summon.overloads.push(CommandOverload {
+        parameters: vec![
+            param("entity", ParamType::String, false),
+            param("x", ParamType::Position, false),
+            param("y", ParamType::Position, false),
+            param("z", ParamType::Position, false),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        summon,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            let Some(entity_name) = invocation.arg(0) else {
+                return usage("Usage: /summon <entity> [x y z]");
+            };
+
+            let sender = runtime.sender_addr();
+            let sender_pos = sender.and_then(|addr| runtime.player_position(addr));
+            let position = match invocation.args.len() {
+                1 => {
+                    if !runtime.sender_is_player() {
+                        return message(
+                            "Console must specify absolute coordinates. Usage: /summon <entity> <x> <y> <z>",
+                        );
+                    }
+                    let mut pos = sender_pos.ok_or_else(|| {
+                        CommandDispatchError::Message("Sender position is unavailable.".to_string())
+                    })?;
+                    pos[1] += 1.0;
+                    pos
+                }
+                4 => parse_position_triplet_for_source(
+                    runtime,
+                    sender_pos,
+                    invocation.arg(1).unwrap_or(""),
+                    invocation.arg(2).unwrap_or(""),
+                    invocation.arg(3).unwrap_or(""),
+                )?,
+                _ => return usage("Usage: /summon <entity> [x y z]"),
+            };
+
+            let entity_id = runtime
+                .spawn_mob(entity_name, position)
+                .map_err(CommandDispatchError::Message)?;
+            runtime.send_feedback(&format!(
+                "Summoned {entity_name} at {:.1} {:.1} {:.1} (entity_id={entity_id}).",
+                position[0], position[1], position[2]
+            ));
+            Ok(())
+        },
+    );
+
     let mut spawnpoint = CommandDefinition::new("spawnpoint", "Set a player's respawn point");
     spawnpoint.usage = "/spawnpoint [player] [x y z]".into();
     spawnpoint.permissions = vec!["server.command.spawnpoint".into()];
@@ -2920,12 +3060,23 @@ mod tests {
         titles: Vec<TitlePacketAction>,
     }
 
+    #[derive(Clone)]
+    struct TestMob {
+        entity_id: u64,
+        name: String,
+        entity_type: String,
+        position: [f32; 3],
+    }
+
     struct TestRuntime {
         visible_commands: Vec<String>,
         feedback: Vec<String>,
         broadcasts: Vec<String>,
         action_broadcasts: Vec<String>,
         players: HashMap<SocketAddr, TestPlayer>,
+        mobs: HashMap<u64, TestMob>,
+        next_entity_id: u64,
+        removed_entities: Vec<u64>,
         should_stop: bool,
         time: i32,
         difficulty: i32,
@@ -2982,6 +3133,9 @@ mod tests {
                 broadcasts: Vec::new(),
                 action_broadcasts: Vec::new(),
                 players,
+                mobs: HashMap::new(),
+                next_entity_id: 100,
+                removed_entities: Vec::new(),
                 should_stop: false,
                 time: 0,
                 difficulty: 2,
@@ -3082,7 +3236,8 @@ mod tests {
         }
 
         fn selector_entities(&self) -> Vec<SelectorEntity> {
-            self.players
+            let mut entities = self
+                .players
                 .values()
                 .map(|player| SelectorEntity {
                     id: player.entity_id,
@@ -3091,7 +3246,15 @@ mod tests {
                     position: player.position,
                     gamemode: Some(player.gamemode),
                 })
-                .collect()
+                .collect::<Vec<_>>();
+            entities.extend(self.mobs.values().map(|mob| SelectorEntity {
+                id: mob.entity_id,
+                name: Some(mob.name.clone()),
+                entity_type: mob.entity_type.clone(),
+                position: mob.position,
+                gamemode: None,
+            }));
+            entities
         }
 
         fn random_index(&mut self, _upper: usize) -> usize {
@@ -3134,14 +3297,36 @@ mod tests {
             Ok(())
         }
 
+        fn spawn_mob(&mut self, mob_name: &str, position: [f32; 3]) -> Result<u64, String> {
+            let kind =
+                MobKind::parse(mob_name).ok_or_else(|| format!("Unknown mob type: {mob_name}"))?;
+            let entity_id = self.next_entity_id;
+            self.next_entity_id += 1;
+            self.mobs.insert(
+                entity_id,
+                TestMob {
+                    entity_id,
+                    name: kind.display_name().to_string(),
+                    entity_type: kind.actor_type().to_string(),
+                    position,
+                },
+            );
+            Ok(entity_id)
+        }
+
         fn kill_player(&mut self, addr: SocketAddr) {
             let player = self.player_mut(addr);
             player.position = player.spawn_position;
             player.messages.push("You died!".to_string());
         }
 
-        fn remove_entity(&mut self, _entity_id: u64) -> Result<(), String> {
-            Err("Entity could not be removed.".to_string())
+        fn remove_entity(&mut self, entity_id: u64) -> Result<(), String> {
+            if self.mobs.remove(&entity_id).is_some() {
+                self.removed_entities.push(entity_id);
+                Ok(())
+            } else {
+                Err("Entity could not be removed.".to_string())
+            }
         }
 
         fn set_time(&mut self, time: i32) {
@@ -3299,6 +3484,17 @@ mod tests {
             20
         }
 
+        fn execute_plugin_command(
+            &mut self,
+            _plugin_name: &str,
+            _command_name: &str,
+            _invocation: &CommandInvocation,
+        ) -> Result<(), CommandDispatchError> {
+            Err(CommandDispatchError::Message(
+                "Plugin commands are not wired in this test runtime.".to_string(),
+            ))
+        }
+
         fn plugin_names(&self) -> Vec<String> {
             Vec::new()
         }
@@ -3408,5 +3604,37 @@ mod tests {
                 "expected `{expected}` in `{error}` for command `{command}`"
             );
         }
+    }
+
+    #[test]
+    fn kill_removes_summoned_mob_with_short_type_selector() {
+        let system = build_command_system();
+        let mut runtime = TestRuntime::new(&system);
+
+        dispatch_ok(&system, &mut runtime, "summon zombie 0 64 0");
+        assert_eq!(runtime.mobs.len(), 1);
+
+        dispatch_ok(&system, &mut runtime, "kill @e[type=zombie]");
+        assert!(
+            runtime.mobs.is_empty(),
+            "expected summoned mob to be removed"
+        );
+        assert_eq!(runtime.removed_entities.len(), 1);
+    }
+
+    #[test]
+    fn kill_removes_summoned_mob_with_namespaced_type_selector() {
+        let system = build_command_system();
+        let mut runtime = TestRuntime::new(&system);
+
+        dispatch_ok(&system, &mut runtime, "summon zombie 0 64 0");
+        assert_eq!(runtime.mobs.len(), 1);
+
+        dispatch_ok(&system, &mut runtime, "kill @e[type=minecraft:zombie]");
+        assert!(
+            runtime.mobs.is_empty(),
+            "expected summoned mob to be removed"
+        );
+        assert_eq!(runtime.removed_entities.len(), 1);
     }
 }

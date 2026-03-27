@@ -1057,6 +1057,59 @@ impl RemoveEntity {
 
 // ── AddItemActor (S→C, 0x0F) ──
 
+#[derive(Clone, Debug)]
+pub struct AddActorAttribute {
+    pub name: String,
+    pub min: f32,
+    pub current: f32,
+    pub max: f32,
+}
+
+pub struct AddActor {
+    pub entity_unique_id: i64,
+    pub entity_runtime_id: u64,
+    pub actor_type: String,
+    pub position: [f32; 3],
+    pub velocity: [f32; 3],
+    pub pitch: f32,
+    pub yaw: f32,
+    pub head_yaw: f32,
+    pub body_yaw: f32,
+    pub attributes: Vec<AddActorAttribute>,
+    pub metadata: Vec<(u32, u32, MetadataValue)>,
+}
+
+impl AddActor {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(192);
+        w.write_var_i64(self.entity_unique_id);
+        w.write_var_u64(self.entity_runtime_id);
+        w.write_string(&self.actor_type);
+        w.write_f32_le(self.position[0]);
+        w.write_f32_le(self.position[1]);
+        w.write_f32_le(self.position[2]);
+        w.write_f32_le(self.velocity[0]);
+        w.write_f32_le(self.velocity[1]);
+        w.write_f32_le(self.velocity[2]);
+        w.write_f32_le(self.pitch);
+        w.write_f32_le(self.yaw);
+        w.write_f32_le(self.head_yaw);
+        w.write_f32_le(self.body_yaw);
+        w.write_var_u32(self.attributes.len() as u32);
+        for attr in &self.attributes {
+            w.write_string(&attr.name);
+            w.write_f32_le(attr.min);
+            w.write_f32_le(attr.current);
+            w.write_f32_le(attr.max);
+        }
+        write_actor_metadata(&mut w, &self.metadata);
+        w.write_var_u32(0); // synced int properties
+        w.write_var_u32(0); // synced float properties
+        w.write_var_u32(0); // actor links
+        w.into_bytes()
+    }
+}
+
 pub struct AddItemActor {
     pub entity_unique_id: i64,
     pub entity_runtime_id: u64,
@@ -1097,6 +1150,49 @@ impl TakeItemActor {
         let mut w = ProtoWriter::with_capacity(16);
         w.write_var_u64(self.item_actor_runtime_id);
         w.write_var_u64(self.taker_actor_runtime_id);
+        w.into_bytes()
+    }
+}
+
+pub struct MoveActorAbsolute {
+    pub runtime_entity_id: u64,
+    pub position: [f32; 3],
+    pub pitch: f32,
+    pub yaw: f32,
+    pub head_yaw: f32,
+    pub flags: u8,
+}
+
+impl MoveActorAbsolute {
+    pub const FLAG_GROUND: u8 = 1 << 0;
+    pub const FLAG_TELEPORT: u8 = 1 << 1;
+
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(32);
+        w.write_var_u64(self.runtime_entity_id);
+        w.write_u8(self.flags);
+        w.write_f32_le(self.position[0]);
+        w.write_f32_le(self.position[1]);
+        w.write_f32_le(self.position[2]);
+        w.write_u8(angle_to_byte(self.pitch));
+        w.write_u8(angle_to_byte(self.yaw));
+        w.write_u8(angle_to_byte(self.head_yaw));
+        w.into_bytes()
+    }
+}
+
+pub struct SetActorMotion {
+    pub runtime_entity_id: u64,
+    pub motion: [f32; 3],
+}
+
+impl SetActorMotion {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(24);
+        w.write_var_u64(self.runtime_entity_id);
+        w.write_f32_le(self.motion[0]);
+        w.write_f32_le(self.motion[1]);
+        w.write_f32_le(self.motion[2]);
         w.into_bytes()
     }
 }
@@ -1411,6 +1507,7 @@ pub struct SetActorData {
     pub tick: u64,
 }
 
+#[derive(Clone, Debug)]
 pub enum MetadataValue {
     Byte(u8),
     Short(i16),
@@ -1422,7 +1519,9 @@ pub enum MetadataValue {
 
 fn write_actor_metadata(w: &mut ProtoWriter, metadata: &[(u32, u32, MetadataValue)]) {
     w.write_var_u32(metadata.len() as u32);
-    for (key, data_type, value) in metadata {
+    let mut ordered = metadata.iter().collect::<Vec<_>>();
+    ordered.sort_by_key(|(key, _, _)| *key);
+    for (key, data_type, value) in ordered {
         w.write_var_u32(*key);
         w.write_var_u32(*data_type);
         match value {
@@ -1434,6 +1533,11 @@ fn write_actor_metadata(w: &mut ProtoWriter, metadata: &[(u32, u32, MetadataValu
             MetadataValue::Long(v) => w.write_var_i64(*v),
         }
     }
+}
+
+fn angle_to_byte(angle: f32) -> u8 {
+    let wrapped = angle.rem_euclid(360.0);
+    ((wrapped * 256.0 / 360.0).round() as i32 & 0xFF) as u8
 }
 
 /// Entity metadata flag bits (from PMMP EntityMetadataFlags.php)

@@ -312,7 +312,9 @@ fn entity_matches(selector: &Selector, entity: &SelectorEntity, origin: [f32; 3]
     }
 
     if let Some(entity_type) = &selector.entity_type {
-        if !entity.entity_type.eq_ignore_ascii_case(entity_type) {
+        let selector_type = normalize_entity_type(entity_type);
+        let candidate_type = normalize_entity_type(&entity.entity_type);
+        if !candidate_type.eq_ignore_ascii_case(selector_type) {
             return false;
         }
     }
@@ -357,6 +359,12 @@ fn entity_matches(selector: &Selector, entity: &SelectorEntity, origin: [f32; 3]
     }
 
     true
+}
+
+fn normalize_entity_type(entity_type: &str) -> &str {
+    entity_type
+        .strip_prefix("minecraft:")
+        .unwrap_or(entity_type)
 }
 
 fn distance_sq(position: [f32; 3], origin: [f32; 3]) -> f32 {
