@@ -6,6 +6,62 @@ Avancer **phase par phase**, chaque phase est **testable et fonctionnelle** avan
 
 ---
 
+## 🚨 PRIORITÉ ABSOLUE — Phase INV : Port intégral InventoryManager PMMP
+
+**Bloque tout le reste depuis des semaines. À traiter dans une session dédiée qui ne s'arrête pas tant que les 10 tests E2E ne passent pas.**
+
+**Documents de référence obligatoires :**
+- [`INVENTORY-ITEMS-SYSTEM.md`](INVENTORY-ITEMS-SYSTEM.md) — état exact + plan détaillé en 6 phases (A→F)
+- [`09-INVENTORY-SYSTEM.md`](09-INVENTORY-SYSTEM.md) — architecture cible
+
+**Bugs confirmés en production (testé client Bedrock 1.26.10) :**
+- [ ] **Crash client à l'ouverture inventaire** (touche E)
+  - Format ContainerOpen byte-correct mais le client crash quand même
+  - Cause racine : pas d'`InventoryManager`, pas de stack ID tracking, pas de two-phase sync
+- [ ] **Items au sol affichés en ombre + crash après plusieurs spawn**
+  - AddItemActor envoyé, item visible comme silhouette transparente
+  - Crash client après plusieurs items
+- [ ] **Inventaire pas affiché correctement** (hotbar vide visuellement même avec items)
+- [ ] **Drop d'item depuis inventaire ignoré** (touche Q ou drag hors UI)
+- [ ] **ItemStackRequest pas géré proprement** (drag/drop dans l'UI inventaire)
+
+**Plan d'attaque (résumé — détail dans INVENTORY-ITEMS-SYSTEM.md §4) :**
+
+### Phase A — Infrastructure
+- [ ] Créer `crates/mc-rs-server/src/inventory_manager.rs` (port `InventoryManager.php`)
+- [ ] Étendre `PlayerInventory` : cursor, crafting_grid_2x2, crafting_result, listeners, dirty tracking
+- [ ] Refactor `ItemStackWrapper::encode` pour accepter un stack_id paramètre (retirer hardcode `1`)
+
+### Phase B — Port InventoryManager
+- [ ] `register_inventories()` (associate windowId 0/119/120/124 + ComplexWindowMap UI)
+- [ ] `sync_all()`, `sync_contents()`, `sync_slot()` avec **two-phase sync**
+- [ ] `send_inventory_content_packets()` clear puis real (PMMP InventoryManager.php:542)
+- [ ] `send_inventory_slot_packets()` clear puis real (PMMP InventoryManager.php:511)
+- [ ] `on_client_open_main_inventory()` avec `on_current_window_remove()` + `open_window_deferred()`
+- [ ] `on_client_remove_window()` (handshake close ack)
+- [ ] `handle_item_stack_request()` complet (Take/Place/Swap/Drop/Destroy/CraftRecipe/...)
+- [ ] `ItemStackResponseBuilder` proprement construit + envoi `ItemStackResponsePacket`
+
+### Phase C — Brancher dans Connection
+- [ ] Remplacer tous les handlers dans `connection/inventory.rs` par des appels au manager
+- [ ] Au spawn : `register_inventories()` puis `sync_all()`
+
+### Phase D — Items au sol (AddItemActor)
+- [ ] Vérifier `entity::item_metadata()` complet (tous les flags PMMP §3.9 INVENTORY-ITEMS-SYSTEM.md)
+- [ ] Vérifier `coreItemStackToNet()` correct (block_runtime_id pour items-blocs)
+- [ ] Tests : casser bloc → item visible (pas une ombre), tombe, ramassable
+
+### Phase E — Drop depuis inventaire
+- [ ] `ItemStackRequest::Drop` → spawn item entity à eye + 1.3 avec motion direction*0.4
+- [ ] Legacy `InventoryTransaction::Normal` SOURCE_WORLD → spawn équivalent
+
+### Phase F — Validation E2E
+Les 10 tests doivent TOUS passer (voir INVENTORY-ITEMS-SYSTEM.md §4 Phase F).
+
+**Règle de la session inventaire : NE PAS S'ARRÊTER tant que les 10 tests E2E ne passent pas.**
+
+---
+
 ## Phase 1 : Foundation (réseau + login) — ✅ TERMINÉE
 
 **Objectif :** Un client peut se connecter, voir le serveur dans la liste, et arriver au monde.

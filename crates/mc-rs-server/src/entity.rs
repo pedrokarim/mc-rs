@@ -105,6 +105,7 @@ impl EntityBase {
         SetActorMotion {
             runtime_entity_id: self.entity_runtime_id,
             motion: self.velocity,
+            tick: 0,
         }
         .encode()
     }
@@ -146,7 +147,11 @@ pub fn living_metadata(
 }
 
 pub fn item_metadata() -> Vec<(u32, u32, MetadataValue)> {
-    let flags = entity_flags::HAS_GRAVITY | entity_flags::HAS_COLLISION;
+    // Matches PMMP Entity::syncNetworkData() for an ItemEntity:
+    // HAS_COLLISION + AFFECTED_BY_GRAVITY, bounding box 0.25x0.25, scale 1.0.
+    // The previous static workaround was a consequence of SetActorMotionPacket
+    // missing the trailing `tick` VarU64 — fixed separately in mc-rs-proto.
+    let flags = entity_flags::HAS_COLLISION | entity_flags::HAS_GRAVITY;
     vec![
         (0, 7, MetadataValue::Long(flags)),
         (3, 0, MetadataValue::Byte(0)),

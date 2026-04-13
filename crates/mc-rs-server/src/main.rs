@@ -46,7 +46,7 @@ use crate::commands::{
 };
 use crate::config::ServerConfig;
 use crate::connection::Connection;
-use crate::item_entities::ItemEntityManager;
+use crate::item_entities::{hex_preview, ItemEntityManager, PendingItemEntitySpawn};
 use crate::mob_entities::MobEntityManager;
 use crate::player_registry::PlayerRegistry;
 use crate::plugin::{PluginLoadOrder, PluginManager};
@@ -511,6 +511,44 @@ async fn main() {
     }
 }
 
+fn spawn_and_broadcast_item_entity(
+    log_context: &str,
+    connections: &mut HashMap<SocketAddr, Connection>,
+    raknet: &mut RakNetServer,
+    item_entities: &mut ItemEntityManager,
+    spawn: PendingItemEntitySpawn,
+) {
+    let entity = item_entities.spawn(spawn);
+    let add_item_bytes = entity.add_actor_packet();
+    info!(
+        "[{}] AddItemActor entity prepared: {}",
+        log_context,
+        entity.debug_summary()
+    );
+    info!(
+        "[{}] AddItemActor body: len={} hex={}",
+        log_context,
+        add_item_bytes.len(),
+        hex_preview(&add_item_bytes, 96)
+    );
+
+    for (other_addr, other_conn) in connections.iter_mut() {
+        if other_conn.is_in_game() {
+            let pkt =
+                other_conn.encode_compressed_packet(packet_id::ADD_ITEM_ACTOR, &add_item_bytes);
+            info!(
+                "[{}] Sending ADD_ITEM_ACTOR to {}: compressed_len={} body_len={}",
+                log_context,
+                other_addr,
+                pkt.len(),
+                add_item_bytes.len()
+            );
+            let prepared = other_conn.prepare_for_send(pkt);
+            raknet.send_to_session(other_addr, prepared, Reliability::ReliableOrdered, true);
+        }
+    }
+}
+
 fn process_peer_events(
     peers: &mut HashMap<SocketAddr, mc_rs_raknet::RakNetPeer>,
     connections: &mut HashMap<SocketAddr, Connection>,
@@ -792,24 +830,15 @@ fn process_peer_events(
                         );
                     }
 
+                    let log_context = addr.to_string();
                     for spawn in item_spawns {
-                        let entity = item_entities.spawn(spawn);
-                        let add_item_bytes = entity.add_actor_packet();
-                        for (other_addr, other_conn) in connections.iter_mut() {
-                            if other_conn.is_in_game() {
-                                let pkt = other_conn.encode_compressed_packet(
-                                    packet_id::ADD_ITEM_ACTOR,
-                                    &add_item_bytes,
-                                );
-                                let prepared = other_conn.prepare_for_send(pkt);
-                                raknet.send_to_session(
-                                    other_addr,
-                                    prepared,
-                                    Reliability::ReliableOrdered,
-                                    true,
-                                );
-                            }
-                        }
+                        spawn_and_broadcast_item_entity(
+                            &log_context,
+                            connections,
+                            raknet,
+                            item_entities,
+                            spawn,
+                        );
                     }
 
                     for attack in pending_entity_attacks {
@@ -854,6 +883,19 @@ fn process_peer_events(
                                             true,
                                         );
                                     }
+                                }
+                            }
+
+                            if let Some(death_position) = result.death_position {
+                                let log_context = format!("{addr}:mob-death");
+                                for drop in result.drops {
+                                    spawn_and_broadcast_item_entity(
+                                        &log_context,
+                                        connections,
+                                        raknet,
+                                        item_entities,
+                                        PendingItemEntitySpawn::with_scatter(drop, death_position),
+                                    );
                                 }
                             }
                         }

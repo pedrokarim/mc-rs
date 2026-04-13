@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
-use mc_rs_proto::packets::player::{PlayerAttribute, UpdateAttributes};
+use mc_rs_proto::packets::player::{ItemStack, PlayerAttribute, UpdateAttributes};
 
 use crate::entity::{health_attributes, living_metadata, EntityBase};
+use crate::item_registry;
 use crate::world::block_registry::BLOCKS;
 use crate::world::chunk_cache::ChunkCache;
 
@@ -90,6 +91,29 @@ impl MobKind {
             Self::Chicken => 4.0,
         }
     }
+
+    pub fn default_loot(self) -> Vec<ItemStack> {
+        fn item(name: &str, count: u16) -> ItemStack {
+            ItemStack::new(item_registry::required_item_id(name), count, 0)
+        }
+
+        match self {
+            Self::Zombie => vec![item("minecraft:rotten_flesh", 1)],
+            Self::Skeleton => vec![item("minecraft:bone", 1), item("minecraft:arrow", 1)],
+            Self::Creeper => vec![item("minecraft:gunpowder", 1)],
+            Self::Cow => vec![item("minecraft:beef", 1), item("minecraft:leather", 1)],
+            Self::Pig => vec![item("minecraft:porkchop", 1)],
+            Self::Sheep => vec![
+                ItemStack::new(
+                    item_registry::required_item_id("minecraft:white_wool"),
+                    1,
+                    0,
+                ),
+                item("minecraft:mutton", 1),
+            ],
+            Self::Chicken => vec![item("minecraft:chicken", 1), item("minecraft:feather", 1)],
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -129,6 +153,8 @@ pub struct MovementUpdate {
 pub struct DamageResult {
     pub update_attributes_packet: Option<Vec<u8>>,
     pub remove_packet: Option<Vec<u8>>,
+    pub death_position: Option<[f32; 3]>,
+    pub drops: Vec<ItemStack>,
 }
 
 pub struct TickResult {
@@ -189,11 +215,15 @@ impl MobEntityManager {
         }
 
         let runtime_entity_id = entity.base.entity_runtime_id;
-        let remove_packet = if new_health <= 0.0 {
-            let entity = self.entities.remove(&entity_runtime_id)?;
-            Some(entity.remove_packet())
+        let (remove_packet, death_position, drops) = if new_health <= 0.0 {
+            let entity = self.entities.remove(&runtime_entity_id)?;
+            (
+                Some(entity.remove_packet()),
+                Some(entity.base.position),
+                entity.kind.default_loot(),
+            )
         } else {
-            None
+            (None, None, Vec::new())
         };
 
         let update_attributes_packet = if remove_packet.is_none() {
@@ -218,6 +248,8 @@ impl MobEntityManager {
         Some(DamageResult {
             update_attributes_packet,
             remove_packet,
+            death_position,
+            drops,
         })
     }
 
@@ -271,7 +303,7 @@ impl MobEntityManager {
     }
 }
 
-fn is_supporting_block(runtime_id: u32) -> bool {
+pub(crate) fn is_supporting_block(runtime_id: u32) -> bool {
     runtime_id != BLOCKS.air
         && runtime_id != BLOCKS.water
         && runtime_id != BLOCKS.lava
@@ -296,6 +328,7 @@ fn is_supporting_block(runtime_id: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{is_supporting_block, MobEntityManager, MobKind};
+    use crate::item_registry;
     use crate::world::block_registry::BLOCKS;
     use crate::world::chunk_cache::ChunkCache;
 
@@ -365,5 +398,29 @@ mod tests {
         assert!(mobs
             .all()
             .all(|entity| entity.base.entity_runtime_id != zombie.base.entity_runtime_id));
+    }
+
+    #[test]
+    fn killing_a_mob_returns_position_and_loot() {
+        let mut mobs = MobEntityManager::new();
+        let cow = mobs.spawn(MobKind::Cow, [4.5, 70.0, -2.5]);
+
+        let mut last_result = None;
+        for _ in 0..3 {
+            last_result = mobs.apply_attack(cow.base.entity_runtime_id, 4.0);
+        }
+
+        let result = last_result.expect("expected kill result");
+        assert!(result.remove_packet.is_some());
+        assert_eq!(result.death_position, Some([4.5, 70.0, -2.5]));
+        assert_eq!(result.drops.len(), 2);
+        assert!(result
+            .drops
+            .iter()
+            .any(|item| item.id == item_registry::required_item_id("minecraft:beef")));
+        assert!(result
+            .drops
+            .iter()
+            .any(|item| item.id == item_registry::required_item_id("minecraft:leather")));
     }
 }

@@ -71,7 +71,7 @@ impl ItemRegistryData {
             );
             payload.write_bool(entry.component_based);
             payload.write_var_i32(entry.version);
-            payload.write_raw(&entry.component_nbt);
+            payload.write_byte_array(&entry.component_nbt);
         }
 
         let by_name = entries
@@ -162,6 +162,7 @@ pub fn migrate_legacy_item_id(id: i32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mc_rs_proto::io::ProtoReader;
 
     #[test]
     fn required_item_registry_contains_core_entries() {
@@ -175,5 +176,28 @@ mod tests {
     fn legacy_item_ids_normalize_to_bedrock_network_ids() {
         assert_eq!(migrate_legacy_item_id(345), 423);
         assert_eq!(migrate_legacy_item_id(3), 3);
+    }
+
+    #[test]
+    fn item_registry_payload_roundtrips_all_entries() {
+        let mut reader = ProtoReader::new(payload());
+        let count = reader.read_var_u32().unwrap() as usize;
+        assert_eq!(count, ITEM_REGISTRY.entries.len());
+
+        for expected in &ITEM_REGISTRY.entries {
+            let string_id = reader.read_string().unwrap();
+            let runtime_id = reader.read_i16_le().unwrap() as i32;
+            let component_based = reader.read_bool().unwrap();
+            let version = reader.read_var_i32().unwrap();
+            let component_nbt = reader.read_byte_array().unwrap();
+
+            assert_eq!(string_id, expected.string_id);
+            assert_eq!(runtime_id, expected.runtime_id);
+            assert_eq!(component_based, expected.component_based);
+            assert_eq!(version, expected.version);
+            assert_eq!(component_nbt, expected.component_nbt);
+        }
+
+        assert_eq!(reader.remaining(), 0);
     }
 }

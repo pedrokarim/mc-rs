@@ -1184,15 +1184,20 @@ impl MoveActorAbsolute {
 pub struct SetActorMotion {
     pub runtime_entity_id: u64,
     pub motion: [f32; 3],
+    /// Server tick at which the packet was sent. Used by the client in relation
+    /// to CorrectPlayerMovePrediction. Must be present since protocol 419+ —
+    /// omitting it corrupts the batch and crashes the client.
+    pub tick: u64,
 }
 
 impl SetActorMotion {
     pub fn encode(&self) -> Vec<u8> {
-        let mut w = ProtoWriter::with_capacity(24);
+        let mut w = ProtoWriter::with_capacity(32);
         w.write_var_u64(self.runtime_entity_id);
         w.write_f32_le(self.motion[0]);
         w.write_f32_le(self.motion[1]);
         w.write_f32_le(self.motion[2]);
+        w.write_var_u64(self.tick);
         w.into_bytes()
     }
 }
@@ -1711,11 +1716,61 @@ impl ItemStackWrapper {
             w.write_var_i32(stack_id);
         }
         w.write_var_i32(self.item.block_runtime_id);
-        // Extra data as length-prefixed string
-        w.write_var_u32(self.item.extra_data.len() as u32);
-        if !self.item.extra_data.is_empty() {
-            w.write_raw(&self.item.extra_data);
-        }
+        let extra_data = if self.item.extra_data.is_empty() {
+            minimal_item_extra_data(self.item.id)
+        } else {
+            self.item.extra_data.clone()
+        };
+        w.write_byte_array(&extra_data);
+    }
+}
+
+fn minimal_item_extra_data(_item_id: i32) -> Vec<u8> {
+    // Matches PMMP ItemStackExtraData::write() / gophertunnel 944 ItemInstance
+    // for an item with no NBT and no can-place-on / can-destroy lists.
+    // Bedrock expects fixed-width LE counts, NOT VarInts.
+    //
+    // Note: shields (protocol 944 = `minecraft:shield`, network id 387) carry
+    // an additional Int64 "blocking tick" trailer. mc-rs does not currently
+    // synthesize shield items, and the previous hardcoded `item_id == 355`
+    // check was incorrect — id 355 is actually `minecraft:golden_shovel` on
+    // protocol 944, so adding the trailer here corrupted that specific item.
+    // When shield support lands, add a real registry-driven check.
+    let mut extra = ProtoWriter::with_capacity(10);
+    extra.write_i16_le(0); // NBT length (0 = no NBT compound tag)
+    extra.write_i32_le(0); // canPlaceOn count
+    extra.write_i32_le(0); // canDestroy count
+    extra.into_bytes()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decode_item_stack_wrapper, minimal_item_extra_data, ItemStack, ItemStackWrapper};
+    use crate::io::{ProtoReader, ProtoWriter};
+
+    #[test]
+    fn item_stack_wrapper_writes_minimal_valid_extra_data_for_basic_items() {
+        let stack = ItemStackWrapper::legacy(ItemStack::new(3, 1, 9853));
+        let mut writer = ProtoWriter::new();
+        stack.encode(&mut writer);
+
+        let bytes = writer.into_bytes();
+        let mut reader = ProtoReader::new(&bytes);
+        let decoded = decode_item_stack_wrapper(&mut reader).expect("wrapper should decode");
+
+        assert_eq!(decoded.item.id, 3);
+        assert_eq!(decoded.item.count, 1);
+        assert_eq!(decoded.item.block_runtime_id, 9853);
+        assert_eq!(decoded.item.extra_data, vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn minimal_item_extra_data_uses_fixed_width_counts() {
+        let extra = minimal_item_extra_data(3);
+        assert_eq!(extra.len(), 10);
+        assert_eq!(extra[0..2], [0, 0]); // no NBT
+        assert_eq!(extra[2..6], [0, 0, 0, 0]); // canPlace count
+        assert_eq!(extra[6..10], [0, 0, 0, 0]); // canBreak count
     }
 }
 

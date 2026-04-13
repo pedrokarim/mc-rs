@@ -24,7 +24,7 @@ use tracing::info;
 
 use crate::connection::Connection;
 use crate::inventory;
-use crate::item_entities::ItemEntityManager;
+use crate::item_entities::{ItemEntityManager, PendingItemEntitySpawn};
 use crate::mob_entities::{MobEntityManager, MobKind};
 use crate::player_data;
 use crate::player_registry::PlayerRegistry;
@@ -496,6 +496,11 @@ impl ExecutionContext<'_> {
         for addr in addrs {
             self.send_compressed(addr, packet_id, payload);
         }
+    }
+
+    fn spawn_world_item_entity(&mut self, spawn: PendingItemEntitySpawn) {
+        let entity = self.item_entities.spawn(spawn);
+        self.broadcast_compressed(packet_id::ADD_ITEM_ACTOR, &entity.add_actor_packet());
     }
 
     fn update_connection_permissions(&mut self, name: &str) {
@@ -1054,8 +1059,13 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
             return Ok(());
         }
         if let Some(entity) = self.mob_entities.remove(entity_id) {
+            let position = entity.base.position;
+            let drops = entity.kind.default_loot();
             let remove_packet = entity.remove_packet();
             self.broadcast_compressed(packet_id::REMOVE_ACTOR, &remove_packet);
+            for drop in drops {
+                self.spawn_world_item_entity(PendingItemEntitySpawn::stationary(drop, position));
+            }
             return Ok(());
         }
         Err("Entity could not be removed.".to_string())
