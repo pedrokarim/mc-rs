@@ -903,6 +903,18 @@ pub mod wolf_armor;
 #[allow(dead_code)]
 pub mod block_comparison;
 #[allow(dead_code)]
+pub mod custom_nameplate;
+#[allow(dead_code)]
+pub mod packet_compression;
+#[allow(dead_code)]
+pub mod chunk_request;
+#[allow(dead_code)]
+pub mod animation_defs;
+#[allow(dead_code)]
+pub mod velocity_broadcast;
+#[allow(dead_code)]
+pub mod chat_cooldown;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
