@@ -179,6 +179,12 @@ pub mod equipment_slots;
 #[allow(dead_code)]
 pub mod sound_category;
 #[allow(dead_code)]
+pub mod cooldowns;
+#[allow(dead_code)]
+pub mod weapon_stats;
+#[allow(dead_code)]
+pub mod potion_container;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
