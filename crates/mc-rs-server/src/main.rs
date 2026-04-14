@@ -93,6 +93,10 @@ pub mod spawn_eggs;
 #[allow(dead_code)]
 pub mod dyes;
 #[allow(dead_code)]
+pub mod liquids;
+#[allow(dead_code)]
+pub mod biomes_registry;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
