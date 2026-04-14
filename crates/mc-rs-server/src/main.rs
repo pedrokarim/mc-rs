@@ -877,6 +877,18 @@ pub mod bat;
 #[allow(dead_code)]
 pub mod magma_cube;
 #[allow(dead_code)]
+pub mod endermite;
+#[allow(dead_code)]
+pub mod snow_golem;
+#[allow(dead_code)]
+pub mod piglin;
+#[allow(dead_code)]
+pub mod villager;
+#[allow(dead_code)]
+pub mod breeze_rod;
+#[allow(dead_code)]
+pub mod heavy_core;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
