@@ -841,6 +841,16 @@ pub mod random_tick;
 #[allow(dead_code)]
 pub mod spawn_egg_list;
 #[allow(dead_code)]
+pub mod item_stack_merge;
+#[allow(dead_code)]
+pub mod stack_sizes;
+#[allow(dead_code)]
+pub mod entity_persistence;
+#[allow(dead_code)]
+pub mod motion;
+#[allow(dead_code)]
+pub mod chunk_serializer_formats;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
