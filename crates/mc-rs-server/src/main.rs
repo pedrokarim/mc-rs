@@ -185,6 +185,10 @@ pub mod weapon_stats;
 #[allow(dead_code)]
 pub mod potion_container;
 #[allow(dead_code)]
+pub mod achievements_map;
+#[allow(dead_code)]
+pub mod loot_context;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
