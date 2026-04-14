@@ -215,6 +215,10 @@ pub mod smithing_template;
 #[allow(dead_code)]
 pub mod arrow_pickup;
 #[allow(dead_code)]
+pub mod respawn_anchor;
+#[allow(dead_code)]
+pub mod cauldron;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
