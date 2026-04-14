@@ -201,6 +201,10 @@ pub mod boss;
 #[allow(dead_code)]
 pub mod plant_growth;
 #[allow(dead_code)]
+pub mod movement_calc;
+#[allow(dead_code)]
+pub mod end_features;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
