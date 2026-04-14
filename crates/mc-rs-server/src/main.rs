@@ -79,6 +79,14 @@ pub mod banner;
 #[allow(dead_code)]
 pub mod weather;
 #[allow(dead_code)]
+pub mod brewing;
+#[allow(dead_code)]
+pub mod firework;
+#[allow(dead_code)]
+pub mod composter;
+#[allow(dead_code)]
+pub mod beacon;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
