@@ -225,6 +225,12 @@ pub mod patrol;
 #[allow(dead_code)]
 pub mod trading_generator;
 #[allow(dead_code)]
+pub mod mining_speed;
+#[allow(dead_code)]
+pub mod climb;
+#[allow(dead_code)]
+pub mod drop_reasons;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
