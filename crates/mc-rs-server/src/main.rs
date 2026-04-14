@@ -989,6 +989,18 @@ pub mod block_light_update;
 #[allow(dead_code)]
 pub mod sky_light_update;
 #[allow(dead_code)]
+pub mod chunk_ticket;
+#[allow(dead_code)]
+pub mod world_border_damage;
+#[allow(dead_code)]
+pub mod spawn_chunks;
+#[allow(dead_code)]
+pub mod level_db_keys;
+#[allow(dead_code)]
+pub mod compass;
+#[allow(dead_code)]
+pub mod spyglass;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
