@@ -23,6 +23,14 @@ pub mod visuals;
 #[allow(dead_code)]
 pub mod scheduler;
 #[allow(dead_code)]
+pub mod survival;
+#[allow(dead_code)]
+pub mod effects;
+#[allow(dead_code)]
+pub mod armor;
+#[allow(dead_code)]
+pub mod enchantments;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
