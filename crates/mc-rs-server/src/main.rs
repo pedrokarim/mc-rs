@@ -1001,6 +1001,16 @@ pub mod compass;
 #[allow(dead_code)]
 pub mod spyglass;
 #[allow(dead_code)]
+pub mod carrot_on_stick;
+#[allow(dead_code)]
+pub mod saddles;
+#[allow(dead_code)]
+pub mod trial_loot;
+#[allow(dead_code)]
+pub mod enchanted_books;
+#[allow(dead_code)]
+pub mod dye_recipes;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
