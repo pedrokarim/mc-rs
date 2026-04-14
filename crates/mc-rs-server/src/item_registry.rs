@@ -121,6 +121,10 @@ pub fn payload() -> &'static [u8] {
     &ITEM_REGISTRY.payload
 }
 
+pub fn item_name_by_id(id: i32) -> Option<&'static str> {
+    ITEM_REGISTRY.by_runtime_id.get(&id).map(String::as_str)
+}
+
 pub fn entry_count() -> usize {
     ITEM_REGISTRY.entries.len()
 }
