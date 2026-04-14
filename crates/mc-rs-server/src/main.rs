@@ -833,6 +833,14 @@ pub mod campfire_recipes;
 #[allow(dead_code)]
 pub mod crafting_recipes;
 #[allow(dead_code)]
+pub mod potions_brewing;
+#[allow(dead_code)]
+pub mod golem_crafting;
+#[allow(dead_code)]
+pub mod random_tick;
+#[allow(dead_code)]
+pub mod spawn_egg_list;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
