@@ -705,6 +705,22 @@ pub mod async_task_pool;
 #[allow(dead_code)]
 pub mod binary_stream;
 #[allow(dead_code)]
+pub mod inventory_drag;
+#[allow(dead_code)]
+pub mod dropping_items;
+#[allow(dead_code)]
+pub mod container_types;
+#[allow(dead_code)]
+pub mod barrel;
+#[allow(dead_code)]
+pub mod splash_damage;
+#[allow(dead_code)]
+pub mod suffocation;
+#[allow(dead_code)]
+pub mod water_physics;
+#[allow(dead_code)]
+pub mod freezing;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
