@@ -71,6 +71,14 @@ pub mod explosion;
 #[allow(dead_code)]
 pub mod transfer;
 #[allow(dead_code)]
+pub mod raid;
+#[allow(dead_code)]
+pub mod maps;
+#[allow(dead_code)]
+pub mod banner;
+#[allow(dead_code)]
+pub mod weather;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
