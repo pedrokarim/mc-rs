@@ -31,6 +31,10 @@ pub mod armor;
 #[allow(dead_code)]
 pub mod enchantments;
 #[allow(dead_code)]
+pub mod block_behaviors;
+#[allow(dead_code)]
+pub mod block_entities;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
