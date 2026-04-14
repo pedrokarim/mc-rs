@@ -65,6 +65,12 @@ pub mod sound_events;
 #[allow(dead_code)]
 pub mod structures;
 #[allow(dead_code)]
+pub mod particles_registry;
+#[allow(dead_code)]
+pub mod explosion;
+#[allow(dead_code)]
+pub mod transfer;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
