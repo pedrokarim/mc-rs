@@ -131,6 +131,12 @@ pub mod entity_identifiers;
 #[allow(dead_code)]
 pub mod biome_spawning;
 #[allow(dead_code)]
+pub mod block_states;
+#[allow(dead_code)]
+pub mod item_tags;
+#[allow(dead_code)]
+pub mod item_properties;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
