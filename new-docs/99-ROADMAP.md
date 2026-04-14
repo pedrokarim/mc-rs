@@ -60,6 +60,26 @@ Les 10 tests doivent TOUS passer (voir INVENTORY-ITEMS-SYSTEM.md §4 Phase F).
 
 **Règle de la session inventaire : NE PAS S'ARRÊTER tant que les 10 tests E2E ne passent pas.**
 
+### Avancées Phase INV (2026-04-14, audit code vs PMMP)
+- [x] `send_inventory_content_packets` : two-phase (air clear puis réel) — commentaire précédent prétendait que dragonfly single-phase marchait sur 944, mais ça crash le client 1.26.10
+- [x] `send_inventory_slot_packets` : two-phase si `stack_id != 0` (PMMP hack 1.20.12+)
+- [x] `full_container_name` : passe `last_inventory_network_id` (PMMP) au lieu de `0` hardcodé
+- [x] `on_client_open_main_inventory` : format PMMP strict
+  - windowId = dynamique via `get_new_window_id()` (plus de `0` hardcodé)
+  - actor_unique_id = `player.entity_runtime_id` (plus de `-1`)
+  - blockPosition = `(0, 0, 0)` (PMMP `entityInv`)
+- [x] `openWindowDeferred` : implémenté via `pending_open_main_inventory` — différé si close pending, exécuté dans `on_client_remove_window` au moment du ACK
+- [x] `sync_all` : itère toutes les keys (Main, Offhand, Armor, Cursor, Craft2x2, CraftResult) en appelant `sync_contents`. Complex → `InventorySlot` individuels ; non-complex → `InventoryContent` two-phase
+- [x] `CraftResult` enregistré comme complex dans `new()` (manquait)
+- [x] 3 tests unitaires PMMP contract (windowId dynamique, two-phase count, deferred open)
+
+**À tester avec client Bedrock 1.26.10** : crash à l'ouverture (touche E) devrait être résolu maintenant que `ContainerOpen` et les sync sont PMMP-strict.
+
+**Reste Phase INV** :
+- [ ] Phase D : `entity::item_metadata()` complet (vérifier flags vs §3.9)
+- [ ] Phase E : Drop via `ItemStackRequest::Drop` (partiellement fait dans `process_item_stack_request`)
+- [ ] Phase F : Tests E2E manuels avec client (nécessite session de playtest)
+
 ---
 
 ## Phase 1 : Foundation (réseau + login) — ✅ TERMINÉE
