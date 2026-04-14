@@ -189,6 +189,10 @@ pub mod achievements_map;
 #[allow(dead_code)]
 pub mod loot_context;
 #[allow(dead_code)]
+pub mod chunk_ticking;
+#[allow(dead_code)]
+pub mod redstone_comparator;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
