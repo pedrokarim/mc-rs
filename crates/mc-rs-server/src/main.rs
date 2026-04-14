@@ -503,6 +503,50 @@ pub mod candle;
 #[allow(dead_code)]
 pub mod lodestone;
 #[allow(dead_code)]
+pub mod glow_squid;
+#[allow(dead_code)]
+pub mod polar_bear;
+#[allow(dead_code)]
+pub mod tag_system;
+#[allow(dead_code)]
+pub mod team;
+#[allow(dead_code)]
+pub mod pathfinder;
+#[allow(dead_code)]
+pub mod permissions;
+#[allow(dead_code)]
+pub mod scheduler_api;
+#[allow(dead_code)]
+pub mod recipe_unlock;
+#[allow(dead_code)]
+pub mod banner_pattern;
+#[allow(dead_code)]
+pub mod loom;
+#[allow(dead_code)]
+pub mod cartography;
+#[allow(dead_code)]
+pub mod fletching;
+#[allow(dead_code)]
+pub mod chatchannels;
+#[allow(dead_code)]
+pub mod waterlogging;
+#[allow(dead_code)]
+pub mod flower_pot;
+#[allow(dead_code)]
+pub mod target_block;
+#[allow(dead_code)]
+pub mod daylight_sensor;
+#[allow(dead_code)]
+pub mod observer;
+#[allow(dead_code)]
+pub mod tripwire;
+#[allow(dead_code)]
+pub mod repeater;
+#[allow(dead_code)]
+pub mod sculk_vein;
+#[allow(dead_code)]
+pub mod sculk_sensor;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
