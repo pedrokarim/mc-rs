@@ -280,6 +280,41 @@ impl Connection {
                         };
                         ev_mgr.call(&mut ev);
                     }
+
+                    // PMMP `Block::onAttackedByTool` / `Durable::applyDamage` :
+                    // si le held item est un outil durable, on décrémente sa
+                    // durabilité de 1 (PMMP standard pour chaque bloc cassé).
+                    // Si l'outil casse, on le remplace par air.
+                    if self.gamemode != 1 {
+                        let held_slot = self.inventory.held_slot as usize;
+                        let held = &mut self.inventory.slots[held_slot];
+                        if let Some(info) = crate::durability::durable_info(held.item.id) {
+                            let broken = crate::durability::apply_damage(&mut held.item, 1);
+                            if broken {
+                                info!(
+                                    "[{}] Tool broken (id={}, tier={:?})",
+                                    self.addr, held.item.id, info.tier
+                                );
+                                // Replace par air + track via manager.
+                                let new_item = mc_rs_proto::packets::player::ItemStack::AIR;
+                                self.inventory_manager.set_slot(
+                                    &mut self.inventory,
+                                    crate::inventory_manager::InvKey::Main,
+                                    held_slot,
+                                    new_item,
+                                );
+                            } else {
+                                // Slot changé (meta a bougé) : push pending_sync.
+                                let current_item = held.item.clone();
+                                self.inventory_manager.set_slot(
+                                    &mut self.inventory,
+                                    crate::inventory_manager::InvKey::Main,
+                                    held_slot,
+                                    current_item,
+                                );
+                            }
+                        }
+                    }
                 }
 
                 _ => {}

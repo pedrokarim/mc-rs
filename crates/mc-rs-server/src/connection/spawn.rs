@@ -16,6 +16,23 @@ use crate::world::terrain_generator;
 
 use super::{Connection, ConnectionState};
 
+/// Encode UpdateAttributesPacket depuis une liste d'attributs (PMMP-conforme).
+fn encode_update_attrs_inline(entity_runtime_id: u64, attrs: &[crate::attribute::Attribute]) -> Vec<u8> {
+    let mut w = mc_rs_proto::io::ProtoWriter::with_capacity(128);
+    w.write_var_u64(entity_runtime_id);
+    w.write_var_u32(attrs.len() as u32);
+    for a in attrs {
+        w.write_f32_le(a.min_value);
+        w.write_f32_le(a.max_value);
+        w.write_f32_le(a.current_value);
+        w.write_f32_le(a.default_value);
+        w.write_string(&a.id);
+        w.write_var_u32(0);
+    }
+    w.write_var_u64(0);
+    w.into_bytes()
+}
+
 pub(super) fn make_spawn_position(world_x: i32, world_y: i32, world_z: i32) -> [f32; 3] {
     let feet_y = (world_y + 1) as f32;
     [world_x as f32 + 0.5, feet_y + 1.621, world_z as f32 + 0.5]
@@ -125,11 +142,14 @@ impl Connection {
             ),
         );
 
-        // 5. UpdateAttributes -- health, hunger, movement speed (BEFORE abilities per PMMP)
-        let attributes = UpdateAttributes::default_survival(self.entity_runtime_id);
-        responses.push(
-            self.encode_compressed_packet(packet_id::UPDATE_ATTRIBUTES, &attributes.encode()),
-        );
+        // 5. UpdateAttributes -- depuis self.attributes (cohérent avec tick_game_state).
+        // Drain tous les attributs désynchronisés (tous le sont au spawn via
+        // AttributeMap::default_for_player qui set desynchronized=true par default).
+        let desync = self.attributes.drain_desync();
+        if !desync.is_empty() {
+            let payload = encode_update_attrs_inline(self.entity_runtime_id, &desync);
+            responses.push(self.encode_compressed_packet(packet_id::UPDATE_ATTRIBUTES, &payload));
+        }
 
         // 6. AvailableCommands are synced after spawn from the shared command map.
 

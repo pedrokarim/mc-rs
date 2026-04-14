@@ -219,7 +219,7 @@ impl HungerManager {
         self.food_tick_timer = 0;
 
         let hunger = attrs.must_get(ids::HUNGER).current_value;
-        let sat = attrs.must_get(ids::SATURATION).current_value;
+        let _sat = attrs.must_get(ids::SATURATION).current_value;
         let health = attrs.must_get(ids::HEALTH).current_value;
         let max_health = attrs.must_get(ids::HEALTH).max_value;
 

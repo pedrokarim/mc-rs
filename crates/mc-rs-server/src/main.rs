@@ -19,6 +19,8 @@ pub mod passive_entities;
 #[allow(dead_code)]
 pub mod visuals;
 #[allow(dead_code)]
+pub mod scheduler;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
@@ -174,7 +176,8 @@ async fn main() {
     let mut registry = PlayerRegistry::new();
     let mut item_entities = ItemEntityManager::new();
     let mut mob_entities = MobEntityManager::new();
-    let mut passive_entities = crate::passive_entities::PassiveEntityManager::new();
+    // Passive entities (TNT / FallingBlock / XPOrb) — spawned via commands or events.
+    let _passive_entities = crate::passive_entities::PassiveEntityManager::new();
     // Event manager partagé (tous les Connection le clonent).
     let event_manager: Arc<std::sync::Mutex<crate::event::EventManager>> =
         Arc::new(std::sync::Mutex::new(crate::event::EventManager::new()));
@@ -946,6 +949,63 @@ fn process_peer_events(
                     for attack in pending_entity_attacks {
                         const ACTION_ATTACK: u32 = 1;
                         if attack.action_type != ACTION_ATTACK {
+                            continue;
+                        }
+
+                        // Si la target est un autre joueur → combat PvP via combat::attack_entity.
+                        let target_player_addr = connections
+                            .iter()
+                            .find(|(other_addr, c)| {
+                                **other_addr != addr
+                                    && c.entity_runtime_id == attack.target_runtime_id
+                                    && c.is_in_game()
+                            })
+                            .map(|(a, _)| *a);
+
+                        if let Some(tgt_addr) = target_player_addr {
+                            // Récupère la position de l'attaquant (sera utilisée pour knockback).
+                            let attacker_pos = connections
+                                .get(&addr)
+                                .map(|c| c.position)
+                                .unwrap_or([0.0, 0.0, 0.0]);
+                            // Calcule dégât de base depuis held item (durability::base_attack_points) + 1 main nue.
+                            let base_damage = connections
+                                .get(&addr)
+                                .and_then(|c| {
+                                    let held = &c.inventory.slots[c.inventory.held_slot as usize];
+                                    crate::durability::durable_info(held.item.id)
+                                        .map(|i| i.tier.base_attack_points() as f32)
+                                })
+                                .unwrap_or(1.0);
+
+                            // Appliquer l'attaque sur la target.
+                            if let Some(target_conn) = connections.get_mut(&tgt_addr) {
+                                let outcome = {
+                                    let events = target_conn.events.clone();
+                                    let mut ev = events.lock().unwrap();
+                                    crate::combat::attack_entity(
+                                        &mut *ev,
+                                        target_conn.entity_runtime_id,
+                                        target_conn.position,
+                                        &mut target_conn.attributes,
+                                        &mut target_conn.combat,
+                                        crate::event::entity::DamageCause::EntityAttack,
+                                        base_damage,
+                                        Some(attack.target_runtime_id),
+                                        Some(attacker_pos),
+                                        crate::combat::DEFAULT_KNOCKBACK_FORCE,
+                                    )
+                                };
+                                info!(
+                                    "[{}] PvP attack on {}: {} damage, died={}",
+                                    addr,
+                                    target_conn.entity_runtime_id,
+                                    outcome.applied_damage,
+                                    outcome.died,
+                                );
+                                // TODO: broadcast hurt animation, knockback motion,
+                                // death → respawn flow.
+                            }
                             continue;
                         }
 
