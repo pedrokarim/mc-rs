@@ -394,7 +394,6 @@ impl Connection {
     /// Retourne les paquets à envoyer au joueur (UpdateAttributes si desync).
     pub fn tick_game_state(&mut self) -> Vec<Vec<u8>> {
         use mc_rs_proto::packets::packet_id;
-        use mc_rs_proto::packets::player::UpdateAttributes;
 
         // Combat timers (attack_time, no_damage_ticks).
         self.combat.tick();

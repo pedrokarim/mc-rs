@@ -70,4 +70,7 @@ pub mod packet_id {
     pub const SPAWN_PARTICLE_EFFECT: u32 = 0x76;
     pub const BOSS_EVENT: u32 = 0x4A;
     pub const SET_ACTOR_LINK: u32 = 0x29;
+    // Entity events (hurt, death, etc.)
+    pub const ACTOR_EVENT: u32 = 0x1B;
+    pub const RESPAWN: u32 = 0x2D;
 }

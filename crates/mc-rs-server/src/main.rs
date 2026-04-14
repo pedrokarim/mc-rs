@@ -13,6 +13,8 @@ pub mod attribute;
 #[allow(dead_code)]
 pub mod combat;
 #[allow(dead_code)]
+pub mod combat_packets;
+#[allow(dead_code)]
 pub mod durability;
 #[allow(dead_code)]
 pub mod passive_entities;
@@ -979,7 +981,7 @@ fn process_peer_events(
                                 .unwrap_or(1.0);
 
                             // Appliquer l'attaque sur la target.
-                            if let Some(target_conn) = connections.get_mut(&tgt_addr) {
+                            let outcome_info = if let Some(target_conn) = connections.get_mut(&tgt_addr) {
                                 let outcome = {
                                     let events = target_conn.events.clone();
                                     let mut ev = events.lock().unwrap();
@@ -1003,8 +1005,115 @@ fn process_peer_events(
                                     outcome.applied_damage,
                                     outcome.died,
                                 );
-                                // TODO: broadcast hurt animation, knockback motion,
-                                // death → respawn flow.
+                                Some((
+                                    target_conn.entity_runtime_id,
+                                    target_conn.position,
+                                    outcome.knockback,
+                                    outcome.died,
+                                    outcome.applied_damage > 0.0,
+                                    target_conn.spawn_position,
+                                ))
+                            } else {
+                                None
+                            };
+
+                            if let Some((target_rid, target_pos, kb, died, hit, target_spawn)) =
+                                outcome_info
+                            {
+                                // Hurt animation broadcast à tous les viewers.
+                                if hit && !died {
+                                    let hurt_bytes = crate::combat_packets::hurt_animation(target_rid);
+                                    for (other_addr, other_conn) in connections.iter_mut() {
+                                        if other_conn.is_in_game() {
+                                            let pkt = other_conn.encode_compressed_packet(
+                                                packet_id::ACTOR_EVENT,
+                                                &hurt_bytes,
+                                            );
+                                            let prep = other_conn.prepare_for_send(pkt);
+                                            raknet.send_to_session(
+                                                other_addr,
+                                                prep,
+                                                Reliability::ReliableOrdered,
+                                                true,
+                                            );
+                                        }
+                                    }
+                                }
+
+                                // Knockback motion → envoyé à la target.
+                                if let Some((kx, ky, kz)) = kb {
+                                    if let Some(tc) = connections.get_mut(&tgt_addr) {
+                                        let tick = tc.tick;
+                                        let bytes = crate::combat_packets::encode_set_actor_motion(
+                                            target_rid,
+                                            [kx, ky, kz],
+                                            tick,
+                                        );
+                                        let pkt = tc.encode_compressed_packet(
+                                            packet_id::SET_ACTOR_MOTION,
+                                            &bytes,
+                                        );
+                                        let prep = tc.prepare_for_send(pkt);
+                                        raknet.send_to_session(
+                                            &tgt_addr,
+                                            prep,
+                                            Reliability::ReliableOrdered,
+                                            false,
+                                        );
+                                    }
+                                }
+
+                                if died {
+                                    // Death animation à tous + message broadcast.
+                                    let death_bytes = crate::combat_packets::death_animation(target_rid);
+                                    for (other_addr, other_conn) in connections.iter_mut() {
+                                        if other_conn.is_in_game() {
+                                            let pkt = other_conn.encode_compressed_packet(
+                                                packet_id::ACTOR_EVENT,
+                                                &death_bytes,
+                                            );
+                                            let prep = other_conn.prepare_for_send(pkt);
+                                            raknet.send_to_session(
+                                                other_addr,
+                                                prep,
+                                                Reliability::ReliableOrdered,
+                                                true,
+                                            );
+                                        }
+                                    }
+                                    // Respawn packet envoyé à la target pour
+                                    // l'autoriser à respawn (READY_TO_SPAWN=1).
+                                    if let Some(tc) = connections.get_mut(&tgt_addr) {
+                                        // Restore full HP pour le respawn.
+                                        tc.attributes
+                                            .must_get_mut(crate::attribute::ids::HEALTH)
+                                            .set_value(20.0, true);
+                                        tc.attributes
+                                            .must_get_mut(crate::attribute::ids::HUNGER)
+                                            .set_value(20.0, true);
+                                        tc.combat = crate::combat::CombatState::new();
+                                        tc.position = target_spawn;
+                                        let respawn_bytes = crate::combat_packets::encode_respawn(
+                                            target_spawn,
+                                            crate::combat_packets::respawn_state::READY_TO_SPAWN,
+                                            target_rid,
+                                        );
+                                        let pkt = tc.encode_compressed_packet(
+                                            packet_id::RESPAWN,
+                                            &respawn_bytes,
+                                        );
+                                        let prep = tc.prepare_for_send(pkt);
+                                        raknet.send_to_session(
+                                            &tgt_addr,
+                                            prep,
+                                            Reliability::ReliableOrdered,
+                                            true,
+                                        );
+                                    }
+                                }
+
+                                // Ignore unused
+                                let _ = target_pos;
                             }
                             continue;
                         }
