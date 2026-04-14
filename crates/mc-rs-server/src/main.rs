@@ -651,6 +651,30 @@ pub mod rcon;
 #[allow(dead_code)]
 pub mod query_protocol;
 #[allow(dead_code)]
+pub mod slime_spawning;
+#[allow(dead_code)]
+pub mod mob_cap;
+#[allow(dead_code)]
+pub mod despawn_rules;
+#[allow(dead_code)]
+pub mod tool_types;
+#[allow(dead_code)]
+pub mod block_break;
+#[allow(dead_code)]
+pub mod drop_xp;
+#[allow(dead_code)]
+pub mod workbench;
+#[allow(dead_code)]
+pub mod inventory_2x2;
+#[allow(dead_code)]
+pub mod chat_filter;
+#[allow(dead_code)]
+pub mod uuid_utils;
+#[allow(dead_code)]
+pub mod entity_ids;
+#[allow(dead_code)]
+pub mod bounding_box;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
