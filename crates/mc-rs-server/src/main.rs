@@ -1011,6 +1011,14 @@ pub mod enchanted_books;
 #[allow(dead_code)]
 pub mod dye_recipes;
 #[allow(dead_code)]
+pub mod creative_inventory;
+#[allow(dead_code)]
+pub mod block_breaking_progress;
+#[allow(dead_code)]
+pub mod armor_dye;
+#[allow(dead_code)]
+pub mod trade_offer_packet;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
