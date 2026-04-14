@@ -815,6 +815,16 @@ pub mod amethyst_resonance;
 #[allow(dead_code)]
 pub mod lectern_book;
 #[allow(dead_code)]
+pub mod stray_loot;
+#[allow(dead_code)]
+pub mod wither_skeleton_loot;
+#[allow(dead_code)]
+pub mod blaze_loot;
+#[allow(dead_code)]
+pub mod fishing_loot_table;
+#[allow(dead_code)]
+pub mod loot_chest;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
