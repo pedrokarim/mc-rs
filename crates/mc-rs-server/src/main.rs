@@ -751,6 +751,26 @@ pub mod torch;
 #[allow(dead_code)]
 pub mod glass_pane;
 #[allow(dead_code)]
+pub mod slab;
+#[allow(dead_code)]
+pub mod stairs;
+#[allow(dead_code)]
+pub mod trapdoor;
+#[allow(dead_code)]
+pub mod ladder;
+#[allow(dead_code)]
+pub mod vine;
+#[allow(dead_code)]
+pub mod wet_sponge;
+#[allow(dead_code)]
+pub mod magma_block;
+#[allow(dead_code)]
+pub mod bubble_column;
+#[allow(dead_code)]
+pub mod soul_speed;
+#[allow(dead_code)]
+pub mod swift_sneak;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
