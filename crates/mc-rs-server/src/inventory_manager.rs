@@ -190,15 +190,21 @@ impl InventoryManager {
     }
 
     fn full_container_name(&self) -> FullContainerName {
-        // Protocol 944 (dragonfly) : TOUJOURS container_id=0, jamais dynamic.
-        // PMMP 924 passe `lastInventoryNetworkId` mais ça CRASH le client 1.26.10.
-        // Voir commentaire d'origine dans inventory.rs avant refactor.
-        FullContainerName::new(0)
+        // PMMP InventoryManager.php:524,533,554,558 — passe toujours
+        // `lastInventoryNetworkId`. Au spawn avant toute ouverture c'est
+        // `ContainerIds::FIRST = 1`. Après ouverture d'une fenêtre c'est
+        // l'ID dynamique attribué.
+        FullContainerName::new(self.last_inventory_network_id)
     }
 
-    /// `sendInventoryContentPackets()` — protocol 944 single-phase (dragonfly).
-    /// PMMP 924 faisait two-phase (air clear puis vrai) à cause d'un bug client
-    /// spécifique à 924 ; sur 944 dragonfly envoie un seul paquet et ça marche.
+    /// `sendInventoryContentPackets()` — PMMP two-phase (InventoryManager.php:541-558).
+    ///
+    /// Depuis Bedrock 1.20.12, le client ignore le changement de stackId quand
+    /// l'item de surface est identique. Il faut d'abord envoyer tout en air pour
+    /// forcer le client à oublier les anciens stackIds, puis le vrai contenu avec
+    /// les nouveaux stackIds. Sans ça → désynchro silencieuse → crash à l'ouverture.
+    /// (Le commentaire précédent prétendait que dragonfly single-phase fonctionnait
+    /// sur 944, mais en pratique ça crash le client.)
     fn send_inventory_content_packets(
         &self,
         window_id: u32,
@@ -206,13 +212,23 @@ impl InventoryManager {
         out: &mut PacketOut,
     ) {
         let fcn = self.full_container_name();
+        // Phase 1 : tout en air pour forcer l'oubli des anciens stackIds.
+        let air_wrappers: Vec<ItemStackWrapper> =
+            (0..wrappers.len()).map(|_| ItemStackWrapper::air()).collect();
+        out.push((
+            packet_id::INVENTORY_CONTENT,
+            InventoryContent::encode_items(window_id, &air_wrappers, &fcn),
+        ));
+        // Phase 2 : vrai contenu avec les nouveaux stackIds.
         out.push((
             packet_id::INVENTORY_CONTENT,
             InventoryContent::encode_items(window_id, wrappers, &fcn),
         ));
     }
 
-    /// `sendInventorySlotPackets()` — protocol 944 single-phase (dragonfly).
+    /// `sendInventorySlotPackets()` — PMMP two-phase (InventoryManager.php:510-537).
+    /// Le bug 1.20.12+ touche armor, offhand, enchanting — si `stackId != 0`, on
+    /// clear le slot d'abord puis on envoie le vrai contenu.
     fn send_inventory_slot_packets(
         &self,
         window_id: u32,
@@ -221,6 +237,13 @@ impl InventoryManager {
         out: &mut PacketOut,
     ) {
         let fcn = self.full_container_name();
+        if wrapper.stack_id != 0 {
+            let air = ItemStackWrapper::air();
+            out.push((
+                packet_id::INVENTORY_SLOT,
+                InventorySlot::encode(window_id, net_slot, &air, &fcn),
+            ));
+        }
         out.push((
             packet_id::INVENTORY_SLOT,
             InventorySlot::encode(window_id, net_slot, wrapper, &fcn),
@@ -456,34 +479,39 @@ impl InventoryManager {
     }
 
     /// `onClientOpenMainInventory()` — touche E côté client.
-    /// Protocol 944 : format dragonfly (WindowID=0, entityId=-1, position=player).
-    /// Ne PAS utiliser le format PMMP 924 `entityInv(dynamicId, -1, player.id)` —
-    /// ça crash le client Bedrock 1.26.10.
+    /// PMMP `InventoryManager.php:394-408` :
+    ///   1. `onCurrentWindowRemove()` — ferme la fenêtre courante si besoin
+    ///   2. `openWindowDeferred(callback)` — si close pending, store callback
+    ///   3. callback exécuté : `windowId = getNewWindowId()`,
+    ///      `associateIdWithInventory`, `currentWindowType = INVENTORY (-1)`,
+    ///      envoie `entityInv(windowId, -1, player.getId())` avec pos=(0,0,0)
     pub fn on_client_open_main_inventory(
         &mut self,
-        player_position: [f32; 3],
+        player_entity_id: i64,
         out: &mut PacketOut,
     ) {
-        // Anti-spam : si déjà ouvert (tracked), ne rien faire (dragonfly HAS
-        // `if s.invOpened return nil` — on reproduit avec pending_close_window_id
-        // qui restera None si pas de fenêtre dynamique en cours).
+        self.on_current_window_remove(out);
         if self.pending_close_window_id.is_some() {
+            // ACK d'une fermeture en attente : diffère l'ouverture.
+            self.pending_open_main_inventory = Some(player_entity_id);
             return;
         }
+        self.do_open_main_inventory(player_entity_id, out);
+    }
+
+    /// Partie « callback » de `onClientOpenMainInventory` — exécutée soit
+    /// immédiatement soit après l'ACK de close.
+    fn do_open_main_inventory(&mut self, player_entity_id: i64, out: &mut PacketOut) {
+        let window_id = self.get_new_window_id();
+        self.associate_id_with_key(window_id, InvKey::Main);
         self.current_window_type = window_types::INVENTORY;
-        // Anti double-envoi (dragonfly `s.invOpened = true`).
-        self.pending_close_window_id = Some(container_ids::INVENTORY);
         out.push((
             packet_id::CONTAINER_OPEN,
             ContainerOpen {
-                window_id: container_ids::INVENTORY, // 0
-                window_type: 0xFF,                   // -1 = INVENTORY
-                position: [
-                    player_position[0].floor() as i32,
-                    player_position[1].floor() as i32,
-                    player_position[2].floor() as i32,
-                ],
-                actor_unique_id: -1,
+                window_id,
+                window_type: 0xFF, // -1 = INVENTORY
+                position: [0, 0, 0],
+                actor_unique_id: player_entity_id,
             }
             .encode(),
         ));
@@ -556,9 +584,11 @@ impl InventoryManager {
 
         if self.pending_close_window_id == Some(id) {
             self.pending_close_window_id = None;
-            // Format dragonfly : pas d'ouverture différée pour main inv (WindowID=0
-            // est toujours dispo). Pending_open_main_inventory est inutilisé ici.
-            self.pending_open_main_inventory = None;
+            // PMMP `onClientRemoveWindow` lignes 445-449 : exécuter le callback
+            // d'ouverture différée si présent.
+            if let Some(player_entity_id) = self.pending_open_main_inventory.take() {
+                self.do_open_main_inventory(player_entity_id, out);
+            }
         }
     }
 

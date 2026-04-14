@@ -283,12 +283,13 @@ impl Connection {
         info!("[{}] InteractPacket action={}", self.addr, action);
 
         if action == 6 {
-            // Format dragonfly (protocol 944) : WindowID=0, entityId=-1, position=player.
+            // PMMP entityInv : windowId dynamique + actor_unique_id=player.getId()
+            // + blockPosition=(0,0,0). Voir inventory_manager::on_client_open_main_inventory.
             let mut out: Vec<(u32, Vec<u8>)> = Vec::new();
             self.inventory_manager
-                .on_client_open_main_inventory(self.position, &mut out);
+                .on_client_open_main_inventory(self.entity_runtime_id as i64, &mut out);
             info!(
-                "[{}] on_client_open_main_inventory (dragonfly fmt): {} packet(s)",
+                "[{}] on_client_open_main_inventory (PMMP entityInv): {} packet(s)",
                 self.addr,
                 out.len(),
             );
