@@ -127,6 +127,10 @@ pub mod ender_chest;
 #[allow(dead_code)]
 pub mod jukebox;
 #[allow(dead_code)]
+pub mod entity_identifiers;
+#[allow(dead_code)]
+pub mod biome_spawning;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
