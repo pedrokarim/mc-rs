@@ -735,6 +735,22 @@ pub mod lightning;
 #[allow(dead_code)]
 pub mod advancement_tree;
 #[allow(dead_code)]
+pub mod block_entities_map;
+#[allow(dead_code)]
+pub mod campfire;
+#[allow(dead_code)]
+pub mod chiseled_bookshelf;
+#[allow(dead_code)]
+pub mod comparator;
+#[allow(dead_code)]
+pub mod redstone_wire;
+#[allow(dead_code)]
+pub mod block_wall;
+#[allow(dead_code)]
+pub mod torch;
+#[allow(dead_code)]
+pub mod glass_pane;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
