@@ -211,6 +211,10 @@ pub mod fortune;
 #[allow(dead_code)]
 pub mod block_hardness;
 #[allow(dead_code)]
+pub mod smithing_template;
+#[allow(dead_code)]
+pub mod arrow_pickup;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
