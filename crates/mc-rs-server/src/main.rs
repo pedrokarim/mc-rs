@@ -981,6 +981,14 @@ pub mod trim_patterns;
 #[allow(dead_code)]
 pub mod suspicious_sand;
 #[allow(dead_code)]
+pub mod village_trades_detailed;
+#[allow(dead_code)]
+pub mod entity_fall;
+#[allow(dead_code)]
+pub mod block_light_update;
+#[allow(dead_code)]
+pub mod sky_light_update;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
