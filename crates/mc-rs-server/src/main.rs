@@ -41,6 +41,20 @@ pub mod projectiles;
 #[allow(dead_code)]
 pub mod mob_ai;
 #[allow(dead_code)]
+pub mod redstone;
+#[allow(dead_code)]
+pub mod dimensions;
+#[allow(dead_code)]
+pub mod scoreboard;
+#[allow(dead_code)]
+pub mod world_border;
+#[allow(dead_code)]
+pub mod sleep;
+#[allow(dead_code)]
+pub mod trading;
+#[allow(dead_code)]
+pub mod fishing;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
