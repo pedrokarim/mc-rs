@@ -933,6 +933,18 @@ pub mod ancient_city;
 #[allow(dead_code)]
 pub mod trial_chamber;
 #[allow(dead_code)]
+pub mod mangrove_swamp;
+#[allow(dead_code)]
+pub mod cherry_grove;
+#[allow(dead_code)]
+pub mod pale_garden;
+#[allow(dead_code)]
+pub mod end_islands;
+#[allow(dead_code)]
+pub mod end_city;
+#[allow(dead_code)]
+pub mod bastion_remnant;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
