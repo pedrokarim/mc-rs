@@ -403,6 +403,56 @@ pub mod xp;
 #[allow(dead_code)]
 pub mod achievements;
 #[allow(dead_code)]
+pub mod item_frame;
+#[allow(dead_code)]
+pub mod armor_stand;
+#[allow(dead_code)]
+pub mod map_rendering;
+#[allow(dead_code)]
+pub mod sign_text;
+#[allow(dead_code)]
+pub mod decorated_pot;
+#[allow(dead_code)]
+pub mod vault;
+#[allow(dead_code)]
+pub mod trial_spawner;
+#[allow(dead_code)]
+pub mod breeze;
+#[allow(dead_code)]
+pub mod bogged;
+#[allow(dead_code)]
+pub mod armadillo;
+#[allow(dead_code)]
+pub mod happy_ghast;
+#[allow(dead_code)]
+pub mod mushroom_biome;
+#[allow(dead_code)]
+pub mod mooshroom;
+#[allow(dead_code)]
+pub mod biome_color;
+#[allow(dead_code)]
+pub mod night_time;
+#[allow(dead_code)]
+pub mod crop_growth;
+#[allow(dead_code)]
+pub mod sapling_growth;
+#[allow(dead_code)]
+pub mod leaves_decay;
+#[allow(dead_code)]
+pub mod fire_spread;
+#[allow(dead_code)]
+pub mod ice_melt;
+#[allow(dead_code)]
+pub mod snow_layer;
+#[allow(dead_code)]
+pub mod powdered_snow;
+#[allow(dead_code)]
+pub mod amethyst;
+#[allow(dead_code)]
+pub mod copper_oxidation;
+#[allow(dead_code)]
+pub mod tnt;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
