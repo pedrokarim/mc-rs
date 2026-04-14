@@ -137,6 +137,14 @@ pub mod item_tags;
 #[allow(dead_code)]
 pub mod item_properties;
 #[allow(dead_code)]
+pub mod mob_equipment;
+#[allow(dead_code)]
+pub mod damage_modifiers;
+#[allow(dead_code)]
+pub mod horse_attributes;
+#[allow(dead_code)]
+pub mod sheep_color;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
