@@ -453,6 +453,56 @@ pub mod copper_oxidation;
 #[allow(dead_code)]
 pub mod tnt;
 #[allow(dead_code)]
+pub mod obsidian_pillar;
+#[allow(dead_code)]
+pub mod dragon_fight;
+#[allow(dead_code)]
+pub mod end_gateway;
+#[allow(dead_code)]
+pub mod bad_omen;
+#[allow(dead_code)]
+pub mod villager_gossip;
+#[allow(dead_code)]
+pub mod zombie_villager;
+#[allow(dead_code)]
+pub mod sheep;
+#[allow(dead_code)]
+pub mod pig;
+#[allow(dead_code)]
+pub mod cow;
+#[allow(dead_code)]
+pub mod arrow;
+#[allow(dead_code)]
+pub mod thrown_potion;
+#[allow(dead_code)]
+pub mod snowball;
+#[allow(dead_code)]
+pub mod fishing_rod;
+#[allow(dead_code)]
+pub mod fireball;
+#[allow(dead_code)]
+pub mod anvil_damage;
+#[allow(dead_code)]
+pub mod enchant_table;
+#[allow(dead_code)]
+pub mod exp_bottle;
+#[allow(dead_code)]
+pub mod crafter;
+#[allow(dead_code)]
+pub mod music_disc;
+#[allow(dead_code)]
+pub mod spawner;
+#[allow(dead_code)]
+pub mod light_level;
+#[allow(dead_code)]
+pub mod door;
+#[allow(dead_code)]
+pub mod bed_color;
+#[allow(dead_code)]
+pub mod candle;
+#[allow(dead_code)]
+pub mod lodestone;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
