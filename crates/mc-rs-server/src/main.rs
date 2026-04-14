@@ -193,6 +193,10 @@ pub mod chunk_ticking;
 #[allow(dead_code)]
 pub mod redstone_comparator;
 #[allow(dead_code)]
+pub mod ai_goals;
+#[allow(dead_code)]
+pub mod difficulty;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
