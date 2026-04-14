@@ -889,6 +889,20 @@ pub mod breeze_rod;
 #[allow(dead_code)]
 pub mod heavy_core;
 #[allow(dead_code)]
+pub mod shield_decoration;
+#[allow(dead_code)]
+pub mod bundle;
+#[allow(dead_code)]
+pub mod written_book;
+#[allow(dead_code)]
+pub mod banner_color;
+#[allow(dead_code)]
+pub mod ominous_item;
+#[allow(dead_code)]
+pub mod wolf_armor;
+#[allow(dead_code)]
+pub mod block_comparison;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
