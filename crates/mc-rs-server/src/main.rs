@@ -619,6 +619,38 @@ pub mod sprinting;
 #[allow(dead_code)]
 pub mod tick_speed;
 #[allow(dead_code)]
+pub mod entity_drops;
+#[allow(dead_code)]
+pub mod ai_states;
+#[allow(dead_code)]
+pub mod sounds_library;
+#[allow(dead_code)]
+pub mod boss_bar;
+#[allow(dead_code)]
+pub mod conduit_power;
+#[allow(dead_code)]
+pub mod beacon_effects;
+#[allow(dead_code)]
+pub mod arrow_pickup_mode;
+#[allow(dead_code)]
+pub mod keepalive;
+#[allow(dead_code)]
+pub mod ping_system;
+#[allow(dead_code)]
+pub mod datapack;
+#[allow(dead_code)]
+pub mod crash_report;
+#[allow(dead_code)]
+pub mod server_settings;
+#[allow(dead_code)]
+pub mod whitelist;
+#[allow(dead_code)]
+pub mod ops_list;
+#[allow(dead_code)]
+pub mod rcon;
+#[allow(dead_code)]
+pub mod query_protocol;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
