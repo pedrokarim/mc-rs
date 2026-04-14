@@ -345,6 +345,64 @@ pub mod cat;
 #[allow(dead_code)]
 pub mod zoglin;
 #[allow(dead_code)]
+pub mod piston;
+#[allow(dead_code)]
+pub mod dispenser;
+#[allow(dead_code)]
+pub mod hopper;
+#[allow(dead_code)]
+pub mod chest_system;
+#[allow(dead_code)]
+pub mod shulker_box;
+#[allow(dead_code)]
+pub mod redstone_devices;
+#[allow(dead_code)]
+pub mod rail;
+#[allow(dead_code)]
+pub mod minecart;
+#[allow(dead_code)]
+pub mod boat;
+#[allow(dead_code)]
+pub mod leads;
+#[allow(dead_code)]
+pub mod name_tag;
+#[allow(dead_code)]
+pub mod elytra;
+#[allow(dead_code)]
+pub mod totem;
+#[allow(dead_code)]
+pub mod ender_pearl;
+#[allow(dead_code)]
+pub mod end_portal;
+#[allow(dead_code)]
+pub mod nether_portal_spawn;
+#[allow(dead_code)]
+pub mod smithing;
+#[allow(dead_code)]
+pub mod smoker;
+#[allow(dead_code)]
+pub mod stonecutter;
+#[allow(dead_code)]
+pub mod grindstone;
+#[allow(dead_code)]
+pub mod crossbow;
+#[allow(dead_code)]
+pub mod bow;
+#[allow(dead_code)]
+pub mod trident;
+#[allow(dead_code)]
+pub mod mace;
+#[allow(dead_code)]
+pub mod shield;
+#[allow(dead_code)]
+pub mod food;
+#[allow(dead_code)]
+pub mod hunger;
+#[allow(dead_code)]
+pub mod xp;
+#[allow(dead_code)]
+pub mod achievements;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
