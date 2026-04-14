@@ -151,6 +151,12 @@ pub mod fire_mechanics;
 #[allow(dead_code)]
 pub mod nether_portal;
 #[allow(dead_code)]
+pub mod skull;
+#[allow(dead_code)]
+pub mod sign_editor;
+#[allow(dead_code)]
+pub mod book;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
