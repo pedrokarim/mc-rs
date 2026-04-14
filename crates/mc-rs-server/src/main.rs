@@ -799,6 +799,22 @@ pub mod scoreboard_crit;
 #[allow(dead_code)]
 pub mod player_stats;
 #[allow(dead_code)]
+pub mod xp_sharing;
+#[allow(dead_code)]
+pub mod soul_fire;
+#[allow(dead_code)]
+pub mod banner_blocks;
+#[allow(dead_code)]
+pub mod netherite_scrap;
+#[allow(dead_code)]
+pub mod ancient_debris;
+#[allow(dead_code)]
+pub mod powder_snow_bucket;
+#[allow(dead_code)]
+pub mod amethyst_resonance;
+#[allow(dead_code)]
+pub mod lectern_book;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
