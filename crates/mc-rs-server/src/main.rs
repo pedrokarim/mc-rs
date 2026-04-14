@@ -861,6 +861,22 @@ pub mod armor_tier;
 #[allow(dead_code)]
 pub mod mob_hp;
 #[allow(dead_code)]
+pub mod mob_xp;
+#[allow(dead_code)]
+pub mod trap_chest_loot;
+#[allow(dead_code)]
+pub mod village_structures;
+#[allow(dead_code)]
+pub mod mob_xp_drop_on_player_kill;
+#[allow(dead_code)]
+pub mod tadpole;
+#[allow(dead_code)]
+pub mod piglin_brute;
+#[allow(dead_code)]
+pub mod bat;
+#[allow(dead_code)]
+pub mod magma_cube;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
