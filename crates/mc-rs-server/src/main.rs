@@ -231,6 +231,10 @@ pub mod climb;
 #[allow(dead_code)]
 pub mod drop_reasons;
 #[allow(dead_code)]
+pub mod breeding_items;
+#[allow(dead_code)]
+pub mod tnt_primed_source;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
