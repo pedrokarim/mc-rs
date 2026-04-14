@@ -971,6 +971,16 @@ pub mod ocean_ruin;
 #[allow(dead_code)]
 pub mod abandoned_mineshaft;
 #[allow(dead_code)]
+pub mod bamboo_jungle;
+#[allow(dead_code)]
+pub mod badlands_biome;
+#[allow(dead_code)]
+pub mod nether_biomes;
+#[allow(dead_code)]
+pub mod trim_patterns;
+#[allow(dead_code)]
+pub mod suspicious_sand;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
