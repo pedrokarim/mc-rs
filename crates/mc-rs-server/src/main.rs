@@ -207,6 +207,10 @@ pub mod end_features;
 #[allow(dead_code)]
 pub mod command_registry_full;
 #[allow(dead_code)]
+pub mod fortune;
+#[allow(dead_code)]
+pub mod block_hardness;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
