@@ -787,6 +787,18 @@ pub mod item_cooldown;
 #[allow(dead_code)]
 pub mod held_item;
 #[allow(dead_code)]
+pub mod rotation;
+#[allow(dead_code)]
+pub mod movement_control;
+#[allow(dead_code)]
+pub mod custom_commands;
+#[allow(dead_code)]
+pub mod command_selectors;
+#[allow(dead_code)]
+pub mod scoreboard_crit;
+#[allow(dead_code)]
+pub mod player_stats;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
