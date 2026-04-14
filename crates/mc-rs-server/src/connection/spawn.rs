@@ -90,7 +90,7 @@ pub(super) fn find_spawn_position(chunk_cache: &Arc<Mutex<ChunkCache>>, seed: u6
 }
 
 impl Connection {
-    pub(super) fn send_pre_spawn_packets(&self) -> Vec<Vec<u8>> {
+    pub(super) fn send_pre_spawn_packets(&mut self) -> Vec<Vec<u8>> {
         let mut responses = Vec::new();
 
         // StartGame

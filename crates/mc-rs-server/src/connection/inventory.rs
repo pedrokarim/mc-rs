@@ -1,13 +1,11 @@
 use tracing::{debug, info, warn};
 
 use mc_rs_proto::io::ProtoReader;
-use mc_rs_proto::packets::packet_id;
 use mc_rs_proto::packets::player::*;
-use mc_rs_proto::packets::world::*;
 
 use crate::item_entities::PendingItemEntitySpawn;
 
-use super::{Connection, PLAYER_INVENTORY_SCREEN_ID, PLAYER_INVENTORY_WINDOW_TYPE};
+use super::Connection;
 
 /// Compute the unit forward vector from the player's yaw+pitch (Bedrock angles,
 /// in degrees). Matches PMMP `Entity::getDirectionVector`.
@@ -28,9 +26,6 @@ impl Connection {
         request: &ItemStackRequest,
         responses: &mut Vec<Vec<u8>>,
     ) {
-        use mc_rs_proto::packets::player::StackRequestAction;
-        use mc_rs_proto::packets::world::{ItemStackResponse, ItemStackResponseContainer};
-
         debug!(
             "[{}] ItemStackRequest id={} actions={}",
             self.addr,
@@ -38,227 +33,63 @@ impl Connection {
             request.actions.len()
         );
 
-        let mut changed_containers: Vec<ItemStackResponseContainer> = Vec::new();
+        // Délégué au manager (port complet ItemStackRequestExecutor + ResponseBuilder).
+        let outcome = self
+            .inventory_manager
+            .process_item_stack_request(&mut self.inventory, request);
 
-        for action in &request.actions {
-            match action {
-                StackRequestAction::Take {
-                    count,
-                    source,
-                    destination,
-                }
-                | StackRequestAction::Place {
-                    count,
-                    source,
-                    destination,
-                } => {
-                    let src_slot = self.resolve_slot(source.container_id, source.slot_id);
-                    let dst_slot = self.resolve_slot(destination.container_id, destination.slot_id);
-
-                    if let (Some(src_idx), Some(dst_idx)) = (src_slot, dst_slot) {
-                        let take_count = *count;
-
-                        // Take from source
-                        let src_item = self.inventory.slots[src_idx].item.clone();
-                        if src_item.is_air() || src_item.count < take_count as u16 {
-                            continue;
-                        }
-
-                        // Place to destination
-                        let dst_item = &self.inventory.slots[dst_idx].item;
-                        if dst_item.is_air() {
-                            // Move to empty slot
-                            let mut new_item = src_item.clone();
-                            new_item.count = take_count as u16;
-                            let stack_id = self.inventory.next_stack_id();
-                            self.inventory.slots[dst_idx] =
-                                ItemStackWrapper::new(new_item, stack_id);
-                        } else if dst_item.id == src_item.id && dst_item.meta == src_item.meta {
-                            // Stack on same item
-                            self.inventory.slots[dst_idx].item.count += take_count as u16;
-                        } else {
-                            continue; // Can't place here
-                        }
-
-                        // Reduce source
-                        if self.inventory.slots[src_idx].item.count <= take_count as u16 {
-                            self.inventory.slots[src_idx] = ItemStackWrapper::air();
-                        } else {
-                            self.inventory.slots[src_idx].item.count -= take_count as u16;
-                        }
-
-                        // Track changes for response
-                        self.add_slot_to_response(
-                            &mut changed_containers,
-                            source.container_id,
-                            source.slot_id,
-                            src_idx,
-                        );
-                        self.add_slot_to_response(
-                            &mut changed_containers,
-                            destination.container_id,
-                            destination.slot_id,
-                            dst_idx,
-                        );
-                    }
-                }
-                StackRequestAction::Swap {
-                    source,
-                    destination,
-                    ..
-                } => {
-                    let src_slot = self.resolve_slot(source.container_id, source.slot_id);
-                    let dst_slot = self.resolve_slot(destination.container_id, destination.slot_id);
-
-                    if let (Some(src_idx), Some(dst_idx)) = (src_slot, dst_slot) {
-                        self.inventory.slots.swap(src_idx, dst_idx);
-
-                        self.add_slot_to_response(
-                            &mut changed_containers,
-                            source.container_id,
-                            source.slot_id,
-                            src_idx,
-                        );
-                        self.add_slot_to_response(
-                            &mut changed_containers,
-                            destination.container_id,
-                            destination.slot_id,
-                            dst_idx,
-                        );
-                    }
-                }
-                StackRequestAction::Destroy { source, .. } => {
-                    if let Some(slot_idx) = self.resolve_slot(source.container_id, source.slot_id) {
-                        self.inventory.slots[slot_idx] = ItemStackWrapper::air();
-                        self.add_slot_to_response(
-                            &mut changed_containers,
-                            source.container_id,
-                            source.slot_id,
-                            slot_idx,
-                        );
-                    }
-                }
-                StackRequestAction::Drop { count, source } => {
-                    if let Some(slot_idx) = self.resolve_slot(source.container_id, source.slot_id) {
-                        let current = self.inventory.slots[slot_idx].item.clone();
-                        if !current.is_air() && current.count > 0 {
-                            let drop_count = (*count as u16).min(current.count);
-                            if drop_count > 0 {
-                                // Build the dropped stack from the held slot.
-                                let mut dropped = current.clone();
-                                dropped.count = drop_count;
-
-                                // Decrement (or clear) the source slot.
-                                if current.count <= drop_count {
-                                    self.inventory.slots[slot_idx] = ItemStackWrapper::air();
-                                } else {
-                                    self.inventory.slots[slot_idx].item.count -= drop_count;
-                                }
-
-                                // Queue the dropped item entity using the
-                                // player's eye level + forward throw. PMMP:
-                                // position = location + (0, 1.3, 0),
-                                // motion   = directionVector * 0.4.
-                                let dir = direction_vector(self.yaw, self.pitch);
-                                let spawn_pos = [
-                                    self.position[0] + dir[0] * 0.3,
-                                    self.position[1] + 1.3,
-                                    self.position[2] + dir[2] * 0.3,
-                                ];
-                                self.pending_item_spawns
-                                    .push(PendingItemEntitySpawn::with_throw(
-                                        dropped, spawn_pos, dir,
-                                    ));
-                                info!(
-                                    "[{}] Dropped {} x item_id={} from slot {}",
-                                    self.addr, drop_count, current.id, slot_idx
-                                );
-                            }
-                        }
-                        self.add_slot_to_response(
-                            &mut changed_containers,
-                            source.container_id,
-                            source.slot_id,
-                            slot_idx,
-                        );
-                    }
-                }
-                StackRequestAction::Unknown(_) => {}
-            }
+        // Items à drop physiquement → spawn item entities.
+        for dropped in outcome.drops {
+            let dir = direction_vector(self.yaw, self.pitch);
+            let spawn_pos = [
+                self.position[0] + dir[0] * 0.3,
+                self.position[1] + 1.3,
+                self.position[2] + dir[2] * 0.3,
+            ];
+            info!(
+                "[{}] Drop via ItemStackRequest: {} x item_id={}",
+                self.addr, dropped.count, dropped.id
+            );
+            self.pending_item_spawns
+                .push(PendingItemEntitySpawn::with_throw(
+                    dropped, spawn_pos, dir,
+                ));
         }
 
-        // Send response
-        let response = ItemStackResponse::ok(request.request_id, changed_containers);
-        responses.push(
-            self.encode_compressed_packet(packet_id::ITEM_STACK_RESPONSE, &response.encode()),
-        );
+        for (pkt_id, payload) in outcome.packets {
+            responses.push(self.encode_compressed_packet(pkt_id, &payload));
+        }
     }
 
     pub(super) fn inventory_screen_container_name(&self) -> FullContainerName {
-        // Dragonfly (protocol 944) always uses container_id=0 in
-        // FullContainerName for InventoryContent packets — NOT a dynamic ID.
-        FullContainerName::new(0)
+        FullContainerName::new(self.inventory_manager.last_inventory_network_id)
     }
 
-    fn advance_player_inventory_window_id(&mut self) -> u8 {
-        self.player_inventory_window_id = if self.player_inventory_window_id >= 99 {
-            PLAYER_INVENTORY_SCREEN_ID
-        } else {
-            self.player_inventory_window_id + 1
-        };
-        self.player_inventory_window_id
-    }
-
-    /// Sync ALL inventories to the client. Matches dragonfly (gophertunnel 944):
-    ///   sendInv(inv, WindowIDInventory=0)
-    ///   sendInv(ui, WindowIDUI=124)          ← cursor + 2x2 crafting grid (54 slots)
-    ///   sendInv(offHand, WindowIDOffHand=119)
-    ///   sendInv(armour, WindowIDArmour=120)
-    ///
-    /// The UI inventory is critical — without it, the client has no cursor or
-    /// crafting grid state, and opening the inventory UI (E key) crashes.
-    pub(super) fn push_inventory_sync(&self, responses: &mut Vec<Vec<u8>>) {
-        let fcn = self.inventory_screen_container_name();
-
-        // Main inventory (36 slots)
-        responses.push(self.encode_compressed_packet(
-            packet_id::INVENTORY_CONTENT,
-            &InventoryContent::encode_items(0, &self.inventory.slots, &fcn),
-        ));
-
-        // UI inventory (54 slots) — all air. Includes cursor, 2x2 crafting grid,
-        // crafting output, and other UI slots. Dragonfly always sends this at
-        // spawn; without it the client crashes when opening the inventory UI.
-        responses.push(self.encode_compressed_packet(
-            packet_id::INVENTORY_CONTENT,
-            &InventoryContent::encode_empty(124, 54, &fcn),
-        ));
-
-        // Off-hand (1 slot)
-        responses.push(self.encode_compressed_packet(
-            packet_id::INVENTORY_CONTENT,
-            &InventoryContent::encode_items(
-                119,
-                std::slice::from_ref(&self.inventory.offhand),
-                &fcn,
-            ),
-        ));
-
-        // Armor (4 slots)
-        responses.push(self.encode_compressed_packet(
-            packet_id::INVENTORY_CONTENT,
-            &InventoryContent::encode_items(120, &self.inventory.armor, &fcn),
-        ));
-
-        // MobEquipment (held item / hotbar slot)
-        responses.push(self.encode_compressed_packet(
-            packet_id::MOB_EQUIPMENT,
-            &MobEquipment::encode_item(
-                self.entity_runtime_id,
-                self.inventory.held_item(),
-                self.inventory.held_slot,
-            ),
-        ));
+    /// Sync ALL inventories to the client via `InventoryManager`.
+    /// Ordre dragonfly : Main → UI(124, 54 slots) → Offhand → Armor.
+    /// Pas de MobEquipment au spawn (dragonfly ne l'envoie qu'au changement
+    /// hotbar côté client).
+    pub(super) fn push_inventory_sync(&mut self, responses: &mut Vec<Vec<u8>>) {
+        let mut out: Vec<(u32, Vec<u8>)> = Vec::new();
+        self.inventory_manager.sync_all(&self.inventory, &mut out);
+        for (pkt_id, payload) in out {
+            // DEBUG spawn dump
+            let preview: String = payload
+                .iter()
+                .take(48)
+                .map(|b| format!("{:02X}", b))
+                .collect::<Vec<_>>()
+                .join(" ");
+            info!(
+                "[{}] spawn inv pkt 0x{:03X} len={} hex={}{}",
+                self.addr,
+                pkt_id,
+                payload.len(),
+                preview,
+                if payload.len() > 48 { " ..." } else { "" },
+            );
+            responses.push(self.encode_compressed_packet(pkt_id, &payload));
+        }
     }
 
     pub fn prepared_inventory_sync_packets(&mut self) -> Vec<Vec<u8>> {
@@ -270,7 +101,8 @@ impl Connection {
             .collect()
     }
 
-    fn push_open_inventory_window_sync(&self, responses: &mut Vec<Vec<u8>>) {
+    #[allow(dead_code)]
+    fn push_open_inventory_window_sync(&mut self, responses: &mut Vec<Vec<u8>>) {
         self.push_inventory_sync(responses);
     }
 
@@ -287,12 +119,29 @@ impl Connection {
             return responses;
         };
         let InventoryTransaction {
-            request_id: _request_id,
+            request_id,
             changed_slots,
             data,
         } = transaction;
 
-        let mut responses = Vec::new();
+        let responses = Vec::new();
+
+        // PMMP : `setCurrentItemStackRequestId` + `addRawPredictedSlotChanges`
+        // doivent encadrer toute transaction legacy. Sans ça, les set_slot
+        // server-side fired pendant le handle ne sont pas associés au requestId
+        // et provoquent des resync inutiles.
+        self.inventory_manager
+            .set_current_item_stack_request_id(Some(request_id));
+        let actions_for_pred: Vec<_> = match &data {
+            InventoryTransactionData::Normal { actions }
+            | InventoryTransactionData::Mismatch { actions }
+            | InventoryTransactionData::UseItem { actions, .. }
+            | InventoryTransactionData::ReleaseItem { actions, .. }
+            | InventoryTransactionData::UseItemOnEntity { actions, .. }
+            | InventoryTransactionData::Unknown { actions, .. } => actions.clone(),
+        };
+        self.inventory_manager
+            .add_raw_predicted_slot_changes(&actions_for_pred);
 
         match data {
             InventoryTransactionData::Normal { actions } => {
@@ -324,7 +173,8 @@ impl Connection {
                             && a.old_item.item.count >= dropped.count
                     });
                     let slot_idx = if let Some(container_action) = consumed {
-                        self.resolve_slot(0, container_action.inventory_slot as u8)
+                        let idx = container_action.inventory_slot as usize;
+                        (idx < 36).then_some(idx)
                     } else {
                         Some(self.inventory.held_slot as usize)
                     };
@@ -336,11 +186,21 @@ impl Connection {
                                 .item
                                 .count
                                 .saturating_sub(dropped.count);
-                            if remaining == 0 {
-                                self.inventory.slots[idx] = ItemStackWrapper::air();
+                            let new_item = if remaining == 0 {
+                                mc_rs_proto::packets::player::ItemStack::AIR
                             } else {
-                                self.inventory.slots[idx].item.count = remaining;
-                            }
+                                let mut n = self.inventory.slots[idx].item.clone();
+                                n.count = remaining;
+                                n
+                            };
+                            // Via manager : track + listener (matchera la prédiction
+                            // posée plus haut, donc pas de pending_sync).
+                            self.inventory_manager.set_slot(
+                                &mut self.inventory,
+                                crate::inventory_manager::InvKey::Main,
+                                idx,
+                                new_item,
+                            );
                         }
                     }
 
@@ -358,11 +218,12 @@ impl Connection {
                     );
                 }
                 if dropped_any {
-                    self.push_inventory_sync(&mut responses);
+                    // Le manager queue les pending_syncs ; le flush a lieu en
+                    // fin de tick. Pas besoin d'un push_inventory_sync explicite.
                 }
             }
             InventoryTransactionData::Mismatch { .. } => {
-                self.push_inventory_sync(&mut responses);
+                self.inventory_manager.request_sync_all();
             }
             InventoryTransactionData::UseItem { .. }
             | InventoryTransactionData::ReleaseItem { .. }
@@ -388,60 +249,29 @@ impl Connection {
             }
         }
 
-        if !changed_slots.is_empty() && responses.is_empty() {
-            self.push_inventory_sync(&mut responses);
-        }
-
-        responses
-    }
-
-    /// Resolve a container_id + slot_id to an index in self.inventory.slots.
-    fn resolve_slot(&self, container_id: u8, slot_id: u8) -> Option<usize> {
-        match container_id {
-            0 | 12 | 28 | 29 => {
-                // Inventory / hotbar / combined inventory UI containers.
-                let idx = slot_id as usize;
-                if idx < 36 {
-                    Some(idx)
-                } else {
-                    None
+        // PMMP : pour chaque requestChangedSlots, force resync du slot.
+        for cs in &changed_slots {
+            for net_slot in &cs.changed_slots {
+                if let Some((key, core)) = self
+                    .inventory_manager
+                    .locate_window_and_slot(cs.container_id, *net_slot as u32)
+                {
+                    if let Some(item) = self.inventory.slot_ref(key, core).cloned() {
+                        if let Some(entry) = self.inventory_manager.inventories.get_mut(&key) {
+                            entry.pending_syncs.insert(core, item.item);
+                        }
+                    }
                 }
             }
-            _ => None, // Armor, offhand, etc. not handled yet
         }
-    }
 
-    /// Add a slot to the response containers.
-    fn add_slot_to_response(
-        &self,
-        containers: &mut Vec<ItemStackResponseContainer>,
-        container_id: u8,
-        slot_id: u8,
-        inventory_idx: usize,
-    ) {
-        let item = &self.inventory.slots[inventory_idx];
-        let response_slot = ItemStackResponseSlot {
-            slot: slot_id,
-            hotbar_slot: slot_id,
-            count: item.item.count as u8,
-            stack_id: if item.item.is_air() { 0 } else { 1 },
-            custom_name: String::new(),
-            filtered_custom_name: String::new(),
-            durability_correction: 0,
-        };
+        // PMMP : finalisation transaction.
+        self.inventory_manager
+            .sync_mismatched_predicted_slot_changes(&self.inventory);
+        self.inventory_manager
+            .set_current_item_stack_request_id(None);
 
-        // Find or create the container
-        if let Some(container) = containers
-            .iter_mut()
-            .find(|c| c.container_id == container_id)
-        {
-            container.slots.push(response_slot);
-        } else {
-            containers.push(ItemStackResponseContainer {
-                container_id,
-                slots: vec![response_slot],
-            });
-        }
+        responses
     }
 
     pub(super) fn handle_interact(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
@@ -453,29 +283,36 @@ impl Connection {
         info!("[{}] InteractPacket action={}", self.addr, action);
 
         if action == 6 {
-            if self.player_inventory_open {
-                return Vec::new();
-            }
-            self.player_inventory_open = true;
-
-            // PMMP InventoryManager::onClientOpenMainInventory (line 394-408):
-            //   windowId = getNewWindowId()           — dynamic 1-99
-            //   ContainerOpenPacket::entityInv(windowId, WindowTypes::INVENTORY, player->getId())
-            //     → windowType = -1 (0xFF)
-            //     → blockPosition = BlockPosition(0, 0, 0)
-            //     → actorUniqueId = player entity unique ID
-            let window_id = self.advance_player_inventory_window_id();
-            let container_open = ContainerOpen::entity_inventory(
-                window_id,
-                self.entity_runtime_id as i64,
-            );
+            // Format dragonfly (protocol 944) : WindowID=0, entityId=-1, position=player.
+            let mut out: Vec<(u32, Vec<u8>)> = Vec::new();
+            self.inventory_manager
+                .on_client_open_main_inventory(self.position, &mut out);
             info!(
-                "[{}] Opening player inventory (PMMP entityInv: window_id={}, entity={})",
-                self.addr, window_id, self.entity_runtime_id,
+                "[{}] on_client_open_main_inventory (dragonfly fmt): {} packet(s)",
+                self.addr,
+                out.len(),
             );
-            return vec![
-                self.encode_compressed_packet(packet_id::CONTAINER_OPEN, &container_open.encode()),
-            ];
+            // DEBUG : dump hex des paquets bruts pour diagnostic client-side crash.
+            for (pkt_id, payload) in &out {
+                let preview: String = payload
+                    .iter()
+                    .take(64)
+                    .map(|b| format!("{:02X}", b))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                info!(
+                    "[{}] E-key packet 0x{:03X} len={} hex={}{}",
+                    self.addr,
+                    pkt_id,
+                    payload.len(),
+                    preview,
+                    if payload.len() > 64 { " ..." } else { "" },
+                );
+            }
+            return out
+                .into_iter()
+                .map(|(id, p)| self.encode_compressed_packet(id, &p))
+                .collect();
         }
 
         Vec::new()
@@ -483,49 +320,72 @@ impl Connection {
 
     pub(super) fn handle_container_close(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
         let raw_window_id = reader.read_u8().unwrap_or(0);
-        let window_type = reader.read_u8().unwrap_or(0);
+        let _window_type = reader.read_u8().unwrap_or(0);
         let _server = reader.read_bool().unwrap_or(false);
 
-        let window_id = if raw_window_id == u8::MAX {
-            self.player_inventory_window_id
-        } else {
-            raw_window_id
-        };
-
         info!(
-            "[{}] ContainerClose window_id={} window_type={}",
-            self.addr, window_id, window_type
+            "[{}] ContainerClose raw_window_id={}",
+            self.addr, raw_window_id
         );
 
-        if window_id == self.player_inventory_window_id {
-            self.player_inventory_open = false;
-        }
+        let mut out: Vec<(u32, Vec<u8>)> = Vec::new();
+        self.inventory_manager
+            .on_client_remove_window(raw_window_id, &mut out);
+        self.player_inventory_open = false;
 
-        // Echo back the close
-        let close = ContainerClose {
-            window_id,
-            window_type: if window_id == self.player_inventory_window_id {
-                PLAYER_INVENTORY_WINDOW_TYPE
-            } else {
-                window_type
-            },
-            server: false,
-        };
-        vec![self.encode_compressed_packet(packet_id::CONTAINER_CLOSE, &close.encode())]
+        out.into_iter()
+            .map(|(id, p)| self.encode_compressed_packet(id, &p))
+            .collect()
     }
 
     pub(super) fn handle_mob_equipment(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
+        use mc_rs_proto::packets::player::MobEquipment;
+
         let _runtime_entity_id = reader.read_var_u64().unwrap_or(0);
         let _item_id = reader.read_var_i32().unwrap_or(0);
         let remaining = reader.read_remaining();
         if remaining.len() >= 3 {
             let hotbar_slot = remaining[remaining.len() - 2];
+            let window_id = remaining[remaining.len() - 1];
+            // PMMP: ignorer le windowId=OFFHAND (119), c'est juste un placement offhand.
+            if window_id == 119 {
+                return Vec::new();
+            }
             if hotbar_slot < 9 {
                 self.inventory.held_slot = hotbar_slot;
+                self.inventory_manager
+                    .on_client_select_hotbar_slot(hotbar_slot as i32);
                 debug!("[{}] Held slot changed to {}", self.addr, hotbar_slot);
+
+                // Broadcast aux autres viewers : ils doivent voir l'item tenu.
+                let stack_id = self
+                    .inventory_manager
+                    .stack_id_of(crate::inventory_manager::InvKey::Main, hotbar_slot as usize);
+                let wrapper = mc_rs_proto::packets::player::ItemStackWrapper {
+                    stack_id,
+                    item: self.inventory.slots[hotbar_slot as usize].item.clone(),
+                };
+                let bcast = MobEquipment::encode_item(self.entity_runtime_id, &wrapper, hotbar_slot);
+                let bcast_pkt = self.encode_compressed_packet(
+                    mc_rs_proto::packets::packet_id::MOB_EQUIPMENT,
+                    &bcast,
+                );
+                self.broadcasts.push(bcast_pkt);
             }
         }
 
         Vec::new()
+    }
+
+    /// Vide les pending sync slots du manager. À appeler à chaque fin de tick
+    /// pour propager au client toute mutation server-side (pickup, block place,
+    /// command /give, etc.). PMMP `flushPendingUpdates`.
+    pub fn tick_inventory_flush(&mut self) -> Vec<Vec<u8>> {
+        let out = self
+            .inventory_manager
+            .flush_pending_updates(&self.inventory);
+        out.into_iter()
+            .map(|(id, p)| self.encode_compressed_packet(id, &p))
+            .collect()
     }
 }

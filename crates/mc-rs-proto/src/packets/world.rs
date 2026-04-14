@@ -136,9 +136,11 @@ impl StartGame {
         w.write_bool(self.hardcore);
         w.write_var_i32(self.difficulty);
 
-        // BlockPosition (spawn)
+        // BlockPosition spawn — gophertunnel 944 `BlockPos`: Varint32 signed
+        // sur les 3 axes (writer.go:99). L'ancien VarU32 sur Y désalignait
+        // tous les champs suivants dans StartGame (400+ fields).
         w.write_var_i32(self.spawn_position[0]);
-        w.write_var_u32(self.spawn_position[1] as u32);
+        w.write_var_i32(self.spawn_position[1]);
         w.write_var_i32(self.spawn_position[2]);
 
         w.write_bool(self.achievements_disabled);
@@ -413,7 +415,7 @@ impl AvailableActorIdentifiers {
 // ── UpdateBlock (S→C, 0x15) ──
 
 pub struct UpdateBlock {
-    pub position: [i32; 3], // x(VarInt), y(VarUInt32), z(VarInt)
+    pub position: [i32; 3], // BlockPos gophertunnel 944 : VarInt32 signé X/Y/Z
     pub runtime_id: u32,    // VarUInt32
     pub flags: u32,         // VarUInt32 (FLAG_NETWORK=2 | FLAG_NEIGHBORS=1 = 3)
     pub layer: u32,         // VarUInt32 (0 = main)
@@ -424,7 +426,7 @@ impl UpdateBlock {
         use crate::io::ProtoWriter;
         let mut w = ProtoWriter::with_capacity(20);
         w.write_var_i32(self.position[0]);
-        w.write_var_u32(self.position[1] as u32);
+        w.write_var_i32(self.position[1]);
         w.write_var_i32(self.position[2]);
         w.write_var_u32(self.runtime_id);
         w.write_var_u32(self.flags);
@@ -722,14 +724,15 @@ pub struct SetSpawnPosition {
 
 impl SetSpawnPosition {
     pub fn encode(&self) -> Vec<u8> {
+        // gophertunnel 944 SetSpawnPosition : 2 x BlockPos signés (packet/set_spawn_position.go).
         let mut w = ProtoWriter::with_capacity(32);
         w.write_var_i32(self.spawn_type);
         w.write_var_i32(self.position[0]);
-        w.write_var_u32(self.position[1] as u32);
+        w.write_var_i32(self.position[1]);
         w.write_var_i32(self.position[2]);
         w.write_var_i32(self.dimension);
         w.write_var_i32(self.spawn_position[0]);
-        w.write_var_u32(self.spawn_position[1] as u32);
+        w.write_var_i32(self.spawn_position[1]);
         w.write_var_i32(self.spawn_position[2]);
         w.into_bytes()
     }
@@ -764,10 +767,16 @@ impl ContainerOpen {
         let mut w = ProtoWriter::with_capacity(16);
         w.write_u8(self.window_id);
         w.write_u8(self.window_type);
+        // BlockPos protocol 944 (gophertunnel writer.go:99) : X, Y, Z sont
+        // TOUS des Varint32 signés (zigzag). PMMP 924 utilise VarU32 pour Y
+        // sur certains paquets ; ici pour ContainerOpen c'est SIGNED pour les 3.
+        // Si Y est écrit en VarU32 (par ex. 69 = 0x45, 1 byte) au lieu de
+        // VarI32 (69 → zigzag 138 = 0x8A 0x01, 2 bytes) le wire est décalé
+        // et le client crash.
         w.write_var_i32(self.position[0]);
-        w.write_var_u32(self.position[1] as u32);
+        w.write_var_i32(self.position[1]);
         w.write_var_i32(self.position[2]);
-        w.write_var_i64(self.actor_unique_id); // ActorUniqueId = VarI64 (CommonTypes::putActorUniqueId)
+        w.write_var_i64(self.actor_unique_id); // ActorUniqueId = VarI64
         w.into_bytes()
     }
 }
@@ -960,5 +969,45 @@ mod tests {
             println!();
         }
         println!("=== END ===\n");
+    }
+
+    /// Vérifie byte-par-byte que ContainerOpen match gophertunnel 944 pour
+    /// WindowID=0, ContainerType=0xFF (-1), Position=[3, 69, 81], ActorUniqueID=-1.
+    /// Expected:
+    ///   0x00         WindowID u8 (0)
+    ///   0xFF         ContainerType u8 (-1)
+    ///   0x06         X VarInt32(3) zigzag=6
+    ///   0x8A 0x01    Y VarInt32(69) zigzag=138 → LEB128 : 0x8A, 0x01
+    ///   0xA2 0x01    Z VarInt32(81) zigzag=162 → LEB128 : 0xA2, 0x01
+    ///   0x01         ActorUniqueID VarInt64(-1) zigzag=1 → 0x01
+    #[test]
+    fn container_open_bytes_match_gophertunnel_944() {
+        let pkt = ContainerOpen {
+            window_id: 0,
+            window_type: 0xFF,
+            position: [3, 69, 81],
+            actor_unique_id: -1,
+        };
+        let bytes = pkt.encode();
+        let expected = vec![0x00, 0xFF, 0x06, 0x8A, 0x01, 0xA2, 0x01, 0x01];
+        assert_eq!(
+            bytes, expected,
+            "ContainerOpen bytes diverge : got {:02X?}, expected {:02X?}",
+            bytes, expected
+        );
+    }
+
+    /// Edge case : Y=0 (fond du monde). Avec VarU32 c'était `0x00`, avec VarI32 c'est aussi `0x00`.
+    #[test]
+    fn container_open_y_zero_same_byte() {
+        let pkt = ContainerOpen {
+            window_id: 0,
+            window_type: 0xFF,
+            position: [0, 0, 0],
+            actor_unique_id: -1,
+        };
+        let bytes = pkt.encode();
+        // 00 FF 00 00 00 01
+        assert_eq!(bytes, vec![0x00, 0xFF, 0x00, 0x00, 0x00, 0x01]);
     }
 }

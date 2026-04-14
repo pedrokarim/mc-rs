@@ -356,22 +356,26 @@ impl Connection {
         responses.push(sound_bytes.clone());
         self.broadcasts.push(sound_bytes);
 
-        // Decrement item count in inventory
+        // Decrement item count in inventory via manager (track + queue sync).
         let slot = self.inventory.held_slot as usize;
-        if self.inventory.slots[slot].item.count > 1 {
-            self.inventory.slots[slot].item.count -= 1;
-        } else {
-            self.inventory.slots[slot] = ItemStackWrapper::air();
-        }
-
-        // Send inventory slot update
-        let slot_pkt = InventorySlot::encode(
-            0,
-            slot as u32,
-            &self.inventory.slots[slot],
-            &self.inventory_screen_container_name(),
+        let new_item = {
+            let cur = &self.inventory.slots[slot].item;
+            if cur.count > 1 {
+                let mut n = cur.clone();
+                n.count -= 1;
+                n
+            } else {
+                mc_rs_proto::packets::player::ItemStack::AIR
+            }
+        };
+        self.inventory_manager.set_slot(
+            &mut self.inventory,
+            crate::inventory_manager::InvKey::Main,
+            slot,
+            new_item,
         );
-        responses.push(self.encode_compressed_packet(packet_id::INVENTORY_SLOT, &slot_pkt));
+        // Le sync sera émis à la fin du tick via flush_pending_updates (boucle
+        // principale). Pas d'envoi inline ici.
 
         info!(
             "[{}] Block placed at ({}, {}, {}) block_id={}",

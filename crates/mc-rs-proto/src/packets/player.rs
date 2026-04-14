@@ -57,6 +57,19 @@ pub enum StackRequestAction {
         count: u8,
         source: SlotInfo,
     },
+    /// Décrément durabilité côté serveur quand le client casse un bloc.
+    /// PMMP `MineBlockStackRequestAction`. Sans gestion durabilité, on
+    /// se contente d'ack pour ne pas resync.
+    MineBlock {
+        hotbar_slot: i32,
+        predicted_durability: i32,
+        network_stack_id: i32,
+    },
+    /// Créatif : le client demande un item du creative inventory.
+    /// PMMP `CreativeCreateStackRequestAction`.
+    CraftCreative {
+        creative_item_network_id: u32,
+    },
     /// Other actions we don't handle yet.
     Unknown(u8),
 }
@@ -496,10 +509,14 @@ fn decode_item_stack_request(
                 StackRequestAction::Unknown(6)
             }
             11 => {
-                let _hotbar = reader.read_var_i32()?;
-                let _durability = reader.read_var_i32()?;
-                let _stack_id = reader.read_var_i32()?;
-                StackRequestAction::Unknown(11)
+                let hotbar_slot = reader.read_var_i32()?;
+                let predicted_durability = reader.read_var_i32()?;
+                let network_stack_id = reader.read_var_i32()?;
+                StackRequestAction::MineBlock {
+                    hotbar_slot,
+                    predicted_durability,
+                    network_stack_id,
+                }
             }
             12 => {
                 let _recipe_id = reader.read_var_u32()?;
@@ -516,8 +533,10 @@ fn decode_item_stack_request(
                 StackRequestAction::Unknown(13)
             }
             14 => {
-                let _slot = reader.read_var_u32()?;
-                StackRequestAction::Unknown(14)
+                let creative_item_network_id = reader.read_var_u32()?;
+                StackRequestAction::CraftCreative {
+                    creative_item_network_id,
+                }
             }
             other => StackRequestAction::Unknown(other),
         };
@@ -1700,8 +1719,9 @@ impl ItemStackWrapper {
 
     /// Encode to network bytes.
     ///
-    /// The current server still runs Bedrock with ItemStackNetManager disabled,
-    /// so clientbound wrappers must use legacy stack IDs: 0 for air, 1 for non-air.
+    /// Mirrors PMMP `ItemStackWrapper::write()` — the `stack_id` field is
+    /// authoritative: 0 means "no net id" (air or legacy), non-zero means
+    /// the server-assigned unique stack ID (set by `InventoryManager`).
     pub fn encode(&self, w: &mut ProtoWriter) {
         w.write_var_i32(self.item.id);
         if self.item.id == 0 {
@@ -1709,7 +1729,7 @@ impl ItemStackWrapper {
         }
         w.write_u16_le(self.item.count);
         w.write_var_u32(self.item.meta);
-        let stack_id = if self.item.is_air() { 0 } else { 1 };
+        let stack_id = if self.item.is_air() { 0 } else { self.stack_id };
         let has_net_id = stack_id != 0;
         w.write_bool(has_net_id);
         if has_net_id {

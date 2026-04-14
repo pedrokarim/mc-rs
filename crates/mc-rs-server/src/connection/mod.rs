@@ -21,6 +21,7 @@ use mc_rs_proto::packets::packet_id;
 
 use crate::config::ConnectionConfig;
 use crate::inventory::PlayerInventory;
+use crate::inventory_manager::InventoryManager;
 use crate::item_entities::PendingItemEntitySpawn;
 use crate::player_registry;
 use crate::world::chunk_cache::ChunkCache;
@@ -110,6 +111,7 @@ pub struct Connection {
 
     // Player inventory
     pub inventory: PlayerInventory,
+    pub(super) inventory_manager: InventoryManager,
     pub(super) player_inventory_window_id: u8,
     pub(super) player_inventory_open: bool,
 
@@ -172,6 +174,7 @@ impl Connection {
             pending_item_spawns: Vec::new(),
             pending_entity_attacks: Vec::new(),
             inventory,
+            inventory_manager: InventoryManager::new(),
             player_inventory_window_id: PLAYER_INVENTORY_SCREEN_ID,
             player_inventory_open: false,
             next_form_id: 1,
@@ -239,6 +242,16 @@ impl Connection {
             }
         }
 
+        // PMMP `flushPendingUpdates` à la fin du traitement des paquets : envoie
+        // tout `pending_sync` queued par les listeners (block place,
+        // pickup-via-add_item, /give, etc.). Sans ça, les mutations server-side
+        // n'arrivent jamais au client.
+        if self.is_in_game() {
+            for pkt in self.tick_inventory_flush() {
+                responses.push(pkt);
+            }
+        }
+
         responses
     }
 
@@ -275,6 +288,11 @@ impl Connection {
             // -- SpawnResponse --
             (ConnectionState::SpawnResponse, packet_id::SET_LOCAL_PLAYER_AS_INITIALIZED) => {
                 self.handle_set_local_player_as_initialized()
+            }
+            // Le client envoie MobEquipment (sélection hotbar) juste avant
+            // SET_LOCAL_PLAYER_AS_INITIALIZED. PMMP l'accepte silencieusement.
+            (ConnectionState::SpawnResponse, packet_id::MOB_EQUIPMENT) => {
+                self.handle_mob_equipment(reader)
             }
 
             // -- InGame --

@@ -7,7 +7,15 @@ mod connection;
 #[allow(dead_code)]
 mod entity;
 #[allow(dead_code)]
+pub mod event;
+#[allow(dead_code)]
+pub mod attribute;
+#[allow(dead_code)]
+pub mod combat;
+#[allow(dead_code)]
 pub mod inventory;
+#[allow(dead_code)]
+pub mod inventory_manager;
 #[allow(dead_code)]
 mod item_entities;
 #[allow(dead_code)]
@@ -54,15 +62,50 @@ use crate::server_state::ServerState;
 use crate::world::chunk_cache::ChunkCache;
 use crate::world::tick::{encode_set_time, WorldPacket, WorldState};
 
+/// Writer qui flush stdout après chaque `write`. Sans ça, PowerShell `>` buffer
+/// stdout par blocs de 4 Ko et les logs de gameplay restent invisibles jusqu'à
+/// arrêt du process.
+struct LineFlushStdout;
+
+impl std::io::Write for LineFlushStdout {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let mut out = std::io::stdout().lock();
+        let n = out.write(buf)?;
+        out.flush()?;
+        Ok(n)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        std::io::stdout().flush()
+    }
+}
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for LineFlushStdout {
+    type Writer = LineFlushStdout;
+    fn make_writer(&'a self) -> Self::Writer {
+        LineFlushStdout
+    }
+}
+
 #[tokio::main]
 async fn main() {
-    // Initialize logging
+    // Initialize logging avec flush immédiat (nécessaire pour PowerShell `>`).
     tracing_subscriber::fmt()
+        .with_writer(LineFlushStdout)
+        .with_ansi(false)
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,mc_rs_raknet=debug")),
         )
         .init();
+
+    // Installe un hook de panic qui écrit aussi sur stdout — sinon un panic
+    // part sur stderr (non redirigé par `>`) et on loupe le message.
+    std::panic::set_hook(Box::new(|info| {
+        let msg = format!("\n==== PANIC ====\n{info}\n================\n");
+        let _ = std::io::Write::write_all(&mut std::io::stdout(), msg.as_bytes());
+        let _ = std::io::Write::flush(&mut std::io::stdout());
+        let _ = std::io::Write::write_all(&mut std::io::stderr(), msg.as_bytes());
+    }));
 
     info!("MC-RS Server starting...");
 
@@ -351,11 +394,20 @@ async fn main() {
                     };
 
                     let collected = if let Some(conn) = connections.get_mut(&pickup.player_addr) {
-                        if conn.inventory.add_item(entity.item.clone()).is_some() {
-                            Some((
-                                conn.entity_runtime_id,
-                                conn.prepared_inventory_sync_packets(),
-                            ))
+                        // PMMP `Inventory::addItem()` via le manager — déclenche
+                        // le listener (track + pending_sync) pour chaque slot
+                        // modifié. Le sync wire est ensuite émis par
+                        // `tick_inventory_flush()`.
+                        let added = conn
+                            .inventory_manager
+                            .add_item_to_main(&mut conn.inventory, entity.item.clone());
+                        if added {
+                            let sync_pkts: Vec<Vec<u8>> = conn
+                                .tick_inventory_flush()
+                                .into_iter()
+                                .map(|p| conn.prepare_for_send(p))
+                                .collect();
+                            Some((conn.entity_runtime_id, sync_pkts))
                         } else {
                             None
                         }

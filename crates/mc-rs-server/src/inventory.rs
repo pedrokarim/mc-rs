@@ -137,11 +137,18 @@ pub fn item_to_block(item_id: i32) -> Option<u32> {
     }
 }
 
-/// Player inventory: 36 main slots + 4 armor + 1 offhand.
+/// Player inventory: 36 main slots + 4 armor + 1 offhand + cursor + 2x2 craft grid.
+///
+/// Mirrors PMMP split across PlayerInventory, ArmorInventory, PlayerOffHandInventory,
+/// PlayerCursorInventory and PlayerCraftingInventory. Bundled here because Rust lacks
+/// `spl_object_id` — InventoryManager identifies them via `InvKey` instead.
 pub struct PlayerInventory {
     pub slots: Vec<ItemStackWrapper>, // 36 slots (hotbar 0-8, main 9-35)
     pub armor: Vec<ItemStackWrapper>, // 4 slots
     pub offhand: ItemStackWrapper,
+    pub cursor: ItemStackWrapper,           // 1 slot (UI slot 0)
+    pub craft_grid: [ItemStackWrapper; 4],  // 2x2 (UI slots 28..32)
+    pub craft_result: ItemStackWrapper,     // (UI slot 50)
     pub held_slot: u8, // 0-8 hotbar index
     next_stack_id: i32,
 }
@@ -158,6 +165,14 @@ impl PlayerInventory {
             slots: vec![ItemStackWrapper::air(); 36],
             armor: vec![ItemStackWrapper::air(); 4],
             offhand: ItemStackWrapper::air(),
+            cursor: ItemStackWrapper::air(),
+            craft_grid: [
+                ItemStackWrapper::air(),
+                ItemStackWrapper::air(),
+                ItemStackWrapper::air(),
+                ItemStackWrapper::air(),
+            ],
+            craft_result: ItemStackWrapper::air(),
             held_slot: 0,
             next_stack_id: 1,
         }
@@ -184,6 +199,14 @@ impl PlayerInventory {
             slots,
             armor,
             offhand,
+            cursor: ItemStackWrapper::air(),
+            craft_grid: [
+                ItemStackWrapper::air(),
+                ItemStackWrapper::air(),
+                ItemStackWrapper::air(),
+                ItemStackWrapper::air(),
+            ],
+            craft_result: ItemStackWrapper::air(),
             held_slot: held_slot.min(8),
             next_stack_id: max_stack_id.max(0) + 1,
         }
@@ -196,6 +219,44 @@ impl PlayerInventory {
         id
     }
 
+    /// Get a mutable reference to a slot inside the logical inventory identified by `key`.
+    /// Returns None if the slot is out of range for that inventory.
+    pub fn slot_mut(&mut self, key: crate::inventory_manager::InvKey, core_slot: usize) -> Option<&mut ItemStackWrapper> {
+        use crate::inventory_manager::InvKey;
+        match key {
+            InvKey::Main => self.slots.get_mut(core_slot),
+            InvKey::Offhand => (core_slot == 0).then_some(&mut self.offhand),
+            InvKey::Armor => self.armor.get_mut(core_slot),
+            InvKey::Cursor => (core_slot == 0).then_some(&mut self.cursor),
+            InvKey::Craft2x2 => self.craft_grid.get_mut(core_slot),
+            InvKey::CraftResult => (core_slot == 0).then_some(&mut self.craft_result),
+        }
+    }
+
+    pub fn slot_ref(&self, key: crate::inventory_manager::InvKey, core_slot: usize) -> Option<&ItemStackWrapper> {
+        use crate::inventory_manager::InvKey;
+        match key {
+            InvKey::Main => self.slots.get(core_slot),
+            InvKey::Offhand => (core_slot == 0).then_some(&self.offhand),
+            InvKey::Armor => self.armor.get(core_slot),
+            InvKey::Cursor => (core_slot == 0).then_some(&self.cursor),
+            InvKey::Craft2x2 => self.craft_grid.get(core_slot),
+            InvKey::CraftResult => (core_slot == 0).then_some(&self.craft_result),
+        }
+    }
+
+    pub fn inventory_size(key: crate::inventory_manager::InvKey) -> usize {
+        use crate::inventory_manager::InvKey;
+        match key {
+            InvKey::Main => 36,
+            InvKey::Offhand => 1,
+            InvKey::Armor => 4,
+            InvKey::Cursor => 1,
+            InvKey::Craft2x2 => 4,
+            InvKey::CraftResult => 1,
+        }
+    }
+
     /// Get the item in the currently held hotbar slot.
     pub fn held_item(&self) -> &ItemStackWrapper {
         &self.slots[self.held_slot as usize]
@@ -205,6 +266,11 @@ impl PlayerInventory {
         self.slots.fill(ItemStackWrapper::air());
         self.armor.fill(ItemStackWrapper::air());
         self.offhand = ItemStackWrapper::air();
+        self.cursor = ItemStackWrapper::air();
+        for s in &mut self.craft_grid {
+            *s = ItemStackWrapper::air();
+        }
+        self.craft_result = ItemStackWrapper::air();
         self.held_slot = 0;
         self.next_stack_id = 1;
     }
