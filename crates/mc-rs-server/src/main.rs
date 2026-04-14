@@ -547,6 +547,36 @@ pub mod sculk_vein;
 #[allow(dead_code)]
 pub mod sculk_sensor;
 #[allow(dead_code)]
+pub mod wind_charge;
+#[allow(dead_code)]
+pub mod creaking;
+#[allow(dead_code)]
+pub mod cocoa_beans;
+#[allow(dead_code)]
+pub mod sugar_cane;
+#[allow(dead_code)]
+pub mod bamboo;
+#[allow(dead_code)]
+pub mod kelp;
+#[allow(dead_code)]
+pub mod coral;
+#[allow(dead_code)]
+pub mod sea_pickle;
+#[allow(dead_code)]
+pub mod turtle_egg;
+#[allow(dead_code)]
+pub mod frog_spawn;
+#[allow(dead_code)]
+pub mod beehive;
+#[allow(dead_code)]
+pub mod honey_block;
+#[allow(dead_code)]
+pub mod slime_block;
+#[allow(dead_code)]
+pub mod dragon_egg;
+#[allow(dead_code)]
+pub mod chorus_fruit;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
