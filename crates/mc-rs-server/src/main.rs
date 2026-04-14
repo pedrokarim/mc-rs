@@ -55,6 +55,16 @@ pub mod trading;
 #[allow(dead_code)]
 pub mod fishing;
 #[allow(dead_code)]
+pub mod advancements;
+#[allow(dead_code)]
+pub mod statistics;
+#[allow(dead_code)]
+pub mod loot_tables;
+#[allow(dead_code)]
+pub mod sound_events;
+#[allow(dead_code)]
+pub mod structures;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
