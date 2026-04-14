@@ -721,6 +721,20 @@ pub mod water_physics;
 #[allow(dead_code)]
 pub mod freezing;
 #[allow(dead_code)]
+pub mod mining_effect;
+#[allow(dead_code)]
+pub mod block_pickaxe;
+#[allow(dead_code)]
+pub mod world_events_map;
+#[allow(dead_code)]
+pub mod game_rules_map;
+#[allow(dead_code)]
+pub mod weather_state;
+#[allow(dead_code)]
+pub mod lightning;
+#[allow(dead_code)]
+pub mod advancement_tree;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
