@@ -167,6 +167,12 @@ pub mod gamemode;
 #[allow(dead_code)]
 pub mod kick_disconnect;
 #[allow(dead_code)]
+pub mod recipe_book;
+#[allow(dead_code)]
+pub mod bucket;
+#[allow(dead_code)]
+pub mod painting;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
