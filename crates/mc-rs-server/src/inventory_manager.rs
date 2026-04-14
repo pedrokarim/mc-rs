@@ -149,6 +149,8 @@ impl InventoryManager {
                 .collect(),
             InvKey::Craft2x2,
         );
+        // CraftResult : slot UI 50 (core slot 0).
+        mgr.add_complex(vec![(ui_slot::CRAFTING_RESULT, 0)], InvKey::CraftResult);
         mgr
     }
 
@@ -333,22 +335,26 @@ impl InventoryManager {
 
     /// `syncAll()` — resync tous les inventaires enregistrés.
     ///
-    /// Protocol 944 (dragonfly) : les inventaires non-UI (Main, Offhand, Armor)
-    /// reçoivent chacun un InventoryContent. La fenêtre UI (124) reçoit
-    /// **un seul** InventoryContent de 54 slots où cursor (0), craft grid
-    /// (28..32) et craft result (50) sont aux bonnes positions, le reste en air.
-    /// Sans ces 54 slots le client 1.26.10 crash à l'ouverture de l'inventaire.
+    /// PMMP `InventoryManager.php:628-632` itère `$this->inventories` et appelle
+    /// `syncContents()` sur chacun. Pour un inventaire non-complex, ça envoie
+    /// un `InventoryContent` two-phase sur son windowId. Pour un complex
+    /// (cursor, craft grid, craft result), ça envoie un `InventorySlot` par
+    /// core slot, mappé sur le netSlot via `complex_slot_map`.
+    ///
+    /// Ordre : Main, Offhand, Armor puis les UI-complex (Cursor, Craft2x2,
+    /// CraftResult). L'ordre PMMP est celui d'insertion dans la HashMap qui
+    /// est stable parce qu'ajoutés dans un ordre fixe dans `new()`.
     pub fn sync_all(&mut self, inv: &PlayerInventory, out: &mut PacketOut) {
-        // Ordre exact dragonfly (session.go:255-258) :
-        //   sendInv(inv, WindowIDInventory=0)
-        //   sendInv(ui,  WindowIDUI=124)
-        //   sendInv(offHand, WindowIDOffHand=119)
-        //   sendInv(armour, WindowIDArmour=120)
-        // Pas de MobEquipment au spawn (dragonfly ne l'envoie qu'au changement).
-        self.sync_contents_non_ui(inv, InvKey::Main, out);
-        self.sync_ui_inventory(inv, out);
-        self.sync_contents_non_ui(inv, InvKey::Offhand, out);
-        self.sync_contents_non_ui(inv, InvKey::Armor, out);
+        for key in [
+            InvKey::Main,
+            InvKey::Offhand,
+            InvKey::Armor,
+            InvKey::Cursor,
+            InvKey::Craft2x2,
+            InvKey::CraftResult,
+        ] {
+            self.sync_contents(inv, key, out);
+        }
     }
 
     /// Sync un inventaire "simple" (non mappé sur UI). Envoie un InventoryContent
@@ -1262,5 +1268,101 @@ impl InventoryManager {
         if let Some(s) = inv.slot_mut(b.0, b.1) {
             *s = item_a;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mc_rs_proto::io::ProtoReader;
+
+    /// Fresh manager : windowId dynamique démarre à FIRST (1), next devient 2.
+    #[test]
+    fn e_key_emits_container_open_with_dynamic_window_id_and_player_actor() {
+        let mut mgr = InventoryManager::new();
+        let mut out = PacketOut::new();
+        let player_id: i64 = 42;
+
+        mgr.on_client_open_main_inventory(player_id, &mut out);
+
+        // Au premier E-key, aucun close pending → exécution immédiate.
+        // Doit produire un seul ContainerOpen.
+        let opens: Vec<_> = out
+            .iter()
+            .filter(|(pid, _)| *pid == packet_id::CONTAINER_OPEN)
+            .collect();
+        assert_eq!(opens.len(), 1, "expected exactly one CONTAINER_OPEN");
+
+        let payload = &opens[0].1;
+        let mut r = ProtoReader::new(payload);
+        // PMMP entityInv layout:
+        //   U8 windowId, U8 windowType, BlockPos (VarI32,VarI32,VarI32), VarI64 actorUniqueId
+        let window_id = r.read_u8().unwrap();
+        let window_type = r.read_u8().unwrap();
+        let bx = r.read_var_i32().unwrap();
+        let by = r.read_var_i32().unwrap();
+        let bz = r.read_var_i32().unwrap();
+        let actor_id = r.read_var_i64().unwrap();
+
+        assert_eq!(window_id, 2, "first dynamic windowId after FIRST=1 should be 2");
+        assert_eq!(window_type, 0xFF, "INVENTORY window type = -1 (0xFF byte)");
+        assert_eq!((bx, by, bz), (0, 0, 0), "entityInv block pos must be (0,0,0)");
+        assert_eq!(actor_id, player_id, "actor_unique_id must be player entity id");
+    }
+
+    #[test]
+    fn sync_all_matches_pmmp_semantics() {
+        let mut mgr = InventoryManager::new();
+        let inv = crate::inventory::PlayerInventory::new();
+        let mut out = PacketOut::new();
+        mgr.sync_all(&inv, &mut out);
+
+        // PMMP sémantique :
+        //   - Inventaires non-complex (Main, Offhand, Armor) : `InventoryContent`
+        //     two-phase → 2 paquets chacun = 6 INVENTORY_CONTENT.
+        //   - Inventaires complex (Cursor 1 slot, Craft2x2 4 slots, CraftResult 1)
+        //     envoient `InventorySlot` par core slot. Au spawn tous air →
+        //     stack_id = 0 → pas de phase clear → 1 paquet par slot = 6 slots =
+        //     6 INVENTORY_SLOT.
+        let content_packets = out
+            .iter()
+            .filter(|(pid, _)| *pid == packet_id::INVENTORY_CONTENT)
+            .count();
+        let slot_packets = out
+            .iter()
+            .filter(|(pid, _)| *pid == packet_id::INVENTORY_SLOT)
+            .count();
+        assert_eq!(
+            content_packets, 6,
+            "two-phase × 3 non-complex (Main, Offhand, Armor) = 6 INVENTORY_CONTENT"
+        );
+        assert_eq!(
+            slot_packets, 6,
+            "1 paquet par core slot complex air: Cursor(1) + Craft2x2(4) + CraftResult(1) = 6"
+        );
+    }
+
+    #[test]
+    fn container_open_is_deferred_while_close_pending() {
+        let mut mgr = InventoryManager::new();
+        let mut out = PacketOut::new();
+
+        // Simule un close pending (une fenêtre dynamique en cours de fermeture).
+        // On déclenche d'abord une ouverture pour avoir un windowId dynamique tracké,
+        // puis `on_current_window_remove` pour poser le pending_close.
+        mgr.on_client_open_main_inventory(1, &mut out);
+        out.clear();
+        mgr.on_current_window_remove(&mut out);
+        assert!(mgr.pending_close_window_id.is_some());
+
+        // Deuxième E-key pendant que le close est pending → ne produit pas d'open.
+        out.clear();
+        mgr.on_client_open_main_inventory(1, &mut out);
+        let opens = out
+            .iter()
+            .filter(|(pid, _)| *pid == packet_id::CONTAINER_OPEN)
+            .count();
+        assert_eq!(opens, 0, "open must be deferred while a close is pending");
+        assert!(mgr.pending_open_main_inventory.is_some());
     }
 }
