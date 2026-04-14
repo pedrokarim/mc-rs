@@ -35,6 +35,12 @@ pub mod block_behaviors;
 #[allow(dead_code)]
 pub mod block_entities;
 #[allow(dead_code)]
+pub mod crafting;
+#[allow(dead_code)]
+pub mod projectiles;
+#[allow(dead_code)]
+pub mod mob_ai;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
