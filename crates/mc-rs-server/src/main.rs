@@ -97,6 +97,14 @@ pub mod liquids;
 #[allow(dead_code)]
 pub mod biomes_registry;
 #[allow(dead_code)]
+pub mod workstations;
+#[allow(dead_code)]
+pub mod skins;
+#[allow(dead_code)]
+pub mod sculk;
+#[allow(dead_code)]
+pub mod conduit;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
