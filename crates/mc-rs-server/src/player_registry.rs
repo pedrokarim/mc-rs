@@ -10,6 +10,8 @@ pub fn next_entity_id() -> i64 {
 }
 
 /// Info about a connected player, shared across the server.
+/// Ne contient que l'index (pour broadcast multi-joueurs) ; l'état gameplay
+/// autoritaire vit dans `Connection` (hunger, combat, attributes, inventory).
 #[derive(Clone)]
 pub struct PlayerInfo {
     pub addr: SocketAddr,
@@ -90,6 +92,10 @@ impl PlayerRegistry {
             info.yaw = yaw;
             info.head_yaw = head_yaw;
         }
+    }
+
+    pub fn get_mut(&mut self, addr: &SocketAddr) -> Option<&mut PlayerInfo> {
+        self.players.get_mut(addr)
     }
 
     /// Get all players except the given addr.

@@ -278,15 +278,19 @@ impl PlayerInventory {
     /// Add an item to the first available slot.
     /// Returns the slot index if successful, None if inventory is full.
     pub fn add_item(&mut self, item: ItemStack) -> Option<usize> {
+        // Max stack dépend du type d'item (sword=1, ender_pearl=16, stone=64).
+        let max_stack = crate::item_registry::item_name_by_id(item.id as i32)
+            .map(crate::stack_sizes::max_stack_size)
+            .unwrap_or(64);
         // First try to stack with existing items
         for i in 0..36 {
             let slot = &self.slots[i];
             if slot.item.id == item.id
                 && slot.item.meta == item.meta
-                && slot.item.count < 64
+                && slot.item.count < max_stack
                 && !slot.item.is_air()
             {
-                let space = 64 - self.slots[i].item.count;
+                let space = max_stack - self.slots[i].item.count;
                 let add = item.count.min(space);
                 self.slots[i].item.count += add;
                 return Some(i);

@@ -727,8 +727,6 @@ pub mod block_pickaxe;
 #[allow(dead_code)]
 pub mod world_events_map;
 #[allow(dead_code)]
-pub mod game_rules_map;
-#[allow(dead_code)]
 pub mod weather_state;
 #[allow(dead_code)]
 pub mod lightning;

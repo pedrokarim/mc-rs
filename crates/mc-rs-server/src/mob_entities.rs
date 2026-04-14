@@ -85,11 +85,8 @@ impl MobKind {
     }
 
     pub fn max_health(self) -> f32 {
-        match self {
-            Self::Zombie | Self::Skeleton | Self::Creeper => 20.0,
-            Self::Cow | Self::Pig | Self::Sheep => 10.0,
-            Self::Chicken => 4.0,
-        }
+        // Source autoritaire : `mob_hp::mob_max_hp` (couvre ~60 entités vanilla).
+        crate::mob_hp::mob_max_hp(self.actor_type())
     }
 
     pub fn default_loot(self) -> Vec<ItemStack> {
