@@ -161,6 +161,12 @@ pub mod lectern;
 #[allow(dead_code)]
 pub mod villages;
 #[allow(dead_code)]
+pub mod mineshaft;
+#[allow(dead_code)]
+pub mod gamemode;
+#[allow(dead_code)]
+pub mod kick_disconnect;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
