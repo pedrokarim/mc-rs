@@ -219,6 +219,12 @@ pub mod respawn_anchor;
 #[allow(dead_code)]
 pub mod cauldron;
 #[allow(dead_code)]
+pub mod mob_variants;
+#[allow(dead_code)]
+pub mod patrol;
+#[allow(dead_code)]
+pub mod trading_generator;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
