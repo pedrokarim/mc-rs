@@ -577,6 +577,48 @@ pub mod dragon_egg;
 #[allow(dead_code)]
 pub mod chorus_fruit;
 #[allow(dead_code)]
+pub mod scaffolding;
+#[allow(dead_code)]
+pub mod dripleaf;
+#[allow(dead_code)]
+pub mod pointed_dripstone;
+#[allow(dead_code)]
+pub mod moss;
+#[allow(dead_code)]
+pub mod azalea;
+#[allow(dead_code)]
+pub mod cave_vines;
+#[allow(dead_code)]
+pub mod glow_berry;
+#[allow(dead_code)]
+pub mod deepslate;
+#[allow(dead_code)]
+pub mod command_blocks;
+#[allow(dead_code)]
+pub mod structure_block;
+#[allow(dead_code)]
+pub mod jigsaw;
+#[allow(dead_code)]
+pub mod nbt_tags_ext;
+#[allow(dead_code)]
+pub mod entity_tick;
+#[allow(dead_code)]
+pub mod text_colors;
+#[allow(dead_code)]
+pub mod language;
+#[allow(dead_code)]
+pub mod player_abilities;
+#[allow(dead_code)]
+pub mod damage_sources;
+#[allow(dead_code)]
+pub mod pack_encoder;
+#[allow(dead_code)]
+pub mod chunk_radius;
+#[allow(dead_code)]
+pub mod sprinting;
+#[allow(dead_code)]
+pub mod tick_speed;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
