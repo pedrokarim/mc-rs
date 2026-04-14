@@ -675,6 +675,22 @@ pub mod entity_ids;
 #[allow(dead_code)]
 pub mod bounding_box;
 #[allow(dead_code)]
+pub mod server_log;
+#[allow(dead_code)]
+pub mod console_commands;
+#[allow(dead_code)]
+pub mod world_time;
+#[allow(dead_code)]
+pub mod vector_math;
+#[allow(dead_code)]
+pub mod raytrace;
+#[allow(dead_code)]
+pub mod sidebar;
+#[allow(dead_code)]
+pub mod title_packet;
+#[allow(dead_code)]
+pub mod tab_list;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
