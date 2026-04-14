@@ -145,6 +145,12 @@ pub mod horse_attributes;
 #[allow(dead_code)]
 pub mod sheep_color;
 #[allow(dead_code)]
+pub mod game_rules;
+#[allow(dead_code)]
+pub mod fire_mechanics;
+#[allow(dead_code)]
+pub mod nether_portal;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
