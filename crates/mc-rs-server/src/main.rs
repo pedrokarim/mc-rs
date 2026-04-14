@@ -119,6 +119,10 @@ pub mod mob_behaviors;
 #[allow(dead_code)]
 pub mod noteblock;
 #[allow(dead_code)]
+pub mod container_behaviors;
+#[allow(dead_code)]
+pub mod spawn_rules;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
