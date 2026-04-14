@@ -266,6 +266,20 @@ impl Connection {
                         "[{}] Block broken at ({}, {}, {}) old_id={}",
                         self.addr, bx, by, bz, old_block_id
                     );
+
+                    // PMMP `BlockBreakEvent` (post-break, pour monitoring plugins).
+                    if let Ok(mut ev_mgr) = self.events.lock() {
+                        let mut ev = crate::event::block::BlockBreakEvent {
+                            player_addr: self.addr,
+                            position: [bx, by, bz],
+                            old_block_runtime_id: old_block_id,
+                            new_block_runtime_id: air_id,
+                            drops: Vec::new(),
+                            xp_drop: 0,
+                            cancelled: false,
+                        };
+                        ev_mgr.call(&mut ev);
+                    }
                 }
 
                 _ => {}
@@ -381,5 +395,17 @@ impl Connection {
             "[{}] Block placed at ({}, {}, {}) block_id={}",
             self.addr, tx, ty, tz, block_runtime_id
         );
+
+        // PMMP `BlockPlaceEvent` (post-place).
+        if let Ok(mut ev_mgr) = self.events.lock() {
+            let mut ev = crate::event::block::BlockPlaceEvent {
+                player_addr: self.addr,
+                position: [tx, ty, tz],
+                block_runtime_id,
+                replaced_block_runtime_id: BLOCKS.air,
+                cancelled: false,
+            };
+            ev_mgr.call(&mut ev);
+        }
     }
 }

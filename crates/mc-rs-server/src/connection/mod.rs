@@ -20,6 +20,9 @@ use mc_rs_proto::io::ProtoReader;
 use mc_rs_proto::packets::packet_id;
 
 use crate::config::ConnectionConfig;
+use crate::attribute::{AttributeMap, HungerManager};
+use crate::combat::CombatState;
+use crate::event::EventManager;
 use crate::inventory::PlayerInventory;
 use crate::inventory_manager::InventoryManager;
 use crate::item_entities::PendingItemEntitySpawn;
@@ -115,6 +118,16 @@ pub struct Connection {
     pub(super) player_inventory_window_id: u8,
     pub(super) player_inventory_open: bool,
 
+    // Player stats : attributs (santé, faim, XP), combat, hunger.
+    pub attributes: AttributeMap,
+    pub combat: CombatState,
+    pub hunger: HungerManager,
+    /// Horloge game-tick (20 TPS = 1 tick / 5 server-ticks).
+    pub(super) game_tick_accum: u64,
+
+    // Event manager partagé (fire events pour plugins).
+    pub events: Arc<Mutex<EventManager>>,
+
     // Shared chunk cache (world persistence)
     pub(super) chunk_cache: Arc<Mutex<ChunkCache>>,
 
@@ -133,6 +146,7 @@ impl Connection {
         world_gamemode: i32,
         current_difficulty: i32,
         is_op: bool,
+        events: Arc<Mutex<EventManager>>,
     ) -> Self {
         let spawn_position = world_spawn_override
             .unwrap_or_else(|| spawn::find_spawn_position(&chunk_cache, config.world_seed));
@@ -177,6 +191,11 @@ impl Connection {
             inventory_manager: InventoryManager::new(),
             player_inventory_window_id: PLAYER_INVENTORY_SCREEN_ID,
             player_inventory_open: false,
+            attributes: AttributeMap::default_for_player(),
+            combat: CombatState::new(),
+            hunger: HungerManager::new(),
+            game_tick_accum: 0,
+            events,
             next_form_id: 1,
             pending_forms: HashMap::new(),
             server_keypair,

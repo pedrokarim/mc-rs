@@ -66,4 +66,8 @@ pub mod packet_id {
     pub const CONTAINER_CLOSE: u32 = 0x2F;
     pub const ITEM_STACK_RESPONSE: u32 = 0x94;
     pub const SERVERBOUND_LOADING_SCREEN: u32 = 0x138;
+    // Visuels
+    pub const SPAWN_PARTICLE_EFFECT: u32 = 0x76;
+    pub const BOSS_EVENT: u32 = 0x4A;
+    pub const SET_ACTOR_LINK: u32 = 0x29;
 }

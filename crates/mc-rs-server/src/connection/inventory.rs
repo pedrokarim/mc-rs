@@ -388,4 +388,51 @@ impl Connection {
             .map(|(id, p)| self.encode_compressed_packet(id, &p))
             .collect()
     }
+
+    /// Tick game state : hunger, combat timers, attribute desync sync.
+    /// À appeler à chaque game-tick (20 TPS = 1 tick / 5 server-ticks).
+    /// Retourne les paquets à envoyer au joueur (UpdateAttributes si desync).
+    pub fn tick_game_state(&mut self) -> Vec<Vec<u8>> {
+        use mc_rs_proto::packets::packet_id;
+        use mc_rs_proto::packets::player::UpdateAttributes;
+
+        // Combat timers (attack_time, no_damage_ticks).
+        self.combat.tick();
+        // Hunger (exhaustion drain + regen/starvation).
+        self.hunger
+            .tick(&mut self.attributes, self.current_difficulty);
+
+        // Drain désync → UpdateAttributesPacket si non-vide.
+        let desync = self.attributes.drain_desync();
+        let mut out = Vec::new();
+        if !desync.is_empty() {
+            let payload = encode_update_attributes(self.entity_runtime_id, &desync);
+            out.push(self.encode_compressed_packet(packet_id::UPDATE_ATTRIBUTES, &payload));
+        }
+        out
+    }
+}
+
+/// Helper : encode un `UpdateAttributesPacket` à partir d'une liste d'attributs
+/// désynchronisés. PMMP `UpdateAttributesPacket` format :
+/// VarU64 actorRuntimeId, VarU32 count, { f32 min, f32 max, f32 current, f32 default,
+/// string id, VarU32 modCount (=0) } × count, VarU64 tick.
+fn encode_update_attributes(
+    entity_runtime_id: u64,
+    attrs: &[crate::attribute::Attribute],
+) -> Vec<u8> {
+    use mc_rs_proto::io::ProtoWriter;
+    let mut w = ProtoWriter::with_capacity(128);
+    w.write_var_u64(entity_runtime_id);
+    w.write_var_u32(attrs.len() as u32);
+    for a in attrs {
+        w.write_f32_le(a.min_value);
+        w.write_f32_le(a.max_value);
+        w.write_f32_le(a.current_value);
+        w.write_f32_le(a.default_value);
+        w.write_string(&a.id);
+        w.write_var_u32(0); // mod count
+    }
+    w.write_var_u64(0); // tick
+    w.into_bytes()
 }

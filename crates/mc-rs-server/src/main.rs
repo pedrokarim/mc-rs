@@ -13,6 +13,12 @@ pub mod attribute;
 #[allow(dead_code)]
 pub mod combat;
 #[allow(dead_code)]
+pub mod durability;
+#[allow(dead_code)]
+pub mod passive_entities;
+#[allow(dead_code)]
+pub mod visuals;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
@@ -168,6 +174,10 @@ async fn main() {
     let mut registry = PlayerRegistry::new();
     let mut item_entities = ItemEntityManager::new();
     let mut mob_entities = MobEntityManager::new();
+    let mut passive_entities = crate::passive_entities::PassiveEntityManager::new();
+    // Event manager partagé (tous les Connection le clonent).
+    let event_manager: Arc<std::sync::Mutex<crate::event::EventManager>> =
+        Arc::new(std::sync::Mutex::new(crate::event::EventManager::new()));
     let mut world_state = WorldState::new(
         config.gameplay.do_daylight_cycle,
         config.gameplay.do_weather_cycle,
@@ -269,6 +279,7 @@ async fn main() {
                         server_state.effective_default_gamemode(conn_config.default_gamemode),
                         server_state.effective_difficulty(conn_config.difficulty),
                         false,
+                        Arc::clone(&event_manager),
                     );
                     connections.insert(addr, conn);
                     peers.insert(addr, peer);
@@ -288,6 +299,7 @@ async fn main() {
                     &command_system,
                     &chunk_cache,
                     &mut should_stop,
+                    &event_manager,
                 );
             }
 
@@ -311,6 +323,27 @@ async fn main() {
                                     raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, false);
                                 }
                             }
+                        }
+                    }
+                }
+
+                // Game tick (20 TPS = 1 game tick / 5 server ticks).
+                // Met à jour : combat i-frames, hunger drain/regen, attribute desync sync.
+                for (addr, conn) in connections.iter_mut() {
+                    if !conn.is_in_game() {
+                        continue;
+                    }
+                    conn.game_tick_accum = conn.game_tick_accum.saturating_add(1);
+                    if conn.game_tick_accum >= 5 {
+                        conn.game_tick_accum = 0;
+                        for pkt in conn.tick_game_state() {
+                            let prepared = conn.prepare_for_send(pkt);
+                            raknet.send_to_session(
+                                addr,
+                                prepared,
+                                Reliability::ReliableOrdered,
+                                false,
+                            );
                         }
                     }
                 }
@@ -531,6 +564,7 @@ async fn main() {
                     &command_system,
                     &chunk_cache,
                     &mut should_stop,
+                    &event_manager,
                 );
             }
 
@@ -601,6 +635,7 @@ fn spawn_and_broadcast_item_entity(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn process_peer_events(
     peers: &mut HashMap<SocketAddr, mc_rs_raknet::RakNetPeer>,
     connections: &mut HashMap<SocketAddr, Connection>,
@@ -614,6 +649,7 @@ fn process_peer_events(
     command_system: &ServerCommandSystem,
     chunk_cache: &std::sync::Arc<std::sync::Mutex<ChunkCache>>,
     should_stop: &mut bool,
+    event_manager: &Arc<std::sync::Mutex<crate::event::EventManager>>,
 ) {
     let addrs: Vec<SocketAddr> = peers.keys().copied().collect();
     for addr in addrs {
@@ -796,6 +832,20 @@ fn process_peer_events(
                             addr, name, entity_id
                         );
 
+                        // PMMP `PlayerJoinEvent`. Fire pour les plugins.
+                        if let Ok(mut ev_mgr) = event_manager.lock() {
+                            let mut ev = crate::event::player::PlayerJoinEvent {
+                                player_addr: addr,
+                                display_name: name.clone(),
+                                xuid: xuid.clone(),
+                                entity_runtime_id: runtime_id,
+                                position,
+                                gamemode: player_gamemode,
+                                join_message: format!("{} joined the game", name),
+                            };
+                            ev_mgr.call(&mut ev);
+                        }
+
                         if let Some(joined_conn) = connections.get_mut(&addr) {
                             for entity in item_entities.all() {
                                 let pkt = joined_conn.encode_compressed_packet(
@@ -975,6 +1025,19 @@ fn process_peer_events(
                     // Broadcast RemoveEntity + PlayerList(REMOVE) to all others
                     if let Some(player_info) = registry.remove(&addr) {
                         info!("[{}] {} left the game", addr, player_info.name);
+
+                        // PMMP `PlayerQuitEvent` pour les plugins.
+                        if let Ok(mut ev_mgr) = event_manager.lock() {
+                            let mut ev = crate::event::player::PlayerQuitEvent {
+                                player_addr: addr,
+                                display_name: player_info.name.clone(),
+                                xuid: player_info.xuid.clone(),
+                                entity_runtime_id: player_info.entity_id as u64,
+                                quit_message: format!("{} left the game", player_info.name),
+                                quit_reason: "Client Disconnect".to_string(),
+                            };
+                            ev_mgr.call(&mut ev);
+                        }
 
                         let remove_entity = RemoveEntity {
                             entity_unique_id: player_info.entity_id,

@@ -25,8 +25,27 @@ impl Connection {
 
         info!("[CHAT] {}: {}", player_name, pkt.message);
 
+        // PMMP `PlayerChatEvent` — cancellable, éditable par plugins.
+        let mut chat_message = pkt.message.clone();
+        let mut cancelled = false;
+        if let Ok(mut ev_mgr) = self.events.lock() {
+            let mut ev = crate::event::player::PlayerChatEvent {
+                player_addr: self.addr,
+                sender_name: player_name.clone(),
+                message: pkt.message.clone(),
+                format: format!("<{}> {}", player_name, pkt.message),
+                cancelled: false,
+            };
+            ev_mgr.call(&mut ev);
+            cancelled = ev.cancelled;
+            chat_message = ev.message;
+        }
+        if cancelled {
+            return Vec::new();
+        }
+
         // Broadcast chat to all players (including self)
-        let chat = Text::chat(&player_name, &pkt.message, &xuid);
+        let chat = Text::chat(&player_name, &chat_message, &xuid);
         self.broadcasts
             .push(self.encode_compressed_packet(packet_id::TEXT, &chat));
 
