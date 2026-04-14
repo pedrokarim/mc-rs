@@ -105,6 +105,12 @@ pub mod sculk;
 #[allow(dead_code)]
 pub mod conduit;
 #[allow(dead_code)]
+pub mod form_api;
+#[allow(dead_code)]
+pub mod chunk_serializer_ext;
+#[allow(dead_code)]
+pub mod emotes;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
