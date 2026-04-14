@@ -961,6 +961,16 @@ pub mod woodland_mansion;
 #[allow(dead_code)]
 pub mod witch_hut;
 #[allow(dead_code)]
+pub mod jungle_temple;
+#[allow(dead_code)]
+pub mod igloo;
+#[allow(dead_code)]
+pub mod pillager_outpost;
+#[allow(dead_code)]
+pub mod ocean_ruin;
+#[allow(dead_code)]
+pub mod abandoned_mineshaft;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
