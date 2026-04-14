@@ -825,6 +825,14 @@ pub mod fishing_loot_table;
 #[allow(dead_code)]
 pub mod loot_chest;
 #[allow(dead_code)]
+pub mod furnace_fuel;
+#[allow(dead_code)]
+pub mod furnace_recipes;
+#[allow(dead_code)]
+pub mod campfire_recipes;
+#[allow(dead_code)]
+pub mod crafting_recipes;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
