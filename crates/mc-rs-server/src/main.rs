@@ -173,6 +173,12 @@ pub mod bucket;
 #[allow(dead_code)]
 pub mod painting;
 #[allow(dead_code)]
+pub mod world_events;
+#[allow(dead_code)]
+pub mod equipment_slots;
+#[allow(dead_code)]
+pub mod sound_category;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
