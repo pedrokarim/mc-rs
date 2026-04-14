@@ -235,6 +235,116 @@ pub mod breeding_items;
 #[allow(dead_code)]
 pub mod tnt_primed_source;
 #[allow(dead_code)]
+pub mod cat_gift;
+#[allow(dead_code)]
+pub mod weather_damage;
+#[allow(dead_code)]
+pub mod area_effect_cloud;
+#[allow(dead_code)]
+pub mod falling_block;
+#[allow(dead_code)]
+pub mod experience_orb;
+#[allow(dead_code)]
+pub mod end_crystal;
+#[allow(dead_code)]
+pub mod warden;
+#[allow(dead_code)]
+pub mod allay;
+#[allow(dead_code)]
+pub mod sniffer;
+#[allow(dead_code)]
+pub mod iron_golem;
+#[allow(dead_code)]
+pub mod hoglin;
+#[allow(dead_code)]
+pub mod piglin_bartering;
+#[allow(dead_code)]
+pub mod zombified_piglin;
+#[allow(dead_code)]
+pub mod strider;
+#[allow(dead_code)]
+pub mod frog;
+#[allow(dead_code)]
+pub mod camel;
+#[allow(dead_code)]
+pub mod goat;
+#[allow(dead_code)]
+pub mod axolotl;
+#[allow(dead_code)]
+pub mod bee;
+#[allow(dead_code)]
+pub mod fox;
+#[allow(dead_code)]
+pub mod panda;
+#[allow(dead_code)]
+pub mod wolf;
+#[allow(dead_code)]
+pub mod parrot;
+#[allow(dead_code)]
+pub mod ocelot;
+#[allow(dead_code)]
+pub mod rabbit;
+#[allow(dead_code)]
+pub mod turtle;
+#[allow(dead_code)]
+pub mod fish;
+#[allow(dead_code)]
+pub mod dolphin;
+#[allow(dead_code)]
+pub mod squid;
+#[allow(dead_code)]
+pub mod chicken;
+#[allow(dead_code)]
+pub mod creeper;
+#[allow(dead_code)]
+pub mod enderman;
+#[allow(dead_code)]
+pub mod blaze;
+#[allow(dead_code)]
+pub mod ghast;
+#[allow(dead_code)]
+pub mod wither;
+#[allow(dead_code)]
+pub mod ender_dragon;
+#[allow(dead_code)]
+pub mod slime;
+#[allow(dead_code)]
+pub mod zombie;
+#[allow(dead_code)]
+pub mod skeleton;
+#[allow(dead_code)]
+pub mod spider;
+#[allow(dead_code)]
+pub mod guardian;
+#[allow(dead_code)]
+pub mod shulker;
+#[allow(dead_code)]
+pub mod pillager;
+#[allow(dead_code)]
+pub mod vex;
+#[allow(dead_code)]
+pub mod witch;
+#[allow(dead_code)]
+pub mod drowned;
+#[allow(dead_code)]
+pub mod husk;
+#[allow(dead_code)]
+pub mod phantom;
+#[allow(dead_code)]
+pub mod silverfish;
+#[allow(dead_code)]
+pub mod ravager;
+#[allow(dead_code)]
+pub mod wandering_trader;
+#[allow(dead_code)]
+pub mod llama;
+#[allow(dead_code)]
+pub mod horse;
+#[allow(dead_code)]
+pub mod cat;
+#[allow(dead_code)]
+pub mod zoglin;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
