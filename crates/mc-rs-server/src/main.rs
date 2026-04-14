@@ -197,6 +197,10 @@ pub mod ai_goals;
 #[allow(dead_code)]
 pub mod difficulty;
 #[allow(dead_code)]
+pub mod boss;
+#[allow(dead_code)]
+pub mod plant_growth;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
