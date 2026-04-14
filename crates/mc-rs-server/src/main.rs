@@ -771,6 +771,22 @@ pub mod soul_speed;
 #[allow(dead_code)]
 pub mod swift_sneak;
 #[allow(dead_code)]
+pub mod respawn_system;
+#[allow(dead_code)]
+pub mod player_list_packet;
+#[allow(dead_code)]
+pub mod adventure_mode;
+#[allow(dead_code)]
+pub mod spectator_mode;
+#[allow(dead_code)]
+pub mod smoke_pillar;
+#[allow(dead_code)]
+pub mod player_inventory_slots;
+#[allow(dead_code)]
+pub mod item_cooldown;
+#[allow(dead_code)]
+pub mod held_item;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
