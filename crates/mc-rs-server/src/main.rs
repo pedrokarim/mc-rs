@@ -691,6 +691,20 @@ pub mod title_packet;
 #[allow(dead_code)]
 pub mod tab_list;
 #[allow(dead_code)]
+pub mod packet_loss;
+#[allow(dead_code)]
+pub mod config_loader;
+#[allow(dead_code)]
+pub mod locale_messages;
+#[allow(dead_code)]
+pub mod signals;
+#[allow(dead_code)]
+pub mod timings;
+#[allow(dead_code)]
+pub mod async_task_pool;
+#[allow(dead_code)]
+pub mod binary_stream;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
