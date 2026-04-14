@@ -945,6 +945,22 @@ pub mod end_city;
 #[allow(dead_code)]
 pub mod bastion_remnant;
 #[allow(dead_code)]
+pub mod buried_treasure;
+#[allow(dead_code)]
+pub mod shipwreck;
+#[allow(dead_code)]
+pub mod ruined_portal;
+#[allow(dead_code)]
+pub mod nether_fortress;
+#[allow(dead_code)]
+pub mod ocean_monument;
+#[allow(dead_code)]
+pub mod stronghold;
+#[allow(dead_code)]
+pub mod woodland_mansion;
+#[allow(dead_code)]
+pub mod witch_hut;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
