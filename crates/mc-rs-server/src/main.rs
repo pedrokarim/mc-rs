@@ -157,6 +157,10 @@ pub mod sign_editor;
 #[allow(dead_code)]
 pub mod book;
 #[allow(dead_code)]
+pub mod lectern;
+#[allow(dead_code)]
+pub mod villages;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
