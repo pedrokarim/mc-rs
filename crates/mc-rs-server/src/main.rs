@@ -915,6 +915,24 @@ pub mod velocity_broadcast;
 #[allow(dead_code)]
 pub mod chat_cooldown;
 #[allow(dead_code)]
+pub mod tropical_fish;
+#[allow(dead_code)]
+pub mod torchflower;
+#[allow(dead_code)]
+pub mod pitcher_plant;
+#[allow(dead_code)]
+pub mod spore_blossom;
+#[allow(dead_code)]
+pub mod lush_caves;
+#[allow(dead_code)]
+pub mod dripstone_caves;
+#[allow(dead_code)]
+pub mod deep_dark;
+#[allow(dead_code)]
+pub mod ancient_city;
+#[allow(dead_code)]
+pub mod trial_chamber;
+#[allow(dead_code)]
 pub mod inventory;
 #[allow(dead_code)]
 pub mod inventory_manager;
