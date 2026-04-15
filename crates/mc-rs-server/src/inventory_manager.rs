@@ -192,21 +192,22 @@ impl InventoryManager {
     }
 
     fn full_container_name(&self) -> FullContainerName {
-        // PMMP InventoryManager.php:524,533,554,558 — passe toujours
-        // `lastInventoryNetworkId`. Au spawn avant toute ouverture c'est
-        // `ContainerIds::FIRST = 1`. Après ouverture d'une fenêtre c'est
-        // l'ID dynamique attribué.
-        FullContainerName::new(self.last_inventory_network_id)
+        // Protocol 944 : dragonfly envoie `FullContainerName{}` vide
+        // (container_id=0, pas de dynamic_id) dans `sendInv`
+        // (`dragonfly/server/session/player.go:233`). PMMP 924 passait
+        // `lastInventoryNetworkId` mais **ça crash** le client Bedrock 1.26.10
+        // (logs: disconnect juste après PreSpawn avec container_id=1 embarqué
+        // dans les paquets InventoryContent/InventorySlot). Dragonfly est la
+        // référence protocol 944 canonique, on s'aligne dessus.
+        FullContainerName::new(0)
     }
 
-    /// `sendInventoryContentPackets()` — PMMP two-phase (InventoryManager.php:541-558).
-    ///
-    /// Depuis Bedrock 1.20.12, le client ignore le changement de stackId quand
-    /// l'item de surface est identique. Il faut d'abord envoyer tout en air pour
-    /// forcer le client à oublier les anciens stackIds, puis le vrai contenu avec
-    /// les nouveaux stackIds. Sans ça → désynchro silencieuse → crash à l'ouverture.
-    /// (Le commentaire précédent prétendait que dragonfly single-phase fonctionnait
-    /// sur 944, mais en pratique ça crash le client.)
+    /// Protocol 944 : dragonfly envoie **un seul** `InventoryContent` par sync
+    /// (`sendInv`, `dragonfly/server/session/player.go:232`). Pas de two-phase
+    /// comme PMMP 924. Raison : dragonfly utilise des stackIds stables
+    /// per-instance, pas d'incrément global comme PMMP — le bug client 1.20.12+
+    /// (ignore changement de stackId quand item identique) n'est donc pas
+    /// déclenché. Dragonfly est la référence canonique protocol 944.
     fn send_inventory_content_packets(
         &self,
         window_id: u32,
@@ -214,23 +215,13 @@ impl InventoryManager {
         out: &mut PacketOut,
     ) {
         let fcn = self.full_container_name();
-        // Phase 1 : tout en air pour forcer l'oubli des anciens stackIds.
-        let air_wrappers: Vec<ItemStackWrapper> =
-            (0..wrappers.len()).map(|_| ItemStackWrapper::air()).collect();
-        out.push((
-            packet_id::INVENTORY_CONTENT,
-            InventoryContent::encode_items(window_id, &air_wrappers, &fcn),
-        ));
-        // Phase 2 : vrai contenu avec les nouveaux stackIds.
         out.push((
             packet_id::INVENTORY_CONTENT,
             InventoryContent::encode_items(window_id, wrappers, &fcn),
         ));
     }
 
-    /// `sendInventorySlotPackets()` — PMMP two-phase (InventoryManager.php:510-537).
-    /// Le bug 1.20.12+ touche armor, offhand, enchanting — si `stackId != 0`, on
-    /// clear le slot d'abord puis on envoie le vrai contenu.
+    /// Protocol 944 single-phase. Voir `send_inventory_content_packets`.
     fn send_inventory_slot_packets(
         &self,
         window_id: u32,
@@ -239,13 +230,6 @@ impl InventoryManager {
         out: &mut PacketOut,
     ) {
         let fcn = self.full_container_name();
-        if wrapper.stack_id != 0 {
-            let air = ItemStackWrapper::air();
-            out.push((
-                packet_id::INVENTORY_SLOT,
-                InventorySlot::encode(window_id, net_slot, &air, &fcn),
-            ));
-        }
         out.push((
             packet_id::INVENTORY_SLOT,
             InventorySlot::encode(window_id, net_slot, wrapper, &fcn),
@@ -485,39 +469,38 @@ impl InventoryManager {
     }
 
     /// `onClientOpenMainInventory()` — touche E côté client.
-    /// PMMP `InventoryManager.php:394-408` :
-    ///   1. `onCurrentWindowRemove()` — ferme la fenêtre courante si besoin
-    ///   2. `openWindowDeferred(callback)` — si close pending, store callback
-    ///   3. callback exécuté : `windowId = getNewWindowId()`,
-    ///      `associateIdWithInventory`, `currentWindowType = INVENTORY (-1)`,
-    ///      envoie `entityInv(windowId, -1, player.getId())` avec pos=(0,0,0)
+    ///
+    /// Protocol 944 (dragonfly `handler_interact.go:28-37`) : format canonique
+    /// pour E-key sur protocol 944 :
+    ///   - `WindowID = 0` (statique, pas dynamique comme PMMP 924)
+    ///   - `ContainerType = 0xFF` (-1 INVENTORY)
+    ///   - `ContainerEntityUniqueID = -1` (pas `player.id` comme PMMP 924)
+    ///   - `ContainerPosition = player_position` (pas `(0,0,0)` comme PMMP)
+    ///
+    /// PMMP 924 faisait `entityInv(getNewWindowId(), -1, player.getId())` avec
+    /// pos=(0,0,0), mais ce format crash le client Bedrock 1.26.10 (testé).
     pub fn on_client_open_main_inventory(
         &mut self,
-        player_entity_id: i64,
+        player_position: [f32; 3],
         out: &mut PacketOut,
     ) {
-        self.on_current_window_remove(out);
+        // Anti double-ouverture (`s.invOpened = true` dragonfly).
         if self.pending_close_window_id.is_some() {
-            // ACK d'une fermeture en attente : diffère l'ouverture.
-            self.pending_open_main_inventory = Some(player_entity_id);
             return;
         }
-        self.do_open_main_inventory(player_entity_id, out);
-    }
-
-    /// Partie « callback » de `onClientOpenMainInventory` — exécutée soit
-    /// immédiatement soit après l'ACK de close.
-    fn do_open_main_inventory(&mut self, player_entity_id: i64, out: &mut PacketOut) {
-        let window_id = self.get_new_window_id();
-        self.associate_id_with_key(window_id, InvKey::Main);
         self.current_window_type = window_types::INVENTORY;
+        self.pending_close_window_id = Some(container_ids::INVENTORY);
         out.push((
             packet_id::CONTAINER_OPEN,
             ContainerOpen {
-                window_id,
-                window_type: 0xFF, // -1 = INVENTORY
-                position: [0, 0, 0],
-                actor_unique_id: player_entity_id,
+                window_id: container_ids::INVENTORY, // 0 (statique)
+                window_type: 0xFF,                   // -1 = INVENTORY
+                position: [
+                    player_position[0].floor() as i32,
+                    player_position[1].floor() as i32,
+                    player_position[2].floor() as i32,
+                ],
+                actor_unique_id: -1,
             }
             .encode(),
         ));
@@ -590,11 +573,10 @@ impl InventoryManager {
 
         if self.pending_close_window_id == Some(id) {
             self.pending_close_window_id = None;
-            // PMMP `onClientRemoveWindow` lignes 445-449 : exécuter le callback
-            // d'ouverture différée si présent.
-            if let Some(player_entity_id) = self.pending_open_main_inventory.take() {
-                self.do_open_main_inventory(player_entity_id, out);
-            }
+            // Le champ `pending_open_main_inventory` n'est plus utilisé sur
+            // protocol 944 (pas d'ouverture différée — format dragonfly),
+            // on le clear par sécurité.
+            self.pending_open_main_inventory = None;
         }
     }
 
@@ -1276,16 +1258,16 @@ mod tests {
     use super::*;
     use mc_rs_proto::io::ProtoReader;
 
-    /// Fresh manager : windowId dynamique démarre à FIRST (1), next devient 2.
+    /// Protocol 944 (dragonfly `handler_interact.go:28-37`) :
+    /// WindowID=0 statique, EntityUniqueID=-1, Position=player_pos.
     #[test]
-    fn e_key_emits_container_open_with_dynamic_window_id_and_player_actor() {
+    fn e_key_emits_container_open_dragonfly_944() {
         let mut mgr = InventoryManager::new();
         let mut out = PacketOut::new();
-        let player_id: i64 = 42;
+        let player_pos: [f32; 3] = [3.5, 69.6, 84.2];
 
-        mgr.on_client_open_main_inventory(player_id, &mut out);
+        mgr.on_client_open_main_inventory(player_pos, &mut out);
 
-        // Au premier E-key, aucun close pending → exécution immédiate.
         // Doit produire un seul ContainerOpen.
         let opens: Vec<_> = out
             .iter()
@@ -1295,8 +1277,6 @@ mod tests {
 
         let payload = &opens[0].1;
         let mut r = ProtoReader::new(payload);
-        // PMMP entityInv layout:
-        //   U8 windowId, U8 windowType, BlockPos (VarI32,VarI32,VarI32), VarI64 actorUniqueId
         let window_id = r.read_u8().unwrap();
         let window_type = r.read_u8().unwrap();
         let bx = r.read_var_i32().unwrap();
@@ -1304,26 +1284,23 @@ mod tests {
         let bz = r.read_var_i32().unwrap();
         let actor_id = r.read_var_i64().unwrap();
 
-        assert_eq!(window_id, 2, "first dynamic windowId after FIRST=1 should be 2");
+        assert_eq!(window_id, 0, "dragonfly 944 WindowID statique = 0");
         assert_eq!(window_type, 0xFF, "INVENTORY window type = -1 (0xFF byte)");
-        assert_eq!((bx, by, bz), (0, 0, 0), "entityInv block pos must be (0,0,0)");
-        assert_eq!(actor_id, player_id, "actor_unique_id must be player entity id");
+        assert_eq!((bx, by, bz), (3, 69, 84), "Position = floor(player_pos)");
+        assert_eq!(actor_id, -1, "dragonfly 944 ContainerEntityUniqueID = -1");
     }
 
     #[test]
-    fn sync_all_matches_pmmp_semantics() {
+    fn sync_all_matches_dragonfly_944_semantics() {
         let mut mgr = InventoryManager::new();
         let inv = crate::inventory::PlayerInventory::new();
         let mut out = PacketOut::new();
         mgr.sync_all(&inv, &mut out);
 
-        // PMMP sémantique :
-        //   - Inventaires non-complex (Main, Offhand, Armor) : `InventoryContent`
-        //     two-phase → 2 paquets chacun = 6 INVENTORY_CONTENT.
-        //   - Inventaires complex (Cursor 1 slot, Craft2x2 4 slots, CraftResult 1)
-        //     envoient `InventorySlot` par core slot. Au spawn tous air →
-        //     stack_id = 0 → pas de phase clear → 1 paquet par slot = 6 slots =
-        //     6 INVENTORY_SLOT.
+        // Protocol 944 (dragonfly) single-phase :
+        //   - Non-complex (Main, Offhand, Armor) : 1 InventoryContent chacun = 3
+        //   - Complex (Cursor 1, Craft2x2 4, CraftResult 1) : 1 InventorySlot
+        //     par core slot = 6
         let content_packets = out
             .iter()
             .filter(|(pid, _)| *pid == packet_id::INVENTORY_CONTENT)
@@ -1333,36 +1310,38 @@ mod tests {
             .filter(|(pid, _)| *pid == packet_id::INVENTORY_SLOT)
             .count();
         assert_eq!(
-            content_packets, 6,
-            "two-phase × 3 non-complex (Main, Offhand, Armor) = 6 INVENTORY_CONTENT"
+            content_packets, 3,
+            "single-phase × 3 non-complex (Main, Offhand, Armor)"
         );
         assert_eq!(
             slot_packets, 6,
-            "1 paquet par core slot complex air: Cursor(1) + Craft2x2(4) + CraftResult(1) = 6"
+            "1 paquet par core slot complex: Cursor(1) + Craft2x2(4) + CraftResult(1) = 6"
         );
     }
 
+    /// Anti-double ouverture : après un premier E-key, le manager pose
+    /// `pending_close_window_id`. Un second E-key doit être ignoré
+    /// (protocol 944 dragonfly `if s.invOpened return nil`).
     #[test]
-    fn container_open_is_deferred_while_close_pending() {
+    fn second_e_key_is_ignored_while_first_still_open() {
         let mut mgr = InventoryManager::new();
         let mut out = PacketOut::new();
+        let pos = [0.0, 64.0, 0.0];
 
-        // Simule un close pending (une fenêtre dynamique en cours de fermeture).
-        // On déclenche d'abord une ouverture pour avoir un windowId dynamique tracké,
-        // puis `on_current_window_remove` pour poser le pending_close.
-        mgr.on_client_open_main_inventory(1, &mut out);
-        out.clear();
-        mgr.on_current_window_remove(&mut out);
-        assert!(mgr.pending_close_window_id.is_some());
-
-        // Deuxième E-key pendant que le close est pending → ne produit pas d'open.
-        out.clear();
-        mgr.on_client_open_main_inventory(1, &mut out);
-        let opens = out
+        mgr.on_client_open_main_inventory(pos, &mut out);
+        let first_count = out
             .iter()
             .filter(|(pid, _)| *pid == packet_id::CONTAINER_OPEN)
             .count();
-        assert_eq!(opens, 0, "open must be deferred while a close is pending");
-        assert!(mgr.pending_open_main_inventory.is_some());
+        assert_eq!(first_count, 1);
+
+        // Deuxième E-key : pending_close est set → ignore.
+        out.clear();
+        mgr.on_client_open_main_inventory(pos, &mut out);
+        let second_count = out
+            .iter()
+            .filter(|(pid, _)| *pid == packet_id::CONTAINER_OPEN)
+            .count();
+        assert_eq!(second_count, 0, "second open while inv still open must be ignored");
     }
 }
