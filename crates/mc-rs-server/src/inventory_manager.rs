@@ -317,28 +317,78 @@ impl InventoryManager {
             .map(|(id, _)| *id)
     }
 
-    /// `syncAll()` — resync tous les inventaires enregistrés.
+    /// `syncAll()` — resync tous les inventaires enregistrés au spawn.
     ///
-    /// PMMP `InventoryManager.php:628-632` itère `$this->inventories` et appelle
-    /// `syncContents()` sur chacun. Pour un inventaire non-complex, ça envoie
-    /// un `InventoryContent` two-phase sur son windowId. Pour un complex
-    /// (cursor, craft grid, craft result), ça envoie un `InventorySlot` par
-    /// core slot, mappé sur le netSlot via `complex_slot_map`.
-    ///
-    /// Ordre : Main, Offhand, Armor puis les UI-complex (Cursor, Craft2x2,
-    /// CraftResult). L'ordre PMMP est celui d'insertion dans la HashMap qui
-    /// est stable parce qu'ajoutés dans un ordre fixe dans `new()`.
+    /// Protocol 944 (dragonfly `session/session.go:255-258`) : ordre exact
+    /// ```
+    /// sendInv(inv,     WindowIDInventory=0)    // 36 slots
+    /// sendInv(ui,      WindowIDUI=124)         // 54 slots
+    /// sendInv(offHand, WindowIDOffHand=119)    // 1 slot
+    /// sendInv(armour,  WindowIDArmour=120)     // 4 slots
+    /// ```
+    /// Chaque `sendInv` est **un seul** `InventoryContent` avec tous les slots
+    /// de l'inventaire — y compris UI qui est un container virtuel de 54 slots
+    /// (cursor=0, craft2x2=28..31, result=50, le reste air).
     pub fn sync_all(&mut self, inv: &PlayerInventory, out: &mut PacketOut) {
-        for key in [
-            InvKey::Main,
-            InvKey::Offhand,
-            InvKey::Armor,
-            InvKey::Cursor,
-            InvKey::Craft2x2,
-            InvKey::CraftResult,
-        ] {
-            self.sync_contents(inv, key, out);
+        self.sync_contents_non_ui(inv, InvKey::Main, out);
+        self.sync_ui_inventory(inv, out);
+        self.sync_contents_non_ui(inv, InvKey::Offhand, out);
+        self.sync_contents_non_ui(inv, InvKey::Armor, out);
+    }
+
+    /// Sync la fenêtre UI (124) en un seul paquet de 54 slots
+    /// (dragonfly `session/player.go:232` via `sendInv(s.ui, WindowIDUI)`).
+    /// Layout : cursor (0), craft 2x2 (28..31), result (50), le reste air.
+    fn sync_ui_inventory(&mut self, inv: &PlayerInventory, out: &mut PacketOut) {
+        const UI_SIZE: usize = 54;
+        // Nettoie prédictions/pending_syncs des inventaires UI-backed.
+        for key in [InvKey::Cursor, InvKey::Craft2x2, InvKey::CraftResult] {
+            if let Some(e) = self.inventories.get_mut(&key) {
+                e.predictions.clear();
+                e.pending_syncs.clear();
+            }
         }
+
+        let mut contents: Vec<ItemStackWrapper> =
+            (0..UI_SIZE).map(|_| ItemStackWrapper::air()).collect();
+
+        // Cursor en slot 0.
+        let cursor = inv
+            .slot_ref(InvKey::Cursor, 0)
+            .cloned()
+            .unwrap_or_else(ItemStackWrapper::air);
+        let info = self.track_item_stack(InvKey::Cursor, 0, cursor.item.is_air(), None);
+        contents[ui_slot::CURSOR as usize] = ItemStackWrapper {
+            stack_id: info.stack_id,
+            item: cursor.item,
+        };
+
+        // Craft grid 2x2 (slots 28..32).
+        for core in 0..4 {
+            let item = inv
+                .slot_ref(InvKey::Craft2x2, core)
+                .cloned()
+                .unwrap_or_else(ItemStackWrapper::air);
+            let info = self.track_item_stack(InvKey::Craft2x2, core, item.item.is_air(), None);
+            let net_slot = ui_slot::CRAFTING2X2_INPUT_START as usize + core;
+            contents[net_slot] = ItemStackWrapper {
+                stack_id: info.stack_id,
+                item: item.item,
+            };
+        }
+
+        // Craft result (slot 50).
+        let result = inv
+            .slot_ref(InvKey::CraftResult, 0)
+            .cloned()
+            .unwrap_or_else(ItemStackWrapper::air);
+        let info = self.track_item_stack(InvKey::CraftResult, 0, result.item.is_air(), None);
+        contents[ui_slot::CRAFTING_RESULT as usize] = ItemStackWrapper {
+            stack_id: info.stack_id,
+            item: result.item,
+        };
+
+        self.send_inventory_content_packets(container_ids::UI as u32, &contents, out);
     }
 
     /// Sync un inventaire "simple" (non mappé sur UI). Envoie un InventoryContent
@@ -369,66 +419,6 @@ impl InventoryManager {
         if let Some(window_id) = self.window_id_for(key) {
             self.send_inventory_content_packets(window_id as u32, &contents, out);
         }
-    }
-
-    /// Sync de la fenêtre UI (124) en un seul paquet de 54 slots.
-    /// Layout (dragonfly/gophertunnel 944) :
-    ///   slot 0       → cursor
-    ///   slots 28..31 → crafting grid 2x2
-    ///   slot 50      → crafting result
-    ///   tous les autres → air
-    fn sync_ui_inventory(&mut self, inv: &PlayerInventory, out: &mut PacketOut) {
-        const UI_SIZE: usize = 54;
-        // Nettoie les prédictions/pending_syncs des inventaires UI-backed.
-        for key in [InvKey::Cursor, InvKey::Craft2x2, InvKey::CraftResult] {
-            if let Some(e) = self.inventories.get_mut(&key) {
-                e.predictions.clear();
-                e.pending_syncs.clear();
-            }
-        }
-
-        // Tous les slots à air par défaut.
-        let mut contents: Vec<ItemStackWrapper> = (0..UI_SIZE)
-            .map(|_| ItemStackWrapper::air())
-            .collect();
-
-        // Place cursor en slot 0.
-        let cursor_item = inv
-            .slot_ref(InvKey::Cursor, 0)
-            .cloned()
-            .unwrap_or_else(ItemStackWrapper::air);
-        let info = self.track_item_stack(InvKey::Cursor, 0, cursor_item.item.is_air(), None);
-        contents[ui_slot::CURSOR as usize] = ItemStackWrapper {
-            stack_id: info.stack_id,
-            item: cursor_item.item,
-        };
-
-        // Craft grid 2x2 (slots 28..32).
-        for core in 0..4 {
-            let item = inv
-                .slot_ref(InvKey::Craft2x2, core)
-                .cloned()
-                .unwrap_or_else(ItemStackWrapper::air);
-            let info = self.track_item_stack(InvKey::Craft2x2, core, item.item.is_air(), None);
-            let net_slot = ui_slot::CRAFTING2X2_INPUT_START as usize + core;
-            contents[net_slot] = ItemStackWrapper {
-                stack_id: info.stack_id,
-                item: item.item,
-            };
-        }
-
-        // Craft result (slot 50) — généralement air au spawn.
-        let result = inv
-            .slot_ref(InvKey::CraftResult, 0)
-            .cloned()
-            .unwrap_or_else(ItemStackWrapper::air);
-        let info = self.track_item_stack(InvKey::CraftResult, 0, result.item.is_air(), None);
-        contents[ui_slot::CRAFTING_RESULT as usize] = ItemStackWrapper {
-            stack_id: info.stack_id,
-            item: result.item,
-        };
-
-        self.send_inventory_content_packets(container_ids::UI as u32, &contents, out);
     }
 
     /// `syncSelectedHotbarSlot()` — MobEquipment avec le stackId tracké du slot main.
@@ -1297,10 +1287,12 @@ mod tests {
         let mut out = PacketOut::new();
         mgr.sync_all(&inv, &mut out);
 
-        // Protocol 944 (dragonfly) single-phase :
-        //   - Non-complex (Main, Offhand, Armor) : 1 InventoryContent chacun = 3
-        //   - Complex (Cursor 1, Craft2x2 4, CraftResult 1) : 1 InventorySlot
-        //     par core slot = 6
+        // Protocol 944 (dragonfly `session.go:255-258`) — 4 InventoryContent :
+        //   sendInv(Main,    WindowID=0)    -- 36 slots
+        //   sendInv(UI,      WindowID=124)  -- 54 slots (cursor+craft+result)
+        //   sendInv(Offhand, WindowID=119)  -- 1 slot
+        //   sendInv(Armor,   WindowID=120)  -- 4 slots
+        // Aucun InventorySlot individuel au spawn.
         let content_packets = out
             .iter()
             .filter(|(pid, _)| *pid == packet_id::INVENTORY_CONTENT)
@@ -1310,12 +1302,12 @@ mod tests {
             .filter(|(pid, _)| *pid == packet_id::INVENTORY_SLOT)
             .count();
         assert_eq!(
-            content_packets, 3,
-            "single-phase × 3 non-complex (Main, Offhand, Armor)"
+            content_packets, 4,
+            "dragonfly 944 spawn = 4 InventoryContent (Main, UI, Offhand, Armor)"
         );
         assert_eq!(
-            slot_packets, 6,
-            "1 paquet par core slot complex: Cursor(1) + Craft2x2(4) + CraftResult(1) = 6"
+            slot_packets, 0,
+            "au spawn protocol 944 pas d'InventorySlot individuel"
         );
     }
 
