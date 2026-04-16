@@ -426,9 +426,13 @@ fn encode_update_attributes(
     w.write_var_u64(entity_runtime_id);
     w.write_var_u32(attrs.len() as u32);
     for a in attrs {
+        // Protocol 944 : 6 float32 par attribut (Min, Max, Value,
+        // DefaultMin, DefaultMax, Default). PMMP 924 n'avait que 4.
         w.write_f32_le(a.min_value);
         w.write_f32_le(a.max_value);
         w.write_f32_le(a.current_value);
+        w.write_f32_le(a.min_value);  // DefaultMin
+        w.write_f32_le(a.max_value);  // DefaultMax
         w.write_f32_le(a.default_value);
         w.write_string(&a.id);
         w.write_var_u32(0); // mod count

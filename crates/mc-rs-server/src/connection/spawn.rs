@@ -16,7 +16,16 @@ use crate::world::terrain_generator;
 
 use super::{Connection, ConnectionState};
 
-/// Encode UpdateAttributesPacket depuis une liste d'attributs (PMMP-conforme).
+/// Encode UpdateAttributesPacket — format protocol 944 (dragonfly/gophertunnel).
+///
+/// Layout par attribut :
+///   f32 Min, f32 Max, f32 Value, f32 DefaultMin, f32 DefaultMax, f32 Default,
+///   string Name, VarU32 ModifierCount (+ modifiers)
+///
+/// PMMP 924 n'avait que `Min, Max, Value, Default` (4 floats). Protocol 944
+/// a ajouté `DefaultMin` et `DefaultMax`. Sans ces deux champs, le client
+/// désaligne le parsing et **crash** (observé : disconnect 280-400ms après
+/// réception du paquet UpdateAttributes).
 fn encode_update_attrs_inline(entity_runtime_id: u64, attrs: &[crate::attribute::Attribute]) -> Vec<u8> {
     let mut w = mc_rs_proto::io::ProtoWriter::with_capacity(128);
     w.write_var_u64(entity_runtime_id);
@@ -25,11 +34,14 @@ fn encode_update_attrs_inline(entity_runtime_id: u64, attrs: &[crate::attribute:
         w.write_f32_le(a.min_value);
         w.write_f32_le(a.max_value);
         w.write_f32_le(a.current_value);
+        // Protocol 944 : DefaultMin + DefaultMax juste avant Default.
+        w.write_f32_le(a.min_value);  // DefaultMin = same as Min (vanilla behavior)
+        w.write_f32_le(a.max_value);  // DefaultMax = same as Max
         w.write_f32_le(a.default_value);
         w.write_string(&a.id);
-        w.write_var_u32(0);
+        w.write_var_u32(0); // modifier count
     }
-    w.write_var_u64(0);
+    w.write_var_u64(0); // tick
     w.into_bytes()
 }
 
@@ -131,29 +143,23 @@ impl Connection {
             ENTITY_IDENTIFIERS_NBT,
         ));
 
-        // BiomeDefinitionList -- empty (protocol 924 custom format)
+        // BiomeDefinitionList
         let mut biome_writer = mc_rs_proto::io::ProtoWriter::with_capacity(4);
         biome_writer.write_var_u32(0);
         biome_writer.write_var_u32(0);
-        responses.push(
-            self.encode_compressed_packet(
-                packet_id::BIOME_DEFINITION_LIST,
-                biome_writer.as_bytes(),
-            ),
-        );
+        responses.push(self.encode_compressed_packet(
+            packet_id::BIOME_DEFINITION_LIST,
+            biome_writer.as_bytes(),
+        ));
 
-        // 5. UpdateAttributes -- depuis self.attributes (cohérent avec tick_game_state).
-        // Drain tous les attributs désynchronisés (tous le sont au spawn via
-        // AttributeMap::default_for_player qui set desynchronized=true par default).
+        // 5. UpdateAttributes — format protocol 944 corrigé (6 floats/attr)
         let desync = self.attributes.drain_desync();
         if !desync.is_empty() {
             let payload = encode_update_attrs_inline(self.entity_runtime_id, &desync);
             responses.push(self.encode_compressed_packet(packet_id::UPDATE_ATTRIBUTES, &payload));
         }
 
-        // 6. AvailableCommands are synced after spawn from the shared command map.
-
-        // 7. UpdateAbilities -- based on player's gamemode
+        // 6. UpdateAbilities
         let abilities = if self.gamemode == 1 {
             UpdateAbilities::default_creative(self.entity_runtime_id as i64)
         } else {
@@ -162,30 +168,28 @@ impl Connection {
         responses
             .push(self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities.encode()));
 
-        // 8. UpdateAdventureSettings -- PMMP sends this right after abilities
+        // 7. UpdateAdventureSettings
         let adventure = UpdateAdventureSettings::default_survival();
-        responses.push(
-            self.encode_compressed_packet(
-                packet_id::UPDATE_ADVENTURE_SETTINGS,
-                &adventure.encode(),
-            ),
-        );
+        responses.push(self.encode_compressed_packet(
+            packet_id::UPDATE_ADVENTURE_SETTINGS,
+            &adventure.encode(),
+        ));
 
-        // 9. SetActorData -- entity metadata (gravity, breathing, collision)
+        // 8. SetActorData
         let player_name = self.display_name.clone().unwrap_or_default();
         let actor_data = SetActorData::player_in_game(self.entity_runtime_id, &player_name);
         responses
             .push(self.encode_compressed_packet(packet_id::SET_ACTOR_DATA, &actor_data.encode()));
 
-        // 9. Inventory sync (PMMP syncAll + syncSelectedHotbarSlot)
+        // 9-12. Inventory sync
         self.push_inventory_sync(&mut responses);
 
-        // 10. CraftingData (empty)
+        // 13. CraftingData
         responses.push(
             self.encode_compressed_packet(packet_id::CRAFTING_DATA, &CraftingData::encode_empty()),
         );
 
-        // 10. CreativeContent (empty)
+        // 14. CreativeContent
         responses.push(self.encode_compressed_packet(
             packet_id::CREATIVE_CONTENT,
             &CreativeContent::encode_empty(),
@@ -241,7 +245,7 @@ impl Connection {
             self.chunk_load_queue.len()
         );
 
-        // PLAYER_SPAWN -- send after chunks
+        // PLAYER_SPAWN
         let spawn_status = PlayStatus {
             status: PlayStatusType::PlayerSpawn,
         };
