@@ -372,6 +372,14 @@ impl Connection {
                     }
                 }
 
+                // RESPAWN (7) — client a cliqué Respawn après l'écran de mort.
+                7 => {
+                    let respawn_pkts = self.handle_respawn_request();
+                    for pkt in respawn_pkts {
+                        responses.push(pkt);
+                    }
+                }
+
                 _ => {}
             }
         }

@@ -120,6 +120,9 @@ pub struct Connection {
     /// Y du pic pendant le fall en cours ; None si pas en chute.
     pub(super) fall_peak_y: Option<f32>,
 
+    /// Player est mort (HEALTH=0) et attend l'action RESPAWN du client.
+    pub(super) dead: bool,
+
     // Event manager partagé (fire events pour plugins).
     pub events: Arc<Mutex<EventManager>>,
 
@@ -187,6 +190,7 @@ impl Connection {
             hunger: HungerManager::new(),
             game_tick_accum: 0,
             fall_peak_y: None,
+            dead: false,
             events,
             next_form_id: 1,
             server_keypair,

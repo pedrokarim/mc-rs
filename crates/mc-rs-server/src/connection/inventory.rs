@@ -386,7 +386,8 @@ impl Connection {
             .collect()
     }
 
-    /// Tick game state : hunger, combat timers, attribute desync sync.
+    /// Tick game state : hunger, combat timers, attribute desync sync,
+    /// détection de mort.
     /// À appeler à chaque game-tick (20 TPS = 1 tick / 5 server-ticks).
     /// Retourne les paquets à envoyer au joueur (UpdateAttributes si desync).
     pub fn tick_game_state(&mut self) -> Vec<Vec<u8>> {
@@ -398,13 +399,90 @@ impl Connection {
         self.hunger
             .tick(&mut self.attributes, self.current_difficulty);
 
+        // Détection de mort — quand HEALTH tombe à 0, bascule en état "dead"
+        // et envoie Respawn(SEARCHING_FOR_SPAWN) + DeathAnimation. Le joueur
+        // doit alors cliquer Respawn côté client (PlayerAction::RESPAWN=7).
+        let mut out = Vec::new();
+        if !self.dead
+            && self
+                .attributes
+                .must_get(crate::attribute::ids::HEALTH)
+                .current_value
+                <= 0.0
+        {
+            self.dead = true;
+            let spawn = self.spawn_position;
+            let runtime_id = self.entity_runtime_id;
+            let death_anim = crate::combat_packets::death_animation(runtime_id);
+            out.push(self.encode_compressed_packet(packet_id::ACTOR_EVENT, &death_anim));
+            let respawn = crate::combat_packets::encode_respawn(
+                spawn,
+                crate::combat_packets::respawn_state::SEARCHING_FOR_SPAWN,
+                runtime_id,
+            );
+            out.push(self.encode_compressed_packet(packet_id::RESPAWN, &respawn));
+            info!("[{}] Player died — awaiting respawn action", self.addr);
+        }
+
         // Drain désync → UpdateAttributesPacket si non-vide.
         let desync = self.attributes.drain_desync();
-        let mut out = Vec::new();
         if !desync.is_empty() {
             let payload = encode_update_attributes(self.entity_runtime_id, &desync);
             out.push(self.encode_compressed_packet(packet_id::UPDATE_ATTRIBUTES, &payload));
         }
+        out
+    }
+
+    /// Respawn : restaure HEALTH/hunger/position, envoie Respawn(READY) au
+    /// client. À appeler sur réception de PlayerAction::RESPAWN (type 7).
+    pub fn handle_respawn_request(&mut self) -> Vec<Vec<u8>> {
+        use mc_rs_proto::packets::packet_id;
+        use mc_rs_proto::packets::player::MovePlayer;
+
+        if !self.dead {
+            return Vec::new();
+        }
+        self.dead = false;
+
+        // Restauration attributs (force desync pour resync client).
+        for id in [
+            crate::attribute::ids::HEALTH,
+            crate::attribute::ids::HUNGER,
+            crate::attribute::ids::SATURATION,
+            crate::attribute::ids::EXHAUSTION,
+        ] {
+            let a = self.attributes.must_get_mut(id);
+            a.reset_to_default();
+            a.desynchronized = true;
+        }
+
+        // Téléportation au spawn.
+        self.position = self.spawn_position;
+        self.fall_peak_y = None;
+
+        let move_pkt = MovePlayer {
+            runtime_entity_id: self.entity_runtime_id,
+            position: self.position,
+            pitch: 0.0,
+            yaw: 0.0,
+            head_yaw: 0.0,
+            mode: 1, // reset
+            on_ground: true,
+            riding_runtime_id: 0,
+            tick: self.tick,
+        };
+
+        let mut out = Vec::new();
+        out.push(self.encode_compressed_packet(packet_id::MOVE_PLAYER, &move_pkt.encode()));
+
+        let respawn = crate::combat_packets::encode_respawn(
+            self.spawn_position,
+            crate::combat_packets::respawn_state::READY_TO_SPAWN,
+            self.entity_runtime_id,
+        );
+        out.push(self.encode_compressed_packet(packet_id::RESPAWN, &respawn));
+
+        info!("[{}] Player respawned at spawn", self.addr);
         out
     }
 }
