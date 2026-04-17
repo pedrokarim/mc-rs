@@ -300,6 +300,11 @@ fn decode_use_item_transaction_data(
 
     let block_runtime_id = reader.read_var_u32()?;
     let client_prediction = reader.read_var_u32()?;
+    // Protocol 944 (PMMP UseItemTransactionData.php:98) : clientCooldownState u8
+    // ajouté après clientInteractPrediction. Sans ce read, on est décalé d'1
+    // byte → item_stack_request suivant se décode sur un mauvais offset →
+    // block_place silencieusement ignoré.
+    let _client_cooldown_state = reader.read_u8()?;
 
     Ok(ItemInteractionData {
         action_type,

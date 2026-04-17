@@ -9,7 +9,6 @@ use mc_rs_proto::packets::world::*;
 use crate::item_entities::{item_stack_debug_summary, PendingItemEntitySpawn};
 use crate::world::block_registry::BLOCKS;
 
-use super::spawn::hub_menu_item_id;
 use super::Connection;
 
 impl Connection {
@@ -323,11 +322,11 @@ impl Connection {
 
         // Handle block placement (item interaction with ACTION_CLICK_BLOCK)
         if let Some(ref interaction) = pkt.item_interaction {
-            let held_item_id = self.inventory.held_item().item.id;
-
-            if interaction.action_type == 1 && held_item_id == hub_menu_item_id() {
-                responses.extend(self.open_hub_menu());
-            } else if interaction.action_type == 0 {
+            info!(
+                "[{}] item_interaction: action_type={} face={} hotbar_slot={}",
+                self.addr, interaction.action_type, interaction.face, interaction.hotbar_slot
+            );
+            if interaction.action_type == 0 {
                 // ACTION_CLICK_BLOCK
                 self.handle_block_place(interaction, &mut responses);
             }
@@ -335,6 +334,10 @@ impl Connection {
 
         // Handle inventory stack requests (slot movements)
         if let Some(ref request) = pkt.item_stack_request {
+            info!(
+                "[{}] item_stack_request id={} actions={}",
+                self.addr, request.request_id, request.actions.len()
+            );
             self.handle_item_stack_request(request, &mut responses);
         }
 
