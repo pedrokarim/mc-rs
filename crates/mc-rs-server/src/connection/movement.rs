@@ -101,6 +101,19 @@ impl Connection {
             }
         }
 
+        // Exhaustion par mouvement (survival only) — PMMP `Human::onMovement`
+        // utilise 0.005/block en walk, 0.1/block en sprint, 0.015/block en swim.
+        // On approxime avec 0.01/block horizontal (entre walk et run). Sans
+        // exhaustion la faim ne descend jamais et la régénération compense tout.
+        if self.gamemode == 0 {
+            let dx = pkt.position[0] - self.position[0];
+            let dz = pkt.position[2] - self.position[2];
+            let horizontal = (dx * dx + dz * dz).sqrt();
+            if horizontal > 0.01 {
+                self.hunger.exhaust(&mut self.attributes, horizontal * 0.01);
+            }
+        }
+
         // Update player position
         self.position = pkt.position;
         self.pitch = pkt.pitch;
@@ -302,6 +315,12 @@ impl Connection {
                         "[{}] Block broken at ({}, {}, {}) old_id={}",
                         self.addr, bx, by, bz, old_block_id
                     );
+
+                    // Exhaustion mining (survival only) — PMMP `Human::onBlockBreak` : 0.005
+                    // d'exhaustion par bloc cassé (en plus du damage à l'outil).
+                    if self.gamemode == 0 && old_block_id != air_id {
+                        self.hunger.exhaust(&mut self.attributes, 0.005);
+                    }
 
                     // PMMP `BlockBreakEvent` (post-break, pour monitoring plugins).
                     if let Ok(mut ev_mgr) = self.events.lock() {
