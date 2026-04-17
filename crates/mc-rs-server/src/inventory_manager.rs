@@ -192,22 +192,20 @@ impl InventoryManager {
     }
 
     fn full_container_name(&self) -> FullContainerName {
-        // Protocol 944 : dragonfly envoie `FullContainerName{}` vide
-        // (container_id=0, pas de dynamic_id) dans `sendInv`
-        // (`dragonfly/server/session/player.go:233`). PMMP 924 passait
-        // `lastInventoryNetworkId` mais **ça crash** le client Bedrock 1.26.10
-        // (logs: disconnect juste après PreSpawn avec container_id=1 embarqué
-        // dans les paquets InventoryContent/InventorySlot). Dragonfly est la
-        // référence protocol 944 canonique, on s'aligne dessus.
-        FullContainerName::new(0)
+        // PMMP 5.42.1 (protocol 944) `InventoryManager::sendInventoryContentPackets`
+        // passe `new FullContainerName($this->lastInventoryNetworkId)`. Au spawn
+        // `lastInventoryNetworkId = ContainerIds::FIRST`. Le commentaire précédent
+        // disait que `lastInventoryNetworkId` crashait le client — faux : c'était
+        // un autre bug (color manquant dans PlayerList). PMMP 944 EST la
+        // référence canonique confirmée fonctionnelle avec Bedrock 1.26.10.
+        FullContainerName::new(self.last_inventory_network_id)
     }
 
-    /// Protocol 944 : dragonfly envoie **un seul** `InventoryContent` par sync
-    /// (`sendInv`, `dragonfly/server/session/player.go:232`). Pas de two-phase
-    /// comme PMMP 924. Raison : dragonfly utilise des stackIds stables
-    /// per-instance, pas d'incrément global comme PMMP — le bug client 1.20.12+
-    /// (ignore changement de stackId quand item identique) n'est donc pas
-    /// déclenché. Dragonfly est la référence canonique protocol 944.
+    /// Port fidèle PMMP 5.42.1 `sendInventoryContentPackets` — envoie DEUX
+    /// paquets : un clear (air partout) puis le contenu réel. C'est un HACK
+    /// client Mojang : depuis 1.20.12, le client ignore le changement de
+    /// stackId quand old_item == new_item (notamment armor/offhand/enchanting).
+    /// Envoyer un air d'abord force le client à accepter le vrai contenu.
     fn send_inventory_content_packets(
         &self,
         window_id: u32,
@@ -215,13 +213,24 @@ impl InventoryManager {
         out: &mut PacketOut,
     ) {
         let fcn = self.full_container_name();
+        // Phase 1 : clear (air) — même longueur que le vrai contenu.
+        let air_wrappers: Vec<ItemStackWrapper> =
+            (0..wrappers.len()).map(|_| ItemStackWrapper::air()).collect();
+        out.push((
+            packet_id::INVENTORY_CONTENT,
+            InventoryContent::encode_items(window_id, &air_wrappers, &fcn),
+        ));
+        // Phase 2 : vrai contenu.
         out.push((
             packet_id::INVENTORY_CONTENT,
             InventoryContent::encode_items(window_id, wrappers, &fcn),
         ));
     }
 
-    /// Protocol 944 single-phase. Voir `send_inventory_content_packets`.
+    /// Port fidèle PMMP 5.42.1 `sendInventorySlotPackets` : si stackId != 0,
+    /// envoie un clear (air) avant le vrai item (hack client 1.20.12+ : le
+    /// client ignore le changement de stackId sur armor/offhand si l'item
+    /// n'a pas changé). Pour un slot air (stackId=0), un seul paquet suffit.
     fn send_inventory_slot_packets(
         &self,
         window_id: u32,
@@ -230,6 +239,12 @@ impl InventoryManager {
         out: &mut PacketOut,
     ) {
         let fcn = self.full_container_name();
+        if wrapper.stack_id != 0 {
+            out.push((
+                packet_id::INVENTORY_SLOT,
+                InventorySlot::encode(window_id, net_slot, &ItemStackWrapper::air(), &fcn),
+            ));
+        }
         out.push((
             packet_id::INVENTORY_SLOT,
             InventorySlot::encode(window_id, net_slot, wrapper, &fcn),
@@ -317,82 +332,34 @@ impl InventoryManager {
             .map(|(id, _)| *id)
     }
 
-    /// `syncAll()` — resync tous les inventaires enregistrés au spawn.
+    /// `syncAll()` — resync tous les inventaires trackés au spawn.
     ///
-    /// Protocol 944 (dragonfly `session/session.go:255-258`) : ordre exact
+    /// Port fidèle de PMMP 5.42.1 `InventoryManager::syncAll` :
+    /// ```php
+    /// foreach($this->inventories as $entry){
+    ///     $this->syncContents($entry->inventory);
+    /// }
     /// ```
-    /// sendInv(inv,     WindowIDInventory=0)    // 36 slots
-    /// sendInv(ui,      WindowIDUI=124)         // 54 slots
-    /// sendInv(offHand, WindowIDOffHand=119)    // 1 slot
-    /// sendInv(armour,  WindowIDArmour=120)     // 4 slots
-    /// ```
-    /// Chaque `sendInv` est **un seul** `InventoryContent` avec tous les slots
-    /// de l'inventaire — y compris UI qui est un container virtuel de 54 slots
-    /// (cursor=0, craft2x2=28..31, result=50, le reste air).
+    /// `syncContents` route automatiquement vers slot-par-slot (complex =
+    /// Cursor/Craft) ou InventoryContent full (Main/Offhand/Armor).
     pub fn sync_all(&mut self, inv: &PlayerInventory, out: &mut PacketOut) {
-        self.sync_contents_non_ui(inv, InvKey::Main, out);
-        self.sync_ui_inventory(inv, out);
-        self.sync_contents_non_ui(inv, InvKey::Offhand, out);
-        self.sync_contents_non_ui(inv, InvKey::Armor, out);
-    }
-
-    /// Sync la fenêtre UI (124) en un seul paquet de 54 slots
-    /// (dragonfly `session/player.go:232` via `sendInv(s.ui, WindowIDUI)`).
-    /// Layout : cursor (0), craft 2x2 (28..31), result (50), le reste air.
-    fn sync_ui_inventory(&mut self, inv: &PlayerInventory, out: &mut PacketOut) {
-        const UI_SIZE: usize = 54;
-        // Nettoie prédictions/pending_syncs des inventaires UI-backed.
-        for key in [InvKey::Cursor, InvKey::Craft2x2, InvKey::CraftResult] {
-            if let Some(e) = self.inventories.get_mut(&key) {
-                e.predictions.clear();
-                e.pending_syncs.clear();
-            }
+        // Ordre identique à PMMP : Main → Offhand → Armor → Cursor → Craft2x2.
+        // (L'ordre vient de l'ordre d'insertion dans `inventories`, qui suit
+        // les appels `add`/`addComplex` du constructeur.)
+        for key in [
+            InvKey::Main,
+            InvKey::Offhand,
+            InvKey::Armor,
+            InvKey::Cursor,
+            InvKey::Craft2x2,
+        ] {
+            self.sync_contents(inv, key, out);
         }
-
-        let mut contents: Vec<ItemStackWrapper> =
-            (0..UI_SIZE).map(|_| ItemStackWrapper::air()).collect();
-
-        // Cursor en slot 0.
-        let cursor = inv
-            .slot_ref(InvKey::Cursor, 0)
-            .cloned()
-            .unwrap_or_else(ItemStackWrapper::air);
-        let info = self.track_item_stack(InvKey::Cursor, 0, cursor.item.is_air(), None);
-        contents[ui_slot::CURSOR as usize] = ItemStackWrapper {
-            stack_id: info.stack_id,
-            item: cursor.item,
-        };
-
-        // Craft grid 2x2 (slots 28..32).
-        for core in 0..4 {
-            let item = inv
-                .slot_ref(InvKey::Craft2x2, core)
-                .cloned()
-                .unwrap_or_else(ItemStackWrapper::air);
-            let info = self.track_item_stack(InvKey::Craft2x2, core, item.item.is_air(), None);
-            let net_slot = ui_slot::CRAFTING2X2_INPUT_START as usize + core;
-            contents[net_slot] = ItemStackWrapper {
-                stack_id: info.stack_id,
-                item: item.item,
-            };
-        }
-
-        // Craft result (slot 50).
-        let result = inv
-            .slot_ref(InvKey::CraftResult, 0)
-            .cloned()
-            .unwrap_or_else(ItemStackWrapper::air);
-        let info = self.track_item_stack(InvKey::CraftResult, 0, result.item.is_air(), None);
-        contents[ui_slot::CRAFTING_RESULT as usize] = ItemStackWrapper {
-            stack_id: info.stack_id,
-            item: result.item,
-        };
-
-        self.send_inventory_content_packets(container_ids::UI as u32, &contents, out);
     }
 
     /// Sync un inventaire "simple" (non mappé sur UI). Envoie un InventoryContent
     /// complet sur le windowId associé (0, 119 ou 120).
+    #[allow(dead_code)]
     fn sync_contents_non_ui(
         &mut self,
         inv: &PlayerInventory,
@@ -460,37 +427,42 @@ impl InventoryManager {
 
     /// `onClientOpenMainInventory()` — touche E côté client.
     ///
-    /// Protocol 944 (dragonfly `handler_interact.go:28-37`) : format canonique
-    /// pour E-key sur protocol 944 :
-    ///   - `WindowID = 0` (statique, pas dynamique comme PMMP 924)
-    ///   - `ContainerType = 0xFF` (-1 INVENTORY)
-    ///   - `ContainerEntityUniqueID = -1` (pas `player.id` comme PMMP 924)
-    ///   - `ContainerPosition = player_position` (pas `(0,0,0)` comme PMMP)
-    ///
-    /// PMMP 924 faisait `entityInv(getNewWindowId(), -1, player.getId())` avec
-    /// pos=(0,0,0), mais ce format crash le client Bedrock 1.26.10 (testé).
+    /// Port fidèle `InventoryManager.php:394-408` :
+    ///   1. `onCurrentWindowRemove()` — si une window dynamique tracké, envoyer
+    ///      ContainerClose + poser `pendingCloseWindowId`
+    ///   2. `openWindowDeferred` — si close pending, store callback et attendre
+    ///      le ACK client via `onClientRemoveWindow`
+    ///   3. Quand exécuté : `windowId = getNewWindowId()` (dynamique !),
+    ///      `associateIdWithInventory(windowId, mainInv)`,
+    ///      envoyer `ContainerOpenPacket::entityInv(windowId, -1, player.getId())`
+    ///      où `entityInv` utilise `blockPosition = (0,0,0)` (voir PMMP
+    ///      `ContainerOpenPacket.php:47-49`).
     pub fn on_client_open_main_inventory(
         &mut self,
-        player_position: [f32; 3],
+        player_entity_id: i64,
         out: &mut PacketOut,
     ) {
-        // Anti double-ouverture (`s.invOpened = true` dragonfly).
+        self.on_current_window_remove(out);
         if self.pending_close_window_id.is_some() {
+            self.pending_open_main_inventory = Some(player_entity_id);
             return;
         }
+        self.do_open_main_inventory(player_entity_id, out);
+    }
+
+    /// Partie callback de `onClientOpenMainInventory` (exécutée immédiatement
+    /// ou après ACK client selon l'état de pending_close).
+    fn do_open_main_inventory(&mut self, player_entity_id: i64, out: &mut PacketOut) {
+        let window_id = self.get_new_window_id();
+        self.associate_id_with_key(window_id, InvKey::Main);
         self.current_window_type = window_types::INVENTORY;
-        self.pending_close_window_id = Some(container_ids::INVENTORY);
         out.push((
             packet_id::CONTAINER_OPEN,
             ContainerOpen {
-                window_id: container_ids::INVENTORY, // 0 (statique)
-                window_type: 0xFF,                   // -1 = INVENTORY
-                position: [
-                    player_position[0].floor() as i32,
-                    player_position[1].floor() as i32,
-                    player_position[2].floor() as i32,
-                ],
-                actor_unique_id: -1,
+                window_id,
+                window_type: 0xFF, // -1 = INVENTORY
+                position: [0, 0, 0], // PMMP entityInv fait ça
+                actor_unique_id: player_entity_id,
             }
             .encode(),
         ));
@@ -563,10 +535,11 @@ impl InventoryManager {
 
         if self.pending_close_window_id == Some(id) {
             self.pending_close_window_id = None;
-            // Le champ `pending_open_main_inventory` n'est plus utilisé sur
-            // protocol 944 (pas d'ouverture différée — format dragonfly),
-            // on le clear par sécurité.
-            self.pending_open_main_inventory = None;
+            // PMMP InventoryManager.php:445-451 : exécuter le callback différé
+            // d'ouverture s'il y en a un en attente.
+            if let Some(player_entity_id) = self.pending_open_main_inventory.take() {
+                self.do_open_main_inventory(player_entity_id, out);
+            }
         }
     }
 
@@ -1248,17 +1221,17 @@ mod tests {
     use super::*;
     use mc_rs_proto::io::ProtoReader;
 
-    /// Protocol 944 (dragonfly `handler_interact.go:28-37`) :
-    /// WindowID=0 statique, EntityUniqueID=-1, Position=player_pos.
+    /// PMMP `InventoryManager.php:394-408` :
+    /// WindowID = getNewWindowId() (dynamique, FIRST+1=2 premier appel),
+    /// EntityUniqueID = player.getId(), Position = (0,0,0).
     #[test]
-    fn e_key_emits_container_open_dragonfly_944() {
+    fn e_key_emits_container_open_pmmp_entity_inv() {
         let mut mgr = InventoryManager::new();
         let mut out = PacketOut::new();
-        let player_pos: [f32; 3] = [3.5, 69.6, 84.2];
+        let player_id: i64 = 42;
 
-        mgr.on_client_open_main_inventory(player_pos, &mut out);
+        mgr.on_client_open_main_inventory(player_id, &mut out);
 
-        // Doit produire un seul ContainerOpen.
         let opens: Vec<_> = out
             .iter()
             .filter(|(pid, _)| *pid == packet_id::CONTAINER_OPEN)
@@ -1274,25 +1247,28 @@ mod tests {
         let bz = r.read_var_i32().unwrap();
         let actor_id = r.read_var_i64().unwrap();
 
-        assert_eq!(window_id, 0, "dragonfly 944 WindowID statique = 0");
-        assert_eq!(window_type, 0xFF, "INVENTORY window type = -1 (0xFF byte)");
-        assert_eq!((bx, by, bz), (3, 69, 84), "Position = floor(player_pos)");
-        assert_eq!(actor_id, -1, "dragonfly 944 ContainerEntityUniqueID = -1");
+        assert_eq!(window_id, 2, "PMMP getNewWindowId() = FIRST+1 = 2 au 1er appel");
+        assert_eq!(window_type, 0xFF, "INVENTORY window type = -1");
+        assert_eq!((bx, by, bz), (0, 0, 0), "entityInv utilise pos=(0,0,0)");
+        assert_eq!(actor_id, player_id, "actorUniqueId = player.getId()");
     }
 
     #[test]
-    fn sync_all_matches_dragonfly_944_semantics() {
+    fn sync_all_matches_pmmp_944_semantics() {
         let mut mgr = InventoryManager::new();
         let inv = crate::inventory::PlayerInventory::new();
         let mut out = PacketOut::new();
         mgr.sync_all(&inv, &mut out);
 
-        // Protocol 944 (dragonfly `session.go:255-258`) — 4 InventoryContent :
-        //   sendInv(Main,    WindowID=0)    -- 36 slots
-        //   sendInv(UI,      WindowID=124)  -- 54 slots (cursor+craft+result)
-        //   sendInv(Offhand, WindowID=119)  -- 1 slot
-        //   sendInv(Armor,   WindowID=120)  -- 4 slots
-        // Aucun InventorySlot individuel au spawn.
+        // PMMP 5.42.1 `syncAll` appelle `syncContents` sur chaque inventaire tracké.
+        // Main/Offhand/Armor : InventoryContent two-phase (clear + real) = 2 paquets.
+        // Cursor/Craft2x2 : InventorySlot per slot. Tous les slots au spawn
+        // sont air (stack_id=0) → un seul paquet par slot (pas de clear).
+        //   Main (36 slots)      → 2 InventoryContent
+        //   Offhand (1 slot)     → 2 InventoryContent
+        //   Armor (4 slots)      → 2 InventoryContent
+        //   Cursor (1 slot, air) → 1 InventorySlot
+        //   Craft2x2 (4 slots, air) → 4 InventorySlot
         let content_packets = out
             .iter()
             .filter(|(pid, _)| *pid == packet_id::INVENTORY_CONTENT)
@@ -1301,39 +1277,30 @@ mod tests {
             .iter()
             .filter(|(pid, _)| *pid == packet_id::INVENTORY_SLOT)
             .count();
-        assert_eq!(
-            content_packets, 4,
-            "dragonfly 944 spawn = 4 InventoryContent (Main, UI, Offhand, Armor)"
-        );
-        assert_eq!(
-            slot_packets, 0,
-            "au spawn protocol 944 pas d'InventorySlot individuel"
-        );
+        assert_eq!(content_packets, 6, "PMMP: 2 InventoryContent × 3 = 6");
+        assert_eq!(slot_packets, 5, "PMMP: 1 + 4 = 5 InventorySlot (air)");
     }
 
-    /// Anti-double ouverture : après un premier E-key, le manager pose
-    /// `pending_close_window_id`. Un second E-key doit être ignoré
-    /// (protocol 944 dragonfly `if s.invOpened return nil`).
+    /// PMMP `openWindowDeferred` : un second E-key pendant que le premier a
+    /// enregistré son windowId dynamique déclenche un close + re-ouverture.
+    /// Le second ContainerOpen est différé jusqu'au ACK du close.
     #[test]
-    fn second_e_key_is_ignored_while_first_still_open() {
+    fn second_e_key_triggers_close_and_defers_open() {
         let mut mgr = InventoryManager::new();
         let mut out = PacketOut::new();
-        let pos = [0.0, 64.0, 0.0];
+        let player_id: i64 = 42;
 
-        mgr.on_client_open_main_inventory(pos, &mut out);
-        let first_count = out
-            .iter()
-            .filter(|(pid, _)| *pid == packet_id::CONTAINER_OPEN)
-            .count();
-        assert_eq!(first_count, 1);
+        mgr.on_client_open_main_inventory(player_id, &mut out);
+        let open_count_1 = out.iter().filter(|(pid, _)| *pid == packet_id::CONTAINER_OPEN).count();
+        assert_eq!(open_count_1, 1);
 
-        // Deuxième E-key : pending_close est set → ignore.
         out.clear();
-        mgr.on_client_open_main_inventory(pos, &mut out);
-        let second_count = out
-            .iter()
-            .filter(|(pid, _)| *pid == packet_id::CONTAINER_OPEN)
-            .count();
-        assert_eq!(second_count, 0, "second open while inv still open must be ignored");
+        mgr.on_client_open_main_inventory(player_id, &mut out);
+        // Ici PMMP envoie un ContainerClose (pour la window précédente), et diffère l'open
+        let close_count = out.iter().filter(|(pid, _)| *pid == packet_id::CONTAINER_CLOSE).count();
+        let open_count_2 = out.iter().filter(|(pid, _)| *pid == packet_id::CONTAINER_OPEN).count();
+        assert_eq!(close_count, 1, "should emit ContainerClose for previous window");
+        assert_eq!(open_count_2, 0, "second open is deferred until close ack");
+        assert!(mgr.pending_open_main_inventory.is_some());
     }
 }

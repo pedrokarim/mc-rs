@@ -921,6 +921,9 @@ impl PlayerList {
                 w.write_bool(entry.is_teacher);
                 w.write_bool(entry.is_host);
                 w.write_bool(entry.is_subclient);
+                // Protocol 944 : ARGB color u32 LE (PMMP PlayerListPacket.php:108,
+                // ajouté dans la refonte 1.26.10). Default white = 0xFFFFFFFF.
+                w.write_u32_le(0xFFFFFFFF);
             }
             // Verified skins (one per entry)
             for _ in &self.entries {

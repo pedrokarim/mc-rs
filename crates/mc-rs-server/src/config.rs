@@ -163,7 +163,7 @@ fn default_generator() -> String {
     "normal".to_string()
 }
 fn default_gamemode() -> String {
-    "creative".to_string()
+    "survival".to_string()
 }
 fn default_difficulty() -> String {
     "normal".to_string()

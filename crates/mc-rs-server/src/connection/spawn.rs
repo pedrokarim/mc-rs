@@ -50,9 +50,6 @@ pub(super) fn make_spawn_position(world_x: i32, world_y: i32, world_z: i32) -> [
     [world_x as f32 + 0.5, feet_y + 1.621, world_z as f32 + 0.5]
 }
 
-pub fn hub_menu_item_id() -> i32 {
-    item_registry::required_item_id("minecraft:compass")
-}
 
 fn find_surface_in_loaded_world(cache: &mut ChunkCache, world_x: i32, world_z: i32) -> Option<i32> {
     for world_y in (-64..=319).rev() {
@@ -159,7 +156,15 @@ impl Connection {
             responses.push(self.encode_compressed_packet(packet_id::UPDATE_ATTRIBUTES, &payload));
         }
 
-        // 6. UpdateAbilities
+        // 6. AvailableCommands (PMMP PreSpawnPacketHandler.php:134-135 :
+        //    syncAvailableCommands AVANT abilities). Envoi minimal — la liste
+        //    complète sera resync plus tard via sync_available_commands_for_all.
+        responses.push(self.encode_compressed_packet(
+            packet_id::AVAILABLE_COMMANDS,
+            &AvailableCommands::encode_rich(&[]),
+        ));
+
+        // 7. UpdateAbilities
         let abilities = if self.gamemode == 1 {
             UpdateAbilities::default_creative(self.entity_runtime_id as i64)
         } else {
@@ -168,31 +173,75 @@ impl Connection {
         responses
             .push(self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities.encode()));
 
-        // 7. UpdateAdventureSettings
+        // 8. UpdateAdventureSettings
         let adventure = UpdateAdventureSettings::default_survival();
         responses.push(self.encode_compressed_packet(
             packet_id::UPDATE_ADVENTURE_SETTINGS,
             &adventure.encode(),
         ));
 
-        // 8. SetActorData
+        // 9. SetActorData
         let player_name = self.display_name.clone().unwrap_or_default();
         let actor_data = SetActorData::player_in_game(self.entity_runtime_id, &player_name);
         responses
             .push(self.encode_compressed_packet(packet_id::SET_ACTOR_DATA, &actor_data.encode()));
 
-        // 9-12. Inventory sync
+        // 10. Inventory sync (Main / UI 124 / Offhand / Armor)
         self.push_inventory_sync(&mut responses);
+
+        // 11. MobEquipment (PMMP syncSelectedHotbarSlot — held item du player).
+        //     Sans ce paquet, le client ne sait pas quel item est "en main"
+        //     au spawn.
+        let held_slot = self.inventory.held_slot;
+        let held_stack_id = self
+            .inventory_manager
+            .stack_id_of(crate::inventory_manager::InvKey::Main, held_slot as usize);
+        let held_wrapper = ItemStackWrapper {
+            stack_id: held_stack_id,
+            item: self.inventory.slots[held_slot as usize].item.clone(),
+        };
+        let mob_eq = MobEquipment::encode_item(self.entity_runtime_id, &held_wrapper, held_slot);
+        responses
+            .push(self.encode_compressed_packet(packet_id::MOB_EQUIPMENT, &mob_eq));
+
+        // 12. CreativeContent (PMMP syncCreative — AVANT CraftingData).
+        responses.push(self.encode_compressed_packet(
+            packet_id::CREATIVE_CONTENT,
+            &CreativeContent::encode_empty(),
+        ));
 
         // 13. CraftingData
         responses.push(
             self.encode_compressed_packet(packet_id::CRAFTING_DATA, &CraftingData::encode_empty()),
         );
 
-        // 14. CreativeContent
+        // 14. PlayerList (PMMP syncPlayerList — self-entry + autres joueurs).
+        //     Protocol 944 ajoute un champ `color` u32 LE ARGB par entry (fix
+        //     appliqué dans PlayerList::encode ; sans ça le client désaligne
+        //     la boucle des verified-skins et crash juste après PreSpawn).
+        let uuid_bytes: [u8; 16] = self
+            .uuid
+            .as_ref()
+            .map(|u| *u.as_bytes())
+            .unwrap_or([0u8; 16]);
+        let self_entry = PlayerListAdd {
+            uuid: uuid_bytes,
+            entity_id: self.entity_runtime_id as i64,
+            username: self.display_name.clone().unwrap_or_default(),
+            xuid: self.xuid.clone().unwrap_or_default(),
+            platform_chat_id: String::new(),
+            build_platform: 0,
+            is_teacher: false,
+            is_host: false,
+            is_subclient: false,
+        };
+        let player_list = PlayerList {
+            action: 0,
+            entries: vec![self_entry],
+        };
         responses.push(self.encode_compressed_packet(
-            packet_id::CREATIVE_CONTENT,
-            &CreativeContent::encode_empty(),
+            packet_id::PLAYER_LIST,
+            &player_list.encode(),
         ));
 
         info!("[{}] Sent {} PreSpawn packets", self.addr, responses.len());
@@ -280,9 +329,6 @@ impl Connection {
             self.display_name.as_deref().unwrap_or("Player")
         );
         self.state = ConnectionState::InGame;
-
-        let welcome =
-            Text::system("Use /menu or right-click the compass in slot 1 to open the hub menu.");
-        vec![self.encode_compressed_packet(packet_id::TEXT, &welcome)]
+        Vec::new()
     }
 }

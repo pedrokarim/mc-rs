@@ -283,32 +283,28 @@ impl Connection {
         info!("[{}] InteractPacket action={}", self.addr, action);
 
         if action == 6 {
-            // Protocol 944 dragonfly : WindowID=0, EntityUniqueID=-1, Position=player.
-            // Voir inventory_manager::on_client_open_main_inventory.
+            // PMMP 5.42.1 (protocol 944) `InventoryManager::onClientOpenMainInventory`
+            // (référence confirmée fonctionnelle avec Bedrock 1.26.10) :
+            //   entityInv(windowId=getNewWindowId(), type=INVENTORY=0xFF,
+            //             actorUniqueId=player.getId(), pos=(0,0,0))
+            // avec garde `player_inventory_open` (dragonfly confirme que double
+            // ContainerOpen crashe le client).
+            if self.player_inventory_open {
+                return Vec::new();
+            }
+            self.player_inventory_open = true;
+
             let mut out: Vec<(u32, Vec<u8>)> = Vec::new();
             self.inventory_manager
-                .on_client_open_main_inventory(self.position, &mut out);
+                .on_client_open_main_inventory(self.entity_runtime_id as i64, &mut out);
             info!(
-                "[{}] on_client_open_main_inventory (dragonfly 944): {} packet(s)",
+                "[{}] on_client_open_main_inventory (PMMP entityInv): {} packet(s)",
                 self.addr,
                 out.len(),
             );
-            // DEBUG : dump hex des paquets bruts pour diagnostic client-side crash.
             for (pkt_id, payload) in &out {
-                let preview: String = payload
-                    .iter()
-                    .take(64)
-                    .map(|b| format!("{:02X}", b))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                info!(
-                    "[{}] E-key packet 0x{:03X} len={} hex={}{}",
-                    self.addr,
-                    pkt_id,
-                    payload.len(),
-                    preview,
-                    if payload.len() > 64 { " ..." } else { "" },
-                );
+                let preview: String = payload.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ");
+                info!("[{}] E-key pkt 0x{:03X} len={} hex={}", self.addr, pkt_id, payload.len(), preview);
             }
             return out
                 .into_iter()

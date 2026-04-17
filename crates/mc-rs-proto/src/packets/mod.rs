@@ -44,13 +44,13 @@ pub mod packet_id {
     pub const BIOME_DEFINITION_LIST: u32 = 0x7A;
     pub const NETWORK_SETTINGS: u32 = 0x8F;
     pub const PLAYER_AUTH_INPUT: u32 = 0x90;
-    pub const CREATIVE_CONTENT: u32 = 0x12E;
-    pub const UPDATE_ABILITIES: u32 = 0x12B;
+    pub const CREATIVE_CONTENT: u32 = 0x91;
+    pub const UPDATE_ABILITIES: u32 = 0xBB;
     pub const UPDATE_ADVENTURE_SETTINGS: u32 = 0xBC;
     pub const EMOTE_LIST: u32 = 0x98;
     pub const SET_LOCAL_PLAYER_AS_INITIALIZED: u32 = 0x71;
     pub const REQUEST_NETWORK_SETTINGS: u32 = 0xC1;
-    pub const ITEM_REGISTRY: u32 = 0x161;
+    pub const ITEM_REGISTRY: u32 = 0xA2;
     pub const AVAILABLE_COMMANDS: u32 = 0x4C;
     pub const COMMAND_REQUEST: u32 = 0x4D;
     pub const TRANSFER: u32 = 0x55;

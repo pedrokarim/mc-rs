@@ -37,7 +37,7 @@ seed = 0
 
 [gameplay]
 # Mode de jeu par défaut : "survival", "creative", "adventure", "spectator"
-gamemode = "creative"
+gamemode = "survival"
 
 # Difficulté : "peaceful", "easy", "normal", "hard"
 difficulty = "normal"

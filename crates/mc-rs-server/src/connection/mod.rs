@@ -29,7 +29,6 @@ use crate::item_entities::PendingItemEntitySpawn;
 use crate::player_registry;
 use crate::world::chunk_cache::ChunkCache;
 
-pub use spawn::hub_menu_item_id;
 
 /// Connection state for a single player.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,14 +44,8 @@ pub enum ConnectionState {
 }
 
 pub(super) const CHUNKS_PER_TICK: usize = 4;
-pub(super) const HUB_MENU_SLOT: usize = 0;
 pub(super) const PLAYER_INVENTORY_SCREEN_ID: u8 = 1;
 pub(super) const PLAYER_INVENTORY_WINDOW_TYPE: u8 = 0xFF;
-
-#[derive(Debug, Clone, Copy)]
-pub(super) enum PendingForm {
-    HubMenu,
-}
 
 #[derive(Debug, Clone)]
 pub struct PendingEntityAttack {
@@ -107,7 +100,6 @@ pub struct Connection {
 
     // Server-driven Bedrock forms
     pub(super) next_form_id: u32,
-    pub(super) pending_forms: HashMap<u32, PendingForm>,
 
     // Server keypair (shared across connections)
     pub(super) server_keypair: std::sync::Arc<ServerKeyPair>,
@@ -150,11 +142,7 @@ impl Connection {
     ) -> Self {
         let spawn_position = world_spawn_override
             .unwrap_or_else(|| spawn::find_spawn_position(&chunk_cache, config.world_seed));
-        let mut inventory = PlayerInventory::new();
-        let menu_stack_id = inventory.next_stack_id();
-        use mc_rs_proto::packets::player::{ItemStack, ItemStackWrapper};
-        inventory.slots[HUB_MENU_SLOT] =
-            ItemStackWrapper::new(ItemStack::new(hub_menu_item_id(), 1, 0), menu_stack_id);
+        let inventory = PlayerInventory::new();
 
         Self {
             addr,
@@ -197,7 +185,6 @@ impl Connection {
             game_tick_accum: 0,
             events,
             next_form_id: 1,
-            pending_forms: HashMap::new(),
             server_keypair,
             chunk_cache,
             config,
@@ -392,6 +379,18 @@ impl Connection {
 
     /// Encode a compressed (and optionally encrypted) packet.
     pub fn encode_compressed_packet(&self, pkt_id: u32, payload: &[u8]) -> Vec<u8> {
+        // DEBUG DUMP — même format que PMMP NetworkSession.php.
+        // Dumpe le (pktId, payload) de chaque paquet envoyé, pour diff contre PMMP.
+        let hex: String = payload.iter().take(256).map(|b| format!("{:02X}", b)).collect();
+        let line = format!("[{}] 0x{:03X} len={} hex={}\n",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis(),
+            pkt_id, payload.len(), hex);
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("pkt_sent.log")
+            .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
+
         let pkt_bytes = codec::encode_packet(pkt_id, payload);
         let batch_payload = batch::encode_batch(&[pkt_bytes], self.compression_algo, 7);
 

@@ -875,16 +875,8 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
     }
 
     fn open_sender_menu(&mut self) {
-        if let Some(sender_addr) = self.source_addr() {
-            if let Some(connection) = self.connections.get_mut(&sender_addr) {
-                let packets = connection.open_hub_menu_packets();
-                for packet in packets {
-                    self.send_prepared(sender_addr, packet);
-                }
-            }
-        } else {
-            self.send_feedback("Console cannot open the in-game menu.");
-        }
+        // Hub menu système (compass) retiré. Stub silencieux.
+        self.send_feedback("Hub menu désactivé.");
     }
 
     fn show_sender_biome(&mut self) {
