@@ -4,7 +4,12 @@ use crate::vector_math::Vec3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HitFace {
-    Down, Up, North, South, West, East,
+    Down,
+    Up,
+    North,
+    South,
+    West,
+    East,
 }
 
 #[derive(Debug, Clone)]
@@ -41,9 +46,21 @@ pub fn cast_ray(
     let next_boundary_y = if step_y > 0 { y as f64 + 1.0 } else { y as f64 };
     let next_boundary_z = if step_z > 0 { z as f64 + 1.0 } else { z as f64 };
 
-    let mut t_max_x = if dir.x != 0.0 { (next_boundary_x - origin.x) / dir.x } else { f64::INFINITY };
-    let mut t_max_y = if dir.y != 0.0 { (next_boundary_y - origin.y) / dir.y } else { f64::INFINITY };
-    let mut t_max_z = if dir.z != 0.0 { (next_boundary_z - origin.z) / dir.z } else { f64::INFINITY };
+    let mut t_max_x = if dir.x != 0.0 {
+        (next_boundary_x - origin.x) / dir.x
+    } else {
+        f64::INFINITY
+    };
+    let mut t_max_y = if dir.y != 0.0 {
+        (next_boundary_y - origin.y) / dir.y
+    } else {
+        f64::INFINITY
+    };
+    let mut t_max_z = if dir.z != 0.0 {
+        (next_boundary_z - origin.z) / dir.z
+    } else {
+        f64::INFINITY
+    };
 
     let mut distance = 0.0;
     let mut last_face = HitFace::Up;
@@ -62,17 +79,29 @@ pub fn cast_ray(
             x += step_x;
             distance = t_max_x;
             t_max_x += t_delta_x;
-            last_face = if step_x > 0 { HitFace::West } else { HitFace::East };
+            last_face = if step_x > 0 {
+                HitFace::West
+            } else {
+                HitFace::East
+            };
         } else if t_max_y < t_max_z {
             y += step_y;
             distance = t_max_y;
             t_max_y += t_delta_y;
-            last_face = if step_y > 0 { HitFace::Down } else { HitFace::Up };
+            last_face = if step_y > 0 {
+                HitFace::Down
+            } else {
+                HitFace::Up
+            };
         } else {
             z += step_z;
             distance = t_max_z;
             t_max_z += t_delta_z;
-            last_face = if step_z > 0 { HitFace::North } else { HitFace::South };
+            last_face = if step_z > 0 {
+                HitFace::North
+            } else {
+                HitFace::South
+            };
         }
     }
 

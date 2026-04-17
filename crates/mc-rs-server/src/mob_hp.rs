@@ -13,7 +13,7 @@ pub fn mob_max_hp(entity_type: &str) -> f32 {
         "minecraft:enderman" => 40.0,
         "minecraft:ender_dragon" => 200.0,
         "minecraft:wither" => 300.0,
-        "minecraft:slime" => 1.0,   // size 1
+        "minecraft:slime" => 1.0, // size 1
         "minecraft:magma_cube" => 1.0,
         "minecraft:blaze" => 20.0,
         "minecraft:ghast" => 10.0,
@@ -56,7 +56,10 @@ pub fn mob_max_hp(entity_type: &str) -> f32 {
         "minecraft:axolotl" => 14.0,
         "minecraft:dolphin" => 10.0,
         "minecraft:squid" | "minecraft:glow_squid" => 10.0,
-        "minecraft:cod" | "minecraft:salmon" | "minecraft:pufferfish" | "minecraft:tropical_fish" => 3.0,
+        "minecraft:cod"
+        | "minecraft:salmon"
+        | "minecraft:pufferfish"
+        | "minecraft:tropical_fish" => 3.0,
         "minecraft:turtle" => 30.0,
         "minecraft:polar_bear" => 30.0,
         "minecraft:panda" => 20.0,

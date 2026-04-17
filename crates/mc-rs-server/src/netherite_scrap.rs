@@ -9,20 +9,28 @@ pub fn debris_smelt_result() -> (&'static str, f32) {
 pub fn ingot_recipe() -> (Vec<&'static str>, &'static str) {
     (
         vec![
-            "minecraft:netherite_scrap", "minecraft:netherite_scrap",
-            "minecraft:netherite_scrap", "minecraft:netherite_scrap",
-            "minecraft:gold_ingot", "minecraft:gold_ingot",
-            "minecraft:gold_ingot", "minecraft:gold_ingot",
+            "minecraft:netherite_scrap",
+            "minecraft:netherite_scrap",
+            "minecraft:netherite_scrap",
+            "minecraft:netherite_scrap",
+            "minecraft:gold_ingot",
+            "minecraft:gold_ingot",
+            "minecraft:gold_ingot",
+            "minecraft:gold_ingot",
         ],
         "minecraft:netherite_ingot",
     )
 }
 
 /// Netherite floats in lava.
-pub fn floats_in_lava() -> bool { true }
+pub fn floats_in_lava() -> bool {
+    true
+}
 
 /// Netherite blocks/tools are unburnable.
-pub fn is_fire_immune() -> bool { true }
+pub fn is_fire_immune() -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {

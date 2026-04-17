@@ -23,7 +23,7 @@ impl TntIgnition {
     pub fn fuse_ticks(&self) -> u32 {
         match self {
             Self::Explosion | Self::Lava => 10, // immediate
-            _ => 80, // standard
+            _ => 80,                            // standard
         }
     }
 }

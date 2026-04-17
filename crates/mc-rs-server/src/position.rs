@@ -13,15 +13,22 @@ pub struct Position {
 impl Position {
     pub fn new(x: f64, y: f64, z: f64) -> Self {
         Self {
-            x, y, z,
-            yaw: 0.0, pitch: 0.0,
+            x,
+            y,
+            z,
+            yaw: 0.0,
+            pitch: 0.0,
             dimension: 0,
         }
     }
 
     /// Block position (floor).
     pub fn to_block(&self) -> (i32, i32, i32) {
-        (self.x.floor() as i32, self.y.floor() as i32, self.z.floor() as i32)
+        (
+            self.x.floor() as i32,
+            self.y.floor() as i32,
+            self.z.floor() as i32,
+        )
     }
 
     /// Chunk position (floor div 16).

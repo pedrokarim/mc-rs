@@ -21,11 +21,17 @@ pub const BOOST_TICKS: u32 = 100;
 
 impl ControlStick {
     pub fn new_carrot() -> Self {
-        Self { kind: ControlStickKind::Carrot, durability: CARROT_DURABILITY }
+        Self {
+            kind: ControlStickKind::Carrot,
+            durability: CARROT_DURABILITY,
+        }
     }
 
     pub fn new_warped_fungus() -> Self {
-        Self { kind: ControlStickKind::WarpedFungus, durability: WARPED_FUNGUS_DURABILITY }
+        Self {
+            kind: ControlStickKind::WarpedFungus,
+            durability: WARPED_FUNGUS_DURABILITY,
+        }
     }
 
     /// Use stick on mount → reduces durability.

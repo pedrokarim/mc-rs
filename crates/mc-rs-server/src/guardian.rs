@@ -60,11 +60,17 @@ impl Guardian {
     }
 
     /// Touching guardian deals spike damage.
-    pub fn spike_damage() -> f32 { 2.0 }
+    pub fn spike_damage() -> f32 {
+        2.0
+    }
 
     /// Elder guardian gives Mining Fatigue to nearby players.
-    pub fn elder_range() -> f64 { 50.0 }
-    pub fn elder_mining_fatigue_duration() -> u32 { 6000 }
+    pub fn elder_range() -> f64 {
+        50.0
+    }
+    pub fn elder_mining_fatigue_duration() -> u32 {
+        6000
+    }
 }
 
 #[cfg(test)]

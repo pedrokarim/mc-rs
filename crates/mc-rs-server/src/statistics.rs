@@ -17,7 +17,7 @@ pub enum StatKind {
     Deaths,
     MobKills,
     PlayerKills,
-    TimePlayed,    // ticks
+    TimePlayed, // ticks
     TimeSinceDeath,
     BlocksBroken,
     BlocksPlaced,

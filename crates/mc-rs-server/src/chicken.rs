@@ -63,7 +63,9 @@ impl Chicken {
 }
 
 impl Default for Chicken {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

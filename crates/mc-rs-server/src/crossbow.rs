@@ -26,9 +26,8 @@ impl Crossbow {
     }
 
     pub fn start_charging(&mut self, quick_charge_level: u8, ammo_type: u16) {
-        self.charge_ticks = BASE_CHARGE_TIME.saturating_sub(
-            QUICK_CHARGE_REDUCTION * quick_charge_level as u32
-        );
+        self.charge_ticks =
+            BASE_CHARGE_TIME.saturating_sub(QUICK_CHARGE_REDUCTION * quick_charge_level as u32);
         self.ammo = vec![ammo_type];
     }
 
@@ -65,7 +64,9 @@ impl Crossbow {
 }
 
 impl Default for Crossbow {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

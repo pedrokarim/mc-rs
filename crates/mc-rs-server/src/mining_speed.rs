@@ -48,8 +48,18 @@ mod tests {
 
     #[test]
     fn efficiency_boosts_speed() {
-        let e0 = mining_speed(Some(ToolTier::Iron), Some(ToolType::Pickaxe), Some(ToolType::Pickaxe), 0);
-        let e5 = mining_speed(Some(ToolTier::Iron), Some(ToolType::Pickaxe), Some(ToolType::Pickaxe), 5);
+        let e0 = mining_speed(
+            Some(ToolTier::Iron),
+            Some(ToolType::Pickaxe),
+            Some(ToolType::Pickaxe),
+            0,
+        );
+        let e5 = mining_speed(
+            Some(ToolTier::Iron),
+            Some(ToolType::Pickaxe),
+            Some(ToolType::Pickaxe),
+            5,
+        );
         assert!(e5 > e0);
     }
 }

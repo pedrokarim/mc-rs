@@ -4,7 +4,8 @@
 pub const MELT_LIGHT_THRESHOLD: u8 = 11;
 /// Packed ice/blue ice don't melt (frozen deep).
 pub fn can_melt(block_id: u16) -> bool {
-    matches!(block_id,
+    matches!(
+        block_id,
         79  // ice
         | 212 // frosted ice
     )
@@ -19,7 +20,9 @@ pub fn melt_result(block_id: u16) -> u16 {
 }
 
 /// Snow layer melts to nothing (air).
-pub fn snow_layer_melts() -> u16 { 0 }
+pub fn snow_layer_melts() -> u16 {
+    0
+}
 
 /// Frost walker creates frosted ice on water (stage 0).
 pub const FROST_WALKER_RANGE: u32 = 2;

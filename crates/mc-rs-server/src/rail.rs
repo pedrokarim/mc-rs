@@ -3,9 +3,9 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RailKind {
     Normal,
-    Powered,     // Boosts minecart when powered
-    Detector,    // Emits redstone when minecart on top
-    Activator,   // Toggles minecart on
+    Powered,   // Boosts minecart when powered
+    Detector,  // Emits redstone when minecart on top
+    Activator, // Toggles minecart on
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,7 +31,11 @@ pub struct Rail {
 
 impl Rail {
     pub fn new(kind: RailKind, shape: RailShape) -> Self {
-        Self { kind, shape, powered: false }
+        Self {
+            kind,
+            shape,
+            powered: false,
+        }
     }
 
     pub fn can_curve(&self) -> bool {
@@ -40,7 +44,11 @@ impl Rail {
 
     /// Booster/powered rail speed multiplier.
     pub fn speed_multiplier(&self) -> f32 {
-        if self.kind == RailKind::Powered && self.powered { 1.8 } else { 1.0 }
+        if self.kind == RailKind::Powered && self.powered {
+            1.8
+        } else {
+            1.0
+        }
     }
 
     /// Detector emits redstone when cart on top.

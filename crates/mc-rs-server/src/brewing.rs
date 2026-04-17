@@ -108,40 +108,168 @@ pub struct BrewingRecipe {
 /// Recettes vanilla PMMP `BrewingRecipeHelper`.
 pub fn vanilla_brewing_recipes() -> Vec<BrewingRecipe> {
     vec![
-        BrewingRecipe { input: PotionType::Water, ingredient_item: "minecraft:nether_wart", output: PotionType::Awkward },
-        BrewingRecipe { input: PotionType::Awkward, ingredient_item: "minecraft:golden_carrot", output: PotionType::NightVision },
-        BrewingRecipe { input: PotionType::Awkward, ingredient_item: "minecraft:fermented_spider_eye", output: PotionType::Invisibility },
-        BrewingRecipe { input: PotionType::Awkward, ingredient_item: "minecraft:rabbit_foot", output: PotionType::Leaping },
-        BrewingRecipe { input: PotionType::Awkward, ingredient_item: "minecraft:magma_cream", output: PotionType::FireResistance },
-        BrewingRecipe { input: PotionType::Awkward, ingredient_item: "minecraft:sugar", output: PotionType::Swiftness },
-        BrewingRecipe { input: PotionType::Awkward, ingredient_item: "minecraft:pufferfish", output: PotionType::WaterBreathing },
-        BrewingRecipe { input: PotionType::Awkward, ingredient_item: "minecraft:glistering_melon_slice", output: PotionType::Healing },
-        BrewingRecipe { input: PotionType::Awkward, ingredient_item: "minecraft:spider_eye", output: PotionType::Poison },
-        BrewingRecipe { input: PotionType::Awkward, ingredient_item: "minecraft:ghast_tear", output: PotionType::Regeneration },
-        BrewingRecipe { input: PotionType::Awkward, ingredient_item: "minecraft:blaze_powder", output: PotionType::Strength },
-        BrewingRecipe { input: PotionType::Awkward, ingredient_item: "minecraft:phantom_membrane", output: PotionType::SlowFalling },
+        BrewingRecipe {
+            input: PotionType::Water,
+            ingredient_item: "minecraft:nether_wart",
+            output: PotionType::Awkward,
+        },
+        BrewingRecipe {
+            input: PotionType::Awkward,
+            ingredient_item: "minecraft:golden_carrot",
+            output: PotionType::NightVision,
+        },
+        BrewingRecipe {
+            input: PotionType::Awkward,
+            ingredient_item: "minecraft:fermented_spider_eye",
+            output: PotionType::Invisibility,
+        },
+        BrewingRecipe {
+            input: PotionType::Awkward,
+            ingredient_item: "minecraft:rabbit_foot",
+            output: PotionType::Leaping,
+        },
+        BrewingRecipe {
+            input: PotionType::Awkward,
+            ingredient_item: "minecraft:magma_cream",
+            output: PotionType::FireResistance,
+        },
+        BrewingRecipe {
+            input: PotionType::Awkward,
+            ingredient_item: "minecraft:sugar",
+            output: PotionType::Swiftness,
+        },
+        BrewingRecipe {
+            input: PotionType::Awkward,
+            ingredient_item: "minecraft:pufferfish",
+            output: PotionType::WaterBreathing,
+        },
+        BrewingRecipe {
+            input: PotionType::Awkward,
+            ingredient_item: "minecraft:glistering_melon_slice",
+            output: PotionType::Healing,
+        },
+        BrewingRecipe {
+            input: PotionType::Awkward,
+            ingredient_item: "minecraft:spider_eye",
+            output: PotionType::Poison,
+        },
+        BrewingRecipe {
+            input: PotionType::Awkward,
+            ingredient_item: "minecraft:ghast_tear",
+            output: PotionType::Regeneration,
+        },
+        BrewingRecipe {
+            input: PotionType::Awkward,
+            ingredient_item: "minecraft:blaze_powder",
+            output: PotionType::Strength,
+        },
+        BrewingRecipe {
+            input: PotionType::Awkward,
+            ingredient_item: "minecraft:phantom_membrane",
+            output: PotionType::SlowFalling,
+        },
         // Redstone : extend duration (Long versions).
-        BrewingRecipe { input: PotionType::Swiftness, ingredient_item: "minecraft:redstone", output: PotionType::LongSwiftness },
-        BrewingRecipe { input: PotionType::Leaping, ingredient_item: "minecraft:redstone", output: PotionType::LongLeaping },
-        BrewingRecipe { input: PotionType::FireResistance, ingredient_item: "minecraft:redstone", output: PotionType::LongFireResistance },
-        BrewingRecipe { input: PotionType::NightVision, ingredient_item: "minecraft:redstone", output: PotionType::LongNightVision },
-        BrewingRecipe { input: PotionType::Invisibility, ingredient_item: "minecraft:redstone", output: PotionType::LongInvisibility },
-        BrewingRecipe { input: PotionType::Regeneration, ingredient_item: "minecraft:redstone", output: PotionType::LongRegeneration },
-        BrewingRecipe { input: PotionType::Strength, ingredient_item: "minecraft:redstone", output: PotionType::LongStrength },
-        BrewingRecipe { input: PotionType::Poison, ingredient_item: "minecraft:redstone", output: PotionType::LongPoison },
-        BrewingRecipe { input: PotionType::Weakness, ingredient_item: "minecraft:redstone", output: PotionType::LongWeakness },
-        BrewingRecipe { input: PotionType::Slowness, ingredient_item: "minecraft:redstone", output: PotionType::LongSlowness },
-        BrewingRecipe { input: PotionType::WaterBreathing, ingredient_item: "minecraft:redstone", output: PotionType::LongWaterBreathing },
-        BrewingRecipe { input: PotionType::SlowFalling, ingredient_item: "minecraft:redstone", output: PotionType::LongSlowFalling },
+        BrewingRecipe {
+            input: PotionType::Swiftness,
+            ingredient_item: "minecraft:redstone",
+            output: PotionType::LongSwiftness,
+        },
+        BrewingRecipe {
+            input: PotionType::Leaping,
+            ingredient_item: "minecraft:redstone",
+            output: PotionType::LongLeaping,
+        },
+        BrewingRecipe {
+            input: PotionType::FireResistance,
+            ingredient_item: "minecraft:redstone",
+            output: PotionType::LongFireResistance,
+        },
+        BrewingRecipe {
+            input: PotionType::NightVision,
+            ingredient_item: "minecraft:redstone",
+            output: PotionType::LongNightVision,
+        },
+        BrewingRecipe {
+            input: PotionType::Invisibility,
+            ingredient_item: "minecraft:redstone",
+            output: PotionType::LongInvisibility,
+        },
+        BrewingRecipe {
+            input: PotionType::Regeneration,
+            ingredient_item: "minecraft:redstone",
+            output: PotionType::LongRegeneration,
+        },
+        BrewingRecipe {
+            input: PotionType::Strength,
+            ingredient_item: "minecraft:redstone",
+            output: PotionType::LongStrength,
+        },
+        BrewingRecipe {
+            input: PotionType::Poison,
+            ingredient_item: "minecraft:redstone",
+            output: PotionType::LongPoison,
+        },
+        BrewingRecipe {
+            input: PotionType::Weakness,
+            ingredient_item: "minecraft:redstone",
+            output: PotionType::LongWeakness,
+        },
+        BrewingRecipe {
+            input: PotionType::Slowness,
+            ingredient_item: "minecraft:redstone",
+            output: PotionType::LongSlowness,
+        },
+        BrewingRecipe {
+            input: PotionType::WaterBreathing,
+            ingredient_item: "minecraft:redstone",
+            output: PotionType::LongWaterBreathing,
+        },
+        BrewingRecipe {
+            input: PotionType::SlowFalling,
+            ingredient_item: "minecraft:redstone",
+            output: PotionType::LongSlowFalling,
+        },
         // Glowstone : amplifier (Strong).
-        BrewingRecipe { input: PotionType::Swiftness, ingredient_item: "minecraft:glowstone_dust", output: PotionType::StrongSwiftness },
-        BrewingRecipe { input: PotionType::Leaping, ingredient_item: "minecraft:glowstone_dust", output: PotionType::StrongLeaping },
-        BrewingRecipe { input: PotionType::Healing, ingredient_item: "minecraft:glowstone_dust", output: PotionType::StrongHealing },
-        BrewingRecipe { input: PotionType::Harming, ingredient_item: "minecraft:glowstone_dust", output: PotionType::StrongHarming },
-        BrewingRecipe { input: PotionType::Regeneration, ingredient_item: "minecraft:glowstone_dust", output: PotionType::StrongRegeneration },
-        BrewingRecipe { input: PotionType::Strength, ingredient_item: "minecraft:glowstone_dust", output: PotionType::StrongStrength },
-        BrewingRecipe { input: PotionType::Poison, ingredient_item: "minecraft:glowstone_dust", output: PotionType::StrongPoison },
-        BrewingRecipe { input: PotionType::Slowness, ingredient_item: "minecraft:glowstone_dust", output: PotionType::StrongSlowness },
+        BrewingRecipe {
+            input: PotionType::Swiftness,
+            ingredient_item: "minecraft:glowstone_dust",
+            output: PotionType::StrongSwiftness,
+        },
+        BrewingRecipe {
+            input: PotionType::Leaping,
+            ingredient_item: "minecraft:glowstone_dust",
+            output: PotionType::StrongLeaping,
+        },
+        BrewingRecipe {
+            input: PotionType::Healing,
+            ingredient_item: "minecraft:glowstone_dust",
+            output: PotionType::StrongHealing,
+        },
+        BrewingRecipe {
+            input: PotionType::Harming,
+            ingredient_item: "minecraft:glowstone_dust",
+            output: PotionType::StrongHarming,
+        },
+        BrewingRecipe {
+            input: PotionType::Regeneration,
+            ingredient_item: "minecraft:glowstone_dust",
+            output: PotionType::StrongRegeneration,
+        },
+        BrewingRecipe {
+            input: PotionType::Strength,
+            ingredient_item: "minecraft:glowstone_dust",
+            output: PotionType::StrongStrength,
+        },
+        BrewingRecipe {
+            input: PotionType::Poison,
+            ingredient_item: "minecraft:glowstone_dust",
+            output: PotionType::StrongPoison,
+        },
+        BrewingRecipe {
+            input: PotionType::Slowness,
+            ingredient_item: "minecraft:glowstone_dust",
+            output: PotionType::StrongSlowness,
+        },
     ]
 }
 

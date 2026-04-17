@@ -41,6 +41,9 @@ mod tests {
 
     #[test]
     fn red_yellow_orange() {
-        assert_eq!(combine(DyeColor::Red, DyeColor::Yellow), Some(DyeColor::Orange));
+        assert_eq!(
+            combine(DyeColor::Red, DyeColor::Yellow),
+            Some(DyeColor::Orange)
+        );
     }
 }

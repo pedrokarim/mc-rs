@@ -8,11 +8,17 @@ pub struct BinaryStream {
 
 impl BinaryStream {
     pub fn new() -> Self {
-        Self { buffer: Vec::new(), offset: 0 }
+        Self {
+            buffer: Vec::new(),
+            offset: 0,
+        }
     }
 
     pub fn from_bytes(bytes: Vec<u8>) -> Self {
-        Self { buffer: bytes, offset: 0 }
+        Self {
+            buffer: bytes,
+            offset: 0,
+        }
     }
 
     pub fn eof(&self) -> bool {
@@ -92,7 +98,9 @@ impl BinaryStream {
 }
 
 impl Default for BinaryStream {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

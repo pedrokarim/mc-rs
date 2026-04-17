@@ -2,7 +2,16 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TreeSpecies {
-    Oak, Birch, Spruce, Jungle, Acacia, DarkOak, Mangrove, Cherry, Azalea, BambooShoot,
+    Oak,
+    Birch,
+    Spruce,
+    Jungle,
+    Acacia,
+    DarkOak,
+    Mangrove,
+    Cherry,
+    Azalea,
+    BambooShoot,
 }
 
 impl TreeSpecies {
@@ -17,16 +26,24 @@ impl TreeSpecies {
     }
 
     /// Needs sky access.
-    pub fn needs_sky() -> bool { true }
+    pub fn needs_sky() -> bool {
+        true
+    }
 
     /// Growth stages (saplings have 2 phases).
-    pub fn max_stage() -> u8 { 1 }
+    pub fn max_stage() -> u8 {
+        1
+    }
 
     /// Growth chance per random tick (~5%).
-    pub fn growth_chance() -> f32 { 0.05 }
+    pub fn growth_chance() -> f32 {
+        0.05
+    }
 
     /// Bone meal guarantees growth or next stage.
-    pub fn bone_meal_chance() -> f32 { 0.45 }
+    pub fn bone_meal_chance() -> f32 {
+        0.45
+    }
 
     pub fn log_block(&self) -> &'static str {
         match self {

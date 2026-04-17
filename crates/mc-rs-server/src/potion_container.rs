@@ -59,6 +59,8 @@ mod tests {
 
     #[test]
     fn lingering_shortest() {
-        assert!(PotionForm::Lingering.duration_multiplier() < PotionForm::Splash.duration_multiplier());
+        assert!(
+            PotionForm::Lingering.duration_multiplier() < PotionForm::Splash.duration_multiplier()
+        );
     }
 }

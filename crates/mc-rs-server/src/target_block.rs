@@ -27,13 +27,23 @@ mod tests {
 
     #[test]
     fn center_hit_max_signal() {
-        let hit = TargetHit { x: 0.5, y: 0.5, z: 0.5, face: 1 };
+        let hit = TargetHit {
+            x: 0.5,
+            y: 0.5,
+            z: 0.5,
+            face: 1,
+        };
         assert_eq!(signal_from_hit(hit, 0.0, 0.0, 0.0), 15);
     }
 
     #[test]
     fn edge_hit_zero_signal() {
-        let hit = TargetHit { x: 1.0, y: 0.5, z: 0.5, face: 1 };
+        let hit = TargetHit {
+            x: 1.0,
+            y: 0.5,
+            z: 0.5,
+            face: 1,
+        };
         let sig = signal_from_hit(hit, 0.0, 0.0, 0.0);
         assert_eq!(sig, 0);
     }

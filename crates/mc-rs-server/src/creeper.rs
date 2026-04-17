@@ -68,7 +68,9 @@ impl Creeper {
 }
 
 impl Default for Creeper {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

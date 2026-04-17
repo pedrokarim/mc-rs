@@ -2,16 +2,16 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FrameVariant {
-    Normal,    // Oak item frame
-    Glow,      // Glow item frame (bright)
+    Normal, // Oak item frame
+    Glow,   // Glow item frame (bright)
 }
 
 #[derive(Debug, Clone)]
 pub struct ItemFrame {
     pub variant: FrameVariant,
-    pub facing: u8, // 0=down,1=up,2=north,3=south,4=west,5=east
+    pub facing: u8,               // 0=down,1=up,2=north,3=south,4=west,5=east
     pub item: Option<(u16, u16)>, // (id, damage)
-    pub rotation: u8, // 0-7 (0,45,90,... deg)
+    pub rotation: u8,             // 0-7 (0,45,90,... deg)
     pub is_map: bool,
 }
 

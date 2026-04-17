@@ -11,7 +11,9 @@ pub fn smelt_result() -> &'static str {
 }
 
 /// Wet sponge turns dry when placed in nether.
-pub fn becomes_dry_in_nether() -> bool { true }
+pub fn becomes_dry_in_nether() -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {

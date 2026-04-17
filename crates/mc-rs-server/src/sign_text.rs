@@ -47,7 +47,9 @@ impl SignData {
 }
 
 impl Default for SignData {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

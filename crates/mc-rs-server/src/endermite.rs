@@ -16,7 +16,9 @@ pub const HP: f32 = 8.0;
 pub const SPEED: f32 = 0.25;
 
 /// Endermen attack endermites.
-pub fn endermen_hostile() -> bool { true }
+pub fn endermen_hostile() -> bool {
+    true
+}
 
 impl Endermite {
     pub fn new() -> Self {
@@ -30,7 +32,9 @@ impl Endermite {
 }
 
 impl Default for Endermite {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Ender pearl endermite spawn chance (5%).

@@ -25,7 +25,16 @@ pub const DESPAWN_TICKS: u32 = 6000;
 
 impl Snowball {
     pub fn new(x: f64, y: f64, z: f64, thrower: u64, mx: f64, my: f64, mz: f64) -> Self {
-        Self { x, y, z, motion_x: mx, motion_y: my, motion_z: mz, thrower, age: 0 }
+        Self {
+            x,
+            y,
+            z,
+            motion_x: mx,
+            motion_y: my,
+            motion_z: mz,
+            thrower,
+            age: 0,
+        }
     }
 
     pub fn tick(&mut self) {

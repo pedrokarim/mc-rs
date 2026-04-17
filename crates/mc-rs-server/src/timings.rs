@@ -38,7 +38,9 @@ impl TimingEntry {
 }
 
 impl Default for TimingEntry {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -48,7 +50,9 @@ pub struct TimingsManager {
 }
 
 impl TimingsManager {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     pub fn start(&mut self, name: &str) -> Option<TimingGuard<'_>> {
         if !self.enabled {

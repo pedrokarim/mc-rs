@@ -269,7 +269,10 @@ mod tests {
                 break;
             }
         }
-        assert!(exploded_pos.is_some(), "TNT should have exploded by tick 80");
+        assert!(
+            exploded_pos.is_some(),
+            "TNT should have exploded by tick 80"
+        );
     }
 
     #[test]

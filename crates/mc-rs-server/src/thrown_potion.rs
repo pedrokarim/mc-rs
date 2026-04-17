@@ -33,8 +33,12 @@ pub fn lingering_cloud_duration() -> u32 {
 impl ThrownPotion {
     pub fn new(x: f64, y: f64, z: f64, effects: Vec<ThrownEffect>, lingering: bool) -> Self {
         Self {
-            x, y, z,
-            motion_x: 0.0, motion_y: 0.0, motion_z: 0.0,
+            x,
+            y,
+            z,
+            motion_x: 0.0,
+            motion_y: 0.0,
+            motion_z: 0.0,
             lingering,
             effects,
             age: 0,

@@ -44,11 +44,15 @@ impl Drowned {
     }
 
     /// Copper ingot was added as possible drop (Minecraft 1.21+).
-    pub fn copper_drop_chance() -> f32 { 0.1 }
+    pub fn copper_drop_chance() -> f32 {
+        0.1
+    }
 }
 
 impl Default for Drowned {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

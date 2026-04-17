@@ -12,9 +12,9 @@ pub enum CoralColor {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoralForm {
     Block,
-    Coral,      // Single coral
-    CoralFan,   // Ground-mounted
-    CoralWall,  // Wall-mounted fan
+    Coral,     // Single coral
+    CoralFan,  // Ground-mounted
+    CoralWall, // Wall-mounted fan
 }
 
 #[derive(Debug, Clone)]
@@ -30,7 +30,12 @@ pub const DEATH_TICKS_OUT_OF_WATER: u32 = 100;
 
 impl Coral {
     pub fn new(color: CoralColor, form: CoralForm, alive: bool) -> Self {
-        Self { color, form, alive, ticks_out_of_water: 0 }
+        Self {
+            color,
+            form,
+            alive,
+            ticks_out_of_water: 0,
+        }
     }
 
     pub fn tick(&mut self, in_water: bool) {

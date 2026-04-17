@@ -26,7 +26,10 @@ use super::{Connection, ConnectionState};
 /// a ajouté `DefaultMin` et `DefaultMax`. Sans ces deux champs, le client
 /// désaligne le parsing et **crash** (observé : disconnect 280-400ms après
 /// réception du paquet UpdateAttributes).
-fn encode_update_attrs_inline(entity_runtime_id: u64, attrs: &[crate::attribute::Attribute]) -> Vec<u8> {
+fn encode_update_attrs_inline(
+    entity_runtime_id: u64,
+    attrs: &[crate::attribute::Attribute],
+) -> Vec<u8> {
     let mut w = mc_rs_proto::io::ProtoWriter::with_capacity(128);
     w.write_var_u64(entity_runtime_id);
     w.write_var_u32(attrs.len() as u32);
@@ -35,8 +38,8 @@ fn encode_update_attrs_inline(entity_runtime_id: u64, attrs: &[crate::attribute:
         w.write_f32_le(a.max_value);
         w.write_f32_le(a.current_value);
         // Protocol 944 : DefaultMin + DefaultMax juste avant Default.
-        w.write_f32_le(a.min_value);  // DefaultMin = same as Min (vanilla behavior)
-        w.write_f32_le(a.max_value);  // DefaultMax = same as Max
+        w.write_f32_le(a.min_value); // DefaultMin = same as Min (vanilla behavior)
+        w.write_f32_le(a.max_value); // DefaultMax = same as Max
         w.write_f32_le(a.default_value);
         w.write_string(&a.id);
         w.write_var_u32(0); // modifier count
@@ -49,7 +52,6 @@ pub(super) fn make_spawn_position(world_x: i32, world_y: i32, world_z: i32) -> [
     let feet_y = (world_y + 1) as f32;
     [world_x as f32 + 0.5, feet_y + 1.621, world_z as f32 + 0.5]
 }
-
 
 fn find_surface_in_loaded_world(cache: &mut ChunkCache, world_x: i32, world_z: i32) -> Option<i32> {
     for world_y in (-64..=319).rev() {
@@ -144,10 +146,12 @@ impl Connection {
         let mut biome_writer = mc_rs_proto::io::ProtoWriter::with_capacity(4);
         biome_writer.write_var_u32(0);
         biome_writer.write_var_u32(0);
-        responses.push(self.encode_compressed_packet(
-            packet_id::BIOME_DEFINITION_LIST,
-            biome_writer.as_bytes(),
-        ));
+        responses.push(
+            self.encode_compressed_packet(
+                packet_id::BIOME_DEFINITION_LIST,
+                biome_writer.as_bytes(),
+            ),
+        );
 
         // 5. UpdateAttributes — format protocol 944 corrigé (6 floats/attr)
         let desync = self.attributes.drain_desync();
@@ -175,10 +179,12 @@ impl Connection {
 
         // 8. UpdateAdventureSettings
         let adventure = UpdateAdventureSettings::default_survival();
-        responses.push(self.encode_compressed_packet(
-            packet_id::UPDATE_ADVENTURE_SETTINGS,
-            &adventure.encode(),
-        ));
+        responses.push(
+            self.encode_compressed_packet(
+                packet_id::UPDATE_ADVENTURE_SETTINGS,
+                &adventure.encode(),
+            ),
+        );
 
         // 9. SetActorData
         let player_name = self.display_name.clone().unwrap_or_default();
@@ -201,8 +207,7 @@ impl Connection {
             item: self.inventory.slots[held_slot as usize].item.clone(),
         };
         let mob_eq = MobEquipment::encode_item(self.entity_runtime_id, &held_wrapper, held_slot);
-        responses
-            .push(self.encode_compressed_packet(packet_id::MOB_EQUIPMENT, &mob_eq));
+        responses.push(self.encode_compressed_packet(packet_id::MOB_EQUIPMENT, &mob_eq));
 
         // 12. CreativeContent (PMMP syncCreative — AVANT CraftingData).
         responses.push(self.encode_compressed_packet(
@@ -239,10 +244,8 @@ impl Connection {
             action: 0,
             entries: vec![self_entry],
         };
-        responses.push(self.encode_compressed_packet(
-            packet_id::PLAYER_LIST,
-            &player_list.encode(),
-        ));
+        responses
+            .push(self.encode_compressed_packet(packet_id::PLAYER_LIST, &player_list.encode()));
 
         info!("[{}] Sent {} PreSpawn packets", self.addr, responses.len());
 

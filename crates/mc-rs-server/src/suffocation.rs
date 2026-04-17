@@ -6,7 +6,8 @@ pub const SUFFOCATION_INTERVAL: u32 = 10; // ticks
 
 /// Only non-transparent solid blocks suffocate.
 pub fn causes_suffocation(block_id: u16) -> bool {
-    !matches!(block_id,
+    !matches!(
+        block_id,
         0  // air
         | 20 | 95 // glass
         | 92 // cake (partial)
@@ -19,7 +20,9 @@ pub fn causes_suffocation(block_id: u16) -> bool {
 }
 
 /// Water/lava don't suffocate.
-pub fn water_suffocates() -> bool { false }
+pub fn water_suffocates() -> bool {
+    false
+}
 
 #[cfg(test)]
 mod tests {

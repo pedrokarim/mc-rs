@@ -18,7 +18,7 @@ pub enum TextColor {
     LightPurple,
     Yellow,
     White,
-    MinecoinGold,   // Bedrock only
+    MinecoinGold, // Bedrock only
     MaterialQuartz,
     MaterialIron,
     MaterialNetherite,
@@ -29,7 +29,7 @@ pub enum TextColor {
     MaterialDiamond,
     MaterialLapis,
     MaterialAmethyst,
-    MaterialResin,  // 1.21
+    MaterialResin, // 1.21
     MaterialPale,
 }
 

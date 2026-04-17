@@ -2,9 +2,9 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CartographyOperation {
-    Duplicate, // Map + empty map → 2 copies
-    Expand,    // Map + paper → larger scale
-    Lock,      // Map + glass pane → locked (stops auto-update)
+    Duplicate,     // Map + empty map → 2 copies
+    Expand,        // Map + paper → larger scale
+    Lock,          // Map + glass pane → locked (stops auto-update)
     MapWithBanner, // Map + named banner → marker
 }
 
@@ -19,7 +19,9 @@ impl CartographyOperation {
     }
 
     /// Expansion max scale (4 = 1:16).
-    pub fn max_scale() -> u8 { 4 }
+    pub fn max_scale() -> u8 {
+        4
+    }
 }
 
 #[cfg(test)]

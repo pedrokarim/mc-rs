@@ -32,7 +32,9 @@ impl NameTag {
     }
 
     /// Mobs named with a nametag won't despawn.
-    pub fn prevents_despawn() -> bool { true }
+    pub fn prevents_despawn() -> bool {
+        true
+    }
 }
 
 #[cfg(test)]

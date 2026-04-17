@@ -12,7 +12,11 @@ pub fn breeding_item(mob: MobKind) -> &'static [&'static str] {
             "minecraft:pumpkin_seeds",
             "minecraft:beetroot_seeds",
         ],
-        MobKind::Rabbit => &["minecraft:dandelion", "minecraft:carrot", "minecraft:golden_carrot"],
+        MobKind::Rabbit => &[
+            "minecraft:dandelion",
+            "minecraft:carrot",
+            "minecraft:golden_carrot",
+        ],
         MobKind::Wolf => &[
             "minecraft:beef",
             "minecraft:porkchop",
@@ -32,7 +36,12 @@ pub fn breeding_item(mob: MobKind) -> &'static [&'static str] {
         MobKind::Panda => &["minecraft:bamboo"],
         MobKind::Turtle => &["minecraft:seagrass"],
         MobKind::Dolphin => &["minecraft:raw_cod", "minecraft:cooked_cod"],
-        MobKind::Villager => &["minecraft:bread", "minecraft:carrot", "minecraft:potato", "minecraft:beetroot"],
+        MobKind::Villager => &[
+            "minecraft:bread",
+            "minecraft:carrot",
+            "minecraft:potato",
+            "minecraft:beetroot",
+        ],
         MobKind::Parrot => &[
             "minecraft:wheat_seeds",
             "minecraft:melon_seeds",

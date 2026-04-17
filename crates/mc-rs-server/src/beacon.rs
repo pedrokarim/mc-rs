@@ -10,7 +10,12 @@ use crate::effects::EffectKind;
 pub fn primary_effects(level: u8) -> Vec<EffectKind> {
     match level {
         1 => vec![EffectKind::Speed, EffectKind::Haste],
-        2 => vec![EffectKind::Speed, EffectKind::Haste, EffectKind::Resistance, EffectKind::JumpBoost],
+        2 => vec![
+            EffectKind::Speed,
+            EffectKind::Haste,
+            EffectKind::Resistance,
+            EffectKind::JumpBoost,
+        ],
         3 => vec![
             EffectKind::Speed,
             EffectKind::Haste,

@@ -1,1041 +1,1040 @@
 #[allow(dead_code)]
-mod commands;
+pub mod abandoned_mineshaft;
 #[allow(dead_code)]
-mod config;
+pub mod achievements;
 #[allow(dead_code)]
-mod connection;
+pub mod achievements_map;
 #[allow(dead_code)]
-mod entity;
+pub mod advancement_tree;
 #[allow(dead_code)]
-pub mod event;
+pub mod advancements;
+#[allow(dead_code)]
+pub mod adventure_mode;
+#[allow(dead_code)]
+pub mod ai_goals;
+#[allow(dead_code)]
+pub mod ai_states;
+#[allow(dead_code)]
+pub mod allay;
+#[allow(dead_code)]
+pub mod amethyst;
+#[allow(dead_code)]
+pub mod amethyst_resonance;
+#[allow(dead_code)]
+pub mod ancient_city;
+#[allow(dead_code)]
+pub mod ancient_debris;
+#[allow(dead_code)]
+pub mod animation_defs;
+#[allow(dead_code)]
+pub mod anvil;
+#[allow(dead_code)]
+pub mod anvil_damage;
+#[allow(dead_code)]
+pub mod area_effect_cloud;
+#[allow(dead_code)]
+pub mod armadillo;
+#[allow(dead_code)]
+pub mod armor;
+#[allow(dead_code)]
+pub mod armor_dye;
+#[allow(dead_code)]
+pub mod armor_stand;
+#[allow(dead_code)]
+pub mod armor_tier;
+#[allow(dead_code)]
+pub mod arrow;
+#[allow(dead_code)]
+pub mod arrow_pickup;
+#[allow(dead_code)]
+pub mod arrow_pickup_mode;
+#[allow(dead_code)]
+pub mod async_task_pool;
 #[allow(dead_code)]
 pub mod attribute;
+#[allow(dead_code)]
+pub mod axolotl;
+#[allow(dead_code)]
+pub mod azalea;
+#[allow(dead_code)]
+pub mod bad_omen;
+#[allow(dead_code)]
+pub mod badlands_biome;
+#[allow(dead_code)]
+pub mod bamboo;
+#[allow(dead_code)]
+pub mod bamboo_jungle;
+#[allow(dead_code)]
+pub mod banner;
+#[allow(dead_code)]
+pub mod banner_blocks;
+#[allow(dead_code)]
+pub mod banner_color;
+#[allow(dead_code)]
+pub mod banner_pattern;
+#[allow(dead_code)]
+pub mod barrel;
+#[allow(dead_code)]
+pub mod bastion_remnant;
+#[allow(dead_code)]
+pub mod bat;
+#[allow(dead_code)]
+pub mod beacon;
+#[allow(dead_code)]
+pub mod beacon_effects;
+#[allow(dead_code)]
+pub mod bed_color;
+#[allow(dead_code)]
+pub mod bee;
+#[allow(dead_code)]
+pub mod beehive;
+#[allow(dead_code)]
+pub mod binary_stream;
+#[allow(dead_code)]
+pub mod biome_color;
+#[allow(dead_code)]
+pub mod biome_spawning;
+#[allow(dead_code)]
+pub mod biomes_registry;
+#[allow(dead_code)]
+pub mod blaze;
+#[allow(dead_code)]
+pub mod blaze_loot;
+#[allow(dead_code)]
+pub mod block_behaviors;
+#[allow(dead_code)]
+pub mod block_break;
+#[allow(dead_code)]
+pub mod block_breaking_progress;
+#[allow(dead_code)]
+pub mod block_comparison;
+#[allow(dead_code)]
+pub mod block_entities;
+#[allow(dead_code)]
+pub mod block_entities_map;
+#[allow(dead_code)]
+pub mod block_hardness;
+#[allow(dead_code)]
+pub mod block_light_update;
+#[allow(dead_code)]
+pub mod block_pickaxe;
+#[allow(dead_code)]
+pub mod block_states;
+#[allow(dead_code)]
+pub mod block_wall;
+#[allow(dead_code)]
+pub mod boat;
+#[allow(dead_code)]
+pub mod bogged;
+#[allow(dead_code)]
+pub mod book;
+#[allow(dead_code)]
+pub mod boss;
+#[allow(dead_code)]
+pub mod boss_bar;
+#[allow(dead_code)]
+pub mod bounding_box;
+#[allow(dead_code)]
+pub mod bow;
+#[allow(dead_code)]
+pub mod breeding_items;
+#[allow(dead_code)]
+pub mod breeze;
+#[allow(dead_code)]
+pub mod breeze_rod;
+#[allow(dead_code)]
+pub mod brewing;
+#[allow(dead_code)]
+pub mod bubble_column;
+#[allow(dead_code)]
+pub mod bucket;
+#[allow(dead_code)]
+pub mod bundle;
+#[allow(dead_code)]
+pub mod buried_treasure;
+#[allow(dead_code)]
+pub mod camel;
+#[allow(dead_code)]
+pub mod campfire;
+#[allow(dead_code)]
+pub mod campfire_recipes;
+#[allow(dead_code)]
+pub mod candle;
+#[allow(dead_code)]
+pub mod carrot_on_stick;
+#[allow(dead_code)]
+pub mod cartography;
+#[allow(dead_code)]
+pub mod cat;
+#[allow(dead_code)]
+pub mod cat_gift;
+#[allow(dead_code)]
+pub mod cauldron;
+#[allow(dead_code)]
+pub mod cave_vines;
+#[allow(dead_code)]
+pub mod chat_cooldown;
+#[allow(dead_code)]
+pub mod chat_filter;
+#[allow(dead_code)]
+pub mod chatchannels;
+#[allow(dead_code)]
+pub mod cherry_grove;
+#[allow(dead_code)]
+pub mod chest_system;
+#[allow(dead_code)]
+pub mod chicken;
+#[allow(dead_code)]
+pub mod chiseled_bookshelf;
+#[allow(dead_code)]
+pub mod chorus_fruit;
+#[allow(dead_code)]
+pub mod chunk_radius;
+#[allow(dead_code)]
+pub mod chunk_request;
+#[allow(dead_code)]
+pub mod chunk_serializer_ext;
+#[allow(dead_code)]
+pub mod chunk_serializer_formats;
+#[allow(dead_code)]
+pub mod chunk_ticket;
+#[allow(dead_code)]
+pub mod chunk_ticking;
+#[allow(dead_code)]
+pub mod climb;
+#[allow(dead_code)]
+pub mod cocoa_beans;
 #[allow(dead_code)]
 pub mod combat;
 #[allow(dead_code)]
 pub mod combat_packets;
 #[allow(dead_code)]
-pub mod durability;
-#[allow(dead_code)]
-pub mod passive_entities;
-#[allow(dead_code)]
-pub mod visuals;
-#[allow(dead_code)]
-pub mod scheduler;
-#[allow(dead_code)]
-pub mod survival;
-#[allow(dead_code)]
-pub mod effects;
-#[allow(dead_code)]
-pub mod armor;
-#[allow(dead_code)]
-pub mod enchantments;
-#[allow(dead_code)]
-pub mod block_behaviors;
-#[allow(dead_code)]
-pub mod block_entities;
-#[allow(dead_code)]
-pub mod crafting;
-#[allow(dead_code)]
-pub mod projectiles;
-#[allow(dead_code)]
-pub mod mob_ai;
-#[allow(dead_code)]
-pub mod redstone;
-#[allow(dead_code)]
-pub mod dimensions;
-#[allow(dead_code)]
-pub mod scoreboard;
-#[allow(dead_code)]
-pub mod world_border;
-#[allow(dead_code)]
-pub mod sleep;
-#[allow(dead_code)]
-pub mod trading;
-#[allow(dead_code)]
-pub mod fishing;
-#[allow(dead_code)]
-pub mod advancements;
-#[allow(dead_code)]
-pub mod statistics;
-#[allow(dead_code)]
-pub mod loot_tables;
-#[allow(dead_code)]
-pub mod sound_events;
-#[allow(dead_code)]
-pub mod structures;
-#[allow(dead_code)]
-pub mod particles_registry;
-#[allow(dead_code)]
-pub mod explosion;
-#[allow(dead_code)]
-pub mod transfer;
-#[allow(dead_code)]
-pub mod raid;
-#[allow(dead_code)]
-pub mod maps;
-#[allow(dead_code)]
-pub mod banner;
-#[allow(dead_code)]
-pub mod weather;
-#[allow(dead_code)]
-pub mod brewing;
-#[allow(dead_code)]
-pub mod firework;
-#[allow(dead_code)]
-pub mod composter;
-#[allow(dead_code)]
-pub mod beacon;
-#[allow(dead_code)]
-pub mod anvil;
-#[allow(dead_code)]
-pub mod spawn_eggs;
-#[allow(dead_code)]
-pub mod dyes;
-#[allow(dead_code)]
-pub mod liquids;
-#[allow(dead_code)]
-pub mod biomes_registry;
-#[allow(dead_code)]
-pub mod workstations;
-#[allow(dead_code)]
-pub mod skins;
-#[allow(dead_code)]
-pub mod sculk;
-#[allow(dead_code)]
-pub mod conduit;
-#[allow(dead_code)]
-pub mod form_api;
-#[allow(dead_code)]
-pub mod chunk_serializer_ext;
-#[allow(dead_code)]
-pub mod emotes;
-#[allow(dead_code)]
-pub mod vehicles;
-#[allow(dead_code)]
-pub mod furnace;
-#[allow(dead_code)]
-pub mod mob_behaviors;
-#[allow(dead_code)]
-pub mod noteblock;
-#[allow(dead_code)]
-pub mod container_behaviors;
-#[allow(dead_code)]
-pub mod spawn_rules;
-#[allow(dead_code)]
-pub mod ender_chest;
-#[allow(dead_code)]
-pub mod jukebox;
-#[allow(dead_code)]
-pub mod entity_identifiers;
-#[allow(dead_code)]
-pub mod biome_spawning;
-#[allow(dead_code)]
-pub mod block_states;
-#[allow(dead_code)]
-pub mod item_tags;
-#[allow(dead_code)]
-pub mod item_properties;
-#[allow(dead_code)]
-pub mod mob_equipment;
-#[allow(dead_code)]
-pub mod damage_modifiers;
-#[allow(dead_code)]
-pub mod horse_attributes;
-#[allow(dead_code)]
-pub mod sheep_color;
-#[allow(dead_code)]
-pub mod game_rules;
-#[allow(dead_code)]
-pub mod fire_mechanics;
-#[allow(dead_code)]
-pub mod nether_portal;
-#[allow(dead_code)]
-pub mod skull;
-#[allow(dead_code)]
-pub mod sign_editor;
-#[allow(dead_code)]
-pub mod book;
-#[allow(dead_code)]
-pub mod lectern;
-#[allow(dead_code)]
-pub mod villages;
-#[allow(dead_code)]
-pub mod mineshaft;
-#[allow(dead_code)]
-pub mod gamemode;
-#[allow(dead_code)]
-pub mod kick_disconnect;
-#[allow(dead_code)]
-pub mod recipe_book;
-#[allow(dead_code)]
-pub mod bucket;
-#[allow(dead_code)]
-pub mod painting;
-#[allow(dead_code)]
-pub mod world_events;
-#[allow(dead_code)]
-pub mod equipment_slots;
-#[allow(dead_code)]
-pub mod sound_category;
-#[allow(dead_code)]
-pub mod cooldowns;
-#[allow(dead_code)]
-pub mod weapon_stats;
-#[allow(dead_code)]
-pub mod potion_container;
-#[allow(dead_code)]
-pub mod achievements_map;
-#[allow(dead_code)]
-pub mod loot_context;
-#[allow(dead_code)]
-pub mod chunk_ticking;
-#[allow(dead_code)]
-pub mod redstone_comparator;
-#[allow(dead_code)]
-pub mod ai_goals;
-#[allow(dead_code)]
-pub mod difficulty;
-#[allow(dead_code)]
-pub mod boss;
-#[allow(dead_code)]
-pub mod plant_growth;
-#[allow(dead_code)]
-pub mod movement_calc;
-#[allow(dead_code)]
-pub mod end_features;
+pub mod command_blocks;
 #[allow(dead_code)]
 pub mod command_registry_full;
 #[allow(dead_code)]
-pub mod fortune;
+pub mod command_selectors;
 #[allow(dead_code)]
-pub mod block_hardness;
-#[allow(dead_code)]
-pub mod smithing_template;
-#[allow(dead_code)]
-pub mod arrow_pickup;
-#[allow(dead_code)]
-pub mod respawn_anchor;
-#[allow(dead_code)]
-pub mod cauldron;
-#[allow(dead_code)]
-pub mod mob_variants;
-#[allow(dead_code)]
-pub mod patrol;
-#[allow(dead_code)]
-pub mod trading_generator;
-#[allow(dead_code)]
-pub mod mining_speed;
-#[allow(dead_code)]
-pub mod climb;
-#[allow(dead_code)]
-pub mod drop_reasons;
-#[allow(dead_code)]
-pub mod breeding_items;
-#[allow(dead_code)]
-pub mod tnt_primed_source;
-#[allow(dead_code)]
-pub mod cat_gift;
-#[allow(dead_code)]
-pub mod weather_damage;
-#[allow(dead_code)]
-pub mod area_effect_cloud;
-#[allow(dead_code)]
-pub mod falling_block;
-#[allow(dead_code)]
-pub mod experience_orb;
-#[allow(dead_code)]
-pub mod end_crystal;
-#[allow(dead_code)]
-pub mod warden;
-#[allow(dead_code)]
-pub mod allay;
-#[allow(dead_code)]
-pub mod sniffer;
-#[allow(dead_code)]
-pub mod iron_golem;
-#[allow(dead_code)]
-pub mod hoglin;
-#[allow(dead_code)]
-pub mod piglin_bartering;
-#[allow(dead_code)]
-pub mod zombified_piglin;
-#[allow(dead_code)]
-pub mod strider;
-#[allow(dead_code)]
-pub mod frog;
-#[allow(dead_code)]
-pub mod camel;
-#[allow(dead_code)]
-pub mod goat;
-#[allow(dead_code)]
-pub mod axolotl;
-#[allow(dead_code)]
-pub mod bee;
-#[allow(dead_code)]
-pub mod fox;
-#[allow(dead_code)]
-pub mod panda;
-#[allow(dead_code)]
-pub mod wolf;
-#[allow(dead_code)]
-pub mod parrot;
-#[allow(dead_code)]
-pub mod ocelot;
-#[allow(dead_code)]
-pub mod rabbit;
-#[allow(dead_code)]
-pub mod turtle;
-#[allow(dead_code)]
-pub mod fish;
-#[allow(dead_code)]
-pub mod dolphin;
-#[allow(dead_code)]
-pub mod squid;
-#[allow(dead_code)]
-pub mod chicken;
-#[allow(dead_code)]
-pub mod creeper;
-#[allow(dead_code)]
-pub mod enderman;
-#[allow(dead_code)]
-pub mod blaze;
-#[allow(dead_code)]
-pub mod ghast;
-#[allow(dead_code)]
-pub mod wither;
-#[allow(dead_code)]
-pub mod ender_dragon;
-#[allow(dead_code)]
-pub mod slime;
-#[allow(dead_code)]
-pub mod zombie;
-#[allow(dead_code)]
-pub mod skeleton;
-#[allow(dead_code)]
-pub mod spider;
-#[allow(dead_code)]
-pub mod guardian;
-#[allow(dead_code)]
-pub mod shulker;
-#[allow(dead_code)]
-pub mod pillager;
-#[allow(dead_code)]
-pub mod vex;
-#[allow(dead_code)]
-pub mod witch;
-#[allow(dead_code)]
-pub mod drowned;
-#[allow(dead_code)]
-pub mod husk;
-#[allow(dead_code)]
-pub mod phantom;
-#[allow(dead_code)]
-pub mod silverfish;
-#[allow(dead_code)]
-pub mod ravager;
-#[allow(dead_code)]
-pub mod wandering_trader;
-#[allow(dead_code)]
-pub mod llama;
-#[allow(dead_code)]
-pub mod horse;
-#[allow(dead_code)]
-pub mod cat;
-#[allow(dead_code)]
-pub mod zoglin;
-#[allow(dead_code)]
-pub mod piston;
-#[allow(dead_code)]
-pub mod dispenser;
-#[allow(dead_code)]
-pub mod hopper;
-#[allow(dead_code)]
-pub mod chest_system;
-#[allow(dead_code)]
-pub mod shulker_box;
-#[allow(dead_code)]
-pub mod redstone_devices;
-#[allow(dead_code)]
-pub mod rail;
-#[allow(dead_code)]
-pub mod minecart;
-#[allow(dead_code)]
-pub mod boat;
-#[allow(dead_code)]
-pub mod leads;
-#[allow(dead_code)]
-pub mod name_tag;
-#[allow(dead_code)]
-pub mod elytra;
-#[allow(dead_code)]
-pub mod totem;
-#[allow(dead_code)]
-pub mod ender_pearl;
-#[allow(dead_code)]
-pub mod end_portal;
-#[allow(dead_code)]
-pub mod nether_portal_spawn;
-#[allow(dead_code)]
-pub mod smithing;
-#[allow(dead_code)]
-pub mod smoker;
-#[allow(dead_code)]
-pub mod stonecutter;
-#[allow(dead_code)]
-pub mod grindstone;
-#[allow(dead_code)]
-pub mod crossbow;
-#[allow(dead_code)]
-pub mod bow;
-#[allow(dead_code)]
-pub mod trident;
-#[allow(dead_code)]
-pub mod mace;
-#[allow(dead_code)]
-pub mod shield;
-#[allow(dead_code)]
-pub mod food;
-#[allow(dead_code)]
-pub mod hunger;
-#[allow(dead_code)]
-pub mod xp;
-#[allow(dead_code)]
-pub mod achievements;
-#[allow(dead_code)]
-pub mod item_frame;
-#[allow(dead_code)]
-pub mod armor_stand;
-#[allow(dead_code)]
-pub mod map_rendering;
-#[allow(dead_code)]
-pub mod sign_text;
-#[allow(dead_code)]
-pub mod decorated_pot;
-#[allow(dead_code)]
-pub mod vault;
-#[allow(dead_code)]
-pub mod trial_spawner;
-#[allow(dead_code)]
-pub mod breeze;
-#[allow(dead_code)]
-pub mod bogged;
-#[allow(dead_code)]
-pub mod armadillo;
-#[allow(dead_code)]
-pub mod happy_ghast;
-#[allow(dead_code)]
-pub mod mushroom_biome;
-#[allow(dead_code)]
-pub mod mooshroom;
-#[allow(dead_code)]
-pub mod biome_color;
-#[allow(dead_code)]
-pub mod night_time;
-#[allow(dead_code)]
-pub mod crop_growth;
-#[allow(dead_code)]
-pub mod sapling_growth;
-#[allow(dead_code)]
-pub mod leaves_decay;
-#[allow(dead_code)]
-pub mod fire_spread;
-#[allow(dead_code)]
-pub mod ice_melt;
-#[allow(dead_code)]
-pub mod snow_layer;
-#[allow(dead_code)]
-pub mod powdered_snow;
-#[allow(dead_code)]
-pub mod amethyst;
-#[allow(dead_code)]
-pub mod copper_oxidation;
-#[allow(dead_code)]
-pub mod tnt;
-#[allow(dead_code)]
-pub mod obsidian_pillar;
-#[allow(dead_code)]
-pub mod dragon_fight;
-#[allow(dead_code)]
-pub mod end_gateway;
-#[allow(dead_code)]
-pub mod bad_omen;
-#[allow(dead_code)]
-pub mod villager_gossip;
-#[allow(dead_code)]
-pub mod zombie_villager;
-#[allow(dead_code)]
-pub mod sheep;
-#[allow(dead_code)]
-pub mod pig;
-#[allow(dead_code)]
-pub mod cow;
-#[allow(dead_code)]
-pub mod arrow;
-#[allow(dead_code)]
-pub mod thrown_potion;
-#[allow(dead_code)]
-pub mod snowball;
-#[allow(dead_code)]
-pub mod fishing_rod;
-#[allow(dead_code)]
-pub mod fireball;
-#[allow(dead_code)]
-pub mod anvil_damage;
-#[allow(dead_code)]
-pub mod enchant_table;
-#[allow(dead_code)]
-pub mod exp_bottle;
-#[allow(dead_code)]
-pub mod crafter;
-#[allow(dead_code)]
-pub mod music_disc;
-#[allow(dead_code)]
-pub mod spawner;
-#[allow(dead_code)]
-pub mod light_level;
-#[allow(dead_code)]
-pub mod door;
-#[allow(dead_code)]
-pub mod bed_color;
-#[allow(dead_code)]
-pub mod candle;
-#[allow(dead_code)]
-pub mod lodestone;
-#[allow(dead_code)]
-pub mod glow_squid;
-#[allow(dead_code)]
-pub mod polar_bear;
-#[allow(dead_code)]
-pub mod tag_system;
-#[allow(dead_code)]
-pub mod team;
-#[allow(dead_code)]
-pub mod pathfinder;
-#[allow(dead_code)]
-pub mod permissions;
-#[allow(dead_code)]
-pub mod scheduler_api;
-#[allow(dead_code)]
-pub mod recipe_unlock;
-#[allow(dead_code)]
-pub mod banner_pattern;
-#[allow(dead_code)]
-pub mod loom;
-#[allow(dead_code)]
-pub mod cartography;
-#[allow(dead_code)]
-pub mod fletching;
-#[allow(dead_code)]
-pub mod chatchannels;
-#[allow(dead_code)]
-pub mod waterlogging;
-#[allow(dead_code)]
-pub mod flower_pot;
-#[allow(dead_code)]
-pub mod target_block;
-#[allow(dead_code)]
-pub mod daylight_sensor;
-#[allow(dead_code)]
-pub mod observer;
-#[allow(dead_code)]
-pub mod tripwire;
-#[allow(dead_code)]
-pub mod repeater;
-#[allow(dead_code)]
-pub mod sculk_vein;
-#[allow(dead_code)]
-pub mod sculk_sensor;
-#[allow(dead_code)]
-pub mod wind_charge;
-#[allow(dead_code)]
-pub mod creaking;
-#[allow(dead_code)]
-pub mod cocoa_beans;
-#[allow(dead_code)]
-pub mod sugar_cane;
-#[allow(dead_code)]
-pub mod bamboo;
-#[allow(dead_code)]
-pub mod kelp;
-#[allow(dead_code)]
-pub mod coral;
-#[allow(dead_code)]
-pub mod sea_pickle;
-#[allow(dead_code)]
-pub mod turtle_egg;
-#[allow(dead_code)]
-pub mod frog_spawn;
-#[allow(dead_code)]
-pub mod beehive;
-#[allow(dead_code)]
-pub mod honey_block;
-#[allow(dead_code)]
-pub mod slime_block;
-#[allow(dead_code)]
-pub mod dragon_egg;
-#[allow(dead_code)]
-pub mod chorus_fruit;
-#[allow(dead_code)]
-pub mod scaffolding;
-#[allow(dead_code)]
-pub mod dripleaf;
-#[allow(dead_code)]
-pub mod pointed_dripstone;
-#[allow(dead_code)]
-pub mod moss;
-#[allow(dead_code)]
-pub mod azalea;
-#[allow(dead_code)]
-pub mod cave_vines;
-#[allow(dead_code)]
-pub mod glow_berry;
-#[allow(dead_code)]
-pub mod deepslate;
-#[allow(dead_code)]
-pub mod command_blocks;
-#[allow(dead_code)]
-pub mod structure_block;
-#[allow(dead_code)]
-pub mod jigsaw;
-#[allow(dead_code)]
-pub mod nbt_tags_ext;
-#[allow(dead_code)]
-pub mod entity_tick;
-#[allow(dead_code)]
-pub mod text_colors;
-#[allow(dead_code)]
-pub mod language;
-#[allow(dead_code)]
-pub mod player_abilities;
-#[allow(dead_code)]
-pub mod damage_sources;
-#[allow(dead_code)]
-pub mod pack_encoder;
-#[allow(dead_code)]
-pub mod chunk_radius;
-#[allow(dead_code)]
-pub mod sprinting;
-#[allow(dead_code)]
-pub mod tick_speed;
-#[allow(dead_code)]
-pub mod entity_drops;
-#[allow(dead_code)]
-pub mod ai_states;
-#[allow(dead_code)]
-pub mod sounds_library;
-#[allow(dead_code)]
-pub mod boss_bar;
-#[allow(dead_code)]
-pub mod conduit_power;
-#[allow(dead_code)]
-pub mod beacon_effects;
-#[allow(dead_code)]
-pub mod arrow_pickup_mode;
-#[allow(dead_code)]
-pub mod keepalive;
-#[allow(dead_code)]
-pub mod ping_system;
-#[allow(dead_code)]
-pub mod datapack;
-#[allow(dead_code)]
-pub mod crash_report;
-#[allow(dead_code)]
-pub mod server_settings;
-#[allow(dead_code)]
-pub mod whitelist;
-#[allow(dead_code)]
-pub mod ops_list;
-#[allow(dead_code)]
-pub mod rcon;
-#[allow(dead_code)]
-pub mod query_protocol;
-#[allow(dead_code)]
-pub mod slime_spawning;
-#[allow(dead_code)]
-pub mod mob_cap;
-#[allow(dead_code)]
-pub mod despawn_rules;
-#[allow(dead_code)]
-pub mod tool_types;
-#[allow(dead_code)]
-pub mod block_break;
-#[allow(dead_code)]
-pub mod drop_xp;
-#[allow(dead_code)]
-pub mod workbench;
-#[allow(dead_code)]
-pub mod inventory_2x2;
-#[allow(dead_code)]
-pub mod chat_filter;
-#[allow(dead_code)]
-pub mod uuid_utils;
-#[allow(dead_code)]
-pub mod entity_ids;
-#[allow(dead_code)]
-pub mod bounding_box;
-#[allow(dead_code)]
-pub mod server_log;
-#[allow(dead_code)]
-pub mod console_commands;
-#[allow(dead_code)]
-pub mod world_time;
-#[allow(dead_code)]
-pub mod vector_math;
-#[allow(dead_code)]
-pub mod raytrace;
-#[allow(dead_code)]
-pub mod sidebar;
-#[allow(dead_code)]
-pub mod title_packet;
-#[allow(dead_code)]
-pub mod tab_list;
-#[allow(dead_code)]
-pub mod packet_loss;
-#[allow(dead_code)]
-pub mod config_loader;
-#[allow(dead_code)]
-pub mod locale_messages;
-#[allow(dead_code)]
-pub mod signals;
-#[allow(dead_code)]
-pub mod timings;
-#[allow(dead_code)]
-pub mod async_task_pool;
-#[allow(dead_code)]
-pub mod binary_stream;
-#[allow(dead_code)]
-pub mod inventory_drag;
-#[allow(dead_code)]
-pub mod dropping_items;
-#[allow(dead_code)]
-pub mod container_types;
-#[allow(dead_code)]
-pub mod barrel;
-#[allow(dead_code)]
-pub mod splash_damage;
-#[allow(dead_code)]
-pub mod suffocation;
-#[allow(dead_code)]
-pub mod water_physics;
-#[allow(dead_code)]
-pub mod freezing;
-#[allow(dead_code)]
-pub mod mining_effect;
-#[allow(dead_code)]
-pub mod block_pickaxe;
-#[allow(dead_code)]
-pub mod world_events_map;
-#[allow(dead_code)]
-pub mod weather_state;
-#[allow(dead_code)]
-pub mod lightning;
-#[allow(dead_code)]
-pub mod advancement_tree;
-#[allow(dead_code)]
-pub mod block_entities_map;
-#[allow(dead_code)]
-pub mod campfire;
-#[allow(dead_code)]
-pub mod chiseled_bookshelf;
+mod commands;
 #[allow(dead_code)]
 pub mod comparator;
 #[allow(dead_code)]
-pub mod redstone_wire;
+pub mod compass;
 #[allow(dead_code)]
-pub mod block_wall;
+pub mod composter;
 #[allow(dead_code)]
-pub mod torch;
+pub mod conduit;
 #[allow(dead_code)]
-pub mod glass_pane;
+pub mod conduit_power;
 #[allow(dead_code)]
-pub mod slab;
+mod config;
 #[allow(dead_code)]
-pub mod stairs;
+pub mod config_loader;
 #[allow(dead_code)]
-pub mod trapdoor;
+mod connection;
 #[allow(dead_code)]
-pub mod ladder;
+pub mod console_commands;
 #[allow(dead_code)]
-pub mod vine;
+pub mod container_behaviors;
 #[allow(dead_code)]
-pub mod wet_sponge;
+pub mod container_types;
 #[allow(dead_code)]
-pub mod magma_block;
+pub mod cooldowns;
 #[allow(dead_code)]
-pub mod bubble_column;
+pub mod copper_oxidation;
 #[allow(dead_code)]
-pub mod soul_speed;
+pub mod coral;
 #[allow(dead_code)]
-pub mod swift_sneak;
+pub mod cow;
 #[allow(dead_code)]
-pub mod respawn_system;
+pub mod crafter;
 #[allow(dead_code)]
-pub mod player_list_packet;
+pub mod crafting;
 #[allow(dead_code)]
-pub mod adventure_mode;
+pub mod crafting_recipes;
 #[allow(dead_code)]
-pub mod spectator_mode;
+pub mod crash_report;
 #[allow(dead_code)]
-pub mod smoke_pillar;
+pub mod creaking;
 #[allow(dead_code)]
-pub mod player_inventory_slots;
+pub mod creative_inventory;
 #[allow(dead_code)]
-pub mod item_cooldown;
+pub mod creeper;
 #[allow(dead_code)]
-pub mod held_item;
+pub mod crop_growth;
 #[allow(dead_code)]
-pub mod rotation;
-#[allow(dead_code)]
-pub mod movement_control;
+pub mod crossbow;
 #[allow(dead_code)]
 pub mod custom_commands;
 #[allow(dead_code)]
-pub mod command_selectors;
+pub mod custom_nameplate;
 #[allow(dead_code)]
-pub mod scoreboard_crit;
+pub mod damage_modifiers;
 #[allow(dead_code)]
-pub mod player_stats;
+pub mod damage_sources;
 #[allow(dead_code)]
-pub mod xp_sharing;
+pub mod datapack;
 #[allow(dead_code)]
-pub mod soul_fire;
+pub mod daylight_sensor;
 #[allow(dead_code)]
-pub mod banner_blocks;
+pub mod decorated_pot;
 #[allow(dead_code)]
-pub mod netherite_scrap;
+pub mod deep_dark;
 #[allow(dead_code)]
-pub mod ancient_debris;
+pub mod deepslate;
 #[allow(dead_code)]
-pub mod powder_snow_bucket;
+pub mod despawn_rules;
 #[allow(dead_code)]
-pub mod amethyst_resonance;
+pub mod difficulty;
 #[allow(dead_code)]
-pub mod lectern_book;
+pub mod dimensions;
 #[allow(dead_code)]
-pub mod stray_loot;
+pub mod dispenser;
 #[allow(dead_code)]
-pub mod wither_skeleton_loot;
+pub mod dolphin;
 #[allow(dead_code)]
-pub mod blaze_loot;
+pub mod door;
+#[allow(dead_code)]
+pub mod dragon_egg;
+#[allow(dead_code)]
+pub mod dragon_fight;
+#[allow(dead_code)]
+pub mod dripleaf;
+#[allow(dead_code)]
+pub mod dripstone_caves;
+#[allow(dead_code)]
+pub mod drop_reasons;
+#[allow(dead_code)]
+pub mod drop_xp;
+#[allow(dead_code)]
+pub mod dropping_items;
+#[allow(dead_code)]
+pub mod drowned;
+#[allow(dead_code)]
+pub mod durability;
+#[allow(dead_code)]
+pub mod dye_colors;
+#[allow(dead_code)]
+pub mod dye_recipes;
+#[allow(dead_code)]
+pub mod dyes;
+#[allow(dead_code)]
+pub mod effects;
+#[allow(dead_code)]
+pub mod elytra;
+#[allow(dead_code)]
+pub mod emotes;
+#[allow(dead_code)]
+pub mod enchant_table;
+#[allow(dead_code)]
+pub mod enchanted_books;
+#[allow(dead_code)]
+pub mod enchantments;
+#[allow(dead_code)]
+pub mod end_city;
+#[allow(dead_code)]
+pub mod end_crystal;
+#[allow(dead_code)]
+pub mod end_features;
+#[allow(dead_code)]
+pub mod end_gateway;
+#[allow(dead_code)]
+pub mod end_islands;
+#[allow(dead_code)]
+pub mod end_portal;
+#[allow(dead_code)]
+pub mod ender_chest;
+#[allow(dead_code)]
+pub mod ender_dragon;
+#[allow(dead_code)]
+pub mod ender_pearl;
+#[allow(dead_code)]
+pub mod enderman;
+#[allow(dead_code)]
+pub mod endermite;
+#[allow(dead_code)]
+mod entity;
+#[allow(dead_code)]
+pub mod entity_drops;
+#[allow(dead_code)]
+pub mod entity_fall;
+#[allow(dead_code)]
+pub mod entity_identifiers;
+#[allow(dead_code)]
+pub mod entity_ids;
+#[allow(dead_code)]
+pub mod entity_persistence;
+#[allow(dead_code)]
+pub mod entity_tick;
+#[allow(dead_code)]
+pub mod equipment_slots;
+#[allow(dead_code)]
+pub mod event;
+#[allow(dead_code)]
+pub mod exp_bottle;
+#[allow(dead_code)]
+pub mod experience_orb;
+#[allow(dead_code)]
+pub mod explosion;
+#[allow(dead_code)]
+pub mod falling_block;
+#[allow(dead_code)]
+pub mod fire_mechanics;
+#[allow(dead_code)]
+pub mod fire_spread;
+#[allow(dead_code)]
+pub mod fireball;
+#[allow(dead_code)]
+pub mod firework;
+#[allow(dead_code)]
+pub mod fish;
+#[allow(dead_code)]
+pub mod fishing;
 #[allow(dead_code)]
 pub mod fishing_loot_table;
 #[allow(dead_code)]
-pub mod loot_chest;
+pub mod fishing_rod;
+#[allow(dead_code)]
+pub mod fletching;
+#[allow(dead_code)]
+pub mod flower_pot;
+#[allow(dead_code)]
+pub mod food;
+#[allow(dead_code)]
+pub mod form_api;
+#[allow(dead_code)]
+pub mod fortune;
+#[allow(dead_code)]
+pub mod fox;
+#[allow(dead_code)]
+pub mod freezing;
+#[allow(dead_code)]
+pub mod frog;
+#[allow(dead_code)]
+pub mod frog_spawn;
+#[allow(dead_code)]
+pub mod furnace;
 #[allow(dead_code)]
 pub mod furnace_fuel;
 #[allow(dead_code)]
 pub mod furnace_recipes;
 #[allow(dead_code)]
-pub mod campfire_recipes;
+pub mod game_rules;
 #[allow(dead_code)]
-pub mod crafting_recipes;
+pub mod gamemode;
 #[allow(dead_code)]
-pub mod potions_brewing;
+pub mod ghast;
+#[allow(dead_code)]
+pub mod glass_pane;
+#[allow(dead_code)]
+pub mod glow_berry;
+#[allow(dead_code)]
+pub mod glow_squid;
+#[allow(dead_code)]
+pub mod goat;
 #[allow(dead_code)]
 pub mod golem_crafting;
 #[allow(dead_code)]
-pub mod random_tick;
+pub mod grindstone;
 #[allow(dead_code)]
-pub mod spawn_egg_list;
+pub mod guardian;
 #[allow(dead_code)]
-pub mod item_stack_merge;
-#[allow(dead_code)]
-pub mod stack_sizes;
-#[allow(dead_code)]
-pub mod entity_persistence;
-#[allow(dead_code)]
-pub mod motion;
-#[allow(dead_code)]
-pub mod chunk_serializer_formats;
-#[allow(dead_code)]
-pub mod position;
-#[allow(dead_code)]
-pub mod item_attributes;
-#[allow(dead_code)]
-pub mod dye_colors;
-#[allow(dead_code)]
-pub mod armor_tier;
-#[allow(dead_code)]
-pub mod mob_hp;
-#[allow(dead_code)]
-pub mod mob_xp;
-#[allow(dead_code)]
-pub mod trap_chest_loot;
-#[allow(dead_code)]
-pub mod village_structures;
-#[allow(dead_code)]
-pub mod mob_xp_drop_on_player_kill;
-#[allow(dead_code)]
-pub mod tadpole;
-#[allow(dead_code)]
-pub mod piglin_brute;
-#[allow(dead_code)]
-pub mod bat;
-#[allow(dead_code)]
-pub mod magma_cube;
-#[allow(dead_code)]
-pub mod endermite;
-#[allow(dead_code)]
-pub mod snow_golem;
-#[allow(dead_code)]
-pub mod piglin;
-#[allow(dead_code)]
-pub mod villager;
-#[allow(dead_code)]
-pub mod breeze_rod;
+pub mod happy_ghast;
 #[allow(dead_code)]
 pub mod heavy_core;
 #[allow(dead_code)]
-pub mod shield_decoration;
+pub mod held_item;
 #[allow(dead_code)]
-pub mod bundle;
+pub mod hoglin;
 #[allow(dead_code)]
-pub mod written_book;
+pub mod honey_block;
 #[allow(dead_code)]
-pub mod banner_color;
+pub mod hopper;
 #[allow(dead_code)]
-pub mod ominous_item;
+pub mod horse;
 #[allow(dead_code)]
-pub mod wolf_armor;
+pub mod horse_attributes;
 #[allow(dead_code)]
-pub mod block_comparison;
+pub mod hunger;
 #[allow(dead_code)]
-pub mod custom_nameplate;
+pub mod husk;
 #[allow(dead_code)]
-pub mod packet_compression;
-#[allow(dead_code)]
-pub mod chunk_request;
-#[allow(dead_code)]
-pub mod animation_defs;
-#[allow(dead_code)]
-pub mod velocity_broadcast;
-#[allow(dead_code)]
-pub mod chat_cooldown;
-#[allow(dead_code)]
-pub mod tropical_fish;
-#[allow(dead_code)]
-pub mod torchflower;
-#[allow(dead_code)]
-pub mod pitcher_plant;
-#[allow(dead_code)]
-pub mod spore_blossom;
-#[allow(dead_code)]
-pub mod lush_caves;
-#[allow(dead_code)]
-pub mod dripstone_caves;
-#[allow(dead_code)]
-pub mod deep_dark;
-#[allow(dead_code)]
-pub mod ancient_city;
-#[allow(dead_code)]
-pub mod trial_chamber;
-#[allow(dead_code)]
-pub mod mangrove_swamp;
-#[allow(dead_code)]
-pub mod cherry_grove;
-#[allow(dead_code)]
-pub mod pale_garden;
-#[allow(dead_code)]
-pub mod end_islands;
-#[allow(dead_code)]
-pub mod end_city;
-#[allow(dead_code)]
-pub mod bastion_remnant;
-#[allow(dead_code)]
-pub mod buried_treasure;
-#[allow(dead_code)]
-pub mod shipwreck;
-#[allow(dead_code)]
-pub mod ruined_portal;
-#[allow(dead_code)]
-pub mod nether_fortress;
-#[allow(dead_code)]
-pub mod ocean_monument;
-#[allow(dead_code)]
-pub mod stronghold;
-#[allow(dead_code)]
-pub mod woodland_mansion;
-#[allow(dead_code)]
-pub mod witch_hut;
-#[allow(dead_code)]
-pub mod jungle_temple;
+pub mod ice_melt;
 #[allow(dead_code)]
 pub mod igloo;
 #[allow(dead_code)]
-pub mod pillager_outpost;
-#[allow(dead_code)]
-pub mod ocean_ruin;
-#[allow(dead_code)]
-pub mod abandoned_mineshaft;
-#[allow(dead_code)]
-pub mod bamboo_jungle;
-#[allow(dead_code)]
-pub mod badlands_biome;
-#[allow(dead_code)]
-pub mod nether_biomes;
-#[allow(dead_code)]
-pub mod trim_patterns;
-#[allow(dead_code)]
-pub mod suspicious_sand;
-#[allow(dead_code)]
-pub mod village_trades_detailed;
-#[allow(dead_code)]
-pub mod entity_fall;
-#[allow(dead_code)]
-pub mod block_light_update;
-#[allow(dead_code)]
-pub mod sky_light_update;
-#[allow(dead_code)]
-pub mod chunk_ticket;
-#[allow(dead_code)]
-pub mod world_border_damage;
-#[allow(dead_code)]
-pub mod spawn_chunks;
-#[allow(dead_code)]
-pub mod level_db_keys;
-#[allow(dead_code)]
-pub mod compass;
-#[allow(dead_code)]
-pub mod spyglass;
-#[allow(dead_code)]
-pub mod carrot_on_stick;
-#[allow(dead_code)]
-pub mod saddles;
-#[allow(dead_code)]
-pub mod trial_loot;
-#[allow(dead_code)]
-pub mod enchanted_books;
-#[allow(dead_code)]
-pub mod dye_recipes;
-#[allow(dead_code)]
-pub mod creative_inventory;
-#[allow(dead_code)]
-pub mod block_breaking_progress;
-#[allow(dead_code)]
-pub mod armor_dye;
-#[allow(dead_code)]
-pub mod trade_offer_packet;
-#[allow(dead_code)]
 pub mod inventory;
+#[allow(dead_code)]
+pub mod inventory_2x2;
+#[allow(dead_code)]
+pub mod inventory_drag;
 #[allow(dead_code)]
 pub mod inventory_manager;
 #[allow(dead_code)]
+pub mod iron_golem;
+#[allow(dead_code)]
+pub mod item_attributes;
+#[allow(dead_code)]
+pub mod item_cooldown;
+#[allow(dead_code)]
 mod item_entities;
+#[allow(dead_code)]
+pub mod item_frame;
+#[allow(dead_code)]
+pub mod item_properties;
 #[allow(dead_code)]
 mod item_registry;
 #[allow(dead_code)]
+pub mod item_stack_merge;
+#[allow(dead_code)]
+pub mod item_tags;
+#[allow(dead_code)]
+pub mod jigsaw;
+#[allow(dead_code)]
+pub mod jukebox;
+#[allow(dead_code)]
+pub mod jungle_temple;
+#[allow(dead_code)]
+pub mod keepalive;
+#[allow(dead_code)]
+pub mod kelp;
+#[allow(dead_code)]
+pub mod kick_disconnect;
+#[allow(dead_code)]
+pub mod ladder;
+#[allow(dead_code)]
+pub mod language;
+#[allow(dead_code)]
+pub mod leads;
+#[allow(dead_code)]
+pub mod leaves_decay;
+#[allow(dead_code)]
+pub mod lectern;
+#[allow(dead_code)]
+pub mod lectern_book;
+#[allow(dead_code)]
+pub mod level_db_keys;
+#[allow(dead_code)]
+pub mod light_level;
+#[allow(dead_code)]
+pub mod lightning;
+#[allow(dead_code)]
+pub mod liquids;
+#[allow(dead_code)]
+pub mod llama;
+#[allow(dead_code)]
+pub mod locale_messages;
+#[allow(dead_code)]
+pub mod lodestone;
+pub mod logging;
+#[allow(dead_code)]
+pub mod loom;
+#[allow(dead_code)]
+pub mod loot_chest;
+#[allow(dead_code)]
+pub mod loot_context;
+#[allow(dead_code)]
+pub mod loot_tables;
+#[allow(dead_code)]
+pub mod lush_caves;
+#[allow(dead_code)]
+pub mod mace;
+#[allow(dead_code)]
+pub mod magma_block;
+#[allow(dead_code)]
+pub mod magma_cube;
+#[allow(dead_code)]
+pub mod mangrove_swamp;
+#[allow(dead_code)]
+pub mod map_rendering;
+#[allow(dead_code)]
+pub mod maps;
+#[allow(dead_code)]
+pub mod minecart;
+#[allow(dead_code)]
+pub mod mineshaft;
+#[allow(dead_code)]
+pub mod mining_effect;
+#[allow(dead_code)]
+pub mod mining_speed;
+#[allow(dead_code)]
+pub mod mob_ai;
+#[allow(dead_code)]
+pub mod mob_behaviors;
+#[allow(dead_code)]
+pub mod mob_cap;
+#[allow(dead_code)]
 mod mob_entities;
+#[allow(dead_code)]
+pub mod mob_equipment;
+#[allow(dead_code)]
+pub mod mob_hp;
+#[allow(dead_code)]
+pub mod mob_variants;
+#[allow(dead_code)]
+pub mod mob_xp;
+#[allow(dead_code)]
+pub mod mob_xp_drop_on_player_kill;
+#[allow(dead_code)]
+pub mod mooshroom;
+#[allow(dead_code)]
+pub mod moss;
+#[allow(dead_code)]
+pub mod motion;
+#[allow(dead_code)]
+pub mod movement_calc;
+#[allow(dead_code)]
+pub mod movement_control;
+#[allow(dead_code)]
+pub mod mushroom_biome;
+#[allow(dead_code)]
+pub mod music_disc;
+#[allow(dead_code)]
+pub mod name_tag;
+#[allow(dead_code)]
+pub mod nbt_tags_ext;
+#[allow(dead_code)]
+pub mod nether_biomes;
+#[allow(dead_code)]
+pub mod nether_fortress;
+#[allow(dead_code)]
+pub mod nether_portal;
+#[allow(dead_code)]
+pub mod nether_portal_spawn;
+#[allow(dead_code)]
+pub mod netherite_scrap;
+#[allow(dead_code)]
+pub mod night_time;
+#[allow(dead_code)]
+pub mod noteblock;
+#[allow(dead_code)]
+pub mod observer;
+#[allow(dead_code)]
+pub mod obsidian_pillar;
+#[allow(dead_code)]
+pub mod ocean_monument;
+#[allow(dead_code)]
+pub mod ocean_ruin;
+#[allow(dead_code)]
+pub mod ocelot;
+#[allow(dead_code)]
+pub mod ominous_item;
+#[allow(dead_code)]
+pub mod ops_list;
+#[allow(dead_code)]
+pub mod pack_encoder;
+#[allow(dead_code)]
+pub mod packet_compression;
+#[allow(dead_code)]
+pub mod packet_loss;
+#[allow(dead_code)]
+pub mod painting;
+#[allow(dead_code)]
+pub mod pale_garden;
+#[allow(dead_code)]
+pub mod panda;
+#[allow(dead_code)]
+pub mod parrot;
+#[allow(dead_code)]
+pub mod particles_registry;
+#[allow(dead_code)]
+pub mod passive_entities;
+#[allow(dead_code)]
+pub mod pathfinder;
+#[allow(dead_code)]
+pub mod patrol;
+#[allow(dead_code)]
+pub mod permissions;
+#[allow(dead_code)]
+pub mod phantom;
+#[allow(dead_code)]
+pub mod pig;
+#[allow(dead_code)]
+pub mod piglin;
+#[allow(dead_code)]
+pub mod piglin_bartering;
+#[allow(dead_code)]
+pub mod piglin_brute;
+#[allow(dead_code)]
+pub mod pillager;
+#[allow(dead_code)]
+pub mod pillager_outpost;
+#[allow(dead_code)]
+pub mod ping_system;
+#[allow(dead_code)]
+pub mod piston;
+#[allow(dead_code)]
+pub mod pitcher_plant;
+#[allow(dead_code)]
+pub mod plant_growth;
+#[allow(dead_code)]
+pub mod player_abilities;
 #[allow(dead_code)]
 pub mod player_data;
 #[allow(dead_code)]
+pub mod player_inventory_slots;
+#[allow(dead_code)]
+pub mod player_list_packet;
+#[allow(dead_code)]
 pub mod player_registry;
+#[allow(dead_code)]
+pub mod player_stats;
 #[allow(dead_code)]
 mod plugin;
 #[allow(dead_code)]
+pub mod pointed_dripstone;
+#[allow(dead_code)]
+pub mod polar_bear;
+#[allow(dead_code)]
+pub mod position;
+#[allow(dead_code)]
+pub mod potion_container;
+#[allow(dead_code)]
+pub mod potions_brewing;
+#[allow(dead_code)]
+pub mod powder_snow_bucket;
+#[allow(dead_code)]
+pub mod powdered_snow;
+#[allow(dead_code)]
+pub mod projectiles;
+#[allow(dead_code)]
+pub mod query_protocol;
+#[allow(dead_code)]
+pub mod rabbit;
+#[allow(dead_code)]
+pub mod raid;
+#[allow(dead_code)]
+pub mod rail;
+#[allow(dead_code)]
+pub mod random_tick;
+#[allow(dead_code)]
+pub mod ravager;
+#[allow(dead_code)]
+pub mod raytrace;
+#[allow(dead_code)]
+pub mod rcon;
+#[allow(dead_code)]
+pub mod recipe_book;
+#[allow(dead_code)]
+pub mod recipe_unlock;
+#[allow(dead_code)]
+pub mod redstone;
+#[allow(dead_code)]
+pub mod redstone_comparator;
+#[allow(dead_code)]
+pub mod redstone_devices;
+#[allow(dead_code)]
+pub mod redstone_wire;
+#[allow(dead_code)]
+pub mod repeater;
+#[allow(dead_code)]
+pub mod respawn_anchor;
+#[allow(dead_code)]
+pub mod respawn_system;
+#[allow(dead_code)]
+pub mod rotation;
+#[allow(dead_code)]
+pub mod ruined_portal;
+#[allow(dead_code)]
+pub mod saddles;
+#[allow(dead_code)]
+pub mod sapling_growth;
+#[allow(dead_code)]
+pub mod scaffolding;
+#[allow(dead_code)]
+pub mod scheduler;
+#[allow(dead_code)]
+pub mod scheduler_api;
+#[allow(dead_code)]
+pub mod scoreboard;
+#[allow(dead_code)]
+pub mod scoreboard_crit;
+#[allow(dead_code)]
+pub mod sculk;
+#[allow(dead_code)]
+pub mod sculk_sensor;
+#[allow(dead_code)]
+pub mod sculk_vein;
+#[allow(dead_code)]
+pub mod sea_pickle;
+#[allow(dead_code)]
+pub mod server_settings;
+#[allow(dead_code)]
 mod server_state;
 #[allow(dead_code)]
+pub mod sheep;
+#[allow(dead_code)]
+pub mod sheep_color;
+#[allow(dead_code)]
+pub mod shield;
+#[allow(dead_code)]
+pub mod shield_decoration;
+#[allow(dead_code)]
+pub mod shipwreck;
+#[allow(dead_code)]
+pub mod shulker;
+#[allow(dead_code)]
+pub mod shulker_box;
+#[allow(dead_code)]
+pub mod sidebar;
+#[allow(dead_code)]
+pub mod sign_editor;
+#[allow(dead_code)]
+pub mod sign_text;
+#[allow(dead_code)]
+pub mod signals;
+#[allow(dead_code)]
+pub mod silverfish;
+#[allow(dead_code)]
+pub mod skeleton;
+#[allow(dead_code)]
+pub mod skins;
+#[allow(dead_code)]
+pub mod skull;
+#[allow(dead_code)]
+pub mod sky_light_update;
+#[allow(dead_code)]
+pub mod slab;
+#[allow(dead_code)]
+pub mod sleep;
+#[allow(dead_code)]
+pub mod slime;
+#[allow(dead_code)]
+pub mod slime_block;
+#[allow(dead_code)]
+pub mod slime_spawning;
+#[allow(dead_code)]
+pub mod smithing;
+#[allow(dead_code)]
+pub mod smithing_template;
+#[allow(dead_code)]
+pub mod smoke_pillar;
+#[allow(dead_code)]
+pub mod smoker;
+#[allow(dead_code)]
+pub mod sniffer;
+#[allow(dead_code)]
+pub mod snow_golem;
+#[allow(dead_code)]
+pub mod snow_layer;
+#[allow(dead_code)]
+pub mod snowball;
+#[allow(dead_code)]
+pub mod soul_fire;
+#[allow(dead_code)]
+pub mod soul_speed;
+#[allow(dead_code)]
+pub mod sound_category;
+#[allow(dead_code)]
+pub mod sound_events;
+#[allow(dead_code)]
+pub mod sounds_library;
+#[allow(dead_code)]
+pub mod spawn_chunks;
+#[allow(dead_code)]
+pub mod spawn_egg_list;
+#[allow(dead_code)]
+pub mod spawn_eggs;
+#[allow(dead_code)]
+pub mod spawn_rules;
+#[allow(dead_code)]
+pub mod spawner;
+#[allow(dead_code)]
+pub mod spectator_mode;
+#[allow(dead_code)]
+pub mod spider;
+#[allow(dead_code)]
+pub mod splash_damage;
+#[allow(dead_code)]
+pub mod spore_blossom;
+#[allow(dead_code)]
+pub mod sprinting;
+#[allow(dead_code)]
+pub mod spyglass;
+#[allow(dead_code)]
+pub mod squid;
+#[allow(dead_code)]
+pub mod stack_sizes;
+#[allow(dead_code)]
+pub mod stairs;
+#[allow(dead_code)]
+pub mod statistics;
+#[allow(dead_code)]
+pub mod stonecutter;
+#[allow(dead_code)]
+pub mod stray_loot;
+#[allow(dead_code)]
+pub mod strider;
+#[allow(dead_code)]
+pub mod stronghold;
+#[allow(dead_code)]
+pub mod structure_block;
+#[allow(dead_code)]
+pub mod structures;
+#[allow(dead_code)]
+pub mod suffocation;
+#[allow(dead_code)]
+pub mod sugar_cane;
+#[allow(dead_code)]
+pub mod survival;
+#[allow(dead_code)]
+pub mod suspicious_sand;
+#[allow(dead_code)]
+pub mod swift_sneak;
+#[allow(dead_code)]
+pub mod tab_list;
+#[allow(dead_code)]
+pub mod tadpole;
+#[allow(dead_code)]
+pub mod tag_system;
+#[allow(dead_code)]
+pub mod target_block;
+#[allow(dead_code)]
+pub mod team;
+#[allow(dead_code)]
+pub mod text_colors;
+#[allow(dead_code)]
+pub mod thrown_potion;
+#[allow(dead_code)]
+pub mod tick_speed;
+#[allow(dead_code)]
+pub mod timings;
+#[allow(dead_code)]
+pub mod title_packet;
+#[allow(dead_code)]
+pub mod tnt;
+#[allow(dead_code)]
+pub mod tnt_primed_source;
+#[allow(dead_code)]
+pub mod tool_types;
+#[allow(dead_code)]
+pub mod torch;
+#[allow(dead_code)]
+pub mod torchflower;
+#[allow(dead_code)]
+pub mod totem;
+#[allow(dead_code)]
+pub mod trade_offer_packet;
+#[allow(dead_code)]
+pub mod trading;
+#[allow(dead_code)]
+pub mod trading_generator;
+#[allow(dead_code)]
+pub mod transfer;
+#[allow(dead_code)]
+pub mod trap_chest_loot;
+#[allow(dead_code)]
+pub mod trapdoor;
+#[allow(dead_code)]
+pub mod trial_chamber;
+#[allow(dead_code)]
+pub mod trial_loot;
+#[allow(dead_code)]
+pub mod trial_spawner;
+#[allow(dead_code)]
+pub mod trident;
+#[allow(dead_code)]
+pub mod trim_patterns;
+#[allow(dead_code)]
+pub mod tripwire;
+#[allow(dead_code)]
+pub mod tropical_fish;
+#[allow(dead_code)]
+pub mod turtle;
+#[allow(dead_code)]
+pub mod turtle_egg;
+#[allow(dead_code)]
+pub mod uuid_utils;
+#[allow(dead_code)]
+pub mod vault;
+#[allow(dead_code)]
+pub mod vector_math;
+#[allow(dead_code)]
+pub mod vehicles;
+#[allow(dead_code)]
+pub mod velocity_broadcast;
+#[allow(dead_code)]
+pub mod vex;
+#[allow(dead_code)]
+pub mod village_structures;
+#[allow(dead_code)]
+pub mod village_trades_detailed;
+#[allow(dead_code)]
+pub mod villager;
+#[allow(dead_code)]
+pub mod villager_gossip;
+#[allow(dead_code)]
+pub mod villages;
+#[allow(dead_code)]
+pub mod vine;
+#[allow(dead_code)]
+pub mod visuals;
+#[allow(dead_code)]
+pub mod wandering_trader;
+#[allow(dead_code)]
+pub mod warden;
+#[allow(dead_code)]
+pub mod water_physics;
+#[allow(dead_code)]
+pub mod waterlogging;
+#[allow(dead_code)]
+pub mod weapon_stats;
+#[allow(dead_code)]
+pub mod weather;
+#[allow(dead_code)]
+pub mod weather_damage;
+#[allow(dead_code)]
+pub mod weather_state;
+#[allow(dead_code)]
+pub mod wet_sponge;
+#[allow(dead_code)]
+pub mod whitelist;
+#[allow(dead_code)]
+pub mod wind_charge;
+#[allow(dead_code)]
+pub mod witch;
+#[allow(dead_code)]
+pub mod witch_hut;
+#[allow(dead_code)]
+pub mod wither;
+#[allow(dead_code)]
+pub mod wither_skeleton_loot;
+#[allow(dead_code)]
+pub mod wolf;
+#[allow(dead_code)]
+pub mod wolf_armor;
+#[allow(dead_code)]
+pub mod woodland_mansion;
+#[allow(dead_code)]
+pub mod workbench;
+#[allow(dead_code)]
+pub mod workstations;
+#[allow(dead_code)]
 mod world;
+#[allow(dead_code)]
+pub mod world_border;
+#[allow(dead_code)]
+pub mod world_border_damage;
+#[allow(dead_code)]
+pub mod world_events;
+#[allow(dead_code)]
+pub mod world_events_map;
+#[allow(dead_code)]
+pub mod world_time;
+#[allow(dead_code)]
+pub mod written_book;
+#[allow(dead_code)]
+pub mod xp;
+#[allow(dead_code)]
+pub mod xp_sharing;
+#[allow(dead_code)]
+pub mod zoglin;
+#[allow(dead_code)]
+pub mod zombie;
+#[allow(dead_code)]
+pub mod zombie_villager;
+#[allow(dead_code)]
+pub mod zombified_piglin;
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -1066,55 +1065,19 @@ use crate::server_state::ServerState;
 use crate::world::chunk_cache::ChunkCache;
 use crate::world::tick::{encode_set_time, WorldPacket, WorldState};
 
-/// Writer qui flush stdout après chaque `write`. Sans ça, PowerShell `>` buffer
-/// stdout par blocs de 4 Ko et les logs de gameplay restent invisibles jusqu'à
-/// arrêt du process.
-struct LineFlushStdout;
-
-impl std::io::Write for LineFlushStdout {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let mut out = std::io::stdout().lock();
-        let n = out.write(buf)?;
-        out.flush()?;
-        Ok(n)
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        std::io::stdout().flush()
-    }
-}
-
-impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for LineFlushStdout {
-    type Writer = LineFlushStdout;
-    fn make_writer(&'a self) -> Self::Writer {
-        LineFlushStdout
-    }
-}
-
 #[tokio::main]
 async fn main() {
-    // Initialize logging avec flush immédiat (nécessaire pour PowerShell `>`).
-    tracing_subscriber::fmt()
-        .with_writer(LineFlushStdout)
-        .with_ansi(false)
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,mc_rs_raknet=debug")),
-        )
-        .init();
+    // La config pilote la section [logging] — on la charge AVANT l'init de
+    // tracing. ServerConfig::load est silencieux et renvoie des notes à
+    // émettre une fois le logger prêt.
+    let (config, bootstrap_notes) = ServerConfig::load("server.toml");
 
-    // Installe un hook de panic qui écrit aussi sur stdout — sinon un panic
-    // part sur stderr (non redirigé par `>`) et on loupe le message.
-    std::panic::set_hook(Box::new(|info| {
-        let msg = format!("\n==== PANIC ====\n{info}\n================\n");
-        let _ = std::io::Write::write_all(&mut std::io::stdout(), msg.as_bytes());
-        let _ = std::io::Write::flush(&mut std::io::stdout());
-        let _ = std::io::Write::write_all(&mut std::io::stderr(), msg.as_bytes());
-    }));
+    // Le guard doit rester vivant toute la durée du process (flush au Drop).
+    let _log_guard = crate::logging::init(&config.logging);
+    crate::logging::install_panic_hook();
 
     info!("MC-RS Server starting...");
-
-    // Load config
-    let config = ServerConfig::load("server.toml");
+    bootstrap_notes.flush();
     let world_dir = std::path::Path::new("worlds").join(&config.world.name);
     let world_seed = config.resolve_world_seed(&world_dir);
     let conn_config = config.connection_config(world_seed);
@@ -1975,48 +1938,50 @@ fn process_peer_events(
                                 .unwrap_or(1.0);
 
                             // Appliquer l'attaque sur la target.
-                            let outcome_info = if let Some(target_conn) = connections.get_mut(&tgt_addr) {
-                                let outcome = {
-                                    let events = target_conn.events.clone();
-                                    let mut ev = events.lock().unwrap();
-                                    crate::combat::attack_entity(
-                                        &mut *ev,
+                            let outcome_info =
+                                if let Some(target_conn) = connections.get_mut(&tgt_addr) {
+                                    let outcome = {
+                                        let events = target_conn.events.clone();
+                                        let mut ev = events.lock().unwrap();
+                                        crate::combat::attack_entity(
+                                            &mut *ev,
+                                            target_conn.entity_runtime_id,
+                                            target_conn.position,
+                                            &mut target_conn.attributes,
+                                            &mut target_conn.combat,
+                                            crate::event::entity::DamageCause::EntityAttack,
+                                            base_damage,
+                                            Some(attack.target_runtime_id),
+                                            Some(attacker_pos),
+                                            crate::combat::DEFAULT_KNOCKBACK_FORCE,
+                                        )
+                                    };
+                                    info!(
+                                        "[{}] PvP attack on {}: {} damage, died={}",
+                                        addr,
+                                        target_conn.entity_runtime_id,
+                                        outcome.applied_damage,
+                                        outcome.died,
+                                    );
+                                    Some((
                                         target_conn.entity_runtime_id,
                                         target_conn.position,
-                                        &mut target_conn.attributes,
-                                        &mut target_conn.combat,
-                                        crate::event::entity::DamageCause::EntityAttack,
-                                        base_damage,
-                                        Some(attack.target_runtime_id),
-                                        Some(attacker_pos),
-                                        crate::combat::DEFAULT_KNOCKBACK_FORCE,
-                                    )
+                                        outcome.knockback,
+                                        outcome.died,
+                                        outcome.applied_damage > 0.0,
+                                        target_conn.spawn_position,
+                                    ))
+                                } else {
+                                    None
                                 };
-                                info!(
-                                    "[{}] PvP attack on {}: {} damage, died={}",
-                                    addr,
-                                    target_conn.entity_runtime_id,
-                                    outcome.applied_damage,
-                                    outcome.died,
-                                );
-                                Some((
-                                    target_conn.entity_runtime_id,
-                                    target_conn.position,
-                                    outcome.knockback,
-                                    outcome.died,
-                                    outcome.applied_damage > 0.0,
-                                    target_conn.spawn_position,
-                                ))
-                            } else {
-                                None
-                            };
 
                             if let Some((target_rid, target_pos, kb, died, hit, target_spawn)) =
                                 outcome_info
                             {
                                 // Hurt animation broadcast à tous les viewers.
                                 if hit && !died {
-                                    let hurt_bytes = crate::combat_packets::hurt_animation(target_rid);
+                                    let hurt_bytes =
+                                        crate::combat_packets::hurt_animation(target_rid);
                                     for (other_addr, other_conn) in connections.iter_mut() {
                                         if other_conn.is_in_game() {
                                             let pkt = other_conn.encode_compressed_packet(
@@ -2059,7 +2024,8 @@ fn process_peer_events(
 
                                 if died {
                                     // Death animation à tous + message broadcast.
-                                    let death_bytes = crate::combat_packets::death_animation(target_rid);
+                                    let death_bytes =
+                                        crate::combat_packets::death_animation(target_rid);
                                     for (other_addr, other_conn) in connections.iter_mut() {
                                         if other_conn.is_in_game() {
                                             let pkt = other_conn.encode_compressed_packet(

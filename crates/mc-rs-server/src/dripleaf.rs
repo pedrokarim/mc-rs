@@ -26,7 +26,11 @@ pub const TILT_TICKS: u32 = 11;
 
 impl Dripleaf {
     pub fn new(kind: DripleafKind) -> Self {
-        Self { kind, tilt: DripleafTilt::None, ticks_since_entity: 0 }
+        Self {
+            kind,
+            tilt: DripleafTilt::None,
+            ticks_since_entity: 0,
+        }
     }
 
     pub fn step_on(&mut self) {

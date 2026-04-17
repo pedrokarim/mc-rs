@@ -2,8 +2,18 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TropicalFishPattern {
-    Kob, Sunstreak, Snooper, Dasher, Brinely, Spotty,
-    Flopper, Stripey, Glitter, Blockfish, Betty, Clayfish,
+    Kob,
+    Sunstreak,
+    Snooper,
+    Dasher,
+    Brinely,
+    Spotty,
+    Flopper,
+    Stripey,
+    Glitter,
+    Blockfish,
+    Betty,
+    Clayfish,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,7 +26,7 @@ pub enum TropicalFishShape {
 pub struct TropicalFish {
     pub shape: TropicalFishShape,
     pub pattern: TropicalFishPattern,
-    pub body_color: u8,  // dye id 0-15
+    pub body_color: u8, // dye id 0-15
     pub pattern_color: u8,
 }
 
@@ -29,10 +39,18 @@ impl TropicalFish {
         let mut rng = rand::thread_rng();
         let shapes = [TropicalFishShape::Small, TropicalFishShape::Large];
         let patterns = [
-            TropicalFishPattern::Kob, TropicalFishPattern::Sunstreak, TropicalFishPattern::Snooper,
-            TropicalFishPattern::Dasher, TropicalFishPattern::Brinely, TropicalFishPattern::Spotty,
-            TropicalFishPattern::Flopper, TropicalFishPattern::Stripey, TropicalFishPattern::Glitter,
-            TropicalFishPattern::Blockfish, TropicalFishPattern::Betty, TropicalFishPattern::Clayfish,
+            TropicalFishPattern::Kob,
+            TropicalFishPattern::Sunstreak,
+            TropicalFishPattern::Snooper,
+            TropicalFishPattern::Dasher,
+            TropicalFishPattern::Brinely,
+            TropicalFishPattern::Spotty,
+            TropicalFishPattern::Flopper,
+            TropicalFishPattern::Stripey,
+            TropicalFishPattern::Glitter,
+            TropicalFishPattern::Blockfish,
+            TropicalFishPattern::Betty,
+            TropicalFishPattern::Clayfish,
         ];
         Self {
             shape: shapes[rng.gen_range(0..shapes.len())],
@@ -43,7 +61,9 @@ impl TropicalFish {
     }
 
     /// Damage to attacker.
-    pub fn attack_damage() -> f32 { 0.0 }
+    pub fn attack_damage() -> f32 {
+        0.0
+    }
 }
 
 #[cfg(test)]

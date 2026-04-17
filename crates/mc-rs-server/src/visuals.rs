@@ -93,7 +93,7 @@ pub fn boss_show(
     w.write_f32_le(health_percent);
     // Fall-through PROPERTIES
     w.write_u16_le(0); // darken_screen = false
-    // TEXTURE
+                       // TEXTURE
     w.write_var_u32(color);
     w.write_var_u32(0); // overlay
     w.into_bytes()

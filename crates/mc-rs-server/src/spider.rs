@@ -2,8 +2,8 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpiderVariant {
-    Normal,     // HP 16, damage 2
-    Cave,       // HP 12, damage 2, poison
+    Normal, // HP 16, damage 2
+    Cave,   // HP 12, damage 2, poison
 }
 
 #[derive(Debug, Clone)]

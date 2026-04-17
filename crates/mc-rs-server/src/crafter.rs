@@ -43,7 +43,9 @@ impl Crafter {
         let filled = self.inventory.iter().filter(|s| s.is_some()).count();
         let disabled = self.disabled_slots.iter().filter(|&&d| d).count();
         let usable = 9 - disabled;
-        if usable == 0 { return 0; }
+        if usable == 0 {
+            return 0;
+        }
         ((filled as f32 / usable as f32) * 15.0) as u8
     }
 }

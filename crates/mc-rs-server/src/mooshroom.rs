@@ -3,7 +3,7 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MooshroomVariant {
     Red,
-    Brown,   // From lightning strike
+    Brown, // From lightning strike
 }
 
 #[derive(Debug, Clone)]

@@ -21,7 +21,9 @@ pub enum FishKind {
 }
 
 /// Drink milk removes all effects.
-pub fn milk_removes_effects() -> bool { true }
+pub fn milk_removes_effects() -> bool {
+    true
+}
 
 /// Filling a bucket from water source.
 pub fn can_fill_from(block_id: u16) -> Option<BucketContent> {

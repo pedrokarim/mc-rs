@@ -59,10 +59,10 @@ pub fn render_pixel_color(top_block_id: u16, above_water: bool) -> u8 {
     // Very simplified: just return some palette index.
     if above_water {
         match top_block_id {
-            2 | 3 => 1,      // grass/dirt
-            12 | 24 => 2,    // sand/sandstone
-            1 | 4 => 11,     // stone/cobble
-            8 | 9 => 12,     // water
+            2 | 3 => 1,   // grass/dirt
+            12 | 24 => 2, // sand/sandstone
+            1 | 4 => 11,  // stone/cobble
+            8 | 9 => 12,  // water
             _ => 3,
         }
     } else {

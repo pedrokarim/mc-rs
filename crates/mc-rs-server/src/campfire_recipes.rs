@@ -24,6 +24,9 @@ mod tests {
 
     #[test]
     fn beef_cooks() {
-        assert_eq!(campfire_cook("minecraft:raw_beef"), Some("minecraft:cooked_beef"));
+        assert_eq!(
+            campfire_cook("minecraft:raw_beef"),
+            Some("minecraft:cooked_beef")
+        );
     }
 }

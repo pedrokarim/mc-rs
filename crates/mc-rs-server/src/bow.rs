@@ -15,7 +15,10 @@ pub const MAX_ARROW_VELOCITY: f64 = 3.0;
 
 impl Bow {
     pub fn new() -> Self {
-        Self { charge_ticks: 0, durability: MAX_DURABILITY }
+        Self {
+            charge_ticks: 0,
+            durability: MAX_DURABILITY,
+        }
     }
 
     pub fn start_draw(&mut self) {
@@ -52,7 +55,9 @@ impl Bow {
 }
 
 impl Default for Bow {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

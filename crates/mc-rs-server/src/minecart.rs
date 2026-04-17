@@ -2,11 +2,11 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MinecartKind {
-    Empty,      // Passenger
-    Chest,      // 27 slots storage
-    Hopper,     // Auto-pickup items
-    Tnt,        // Explodes on activator rail
-    Furnace,    // Boosts via fuel
+    Empty,   // Passenger
+    Chest,   // 27 slots storage
+    Hopper,  // Auto-pickup items
+    Tnt,     // Explodes on activator rail
+    Furnace, // Boosts via fuel
     CommandBlock,
     Spawner,
 }

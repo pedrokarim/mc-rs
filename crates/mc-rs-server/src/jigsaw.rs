@@ -2,9 +2,18 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JigsawOrientation {
-    DownEast, DownNorth, DownSouth, DownWest,
-    UpEast, UpNorth, UpSouth, UpWest,
-    WestUp, EastUp, NorthUp, SouthUp,
+    DownEast,
+    DownNorth,
+    DownSouth,
+    DownWest,
+    UpEast,
+    UpNorth,
+    UpSouth,
+    UpWest,
+    WestUp,
+    EastUp,
+    NorthUp,
+    SouthUp,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,8 +25,8 @@ pub enum JigsawJointType {
 #[derive(Debug, Clone)]
 pub struct JigsawBlock {
     pub name: String,
-    pub target: String, // Pattern to search for
-    pub pool: String,   // Template pool
+    pub target: String,      // Pattern to search for
+    pub pool: String,        // Template pool
     pub final_state: String, // Block to replace with
     pub joint: JigsawJointType,
     pub orientation: JigsawOrientation,
@@ -41,7 +50,9 @@ impl JigsawBlock {
 }
 
 impl Default for JigsawBlock {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

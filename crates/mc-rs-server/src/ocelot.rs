@@ -16,7 +16,11 @@ pub fn trust_items() -> &'static [&'static str] {
 
 impl Ocelot {
     pub fn new() -> Self {
-        Self { trusted: false, trust_progress: 0, age: 0 }
+        Self {
+            trusted: false,
+            trust_progress: 0,
+            age: 0,
+        }
     }
 
     pub fn feed_fish(&mut self) -> bool {
@@ -34,7 +38,9 @@ impl Ocelot {
 }
 
 impl Default for Ocelot {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

@@ -62,7 +62,9 @@ impl DecoratedPot {
 }
 
 impl Default for DecoratedPot {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -71,7 +73,9 @@ mod tests {
 
     #[test]
     fn skull_is_valid() {
-        assert!(DecoratedPot::is_valid_sherd("minecraft:skull_pottery_sherd"));
+        assert!(DecoratedPot::is_valid_sherd(
+            "minecraft:skull_pottery_sherd"
+        ));
     }
 
     #[test]

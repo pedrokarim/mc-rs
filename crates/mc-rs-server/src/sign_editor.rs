@@ -19,12 +19,7 @@ pub struct SignText {
 impl Default for SignText {
     fn default() -> Self {
         Self {
-            lines: [
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-            ],
+            lines: [String::new(), String::new(), String::new(), String::new()],
             glow: false,
             color: 0x000000,
         }

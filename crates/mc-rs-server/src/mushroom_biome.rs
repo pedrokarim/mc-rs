@@ -1,7 +1,9 @@
 //! Mushroom biome (MushroomFields) — special decoration rules.
 
 /// No hostile mobs spawn in mushroom biome.
-pub fn allows_hostile_spawn() -> bool { false }
+pub fn allows_hostile_spawn() -> bool {
+    false
+}
 
 /// Only mooshrooms spawn passive.
 pub fn passive_mob_for_biome() -> &'static [&'static str] {

@@ -2,9 +2,9 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FrogVariant {
-    Temperate,  // Beige — default + most biomes
-    Warm,       // White — warm biomes (jungle, desert, savanna, badlands, swamp, mangrove)
-    Cold,       // Green — snowy/cold biomes
+    Temperate, // Beige — default + most biomes
+    Warm,      // White — warm biomes (jungle, desert, savanna, badlands, swamp, mangrove)
+    Cold,      // Green — snowy/cold biomes
 }
 
 impl FrogVariant {

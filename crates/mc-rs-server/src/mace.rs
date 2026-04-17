@@ -46,7 +46,9 @@ impl Mace {
 }
 
 impl Default for Mace {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

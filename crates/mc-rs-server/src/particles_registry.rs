@@ -132,7 +132,9 @@ mod tests {
 
     #[test]
     fn particle_name_matches_format() {
-        assert!(ParticleKind::Explosion.network_name().starts_with("minecraft:"));
+        assert!(ParticleKind::Explosion
+            .network_name()
+            .starts_with("minecraft:"));
         assert!(ParticleKind::SoulFlame.network_name().contains("soul"));
     }
 }

@@ -2,9 +2,9 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DamageCause {
-    Entity,       // attack from mob/player
-    Projectile,   // arrow/trident
-    Suffocation,  // block
+    Entity,      // attack from mob/player
+    Projectile,  // arrow/trident
+    Suffocation, // block
     Fall,
     Fire,
     Lava,
@@ -14,12 +14,12 @@ pub enum DamageCause {
     Void,
     Lightning,
     Starvation,
-    Magic,        // potion
+    Magic, // potion
     Thorns,
     Poison,
     Wither,
-    Falling,      // falling block
-    Contact,      // cactus/sweet berries
+    Falling, // falling block
+    Contact, // cactus/sweet berries
     Suicide,
     Custom,
 }
@@ -27,7 +27,15 @@ pub enum DamageCause {
 impl DamageCause {
     /// Can be blocked by armor?
     pub fn is_armor_blockable(&self) -> bool {
-        !matches!(self, Self::Drowning | Self::Starvation | Self::Void | Self::Magic | Self::Poison | Self::Wither)
+        !matches!(
+            self,
+            Self::Drowning
+                | Self::Starvation
+                | Self::Void
+                | Self::Magic
+                | Self::Poison
+                | Self::Wither
+        )
     }
 
     /// Can be reduced by Protection enchant?
@@ -37,8 +45,13 @@ impl DamageCause {
 
     /// Does this cause apply knockback?
     pub fn causes_knockback(&self) -> bool {
-        matches!(self,
-            Self::Entity | Self::Projectile | Self::BlockExplosion | Self::EntityExplosion | Self::Thorns
+        matches!(
+            self,
+            Self::Entity
+                | Self::Projectile
+                | Self::BlockExplosion
+                | Self::EntityExplosion
+                | Self::Thorns
         )
     }
 }

@@ -1,7 +1,7 @@
 //! Bucket — port PMMP `src/item/LiquidBucket.php` + `Bucket.php`.
 
-use mc_rs_proto::packets::player::ItemStack;
 use crate::item_registry::network_id;
+use mc_rs_proto::packets::player::ItemStack;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BucketContent {

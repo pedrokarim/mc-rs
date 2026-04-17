@@ -34,7 +34,9 @@ impl EnderPearl {
 }
 
 /// Chorus fruit teleport — 5-8 blocks randomized.
-pub fn chorus_fruit_teleport_range() -> f64 { 8.0 }
+pub fn chorus_fruit_teleport_range() -> f64 {
+    8.0
+}
 
 #[cfg(test)]
 mod tests {

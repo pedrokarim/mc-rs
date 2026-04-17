@@ -90,7 +90,7 @@ impl Default for HopperState {
 #[derive(Debug, Clone)]
 pub struct DispenserState {
     pub items: Vec<ItemStack>, // 9 slots
-    pub is_dropper: bool, // dropper ne fait pas d'action spéciale sur items
+    pub is_dropper: bool,      // dropper ne fait pas d'action spéciale sur items
 }
 
 impl DispenserState {

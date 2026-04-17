@@ -78,11 +78,7 @@ impl LootTable {
                             0
                         };
                         if let Some(id) = network_id(&entry.item_name) {
-                            out.push(ItemStack::new(
-                                id,
-                                (base_count + bonus).min(64) as u16,
-                                0,
-                            ));
+                            out.push(ItemStack::new(id, (base_count + bonus).min(64) as u16, 0));
                         }
                         break;
                     }
@@ -101,15 +97,13 @@ pub fn zombie_loot_table() -> LootTable {
         pools: vec![LootPool {
             rolls_min: 1,
             rolls_max: 1,
-            entries: vec![
-                LootEntry {
-                    item_name: "minecraft:rotten_flesh".into(),
-                    min_count: 0,
-                    max_count: 2,
-                    weight: 1,
-                    condition: None,
-                },
-            ],
+            entries: vec![LootEntry {
+                item_name: "minecraft:rotten_flesh".into(),
+                min_count: 0,
+                max_count: 2,
+                weight: 1,
+                condition: None,
+            }],
         }],
     }
 }
@@ -164,15 +158,13 @@ pub fn cow_loot_table() -> LootTable {
             LootPool {
                 rolls_min: 1,
                 rolls_max: 1,
-                entries: vec![
-                    LootEntry {
-                        item_name: "minecraft:beef".into(),
-                        min_count: 1,
-                        max_count: 3,
-                        weight: 1,
-                        condition: None,
-                    },
-                ],
+                entries: vec![LootEntry {
+                    item_name: "minecraft:beef".into(),
+                    min_count: 1,
+                    max_count: 3,
+                    weight: 1,
+                    condition: None,
+                }],
             },
         ],
     }

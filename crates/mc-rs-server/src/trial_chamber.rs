@@ -11,7 +11,9 @@ pub const MAX_DEPTH: i32 = 30;
 /// - Copper
 /// - New wind charges
 
-pub fn structure_name() -> &'static str { "trial_chambers" }
+pub fn structure_name() -> &'static str {
+    "trial_chambers"
+}
 
 /// Mobs spawned in trial spawners.
 pub fn trial_mobs() -> &'static [&'static str] {

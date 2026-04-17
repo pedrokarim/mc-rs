@@ -27,7 +27,9 @@ impl AmethystStage {
     }
 
     /// Growth chance per random tick (low).
-    pub fn growth_chance() -> f32 { 0.05 }
+    pub fn growth_chance() -> f32 {
+        0.05
+    }
 
     /// Growth requires adjacent budding amethyst.
     pub fn block_id(&self) -> u16 {

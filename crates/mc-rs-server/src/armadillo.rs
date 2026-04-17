@@ -66,11 +66,15 @@ impl Armadillo {
     }
 
     /// Immune to damage while rolled.
-    pub fn damage_immune_rolled() -> bool { true }
+    pub fn damage_immune_rolled() -> bool {
+        true
+    }
 }
 
 impl Default for Armadillo {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

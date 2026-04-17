@@ -2,8 +2,8 @@
 
 #[derive(Debug, Clone)]
 pub struct TurtleEgg {
-    pub egg_count: u8,      // 1-4 eggs per block
-    pub hatch_stage: u8,    // 0-2 (crack progression)
+    pub egg_count: u8,   // 1-4 eggs per block
+    pub hatch_stage: u8, // 0-2 (crack progression)
     pub nights_survived: u32,
 }
 
@@ -39,7 +39,9 @@ impl TurtleEgg {
         rng.gen::<f32>() < 1.0 / 3.0
     }
 
-    pub fn zombie_step_always_breaks() -> bool { true }
+    pub fn zombie_step_always_breaks() -> bool {
+        true
+    }
 }
 
 #[cfg(test)]

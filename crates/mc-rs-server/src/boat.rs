@@ -2,7 +2,15 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WoodType {
-    Oak, Spruce, Birch, Jungle, Acacia, DarkOak, Mangrove, Cherry, Bamboo,
+    Oak,
+    Spruce,
+    Birch,
+    Jungle,
+    Acacia,
+    DarkOak,
+    Mangrove,
+    Cherry,
+    Bamboo,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,7 +34,11 @@ pub const CHEST_BOAT_SLOTS: usize = 27;
 
 impl Boat {
     pub fn new(wood: WoodType, kind: BoatKind) -> Self {
-        let slots = if kind == BoatKind::Chest { CHEST_BOAT_SLOTS } else { 0 };
+        let slots = if kind == BoatKind::Chest {
+            CHEST_BOAT_SLOTS
+        } else {
+            0
+        };
         Self {
             wood,
             kind,

@@ -85,7 +85,8 @@ impl Connection {
                 if fall_distance > crate::entity_fall::FALL_THRESHOLD {
                     let damage = crate::entity_fall::compute_damage(fall_distance, 0);
                     if damage > 0.0 {
-                        let current = self.attributes
+                        let current = self
+                            .attributes
                             .must_get(crate::attribute::ids::HEALTH)
                             .current_value;
                         let new_hp = (current - damage).max(0.0);
@@ -400,7 +401,9 @@ impl Connection {
         if let Some(ref request) = pkt.item_stack_request {
             info!(
                 "[{}] item_stack_request id={} actions={}",
-                self.addr, request.request_id, request.actions.len()
+                self.addr,
+                request.request_id,
+                request.actions.len()
             );
             self.handle_item_stack_request(request, &mut responses);
         }

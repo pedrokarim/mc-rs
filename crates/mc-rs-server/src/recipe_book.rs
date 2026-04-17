@@ -1,9 +1,9 @@
 //! Recipe book — port conceptuel Bedrock. Track quelles recettes le joueur
 //! a débloquées.
 
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::SocketAddr;
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Default)]
 pub struct PlayerRecipeBook {
@@ -45,10 +45,7 @@ impl RecipeBookManager {
     }
 
     pub fn unlock_for(&mut self, addr: SocketAddr, recipe_id: &str) -> bool {
-        self.per_player
-            .entry(addr)
-            .or_default()
-            .unlock(recipe_id)
+        self.per_player.entry(addr).or_default().unlock(recipe_id)
     }
 
     pub fn drain_notifications(&mut self, addr: &SocketAddr) -> Vec<String> {

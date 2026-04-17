@@ -2,7 +2,15 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DoorMaterial {
-    Oak, Birch, Spruce, Jungle, Acacia, DarkOak, Mangrove, Cherry, Bamboo,
+    Oak,
+    Birch,
+    Spruce,
+    Jungle,
+    Acacia,
+    DarkOak,
+    Mangrove,
+    Cherry,
+    Bamboo,
     Iron,
     Nether,
     Copper(crate::copper_oxidation::OxidationStage),
@@ -25,7 +33,13 @@ pub struct Door {
 
 impl Door {
     pub fn new(material: DoorMaterial, facing: u8) -> Self {
-        Self { material, facing, hinge: Hinge::Left, open: false, powered: false }
+        Self {
+            material,
+            facing,
+            hinge: Hinge::Left,
+            open: false,
+            powered: false,
+        }
     }
 
     pub fn toggle(&mut self, by_player: bool) -> bool {

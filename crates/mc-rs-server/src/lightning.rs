@@ -22,7 +22,9 @@ pub const CHAIN_RANGE: f64 = 16.0;
 impl LightningBolt {
     pub fn new(x: f64, y: f64, z: f64) -> Self {
         Self {
-            x, y, z,
+            x,
+            y,
+            z,
             lifetime_ticks: LIGHTNING_DURATION,
             target_entity: None,
             visual_only: false,

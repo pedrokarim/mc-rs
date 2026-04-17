@@ -51,7 +51,10 @@ pub fn leashable_mobs() -> &'static [&'static str] {
 
 impl Lead {
     pub fn new(holder: LeadHolder, entity: u64) -> Self {
-        Self { holder, leashed_entity: entity }
+        Self {
+            holder,
+            leashed_entity: entity,
+        }
     }
 
     pub fn can_leash(mob: &str) -> bool {

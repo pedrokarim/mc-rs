@@ -3,19 +3,15 @@
 /// Supported locales (PMMP).
 pub fn supported_locales() -> &'static [&'static str] {
     &[
-        "en_US", "en_GB",
-        "de_DE", "es_ES", "es_MX",
-        "fr_FR", "fr_CA",
-        "it_IT", "ja_JP", "ko_KR",
-        "pt_BR", "pt_PT",
-        "ru_RU", "zh_CN", "zh_TW",
-        "nl_NL", "pl_PL", "tr_TR",
-        "sv_SE", "fi_FI", "hu_HU",
-        "cs_CZ", "da_DK", "el_GR",
+        "en_US", "en_GB", "de_DE", "es_ES", "es_MX", "fr_FR", "fr_CA", "it_IT", "ja_JP", "ko_KR",
+        "pt_BR", "pt_PT", "ru_RU", "zh_CN", "zh_TW", "nl_NL", "pl_PL", "tr_TR", "sv_SE", "fi_FI",
+        "hu_HU", "cs_CZ", "da_DK", "el_GR",
     ]
 }
 
-pub fn default_locale() -> &'static str { "en_US" }
+pub fn default_locale() -> &'static str {
+    "en_US"
+}
 
 /// Translate a key with parameters (simple replacement).
 pub fn translate(key: &str, params: &[String]) -> String {

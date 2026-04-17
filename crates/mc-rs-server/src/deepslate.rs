@@ -10,7 +10,8 @@ pub const DEEPSLATE_MAX_Y: i32 = 8;
 /// Transition zone: stone → deepslate (0-8).
 
 pub fn is_deepslate_block(block_id: u16) -> bool {
-    matches!(block_id,
+    matches!(
+        block_id,
         649  // deepslate
         | 650 // cobbled deepslate
         | 651 // polished deepslate

@@ -2,14 +2,26 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HorseVariant {
-    White, Creamy, Chestnut, Brown, Black, Gray, DarkBrown,
-    Donkey, Mule,
-    ZombieHorse, SkeletonHorse,
+    White,
+    Creamy,
+    Chestnut,
+    Brown,
+    Black,
+    Gray,
+    DarkBrown,
+    Donkey,
+    Mule,
+    ZombieHorse,
+    SkeletonHorse,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HorseMarking {
-    None, WhiteSocks, WhiteField, WhiteDots, BlackDots,
+    None,
+    WhiteSocks,
+    WhiteField,
+    WhiteDots,
+    BlackDots,
 }
 
 #[derive(Debug, Clone)]
@@ -22,7 +34,7 @@ pub struct Horse {
     pub temperament: u8, // 0-100 (higher = easier tame)
     pub saddled: bool,
     pub armor: Option<&'static str>, // iron/gold/diamond/leather/netherite
-    pub chest: bool, // donkey/mule only
+    pub chest: bool,                 // donkey/mule only
     pub max_hp: f32,
     pub speed: f32, // blocks/sec
     pub jump_strength: f32,
@@ -70,10 +82,18 @@ impl Horse {
     }
 
     pub fn equip_armor(&mut self, kind: &'static str) -> bool {
-        if !self.tamed || !matches!(self.variant,
-            HorseVariant::White | HorseVariant::Creamy | HorseVariant::Chestnut |
-            HorseVariant::Brown | HorseVariant::Black | HorseVariant::Gray |
-            HorseVariant::DarkBrown) {
+        if !self.tamed
+            || !matches!(
+                self.variant,
+                HorseVariant::White
+                    | HorseVariant::Creamy
+                    | HorseVariant::Chestnut
+                    | HorseVariant::Brown
+                    | HorseVariant::Black
+                    | HorseVariant::Gray
+                    | HorseVariant::DarkBrown
+            )
+        {
             return false;
         }
         self.armor = Some(kind);
@@ -81,10 +101,16 @@ impl Horse {
     }
 
     pub fn can_wear_armor(&self) -> bool {
-        matches!(self.variant,
-            HorseVariant::White | HorseVariant::Creamy | HorseVariant::Chestnut |
-            HorseVariant::Brown | HorseVariant::Black | HorseVariant::Gray |
-            HorseVariant::DarkBrown)
+        matches!(
+            self.variant,
+            HorseVariant::White
+                | HorseVariant::Creamy
+                | HorseVariant::Chestnut
+                | HorseVariant::Brown
+                | HorseVariant::Black
+                | HorseVariant::Gray
+                | HorseVariant::DarkBrown
+        )
     }
 
     /// Only donkey/mule can carry chest.

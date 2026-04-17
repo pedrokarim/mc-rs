@@ -42,9 +42,19 @@ mod tests {
     #[test]
     fn locked_after_uses() {
         let offer = TradeOffer {
-            buy_a: TradeItem { item_id: 1, count: 1, data: 0, nbt: None },
+            buy_a: TradeItem {
+                item_id: 1,
+                count: 1,
+                data: 0,
+                nbt: None,
+            },
             buy_b: None,
-            sell: TradeItem { item_id: 2, count: 1, data: 0, nbt: None },
+            sell: TradeItem {
+                item_id: 2,
+                count: 1,
+                data: 0,
+                nbt: None,
+            },
             uses: 5,
             max_uses: 5,
             xp_player: 1,

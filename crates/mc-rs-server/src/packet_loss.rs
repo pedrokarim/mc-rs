@@ -51,7 +51,9 @@ impl PacketLossTracker {
 }
 
 impl Default for PacketLossTracker {
-    fn default() -> Self { Self::new(100) }
+    fn default() -> Self {
+        Self::new(100)
+    }
 }
 
 #[cfg(test)]

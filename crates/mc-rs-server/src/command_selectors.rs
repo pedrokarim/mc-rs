@@ -2,12 +2,12 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelectorKind {
-    NearestPlayer,   // @p
-    AllEntities,     // @e
-    AllPlayers,      // @a
-    RandomPlayer,    // @r
-    Self_,           // @s
-    NearestEntity,   // @n (1.19.4+)
+    NearestPlayer, // @p
+    AllEntities,   // @e
+    AllPlayers,    // @a
+    RandomPlayer,  // @r
+    Self_,         // @s
+    NearestEntity, // @n (1.19.4+)
 }
 
 impl SelectorKind {
@@ -57,6 +57,9 @@ mod tests {
 
     #[test]
     fn parses_selectors() {
-        assert_eq!(SelectorKind::from_str("@p"), Some(SelectorKind::NearestPlayer));
+        assert_eq!(
+            SelectorKind::from_str("@p"),
+            Some(SelectorKind::NearestPlayer)
+        );
     }
 }

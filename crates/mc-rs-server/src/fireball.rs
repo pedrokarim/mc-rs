@@ -2,9 +2,9 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FireballKind {
-    Large,   // Ghast fireball (exploding)
-    Small,   // Blaze / fire charge (no explosion, ignite)
-    Dragon,  // Ender dragon breath (AOE on hit)
+    Large,  // Ghast fireball (exploding)
+    Small,  // Blaze / fire charge (no explosion, ignite)
+    Dragon, // Ender dragon breath (AOE on hit)
 }
 
 #[derive(Debug, Clone)]
@@ -32,8 +32,12 @@ impl Fireball {
     pub fn new_ghast(x: f64, y: f64, z: f64, mx: f64, my: f64, mz: f64, shooter: u64) -> Self {
         Self {
             kind: FireballKind::Large,
-            x, y, z,
-            motion_x: mx, motion_y: my, motion_z: mz,
+            x,
+            y,
+            z,
+            motion_x: mx,
+            motion_y: my,
+            motion_z: mz,
             shooter,
             explosion_power: GHAST_POWER,
             age: 0,
@@ -43,8 +47,12 @@ impl Fireball {
     pub fn new_small(x: f64, y: f64, z: f64, mx: f64, my: f64, mz: f64, shooter: u64) -> Self {
         Self {
             kind: FireballKind::Small,
-            x, y, z,
-            motion_x: mx, motion_y: my, motion_z: mz,
+            x,
+            y,
+            z,
+            motion_x: mx,
+            motion_y: my,
+            motion_z: mz,
             shooter,
             explosion_power: 0.0,
             age: 0,

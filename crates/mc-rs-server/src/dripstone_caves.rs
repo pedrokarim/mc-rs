@@ -6,10 +6,7 @@ pub const MIN_Y: i32 = -60;
 pub const MAX_Y: i32 = 50;
 
 pub fn unique_blocks() -> &'static [&'static str] {
-    &[
-        "minecraft:dripstone_block",
-        "minecraft:pointed_dripstone",
-    ]
+    &["minecraft:dripstone_block", "minecraft:pointed_dripstone"]
 }
 
 pub const BIOME_ID: u8 = 189;

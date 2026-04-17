@@ -11,7 +11,9 @@ pub fn sneaking_speed(level: u8) -> f32 {
 }
 
 /// Treasure enchantment — only found in Ancient Cities.
-pub fn is_treasure() -> bool { true }
+pub fn is_treasure() -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {

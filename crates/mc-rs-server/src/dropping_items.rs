@@ -2,10 +2,10 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DropMode {
-    SingleItem,    // Q
-    WholeStack,    // Ctrl+Q
-    DropQ,         // Q from cursor
-    DropOnDeath,   // Death drop
+    SingleItem,  // Q
+    WholeStack,  // Ctrl+Q
+    DropQ,       // Q from cursor
+    DropOnDeath, // Death drop
 }
 
 /// Throw velocity when dropping.

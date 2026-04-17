@@ -2,8 +2,8 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SmokerType {
-    Smoker,        // 200 ticks (double speed), food only
-    BlastFurnace,  // 200 ticks (double speed), ores/iron only
+    Smoker,       // 200 ticks (double speed), food only
+    BlastFurnace, // 200 ticks (double speed), ores/iron only
 }
 
 /// Smoker/BlastFurnace cooks 2x faster than furnace (200 vs 400 default ticks).

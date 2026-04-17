@@ -11,10 +11,7 @@ pub fn spawn_location() -> &'static str {
 /// Crafted into mace with breeze rod.
 pub fn mace_recipe() -> (&'static [&'static str], &'static str) {
     (
-        &[
-            "minecraft:heavy_core",
-            "minecraft:breeze_rod",
-        ],
+        &["minecraft:heavy_core", "minecraft:breeze_rod"],
         "minecraft:mace",
     )
 }

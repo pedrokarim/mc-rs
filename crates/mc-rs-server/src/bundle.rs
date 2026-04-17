@@ -22,11 +22,15 @@ pub fn item_weight(max_stack: u16) -> u32 {
 
 impl Bundle {
     pub fn new() -> Self {
-        Self { items: Vec::new(), color: None }
+        Self {
+            items: Vec::new(),
+            color: None,
+        }
     }
 
     pub fn current_weight(&self, max_stack: impl Fn(u16) -> u16) -> u32 {
-        self.items.iter()
+        self.items
+            .iter()
             .map(|(id, count, _)| (*count as u32) * item_weight(max_stack(*id)))
             .sum()
     }
@@ -42,7 +46,11 @@ impl Bundle {
         if !self.can_add(id, count, max_stack) {
             return false;
         }
-        if let Some(existing) = self.items.iter_mut().find(|(sid, _, sd)| *sid == id && *sd == data) {
+        if let Some(existing) = self
+            .items
+            .iter_mut()
+            .find(|(sid, _, sd)| *sid == id && *sd == data)
+        {
             existing.1 += count;
         } else {
             self.items.push((id, count, data));
@@ -56,7 +64,9 @@ impl Bundle {
 }
 
 impl Default for Bundle {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

@@ -4,7 +4,9 @@
 pub const OMINOUS_BOTTLE_AMPLIFIER_MAX: u8 = 5;
 
 /// Ominous trial key opens ominous vault (more loot).
-pub fn ominous_key_loot_multiplier() -> f32 { 3.0 }
+pub fn ominous_key_loot_multiplier() -> f32 {
+    3.0
+}
 
 /// Bad omen level from ominous bottle consumption.
 pub fn bad_omen_from_bottle(amplifier: u8) -> u8 {

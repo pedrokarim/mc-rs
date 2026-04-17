@@ -62,10 +62,14 @@ pub const SNOWY_COLORS: BiomeColors = BiomeColors {
 
 pub fn colors_for_biome(biome_id: u8) -> BiomeColors {
     match biome_id {
-        0 | 7 | 24 | 48 => BiomeColors { // Ocean variants
-            grass: [141, 179, 96], foliage: [113, 167, 77],
-            water: [63, 118, 228], sky: [120, 167, 255],
-            fog: [192, 216, 255], dry_foliage: [118, 142, 81],
+        0 | 7 | 24 | 48 => BiomeColors {
+            // Ocean variants
+            grass: [141, 179, 96],
+            foliage: [113, 167, 77],
+            water: [63, 118, 228],
+            sky: [120, 167, 255],
+            fog: [192, 216, 255],
+            dry_foliage: [118, 142, 81],
         },
         6 | 134 => SWAMP_COLORS,
         11..=30 => SNOWY_COLORS,

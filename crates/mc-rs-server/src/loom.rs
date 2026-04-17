@@ -4,9 +4,9 @@ use crate::banner_pattern::BannerPattern;
 
 #[derive(Debug, Clone)]
 pub struct LoomOperation {
-    pub banner_input: u16,      // Banner item
+    pub banner_input: u16, // Banner item
     pub banner_color: u8,
-    pub dye_input: u8,          // Dye applied
+    pub dye_input: u8, // Dye applied
     pub pattern: BannerPattern,
     pub existing_layers: u8,
 }

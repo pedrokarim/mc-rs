@@ -99,7 +99,7 @@ pub struct FenceGateState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CampfireState {
     pub lit: bool,
-    pub signal_fire: bool, // signal fire when hay_bale below
+    pub signal_fire: bool,               // signal fire when hay_bale below
     pub cooking_slots: [Option<i32>; 4], // 4 slots item IDs
     pub cook_times: [u16; 4],
 }

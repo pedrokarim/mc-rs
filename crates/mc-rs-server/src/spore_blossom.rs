@@ -7,7 +7,9 @@ pub const PARTICLE_RANGE: f64 = 10.0;
 /// Spore particles per tick.
 pub const PARTICLES_PER_TICK: u32 = 1;
 /// Falls when no block above.
-pub fn needs_ceiling() -> bool { true }
+pub fn needs_ceiling() -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {

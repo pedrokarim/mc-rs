@@ -52,6 +52,8 @@ mod tests {
 
     #[test]
     fn treasure_map_valid() {
-        assert!(map_chest_loot().iter().any(|(i, _, _, _)| *i == "minecraft:buried_treasure_map"));
+        assert!(map_chest_loot()
+            .iter()
+            .any(|(i, _, _, _)| *i == "minecraft:buried_treasure_map"));
     }
 }

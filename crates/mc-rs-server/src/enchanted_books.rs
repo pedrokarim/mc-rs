@@ -9,11 +9,17 @@ pub struct EnchantedBook {
 
 impl EnchantedBook {
     pub fn new() -> Self {
-        Self { stored_enchantments: Vec::new() }
+        Self {
+            stored_enchantments: Vec::new(),
+        }
     }
 
     pub fn add_enchantment(&mut self, kind: EnchantmentKind, level: u8) {
-        if let Some(existing) = self.stored_enchantments.iter_mut().find(|(k, _)| *k == kind) {
+        if let Some(existing) = self
+            .stored_enchantments
+            .iter_mut()
+            .find(|(k, _)| *k == kind)
+        {
             existing.1 = existing.1.max(level);
         } else {
             self.stored_enchantments.push((kind, level));
@@ -23,12 +29,18 @@ impl EnchantedBook {
     /// Bookshelf weight for villager trades (high = harder to get).
     pub fn villager_emerald_cost(level: u8, treasure: bool) -> u32 {
         let base = level as u32 * 5;
-        if treasure { base * 2 } else { base }
+        if treasure {
+            base * 2
+        } else {
+            base
+        }
     }
 }
 
 impl Default for EnchantedBook {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

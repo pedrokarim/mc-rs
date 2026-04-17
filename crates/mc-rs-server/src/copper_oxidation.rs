@@ -2,10 +2,10 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OxidationStage {
-    Fresh,       // Pink/orange
-    Exposed,     // Light green tint
-    Weathered,   // More green
-    Oxidized,    // Teal
+    Fresh,     // Pink/orange
+    Exposed,   // Light green tint
+    Weathered, // More green
+    Oxidized,  // Teal
 }
 
 impl OxidationStage {
@@ -31,13 +31,19 @@ impl OxidationStage {
 /// Oxidation chance per random tick (very slow — 64/1000).
 pub const OXIDATION_CHANCE: f32 = 64.0 / 1000.0;
 /// Requires unwaxed.
-pub fn is_waxable(_block: &str) -> bool { true }
+pub fn is_waxable(_block: &str) -> bool {
+    true
+}
 
 /// Scraping with axe — removes oxidation stage + wax.
-pub fn axe_scrapes() -> bool { true }
+pub fn axe_scrapes() -> bool {
+    true
+}
 
 /// Lightning strike removes all oxidation.
-pub fn lightning_strips_oxidation() -> bool { true }
+pub fn lightning_strips_oxidation() -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {

@@ -13,7 +13,10 @@ pub const ALL_TRIMS: &[(&str, &str)] = &[
     ("minecraft:rib_armor_trim_smithing_template", "rib"),
     ("minecraft:spire_armor_trim_smithing_template", "spire"),
     ("minecraft:silence_armor_trim_smithing_template", "silence"),
-    ("minecraft:wayfinder_armor_trim_smithing_template", "wayfinder"),
+    (
+        "minecraft:wayfinder_armor_trim_smithing_template",
+        "wayfinder",
+    ),
     ("minecraft:shaper_armor_trim_smithing_template", "shaper"),
     ("minecraft:raiser_armor_trim_smithing_template", "raiser"),
     ("minecraft:host_armor_trim_smithing_template", "host"),
@@ -22,7 +25,10 @@ pub const ALL_TRIMS: &[(&str, &str)] = &[
 ];
 
 pub fn trim_name(template: &str) -> Option<&'static str> {
-    ALL_TRIMS.iter().find(|(t, _)| *t == template).map(|(_, n)| *n)
+    ALL_TRIMS
+        .iter()
+        .find(|(t, _)| *t == template)
+        .map(|(_, n)| *n)
 }
 
 /// Smithing duplicates template with material + base block.
@@ -57,6 +63,9 @@ mod tests {
 
     #[test]
     fn coast_is_trim() {
-        assert_eq!(trim_name("minecraft:coast_armor_trim_smithing_template"), Some("coast"));
+        assert_eq!(
+            trim_name("minecraft:coast_armor_trim_smithing_template"),
+            Some("coast")
+        );
     }
 }

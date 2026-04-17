@@ -49,9 +49,16 @@ pub enum BannerPattern {
 impl BannerPattern {
     /// Require sherd/trim from Loom?
     pub fn requires_template(&self) -> bool {
-        matches!(self,
-            Self::Mojang | Self::Skull | Self::Flower | Self::Creeper |
-            Self::Globe | Self::Piglin | Self::Flow | Self::Guster
+        matches!(
+            self,
+            Self::Mojang
+                | Self::Skull
+                | Self::Flower
+                | Self::Creeper
+                | Self::Globe
+                | Self::Piglin
+                | Self::Flow
+                | Self::Guster
         )
     }
 

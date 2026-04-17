@@ -74,7 +74,9 @@ impl FlowerPot {
 }
 
 impl Default for FlowerPot {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

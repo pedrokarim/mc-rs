@@ -62,7 +62,9 @@ impl Phantom {
     }
 
     /// Burns in daylight (retreats to altitude).
-    pub fn burns_in_sunlight() -> bool { true }
+    pub fn burns_in_sunlight() -> bool {
+        true
+    }
 
     /// Only spawns when player hasn't slept > 3 days.
     pub fn can_spawn_for(player_ticks_since_sleep: u32) -> bool {
@@ -71,7 +73,9 @@ impl Phantom {
 }
 
 impl Default for Phantom {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

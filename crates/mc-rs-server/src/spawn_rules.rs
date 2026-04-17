@@ -27,11 +27,7 @@ pub fn vanilla_spawn_rules() -> Vec<SpawnRule> {
     vec![
         SpawnRule {
             mob: MobKind::Cow,
-            biomes: vec![
-                BiomeKind::Plains,
-                BiomeKind::Forest,
-                BiomeKind::Savanna,
-            ],
+            biomes: vec![BiomeKind::Plains, BiomeKind::Forest, BiomeKind::Savanna],
             light: SpawnLightRequirement::DayOnly,
             min_y: 60,
             max_y: 256,
@@ -63,7 +59,7 @@ pub fn vanilla_spawn_rules() -> Vec<SpawnRule> {
         },
         SpawnRule {
             mob: MobKind::Zombie,
-            biomes: vec![],      // tous overworld hostile
+            biomes: vec![], // tous overworld hostile
             light: SpawnLightRequirement::DarkOnly,
             min_y: -64,
             max_y: 256,
@@ -128,7 +124,11 @@ pub fn vanilla_spawn_rules() -> Vec<SpawnRule> {
         },
         SpawnRule {
             mob: MobKind::Ghast,
-            biomes: vec![BiomeKind::NetherWastes, BiomeKind::BasaltDeltas, BiomeKind::SoulSandValley],
+            biomes: vec![
+                BiomeKind::NetherWastes,
+                BiomeKind::BasaltDeltas,
+                BiomeKind::SoulSandValley,
+            ],
             light: SpawnLightRequirement::Any,
             min_y: 0,
             max_y: 128,

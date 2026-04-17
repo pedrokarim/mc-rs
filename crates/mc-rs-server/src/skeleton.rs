@@ -3,9 +3,9 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkeletonVariant {
     Normal,
-    Wither,  // fire melee sword
-    Stray,   // shoots slowness arrows
-    Bogged,  // shoots poison arrows
+    Wither, // fire melee sword
+    Stray,  // shoots slowness arrows
+    Bogged, // shoots poison arrows
 }
 
 #[derive(Debug, Clone)]

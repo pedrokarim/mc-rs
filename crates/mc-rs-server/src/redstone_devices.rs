@@ -2,9 +2,9 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ButtonMaterial {
-    Wood,       // 30 ticks
-    Stone,      // 20 ticks
-    Polished,   // 20 ticks (polished blackstone)
+    Wood,     // 30 ticks
+    Stone,    // 20 ticks
+    Polished, // 20 ticks (polished blackstone)
 }
 
 #[derive(Debug, Clone)]
@@ -15,7 +15,10 @@ pub struct Button {
 
 impl Button {
     pub fn new(material: ButtonMaterial) -> Self {
-        Self { material, pressed_ticks: 0 }
+        Self {
+            material,
+            pressed_ticks: 0,
+        }
     }
 
     pub fn press(&mut self) {
@@ -44,7 +47,10 @@ pub struct Lever {
 
 impl Lever {
     pub fn new() -> Self {
-        Self { powered: false, facing: 0 }
+        Self {
+            powered: false,
+            facing: 0,
+        }
     }
 
     pub fn toggle(&mut self) -> bool {
@@ -54,7 +60,9 @@ impl Lever {
 }
 
 impl Default for Lever {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,21 +82,25 @@ pub struct PressurePlate {
 
 impl PressurePlate {
     pub fn new(kind: PressurePlateKind) -> Self {
-        Self { kind, entities_on: 0, output_power: 0 }
+        Self {
+            kind,
+            entities_on: 0,
+            output_power: 0,
+        }
     }
 
     pub fn activate_for(&mut self, entity_count: u32) {
         self.entities_on = entity_count;
         self.output_power = match self.kind {
             PressurePlateKind::Wood | PressurePlateKind::Stone => {
-                if entity_count > 0 { 15 } else { 0 }
+                if entity_count > 0 {
+                    15
+                } else {
+                    0
+                }
             }
-            PressurePlateKind::GoldHeavyWeighted => {
-                ((entity_count + 3) / 4).min(15) as u8
-            }
-            PressurePlateKind::IronLightWeighted => {
-                (entity_count).min(15) as u8
-            }
+            PressurePlateKind::GoldHeavyWeighted => ((entity_count + 3) / 4).min(15) as u8,
+            PressurePlateKind::IronLightWeighted => (entity_count).min(15) as u8,
         };
     }
 }
@@ -101,7 +113,10 @@ pub struct Bell {
 
 impl Bell {
     pub fn new() -> Self {
-        Self { ringing_ticks: 0, facing: 0 }
+        Self {
+            ringing_ticks: 0,
+            facing: 0,
+        }
     }
 
     pub fn ring(&mut self) {
@@ -119,11 +134,15 @@ impl Bell {
     }
 
     /// Reveal raid invaders nearby.
-    pub fn raid_reveal_range() -> f64 { 32.0 }
+    pub fn raid_reveal_range() -> f64 {
+        32.0
+    }
 }
 
 impl Default for Bell {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

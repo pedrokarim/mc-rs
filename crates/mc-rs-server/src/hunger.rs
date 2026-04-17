@@ -72,7 +72,9 @@ impl HungerState {
 }
 
 impl Default for HungerState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

@@ -5,7 +5,9 @@ pub const DAMAGE_PER_TICK: f32 = 2.0; // Soul fire does more damage
 /// Light emission (10 vs 15 for regular).
 pub const LIGHT_LEVEL: u8 = 10;
 /// Scares piglins.
-pub fn scares_piglins() -> bool { true }
+pub fn scares_piglins() -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {

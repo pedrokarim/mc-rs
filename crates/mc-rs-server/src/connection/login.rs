@@ -10,8 +10,7 @@ use mc_rs_proto::packets::player::{ItemStack, ItemStackWrapper};
 
 use crate::player_data;
 
-use super::spawn::hub_menu_item_id;
-use super::{Connection, ConnectionState, HUB_MENU_SLOT};
+use super::{Connection, ConnectionState};
 
 impl Connection {
     pub(super) fn handle_request_network_settings(
@@ -98,7 +97,6 @@ impl Connection {
                         );
                     }
                 }
-                self.ensure_hub_menu_item();
 
                 info!(
                     "[{}] Player: {} (xuid={}, auth={})",
@@ -222,7 +220,6 @@ impl Connection {
                 // COMPLETED -> transition to PreSpawn
                 info!("[{}] Resource packs completed", self.addr);
                 self.state = ConnectionState::PreSpawn;
-                self.ensure_hub_menu_item();
                 debug!("[{}] -> PreSpawn state", self.addr);
                 self.send_pre_spawn_packets()
             }
@@ -263,25 +260,5 @@ impl Connection {
         writer.write_bool(false); // use_vanilla_editor_packs
 
         vec![self.encode_compressed_packet(packet_id::RESOURCE_PACK_STACK, writer.as_bytes())]
-    }
-
-    /// Helper used by login and resource pack response to re-ensure the hub menu item.
-    pub(super) fn ensure_hub_menu_item(&mut self) {
-        if self
-            .inventory
-            .slots
-            .iter()
-            .any(|slot| slot.item.id == hub_menu_item_id() && !slot.item.is_air())
-        {
-            return;
-        }
-
-        let menu_item = ItemStack::new(hub_menu_item_id(), 1, 0);
-        if self.inventory.slots[HUB_MENU_SLOT].item.is_air() {
-            let stack_id = self.inventory.next_stack_id();
-            self.inventory.slots[HUB_MENU_SLOT] = ItemStackWrapper::new(menu_item, stack_id);
-        } else {
-            let _ = self.inventory.add_item(menu_item);
-        }
     }
 }

@@ -17,7 +17,10 @@ pub struct LightUpdateContext {
 
 impl LightUpdateContext {
     pub fn new(max: usize) -> Self {
-        Self { dirty_blocks: Vec::new(), max_updates_per_tick: max }
+        Self {
+            dirty_blocks: Vec::new(),
+            max_updates_per_tick: max,
+        }
     }
 
     pub fn enqueue(&mut self, pos: (i32, i32, i32)) {

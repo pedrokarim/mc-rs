@@ -3,15 +3,15 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChestKind {
     Normal,
-    Trapped, // Emits redstone when opened
+    Trapped,    // Emits redstone when opened
     EnderChest, // Per-player inventory
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChestPair {
     Single,
-    Left,   // Part of double, west half
-    Right,  // Part of double, east half
+    Left,  // Part of double, west half
+    Right, // Part of double, east half
 }
 
 #[derive(Debug, Clone)]
@@ -71,7 +71,9 @@ impl Chest {
     }
 
     /// Cat blocks chest opening (vanilla PMMP: can't open with cat on top).
-    pub fn opening_blocked_by_cat_on_top() -> bool { true }
+    pub fn opening_blocked_by_cat_on_top() -> bool {
+        true
+    }
 }
 
 #[cfg(test)]

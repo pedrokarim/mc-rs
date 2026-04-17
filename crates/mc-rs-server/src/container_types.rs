@@ -3,7 +3,7 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContainerType {
     Inventory,
-    Container,     // chest
+    Container, // chest
     Workbench,
     Furnace,
     BlastFurnace,

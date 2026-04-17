@@ -141,7 +141,7 @@ impl MobKind {
             Self::Zombie | Self::Drowned | Self::Husk | Self::ZombieVillager => 3.0,
             Self::Spider | Self::CaveSpider => 2.0,
             Self::Skeleton | Self::Stray => 0.0, // damage via arrows
-            Self::Creeper => 0.0,                 // damage via explosion
+            Self::Creeper => 0.0,                // damage via explosion
             Self::Enderman => 7.0,
             Self::WitherSkeleton => 5.0,
             Self::Blaze => 6.0,
@@ -282,9 +282,13 @@ impl MobAi {
             }
             if let Some((pid, dist)) = closest {
                 self.goal = if dist < self.kind.attack_range() {
-                    AiGoal::Attack { target_runtime_id: pid }
+                    AiGoal::Attack {
+                        target_runtime_id: pid,
+                    }
                 } else {
-                    AiGoal::FollowTarget { target_runtime_id: pid }
+                    AiGoal::FollowTarget {
+                        target_runtime_id: pid,
+                    }
                 };
                 return;
             }
@@ -293,7 +297,9 @@ impl MobAi {
         // Passifs fuient si blessés récemment.
         if self.kind.is_passive() && self.health < self.kind.max_health() * 0.3 {
             if let Some((pid, _)) = nearby_players.first() {
-                self.goal = AiGoal::Flee { from_runtime_id: *pid };
+                self.goal = AiGoal::Flee {
+                    from_runtime_id: *pid,
+                };
                 return;
             }
         }
@@ -307,16 +313,16 @@ impl MobAi {
 
     /// Appliqué chaque tick pour bouger le mob selon son goal.
     /// Retourne `Some(attack_request)` si mob veut attaquer ce tick.
-    pub fn tick_motion(
-        &mut self,
-        nearby_players: &[(u64, [f32; 3])],
-    ) -> Option<MobAttackRequest> {
+    pub fn tick_motion(&mut self, nearby_players: &[(u64, [f32; 3])]) -> Option<MobAttackRequest> {
         if !self.is_alive() {
             return None;
         }
         match &self.goal {
             AiGoal::FollowTarget { target_runtime_id } => {
-                if let Some((_, ppos)) = nearby_players.iter().find(|(pid, _)| pid == target_runtime_id) {
+                if let Some((_, ppos)) = nearby_players
+                    .iter()
+                    .find(|(pid, _)| pid == target_runtime_id)
+                {
                     let dx = ppos[0] - self.position[0];
                     let dz = ppos[2] - self.position[2];
                     let dist = (dx * dx + dz * dz).sqrt().max(0.001);
@@ -340,7 +346,10 @@ impl MobAi {
                 None
             }
             AiGoal::Flee { from_runtime_id } => {
-                if let Some((_, ppos)) = nearby_players.iter().find(|(pid, _)| pid == from_runtime_id) {
+                if let Some((_, ppos)) = nearby_players
+                    .iter()
+                    .find(|(pid, _)| pid == from_runtime_id)
+                {
                     let dx = self.position[0] - ppos[0];
                     let dz = self.position[2] - ppos[2];
                     let dist = (dx * dx + dz * dz).sqrt().max(0.001);
@@ -383,7 +392,12 @@ mod tests {
         z.think(&players);
         // Player at distance 5, zombie sight=16, attack_range=2.
         // Should be FollowTarget (too far to attack).
-        assert!(matches!(z.goal, AiGoal::FollowTarget { target_runtime_id: 42 }));
+        assert!(matches!(
+            z.goal,
+            AiGoal::FollowTarget {
+                target_runtime_id: 42
+            }
+        ));
     }
 
     #[test]

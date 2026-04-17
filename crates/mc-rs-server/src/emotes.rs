@@ -20,7 +20,8 @@ impl EmoteRegistry {
     }
 
     pub fn register(&mut self, addr: SocketAddr, emotes: Vec<uuid::Uuid>) {
-        self.per_player.insert(addr, PlayerEmotes { emote_ids: emotes });
+        self.per_player
+            .insert(addr, PlayerEmotes { emote_ids: emotes });
     }
 
     pub fn remove(&mut self, addr: &SocketAddr) {

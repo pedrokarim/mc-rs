@@ -74,7 +74,9 @@ impl DragonFight {
 }
 
 impl Default for DragonFight {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

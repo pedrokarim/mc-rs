@@ -2,7 +2,7 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NetherBiome {
-    NetherWastes,      // Vanilla
+    NetherWastes, // Vanilla
     SoulSandValley,
     CrimsonForest,
     WarpedForest,
@@ -40,10 +40,7 @@ impl NetherBiome {
                 "minecraft:zombified_piglin",
                 "minecraft:strider",
             ],
-            Self::WarpedForest => &[
-                "minecraft:enderman",
-                "minecraft:strider",
-            ],
+            Self::WarpedForest => &["minecraft:enderman", "minecraft:strider"],
             Self::BasaltDeltas => &[
                 "minecraft:magma_cube",
                 "minecraft:ghast",
@@ -69,6 +66,8 @@ mod tests {
 
     #[test]
     fn crimson_has_hoglin() {
-        assert!(NetherBiome::CrimsonForest.native_mobs().contains(&"minecraft:hoglin"));
+        assert!(NetherBiome::CrimsonForest
+            .native_mobs()
+            .contains(&"minecraft:hoglin"));
     }
 }

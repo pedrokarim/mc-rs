@@ -3,8 +3,8 @@
 #[derive(Debug, Clone)]
 pub struct SmithingRecipe {
     pub template: Option<&'static str>, // e.g. netherite upgrade template
-    pub base: &'static str,      // diamond armor/tool
-    pub addition: &'static str,  // netherite ingot
+    pub base: &'static str,             // diamond armor/tool
+    pub addition: &'static str,         // netherite ingot
     pub result: &'static str,
 }
 
@@ -17,7 +17,10 @@ pub fn netherite_upgrades() -> Vec<SmithingRecipe> {
         ("minecraft:diamond_shovel", "minecraft:netherite_shovel"),
         ("minecraft:diamond_hoe", "minecraft:netherite_hoe"),
         ("minecraft:diamond_helmet", "minecraft:netherite_helmet"),
-        ("minecraft:diamond_chestplate", "minecraft:netherite_chestplate"),
+        (
+            "minecraft:diamond_chestplate",
+            "minecraft:netherite_chestplate",
+        ),
         ("minecraft:diamond_leggings", "minecraft:netherite_leggings"),
         ("minecraft:diamond_boots", "minecraft:netherite_boots"),
     ];

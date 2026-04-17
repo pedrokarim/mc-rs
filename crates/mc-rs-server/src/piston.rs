@@ -8,7 +8,12 @@ pub enum PistonKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Facing {
-    Down, Up, North, South, West, East,
+    Down,
+    Up,
+    North,
+    South,
+    West,
+    East,
 }
 
 #[derive(Debug, Clone)]
@@ -57,7 +62,8 @@ impl Piston {
     pub fn can_pull(block_id: u16) -> bool {
         // Sticky piston pulls — mostly same rules as push for immovable blocks,
         // plus slime/honey blocks transfer.
-        Self::can_push(block_id) && !matches!(block_id,
+        Self::can_push(block_id)
+            && !matches!(block_id,
             0  // air
         )
     }

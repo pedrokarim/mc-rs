@@ -11,7 +11,10 @@ pub const PULSE_DURATION: u32 = 2;
 
 impl Observer {
     pub fn new(facing: u8) -> Self {
-        Self { facing, pulse_ticks: 0 }
+        Self {
+            facing,
+            pulse_ticks: 0,
+        }
     }
 
     /// Called when block in front changes.
@@ -30,7 +33,11 @@ impl Observer {
     }
 
     pub fn signal_strength(&self) -> u8 {
-        if self.is_emitting() { 15 } else { 0 }
+        if self.is_emitting() {
+            15
+        } else {
+            0
+        }
     }
 }
 

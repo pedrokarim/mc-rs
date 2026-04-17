@@ -35,7 +35,11 @@ pub fn light_emission(kind: TorchKind, lit: bool) -> u8 {
 
 impl Torch {
     pub fn new(kind: TorchKind, placement: TorchPlacement) -> Self {
-        Self { kind, placement, lit: true }
+        Self {
+            kind,
+            placement,
+            lit: true,
+        }
     }
 
     /// Extinguish (water/wind charge).

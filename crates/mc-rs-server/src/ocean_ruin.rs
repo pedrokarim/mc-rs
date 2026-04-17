@@ -2,8 +2,8 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuinTemperature {
-    Warm,  // Yellow sandstone
-    Cold,  // Gray stone
+    Warm, // Yellow sandstone
+    Cold, // Gray stone
 }
 
 pub fn chest_loot(temp: RuinTemperature) -> &'static [(&'static str, u32, u32, u32)] {
@@ -42,6 +42,8 @@ mod tests {
     #[test]
     fn warm_has_golden_apple() {
         let loot = chest_loot(RuinTemperature::Warm);
-        assert!(loot.iter().any(|(i, _, _, _)| *i == "minecraft:golden_apple"));
+        assert!(loot
+            .iter()
+            .any(|(i, _, _, _)| *i == "minecraft:golden_apple"));
     }
 }

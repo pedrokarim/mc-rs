@@ -214,8 +214,9 @@ impl InventoryManager {
     ) {
         let fcn = self.full_container_name();
         // Phase 1 : clear (air) — même longueur que le vrai contenu.
-        let air_wrappers: Vec<ItemStackWrapper> =
-            (0..wrappers.len()).map(|_| ItemStackWrapper::air()).collect();
+        let air_wrappers: Vec<ItemStackWrapper> = (0..wrappers.len())
+            .map(|_| ItemStackWrapper::air())
+            .collect();
         out.push((
             packet_id::INVENTORY_CONTENT,
             InventoryContent::encode_items(window_id, &air_wrappers, &fcn),
@@ -298,10 +299,7 @@ impl InventoryManager {
         // Complex vs simple.
         let (is_complex, complex_map) = {
             let e = self.inventories.get(&key).unwrap();
-            (
-                e.complex_slot_map.is_some(),
-                e.complex_slot_map.clone(),
-            )
+            (e.complex_slot_map.is_some(), e.complex_slot_map.clone())
         };
 
         if is_complex {
@@ -360,12 +358,7 @@ impl InventoryManager {
     /// Sync un inventaire "simple" (non mappé sur UI). Envoie un InventoryContent
     /// complet sur le windowId associé (0, 119 ou 120).
     #[allow(dead_code)]
-    fn sync_contents_non_ui(
-        &mut self,
-        inv: &PlayerInventory,
-        key: InvKey,
-        out: &mut PacketOut,
-    ) {
+    fn sync_contents_non_ui(&mut self, inv: &PlayerInventory, key: InvKey, out: &mut PacketOut) {
         let size = PlayerInventory::inventory_size(key);
         if let Some(e) = self.inventories.get_mut(&key) {
             e.predictions.clear();
@@ -437,11 +430,7 @@ impl InventoryManager {
     ///      envoyer `ContainerOpenPacket::entityInv(windowId, -1, player.getId())`
     ///      où `entityInv` utilise `blockPosition = (0,0,0)` (voir PMMP
     ///      `ContainerOpenPacket.php:47-49`).
-    pub fn on_client_open_main_inventory(
-        &mut self,
-        player_entity_id: i64,
-        out: &mut PacketOut,
-    ) {
+    pub fn on_client_open_main_inventory(&mut self, player_entity_id: i64, out: &mut PacketOut) {
         self.on_current_window_remove(out);
         if self.pending_close_window_id.is_some() {
             self.pending_open_main_inventory = Some(player_entity_id);
@@ -460,7 +449,7 @@ impl InventoryManager {
             packet_id::CONTAINER_OPEN,
             ContainerOpen {
                 window_id,
-                window_type: 0xFF, // -1 = INVENTORY
+                window_type: 0xFF,   // -1 = INVENTORY
                 position: [0, 0, 0], // PMMP entityInv fait ça
                 actor_unique_id: player_entity_id,
             }
@@ -485,10 +474,16 @@ impl InventoryManager {
                 // Si l'inventaire n'a plus aucun windowId associé, le retirer du tracking.
                 // Mais main/offhand/armor/cursor/craft sont permanents — on NE les retire pas.
                 let still_referenced = self.network_id_to_key.values().any(|k| *k == key);
-                if !still_referenced && !matches!(
-                    key,
-                    InvKey::Main | InvKey::Offhand | InvKey::Armor | InvKey::Cursor | InvKey::Craft2x2
-                ) {
+                if !still_referenced
+                    && !matches!(
+                        key,
+                        InvKey::Main
+                            | InvKey::Offhand
+                            | InvKey::Armor
+                            | InvKey::Cursor
+                            | InvKey::Craft2x2
+                    )
+                {
                     self.inventories.remove(&key);
                 }
             }
@@ -581,12 +576,7 @@ impl InventoryManager {
     /// Prédit un changement client. Quand `set_slot` arrive ensuite avec le
     /// même item, on associe au requestId courant (pas de pending_sync). Sinon
     /// on resync. PMMP `addPredictedSlotChange`.
-    pub fn add_predicted_slot_change(
-        &mut self,
-        key: InvKey,
-        core_slot: usize,
-        item: ItemStack,
-    ) {
+    pub fn add_predicted_slot_change(&mut self, key: InvKey, core_slot: usize, item: ItemStack) {
         self.inventories
             .entry(key)
             .or_default()
@@ -689,7 +679,9 @@ impl InventoryManager {
             if action.source_type != 0 {
                 continue;
             }
-            let Some(window_id) = action.window_id else { continue };
+            let Some(window_id) = action.window_id else {
+                continue;
+            };
             // Seules INVENTORY/OFFHAND/ARMOR sont autorisées en legacy (PMMP).
             let key = match window_id {
                 0 => InvKey::Main,
@@ -857,11 +849,14 @@ impl InventoryManager {
         let mut had_error = false;
 
         let record = |touched: &mut Vec<(u8, u8)>,
-                          touched_logical: &mut Vec<(InvKey, usize)>,
-                          info: &SlotInfo,
-                          key: InvKey,
-                          core: usize| {
-            if !touched.iter().any(|(c, s)| *c == info.container_id && *s == info.slot_id) {
+                      touched_logical: &mut Vec<(InvKey, usize)>,
+                      info: &SlotInfo,
+                      key: InvKey,
+                      core: usize| {
+            if !touched
+                .iter()
+                .any(|(c, s)| *c == info.container_id && *s == info.slot_id)
+            {
                 touched.push((info.container_id, info.slot_id));
             }
             if !touched_logical.iter().any(|(k, s)| *k == key && *s == core) {
@@ -896,7 +891,13 @@ impl InventoryManager {
                         }
                     };
                     record(&mut touched, &mut touched_logical, source, src.0, src.1);
-                    record(&mut touched, &mut touched_logical, destination, dst.0, dst.1);
+                    record(
+                        &mut touched,
+                        &mut touched_logical,
+                        destination,
+                        dst.0,
+                        dst.1,
+                    );
 
                     if !self.transfer_items(inv, src, dst, *count as u16) {
                         had_error = true;
@@ -922,7 +923,13 @@ impl InventoryManager {
                         }
                     };
                     record(&mut touched, &mut touched_logical, source, src.0, src.1);
-                    record(&mut touched, &mut touched_logical, destination, dst.0, dst.1);
+                    record(
+                        &mut touched,
+                        &mut touched_logical,
+                        destination,
+                        dst.0,
+                        dst.1,
+                    );
                     self.swap_items(inv, src, dst);
                 }
                 StackRequestAction::Drop { count, source } => {
@@ -965,7 +972,13 @@ impl InventoryManager {
                         stack_id: 0,
                     };
                     if let Some(target) = self.resolve_slot_info(&info) {
-                        record(&mut touched, &mut touched_logical, &info, target.0, target.1);
+                        record(
+                            &mut touched,
+                            &mut touched_logical,
+                            &info,
+                            target.0,
+                            target.1,
+                        );
                     }
                 }
                 StackRequestAction::CraftCreative {
@@ -1021,10 +1034,9 @@ impl InventoryManager {
         } else {
             self.build_response(inv, request.request_id, &touched)
         };
-        outcome.packets.push((
-            packet_id::ITEM_STACK_RESPONSE,
-            response.encode(),
-        ));
+        outcome
+            .packets
+            .push((packet_id::ITEM_STACK_RESPONSE, response.encode()));
 
         self.set_current_item_stack_request_id(None);
         outcome
@@ -1053,12 +1065,7 @@ impl InventoryManager {
         };
         if let Some((_, core_to_net)) = &entry.complex_slot_map {
             if let Some(&net_slot) = core_to_net.get(&core_slot) {
-                self.send_inventory_slot_packets(
-                    container_ids::UI as u32,
-                    net_slot,
-                    wrapper,
-                    out,
-                );
+                self.send_inventory_slot_packets(container_ids::UI as u32, net_slot, wrapper, out);
             }
         } else if let Some(window_id) = self.window_id_for(key) {
             if key == InvKey::Offhand {
@@ -1069,12 +1076,7 @@ impl InventoryManager {
                     out,
                 );
             } else {
-                self.send_inventory_slot_packets(
-                    window_id as u32,
-                    core_slot as u32,
-                    wrapper,
-                    out,
-                );
+                self.send_inventory_slot_packets(window_id as u32, core_slot as u32, wrapper, out);
             }
         }
     }
@@ -1090,11 +1092,9 @@ impl InventoryManager {
             if *interface_id == ui_id::CREATED_OUTPUT {
                 continue;
             }
-            let Some((window_id, net_slot)) = translate_container_ui(
-                *interface_id,
-                self.last_inventory_network_id,
-                *slot_id,
-            ) else {
+            let Some((window_id, net_slot)) =
+                translate_container_ui(*interface_id, self.last_inventory_network_id, *slot_id)
+            else {
                 continue;
             };
             let Some((key, core_slot)) = self.locate_window_and_slot(window_id, net_slot) else {
@@ -1247,7 +1247,10 @@ mod tests {
         let bz = r.read_var_i32().unwrap();
         let actor_id = r.read_var_i64().unwrap();
 
-        assert_eq!(window_id, 2, "PMMP getNewWindowId() = FIRST+1 = 2 au 1er appel");
+        assert_eq!(
+            window_id, 2,
+            "PMMP getNewWindowId() = FIRST+1 = 2 au 1er appel"
+        );
         assert_eq!(window_type, 0xFF, "INVENTORY window type = -1");
         assert_eq!((bx, by, bz), (0, 0, 0), "entityInv utilise pos=(0,0,0)");
         assert_eq!(actor_id, player_id, "actorUniqueId = player.getId()");
@@ -1291,15 +1294,27 @@ mod tests {
         let player_id: i64 = 42;
 
         mgr.on_client_open_main_inventory(player_id, &mut out);
-        let open_count_1 = out.iter().filter(|(pid, _)| *pid == packet_id::CONTAINER_OPEN).count();
+        let open_count_1 = out
+            .iter()
+            .filter(|(pid, _)| *pid == packet_id::CONTAINER_OPEN)
+            .count();
         assert_eq!(open_count_1, 1);
 
         out.clear();
         mgr.on_client_open_main_inventory(player_id, &mut out);
         // Ici PMMP envoie un ContainerClose (pour la window précédente), et diffère l'open
-        let close_count = out.iter().filter(|(pid, _)| *pid == packet_id::CONTAINER_CLOSE).count();
-        let open_count_2 = out.iter().filter(|(pid, _)| *pid == packet_id::CONTAINER_OPEN).count();
-        assert_eq!(close_count, 1, "should emit ContainerClose for previous window");
+        let close_count = out
+            .iter()
+            .filter(|(pid, _)| *pid == packet_id::CONTAINER_CLOSE)
+            .count();
+        let open_count_2 = out
+            .iter()
+            .filter(|(pid, _)| *pid == packet_id::CONTAINER_OPEN)
+            .count();
+        assert_eq!(
+            close_count, 1,
+            "should emit ContainerClose for previous window"
+        );
         assert_eq!(open_count_2, 0, "second open is deferred until close ack");
         assert!(mgr.pending_open_main_inventory.is_some());
     }

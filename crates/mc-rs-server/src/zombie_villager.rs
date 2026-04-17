@@ -18,7 +18,12 @@ pub const CURE_MAX: u32 = 6 * 60 * 20;
 
 impl ZombieVillager {
     pub fn new(profession: VillagerProfession, level: u8) -> Self {
-        Self { profession, level, curing: false, cure_ticks: 0 }
+        Self {
+            profession,
+            level,
+            curing: false,
+            cure_ticks: 0,
+        }
     }
 
     pub fn start_cure(&mut self) {

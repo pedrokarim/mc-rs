@@ -34,9 +34,9 @@ impl FishKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PufferfishState {
-    Small, // 0
+    Small,  // 0
     Medium, // 1
-    Full, // 2
+    Full,   // 2
 }
 
 #[derive(Debug, Clone)]
@@ -50,7 +50,10 @@ pub const INFLATE_RANGE: f64 = 3.5;
 
 impl Pufferfish {
     pub fn new() -> Self {
-        Self { state: PufferfishState::Small, inflate_cooldown: 0 }
+        Self {
+            state: PufferfishState::Small,
+            inflate_cooldown: 0,
+        }
     }
 
     pub fn update_state(&mut self, enemy_nearby: bool) {
@@ -81,7 +84,9 @@ impl Pufferfish {
 }
 
 impl Default for Pufferfish {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

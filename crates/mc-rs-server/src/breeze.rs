@@ -28,9 +28,15 @@ impl Breeze {
     }
 
     pub fn tick(&mut self) {
-        if self.attack_cooldown > 0 { self.attack_cooldown -= 1; }
-        if self.jump_cooldown > 0 { self.jump_cooldown -= 1; }
-        if self.sliding_ticks > 0 { self.sliding_ticks -= 1; }
+        if self.attack_cooldown > 0 {
+            self.attack_cooldown -= 1;
+        }
+        if self.jump_cooldown > 0 {
+            self.jump_cooldown -= 1;
+        }
+        if self.sliding_ticks > 0 {
+            self.sliding_ticks -= 1;
+        }
     }
 
     pub fn can_attack(&self) -> bool {
@@ -46,11 +52,15 @@ impl Breeze {
     }
 
     /// Immune to projectile damage (deflected by wind).
-    pub fn deflects_projectiles() -> bool { true }
+    pub fn deflects_projectiles() -> bool {
+        true
+    }
 }
 
 impl Default for Breeze {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

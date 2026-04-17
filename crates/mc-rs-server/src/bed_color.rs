@@ -8,7 +8,7 @@ pub enum BedPart {
 
 #[derive(Debug, Clone)]
 pub struct Bed {
-    pub color: u8,         // 0-15 dye
+    pub color: u8, // 0-15 dye
     pub part: BedPart,
     pub facing: u8,
     pub occupied: bool,
@@ -16,7 +16,12 @@ pub struct Bed {
 
 impl Bed {
     pub fn new(color: u8, part: BedPart, facing: u8) -> Self {
-        Self { color, part, facing, occupied: false }
+        Self {
+            color,
+            part,
+            facing,
+            occupied: false,
+        }
     }
 
     /// Explodes in Nether/End.
@@ -25,7 +30,9 @@ impl Bed {
     }
 
     /// Explosion power when bed explodes.
-    pub fn explosion_power() -> f32 { 5.0 }
+    pub fn explosion_power() -> f32 {
+        5.0
+    }
 
     /// Check if safe to set spawn (must have foot+head, not obstructed above).
     pub fn can_set_spawn(&self) -> bool {

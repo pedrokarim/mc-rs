@@ -12,7 +12,11 @@ pub enum SignalKind {
 
 /// On shutdown signal, should save world gracefully.
 pub fn graceful_shutdown_kinds() -> &'static [SignalKind] {
-    &[SignalKind::Interrupt, SignalKind::Terminate, SignalKind::Quit]
+    &[
+        SignalKind::Interrupt,
+        SignalKind::Terminate,
+        SignalKind::Quit,
+    ]
 }
 
 /// Shutdown timeout before force-kill (30s).

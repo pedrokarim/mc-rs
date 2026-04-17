@@ -18,7 +18,16 @@ pub const XP_MAX: u32 = 11;
 
 impl ExperienceBottle {
     pub fn new(x: f64, y: f64, z: f64, mx: f64, my: f64, mz: f64, thrower: u64) -> Self {
-        Self { x, y, z, motion_x: mx, motion_y: my, motion_z: mz, thrower, age: 0 }
+        Self {
+            x,
+            y,
+            z,
+            motion_x: mx,
+            motion_y: my,
+            motion_z: mz,
+            thrower,
+            age: 0,
+        }
     }
 
     pub fn tick(&mut self) {

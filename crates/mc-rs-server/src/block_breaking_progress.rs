@@ -11,7 +11,13 @@ pub struct DigProgress {
 
 impl DigProgress {
     pub fn new(now: u64, pos: (i32, i32, i32), block_id: u16, total_ticks: u32) -> Self {
-        Self { start_tick: now, block_pos: pos, block_id, total_ticks, last_animation_stage: -1 }
+        Self {
+            start_tick: now,
+            block_pos: pos,
+            block_id,
+            total_ticks,
+            last_animation_stage: -1,
+        }
     }
 
     pub fn progress(&self, now: u64) -> f32 {

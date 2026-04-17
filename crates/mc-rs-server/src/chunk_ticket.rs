@@ -2,11 +2,11 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChunkTicketType {
-    Player,        // Near player
-    ForceLoaded,   // Admin command
-    Spawn,         // World spawn
-    Portal,        // Nether/end portal
-    Dragon,        // Ender dragon spawning
+    Player,      // Near player
+    ForceLoaded, // Admin command
+    Spawn,       // World spawn
+    Portal,      // Nether/end portal
+    Dragon,      // Ender dragon spawning
     PostTeleport,
     Unknown,
 }
@@ -29,7 +29,8 @@ impl ChunkTicket {
     pub fn new_player(chunk_x: i32, chunk_z: i32) -> Self {
         Self {
             ticket_type: ChunkTicketType::Player,
-            chunk_x, chunk_z,
+            chunk_x,
+            chunk_z,
             level: 31,
             ttl_ticks: u32::MAX,
         }

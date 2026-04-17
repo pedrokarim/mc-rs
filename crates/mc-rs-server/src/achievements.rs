@@ -7,7 +7,7 @@ pub enum Achievement {
     Benchmarking,
     TimeToFarm,
     BakeBread,
-    TheLie,        // Cake
+    TheLie, // Cake
     GetStone,
     TimeToMine,
     HotTopic,
@@ -117,6 +117,9 @@ mod tests {
 
     #[test]
     fn chains_through_tree() {
-        assert_eq!(Achievement::MonsterHunter.parent(), Some(Achievement::TimeToStrike));
+        assert_eq!(
+            Achievement::MonsterHunter.parent(),
+            Some(Achievement::TimeToStrike)
+        );
     }
 }

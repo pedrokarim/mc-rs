@@ -19,13 +19,20 @@ pub fn hp(size: u8) -> f32 {
 }
 
 /// Fire immune.
-pub fn immune_to_fire() -> bool { true }
+pub fn immune_to_fire() -> bool {
+    true
+}
 /// Doesn't take fall damage.
-pub fn immune_to_fall() -> bool { true }
+pub fn immune_to_fall() -> bool {
+    true
+}
 
 impl MagmaCube {
     pub fn new(size: u8) -> Self {
-        Self { size, on_fire: false }
+        Self {
+            size,
+            on_fire: false,
+        }
     }
 
     pub fn split_on_death(&self) -> Vec<MagmaCube> {

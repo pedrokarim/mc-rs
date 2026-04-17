@@ -71,7 +71,9 @@ impl Shield {
 }
 
 impl Default for Shield {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

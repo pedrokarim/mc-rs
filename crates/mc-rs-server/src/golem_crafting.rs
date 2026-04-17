@@ -3,9 +3,9 @@
 /// Iron golem: T of iron blocks + pumpkin head.
 pub fn iron_golem_pattern() -> Vec<Vec<u16>> {
     vec![
-        vec![0, 86, 0], // air, pumpkin, air (top)
+        vec![0, 86, 0],   // air, pumpkin, air (top)
         vec![42, 42, 42], // iron, iron, iron (middle)
-        vec![0, 42, 0], // air, iron, air (bottom)
+        vec![0, 42, 0],   // air, iron, air (bottom)
     ]
 }
 
@@ -13,8 +13,8 @@ pub fn iron_golem_pattern() -> Vec<Vec<u16>> {
 pub fn wither_pattern() -> Vec<Vec<u16>> {
     vec![
         vec![0, 397, 397, 397, 0], // 3 wither skulls (top)
-        vec![88, 88, 88, 88, 88],   // soul sand row (4 blocks)
-        vec![0, 88, 0, 88, 0],      // T shape (2 blocks)
+        vec![88, 88, 88, 88, 88],  // soul sand row (4 blocks)
+        vec![0, 88, 0, 88, 0],     // T shape (2 blocks)
     ]
 }
 

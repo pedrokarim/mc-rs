@@ -18,7 +18,12 @@ pub const WOOL_DROP_MAX: u32 = 3;
 
 impl Sheep {
     pub fn new(color: SheepColor) -> Self {
-        Self { color, age: 0, shorn: false, regrow_ticks: 0 }
+        Self {
+            color,
+            age: 0,
+            shorn: false,
+            regrow_ticks: 0,
+        }
     }
 
     pub fn tick(&mut self) {

@@ -37,19 +37,35 @@ impl Slime {
         (0..count).map(|_| Slime::new(new_size)).collect()
     }
 
-    pub fn is_big(&self) -> bool { self.size == 4 }
-    pub fn is_small(&self) -> bool { self.size == 1 }
+    pub fn is_big(&self) -> bool {
+        self.size == 4
+    }
+    pub fn is_small(&self) -> bool {
+        self.size == 1
+    }
 
     /// Slime chunk spawn chance (~10% of eligible chunks).
     pub fn chunk_is_slime_chunk(chunk_x: i32, chunk_z: i32, world_seed: u64) -> bool {
         // Vanilla java PRNG formula.
         let seed = world_seed
             .wrapping_add((chunk_x as i64 as u64).wrapping_mul(0x4c1906))
-            .wrapping_add((chunk_x as i64 as u64).wrapping_mul(chunk_x as i64 as u64).wrapping_mul(0x5ac0db))
+            .wrapping_add(
+                (chunk_x as i64 as u64)
+                    .wrapping_mul(chunk_x as i64 as u64)
+                    .wrapping_mul(0x5ac0db),
+            )
             .wrapping_add((chunk_z as i64 as u64).wrapping_mul(0x5f24f) & 0xffffffff)
-            .wrapping_add((chunk_z as i64 as u64).wrapping_mul(chunk_z as i64 as u64).wrapping_mul(0x4307a7))
+            .wrapping_add(
+                (chunk_z as i64 as u64)
+                    .wrapping_mul(chunk_z as i64 as u64)
+                    .wrapping_mul(0x4307a7),
+            )
             ^ 0x3ad8025f;
-        (seed.wrapping_mul(seed.wrapping_mul(6364136223846793005)).wrapping_add(1442695040888963407) % 10) == 0
+        (seed
+            .wrapping_mul(seed.wrapping_mul(6364136223846793005))
+            .wrapping_add(1442695040888963407)
+            % 10)
+            == 0
     }
 }
 

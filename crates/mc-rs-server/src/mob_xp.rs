@@ -3,10 +3,19 @@
 pub fn mob_xp_drop(entity_type: &str) -> (u32, u32) {
     match entity_type {
         // Hostile
-        "minecraft:zombie" | "minecraft:skeleton" | "minecraft:creeper" | "minecraft:stray"
-        | "minecraft:bogged" | "minecraft:wither_skeleton" | "minecraft:husk"
-        | "minecraft:drowned" | "minecraft:zombified_piglin" | "minecraft:zoglin"
-        | "minecraft:phantom" | "minecraft:vex" | "minecraft:piglin" => (5, 5),
+        "minecraft:zombie"
+        | "minecraft:skeleton"
+        | "minecraft:creeper"
+        | "minecraft:stray"
+        | "minecraft:bogged"
+        | "minecraft:wither_skeleton"
+        | "minecraft:husk"
+        | "minecraft:drowned"
+        | "minecraft:zombified_piglin"
+        | "minecraft:zoglin"
+        | "minecraft:phantom"
+        | "minecraft:vex"
+        | "minecraft:piglin" => (5, 5),
         "minecraft:spider" | "minecraft:cave_spider" => (5, 5),
         "minecraft:silverfish" | "minecraft:endermite" => (5, 5),
         "minecraft:enderman" => (5, 5),
@@ -27,13 +36,32 @@ pub fn mob_xp_drop(entity_type: &str) -> (u32, u32) {
         "minecraft:wither" => (50, 50),
         "minecraft:breeze" => (10, 10),
         // Passive/breeding
-        "minecraft:pig" | "minecraft:cow" | "minecraft:mooshroom" | "minecraft:sheep"
-        | "minecraft:chicken" | "minecraft:rabbit" | "minecraft:wolf" | "minecraft:cat"
-        | "minecraft:ocelot" | "minecraft:fox" | "minecraft:parrot" | "minecraft:turtle"
-        | "minecraft:bee" | "minecraft:polar_bear" | "minecraft:panda" | "minecraft:axolotl"
-        | "minecraft:strider" | "minecraft:goat" | "minecraft:frog" | "minecraft:sniffer"
-        | "minecraft:camel" | "minecraft:horse" | "minecraft:donkey" | "minecraft:mule"
-        | "minecraft:llama" | "minecraft:allay" => (1, 3),
+        "minecraft:pig"
+        | "minecraft:cow"
+        | "minecraft:mooshroom"
+        | "minecraft:sheep"
+        | "minecraft:chicken"
+        | "minecraft:rabbit"
+        | "minecraft:wolf"
+        | "minecraft:cat"
+        | "minecraft:ocelot"
+        | "minecraft:fox"
+        | "minecraft:parrot"
+        | "minecraft:turtle"
+        | "minecraft:bee"
+        | "minecraft:polar_bear"
+        | "minecraft:panda"
+        | "minecraft:axolotl"
+        | "minecraft:strider"
+        | "minecraft:goat"
+        | "minecraft:frog"
+        | "minecraft:sniffer"
+        | "minecraft:camel"
+        | "minecraft:horse"
+        | "minecraft:donkey"
+        | "minecraft:mule"
+        | "minecraft:llama"
+        | "minecraft:allay" => (1, 3),
         _ => (0, 0),
     }
 }

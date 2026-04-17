@@ -65,8 +65,12 @@ pub fn biome_features(biome: BiomeKind) -> BiomeFeatures {
                 ice_patches: false,
             }
         }
-        BiomeKind::SnowyTaiga | BiomeKind::SnowyPlains | BiomeKind::IceSpikes
-        | BiomeKind::FrozenPeaks | BiomeKind::SnowySlopes | BiomeKind::Grove => BiomeFeatures {
+        BiomeKind::SnowyTaiga
+        | BiomeKind::SnowyPlains
+        | BiomeKind::IceSpikes
+        | BiomeKind::FrozenPeaks
+        | BiomeKind::SnowySlopes
+        | BiomeKind::Grove => BiomeFeatures {
             tree_density: 0.4,
             flower_chance: 0.02,
             tall_grass_chance: 0.05,

@@ -64,7 +64,9 @@ impl WeatherState {
 }
 
 impl Default for WeatherState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

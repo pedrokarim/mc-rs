@@ -15,8 +15,22 @@ pub enum WolfVariant {
 
 #[derive(Debug, Clone, Copy)]
 pub enum CollarColor {
-    White, Orange, Magenta, LightBlue, Yellow, Lime, Pink, Gray,
-    LightGray, Cyan, Purple, Blue, Brown, Green, Red, Black,
+    White,
+    Orange,
+    Magenta,
+    LightBlue,
+    Yellow,
+    Lime,
+    Pink,
+    Gray,
+    LightGray,
+    Cyan,
+    Purple,
+    Blue,
+    Brown,
+    Green,
+    Red,
+    Black,
 }
 
 #[derive(Debug, Clone)]

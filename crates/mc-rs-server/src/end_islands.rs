@@ -24,7 +24,9 @@ pub fn outer_blocks() -> &'static [&'static str] {
 }
 
 /// Shulker box drop in End cities.
-pub fn city_contains_shulkers() -> bool { true }
+pub fn city_contains_shulkers() -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {

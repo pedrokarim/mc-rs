@@ -133,9 +133,7 @@ pub fn attack_entity(
     // 5) Applique le dégât.
     let hp_before = attrs.must_get(ids::HEALTH).current_value;
     let hp_after = (hp_before - event.final_damage).max(0.0);
-    attrs
-        .must_get_mut(ids::HEALTH)
-        .set_value(hp_after, true);
+    attrs.must_get_mut(ids::HEALTH).set_value(hp_after, true);
     combat.attack_time = DEFAULT_ATTACK_COOLDOWN;
     combat.last_damage_cause_base = Some(event.base_damage);
 
@@ -153,11 +151,7 @@ pub fn attack_entity(
             let nx = dx / f;
             let nz = dz / f;
             let ky = DEFAULT_KNOCKBACK_VERTICAL_LIMIT;
-            Some((
-                nx * effective_force,
-                ky.min(0.4),
-                nz * effective_force,
-            ))
+            Some((nx * effective_force, ky.min(0.4), nz * effective_force))
         } else {
             None
         }

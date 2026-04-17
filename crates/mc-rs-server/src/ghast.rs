@@ -59,11 +59,15 @@ impl Ghast {
     }
 
     /// Fireball explosion power (1.0 vanilla).
-    pub fn fireball_power() -> f32 { 1.0 }
+    pub fn fireball_power() -> f32 {
+        1.0
+    }
 }
 
 impl Default for Ghast {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

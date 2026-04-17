@@ -24,7 +24,12 @@ pub fn tier_1_effects() -> &'static [EffectKind] {
 }
 
 pub fn tier_2_effects() -> &'static [EffectKind] {
-    &[EffectKind::Speed, EffectKind::Haste, EffectKind::Resistance, EffectKind::JumpBoost]
+    &[
+        EffectKind::Speed,
+        EffectKind::Haste,
+        EffectKind::Resistance,
+        EffectKind::JumpBoost,
+    ]
 }
 
 pub fn tier_3_effects() -> &'static [EffectKind] {

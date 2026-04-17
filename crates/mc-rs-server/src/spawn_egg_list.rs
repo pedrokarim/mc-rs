@@ -17,7 +17,10 @@ pub fn all_spawn_eggs() -> &'static [(&'static str, &'static str)] {
         ("minecraft:dolphin_spawn_egg", "minecraft:dolphin"),
         ("minecraft:donkey_spawn_egg", "minecraft:donkey"),
         ("minecraft:drowned_spawn_egg", "minecraft:drowned"),
-        ("minecraft:elder_guardian_spawn_egg", "minecraft:elder_guardian"),
+        (
+            "minecraft:elder_guardian_spawn_egg",
+            "minecraft:elder_guardian",
+        ),
         ("minecraft:ender_dragon_spawn_egg", "minecraft:ender_dragon"),
         ("minecraft:enderman_spawn_egg", "minecraft:enderman"),
         ("minecraft:endermite_spawn_egg", "minecraft:endermite"),
@@ -54,7 +57,10 @@ pub fn all_spawn_eggs() -> &'static [(&'static str, &'static str)] {
         ("minecraft:shulker_spawn_egg", "minecraft:shulker"),
         ("minecraft:silverfish_spawn_egg", "minecraft:silverfish"),
         ("minecraft:skeleton_spawn_egg", "minecraft:skeleton"),
-        ("minecraft:skeleton_horse_spawn_egg", "minecraft:skeleton_horse"),
+        (
+            "minecraft:skeleton_horse_spawn_egg",
+            "minecraft:skeleton_horse",
+        ),
         ("minecraft:slime_spawn_egg", "minecraft:slime"),
         ("minecraft:sniffer_spawn_egg", "minecraft:sniffer"),
         ("minecraft:snow_golem_spawn_egg", "minecraft:snow_golem"),
@@ -64,22 +70,37 @@ pub fn all_spawn_eggs() -> &'static [(&'static str, &'static str)] {
         ("minecraft:strider_spawn_egg", "minecraft:strider"),
         ("minecraft:tadpole_spawn_egg", "minecraft:tadpole"),
         ("minecraft:trader_llama_spawn_egg", "minecraft:trader_llama"),
-        ("minecraft:tropical_fish_spawn_egg", "minecraft:tropical_fish"),
+        (
+            "minecraft:tropical_fish_spawn_egg",
+            "minecraft:tropical_fish",
+        ),
         ("minecraft:turtle_spawn_egg", "minecraft:turtle"),
         ("minecraft:vex_spawn_egg", "minecraft:vex"),
         ("minecraft:villager_spawn_egg", "minecraft:villager"),
         ("minecraft:vindicator_spawn_egg", "minecraft:vindicator"),
-        ("minecraft:wandering_trader_spawn_egg", "minecraft:wandering_trader"),
+        (
+            "minecraft:wandering_trader_spawn_egg",
+            "minecraft:wandering_trader",
+        ),
         ("minecraft:warden_spawn_egg", "minecraft:warden"),
         ("minecraft:witch_spawn_egg", "minecraft:witch"),
         ("minecraft:wither_spawn_egg", "minecraft:wither"),
-        ("minecraft:wither_skeleton_spawn_egg", "minecraft:wither_skeleton"),
+        (
+            "minecraft:wither_skeleton_spawn_egg",
+            "minecraft:wither_skeleton",
+        ),
         ("minecraft:wolf_spawn_egg", "minecraft:wolf"),
         ("minecraft:zoglin_spawn_egg", "minecraft:zoglin"),
         ("minecraft:zombie_spawn_egg", "minecraft:zombie"),
         ("minecraft:zombie_horse_spawn_egg", "minecraft:zombie_horse"),
-        ("minecraft:zombie_villager_spawn_egg", "minecraft:zombie_villager"),
-        ("minecraft:zombified_piglin_spawn_egg", "minecraft:zombified_piglin"),
+        (
+            "minecraft:zombie_villager_spawn_egg",
+            "minecraft:zombie_villager",
+        ),
+        (
+            "minecraft:zombified_piglin_spawn_egg",
+            "minecraft:zombified_piglin",
+        ),
         ("minecraft:armadillo_spawn_egg", "minecraft:armadillo"),
         ("minecraft:breeze_spawn_egg", "minecraft:breeze"),
         ("minecraft:bogged_spawn_egg", "minecraft:bogged"),
@@ -88,7 +109,10 @@ pub fn all_spawn_eggs() -> &'static [(&'static str, &'static str)] {
 }
 
 pub fn entity_for_egg(egg: &str) -> Option<&'static str> {
-    all_spawn_eggs().iter().find(|(e, _)| *e == egg).map(|(_, ent)| *ent)
+    all_spawn_eggs()
+        .iter()
+        .find(|(e, _)| *e == egg)
+        .map(|(_, ent)| *ent)
 }
 
 #[cfg(test)]
@@ -97,6 +121,9 @@ mod tests {
 
     #[test]
     fn zombie_egg_spawns_zombie() {
-        assert_eq!(entity_for_egg("minecraft:zombie_spawn_egg"), Some("minecraft:zombie"));
+        assert_eq!(
+            entity_for_egg("minecraft:zombie_spawn_egg"),
+            Some("minecraft:zombie")
+        );
     }
 }

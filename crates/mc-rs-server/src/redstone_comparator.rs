@@ -1,8 +1,8 @@
 //! Redstone comparator mode — mesure contenu d'inventaire.
 //! Port PMMP `src/block/Comparator.php` (partial).
 
-use mc_rs_proto::packets::player::ItemStack;
 use crate::item_properties::max_stack_size;
+use mc_rs_proto::packets::player::ItemStack;
 
 /// Calcule la fullness d'un inventaire en signal 0-15.
 /// Formule : 1 + (sum(item_frac) / total_slots) * 14.

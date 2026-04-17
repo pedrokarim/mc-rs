@@ -2,8 +2,8 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BeeBlockKind {
-    BeeNest,    // Natural, found in nature (oak/birch)
-    Beehive,    // Crafted
+    BeeNest, // Natural, found in nature (oak/birch)
+    Beehive, // Crafted
 }
 
 #[derive(Debug, Clone)]

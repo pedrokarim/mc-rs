@@ -12,7 +12,11 @@ pub struct LodestoneCompassData {
 
 impl LodestoneCompassData {
     pub fn new(pos: (i32, i32, i32), dim: &'static str) -> Self {
-        Self { target_position: pos, dimension: dim, tracked: true }
+        Self {
+            target_position: pos,
+            dimension: dim,
+            tracked: true,
+        }
     }
 
     /// If lodestone gone, compass spins.

@@ -19,7 +19,9 @@ pub fn spins_in_dimension(dimension: &str) -> bool {
 
 impl Compass {
     pub fn new() -> Self {
-        Self { target: CompassTarget::WorldSpawn }
+        Self {
+            target: CompassTarget::WorldSpawn,
+        }
     }
 
     pub fn link_to_lodestone(&mut self, pos: (i32, i32, i32), dim: String) {
@@ -32,7 +34,9 @@ impl Compass {
 }
 
 impl Default for Compass {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Recovery compass — added in 1.19, points to last death position.

@@ -6,7 +6,9 @@ pub const HUNGER: u8 = 2;
 pub const SATURATION: f32 = 0.4;
 
 /// Feeding fox trusts food.
-pub fn fox_breed_item() -> bool { false } // not used for breeding
+pub fn fox_breed_item() -> bool {
+    false
+} // not used for breeding
 
 /// Mobs eat glow berries (none specific).
 pub fn mobs_that_eat_glow_berries() -> &'static [&'static str] {

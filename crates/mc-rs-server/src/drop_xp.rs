@@ -5,16 +5,16 @@ use rand::Rng;
 /// XP drop per ore type.
 pub fn ore_xp_drop(block_id: u16) -> (u32, u32) {
     match block_id {
-        16 | 620 => (0, 2),    // coal
-        15 | 621 => (0, 0),    // iron (smelt for xp)
-        14 | 622 => (0, 1),    // gold
-        56 | 623 => (3, 7),    // diamond
-        129 | 624 => (3, 7),   // emerald
+        16 | 620 => (0, 2),      // coal
+        15 | 621 => (0, 0),      // iron (smelt for xp)
+        14 | 622 => (0, 1),      // gold
+        56 | 623 => (3, 7),      // diamond
+        129 | 624 => (3, 7),     // emerald
         73 | 74 | 625 => (2, 5), // redstone
-        21 | 626 => (2, 5),    // lapis
-        153 => (2, 5),         // nether quartz
-        627 => (3, 7),         // ancient debris (no — drops in raw)
-        628 => (0, 0),         // copper (no XP)
+        21 | 626 => (2, 5),      // lapis
+        153 => (2, 5),           // nether quartz
+        627 => (3, 7),           // ancient debris (no — drops in raw)
+        628 => (0, 0),           // copper (no XP)
         _ => (0, 0),
     }
 }

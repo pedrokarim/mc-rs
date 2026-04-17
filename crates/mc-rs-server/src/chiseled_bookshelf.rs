@@ -16,7 +16,10 @@ pub enum BookSlotItem {
 
 impl ChiseledBookshelf {
     pub fn new() -> Self {
-        Self { slots: [None; 6], last_interacted_slot: None }
+        Self {
+            slots: [None; 6],
+            last_interacted_slot: None,
+        }
     }
 
     pub fn place_book(&mut self, idx: usize, kind: BookSlotItem) -> bool {
@@ -49,7 +52,9 @@ impl ChiseledBookshelf {
 }
 
 impl Default for ChiseledBookshelf {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

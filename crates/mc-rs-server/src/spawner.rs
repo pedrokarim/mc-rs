@@ -46,7 +46,9 @@ impl MobSpawner {
     }
 
     /// Breaking a spawner drops XP.
-    pub fn break_xp() -> (u32, u32) { (15, 43) }
+    pub fn break_xp() -> (u32, u32) {
+        (15, 43)
+    }
 }
 
 #[cfg(test)]

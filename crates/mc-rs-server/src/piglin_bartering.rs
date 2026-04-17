@@ -12,23 +12,91 @@ pub struct BarterEntry {
 /// Vanilla barter loot table (poids + count range).
 pub fn bartering_loot() -> &'static [BarterEntry] {
     &[
-        BarterEntry { item: "minecraft:enchanted_book",  count: (1, 1), weight: 5 },
-        BarterEntry { item: "minecraft:iron_boots",      count: (1, 1), weight: 8 },
-        BarterEntry { item: "minecraft:potion",          count: (1, 1), weight: 8 },
-        BarterEntry { item: "minecraft:splash_potion",   count: (1, 1), weight: 8 },
-        BarterEntry { item: "minecraft:iron_nugget",     count: (10, 36), weight: 10 },
-        BarterEntry { item: "minecraft:ender_pearl",     count: (2, 4), weight: 10 },
-        BarterEntry { item: "minecraft:string",          count: (3, 9), weight: 20 },
-        BarterEntry { item: "minecraft:quartz",          count: (5, 12), weight: 20 },
-        BarterEntry { item: "minecraft:obsidian",        count: (1, 1), weight: 40 },
-        BarterEntry { item: "minecraft:crying_obsidian", count: (1, 3), weight: 40 },
-        BarterEntry { item: "minecraft:fire_charge",     count: (1, 1), weight: 40 },
-        BarterEntry { item: "minecraft:leather",         count: (2, 4), weight: 40 },
-        BarterEntry { item: "minecraft:soul_sand",       count: (2, 8), weight: 40 },
-        BarterEntry { item: "minecraft:nether_brick",    count: (2, 8), weight: 40 },
-        BarterEntry { item: "minecraft:spectral_arrow",  count: (6, 12), weight: 40 },
-        BarterEntry { item: "minecraft:gravel",          count: (8, 16), weight: 40 },
-        BarterEntry { item: "minecraft:blackstone",      count: (8, 16), weight: 40 },
+        BarterEntry {
+            item: "minecraft:enchanted_book",
+            count: (1, 1),
+            weight: 5,
+        },
+        BarterEntry {
+            item: "minecraft:iron_boots",
+            count: (1, 1),
+            weight: 8,
+        },
+        BarterEntry {
+            item: "minecraft:potion",
+            count: (1, 1),
+            weight: 8,
+        },
+        BarterEntry {
+            item: "minecraft:splash_potion",
+            count: (1, 1),
+            weight: 8,
+        },
+        BarterEntry {
+            item: "minecraft:iron_nugget",
+            count: (10, 36),
+            weight: 10,
+        },
+        BarterEntry {
+            item: "minecraft:ender_pearl",
+            count: (2, 4),
+            weight: 10,
+        },
+        BarterEntry {
+            item: "minecraft:string",
+            count: (3, 9),
+            weight: 20,
+        },
+        BarterEntry {
+            item: "minecraft:quartz",
+            count: (5, 12),
+            weight: 20,
+        },
+        BarterEntry {
+            item: "minecraft:obsidian",
+            count: (1, 1),
+            weight: 40,
+        },
+        BarterEntry {
+            item: "minecraft:crying_obsidian",
+            count: (1, 3),
+            weight: 40,
+        },
+        BarterEntry {
+            item: "minecraft:fire_charge",
+            count: (1, 1),
+            weight: 40,
+        },
+        BarterEntry {
+            item: "minecraft:leather",
+            count: (2, 4),
+            weight: 40,
+        },
+        BarterEntry {
+            item: "minecraft:soul_sand",
+            count: (2, 8),
+            weight: 40,
+        },
+        BarterEntry {
+            item: "minecraft:nether_brick",
+            count: (2, 8),
+            weight: 40,
+        },
+        BarterEntry {
+            item: "minecraft:spectral_arrow",
+            count: (6, 12),
+            weight: 40,
+        },
+        BarterEntry {
+            item: "minecraft:gravel",
+            count: (8, 16),
+            weight: 40,
+        },
+        BarterEntry {
+            item: "minecraft:blackstone",
+            count: (8, 16),
+            weight: 40,
+        },
     ]
 }
 

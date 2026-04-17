@@ -11,11 +11,7 @@ pub struct Pig {
 
 /// Breeding items = carrot / potato / beetroot.
 pub fn breeding_items() -> &'static [&'static str] {
-    &[
-        "minecraft:carrot",
-        "minecraft:potato",
-        "minecraft:beetroot",
-    ]
+    &["minecraft:carrot", "minecraft:potato", "minecraft:beetroot"]
 }
 
 /// Max boost ticks (max carrot on stick use = 64 uses × 17 ticks).
@@ -23,11 +19,19 @@ pub const MAX_BOOST_PER_USE: u32 = 100;
 
 impl Pig {
     pub fn new_adult() -> Self {
-        Self { age: 0, saddled: false, rider: None, boost_ticks: 0, boost_stored: 0 }
+        Self {
+            age: 0,
+            saddled: false,
+            rider: None,
+            boost_ticks: 0,
+            boost_stored: 0,
+        }
     }
 
     pub fn saddle(&mut self) -> bool {
-        if self.saddled { return false; }
+        if self.saddled {
+            return false;
+        }
         self.saddled = true;
         true
     }

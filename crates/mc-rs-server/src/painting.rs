@@ -80,11 +80,20 @@ impl PaintingMotive {
     /// Taille en blocs (width, height).
     pub fn size(&self) -> (u8, u8) {
         match self {
-            Self::Kebab | Self::Aztec | Self::Alban | Self::Aztec2 | Self::Bomb
-            | Self::Plant | Self::Wasteland => (1, 1),
+            Self::Kebab
+            | Self::Aztec
+            | Self::Alban
+            | Self::Aztec2
+            | Self::Bomb
+            | Self::Plant
+            | Self::Wasteland => (1, 1),
             Self::Pool | Self::Courbet | Self::Sea | Self::Sunset | Self::Creebet => (2, 1),
             Self::Wanderer | Self::Graham => (1, 2),
-            Self::Match | Self::Bust | Self::Stage | Self::Void | Self::SkullAndRoses
+            Self::Match
+            | Self::Bust
+            | Self::Stage
+            | Self::Void
+            | Self::SkullAndRoses
             | Self::Wither => (2, 2),
             Self::Fighters => (4, 2),
             Self::Pointer | Self::Pigscene | Self::BurningSkull => (4, 4),

@@ -3,11 +3,11 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AiGoalKind {
-    Panic,           // flee quand damagé
+    Panic, // flee quand damagé
     MeleeAttack,
     RangedAttack,
     FloatInWater,
-    Tempt,           // suivre joueur avec food
+    Tempt, // suivre joueur avec food
     AvoidEntity,
     LookAtPlayer,
     LookAround,
@@ -18,9 +18,9 @@ pub enum AiGoalKind {
     Sleep,
     Breed,
     Eat,
-    Croak,           // frog
-    JumpInWater,     // dolphin
-    LayEgg,          // turtle
+    Croak,       // frog
+    JumpInWater, // dolphin
+    LayEgg,      // turtle
     Hurt,
     Target,
 }
@@ -84,10 +84,7 @@ mod tests {
 
     #[test]
     fn selects_higher_priority() {
-        let mut gs = GoalSelector::new(vec![
-            AiGoalKind::MeleeAttack,
-            AiGoalKind::WanderRandom,
-        ]);
+        let mut gs = GoalSelector::new(vec![AiGoalKind::MeleeAttack, AiGoalKind::WanderRandom]);
         let g = gs.select(vec![AiGoalKind::WanderRandom, AiGoalKind::MeleeAttack]);
         assert_eq!(g, Some(AiGoalKind::MeleeAttack));
     }

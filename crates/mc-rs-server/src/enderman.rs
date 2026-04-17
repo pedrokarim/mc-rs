@@ -82,7 +82,9 @@ impl Enderman {
 }
 
 impl Default for Enderman {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

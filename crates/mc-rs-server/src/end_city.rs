@@ -35,6 +35,8 @@ mod tests {
 
     #[test]
     fn has_diamond_loot() {
-        assert!(city_loot().iter().any(|(i, _, _, _)| *i == "minecraft:diamond"));
+        assert!(city_loot()
+            .iter()
+            .any(|(i, _, _, _)| *i == "minecraft:diamond"));
     }
 }

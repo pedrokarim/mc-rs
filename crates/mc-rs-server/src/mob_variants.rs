@@ -41,10 +41,17 @@ impl FrogVariant {
             return Self::Temperate;
         }
         match biome {
-            BiomeKind::Jungle | BiomeKind::SparseJungle | BiomeKind::BambooJungle
-            | BiomeKind::MangroveSwamp | BiomeKind::Desert => Self::Warm,
-            BiomeKind::SnowyPlains | BiomeKind::SnowyTaiga | BiomeKind::IceSpikes
-            | BiomeKind::FrozenPeaks | BiomeKind::SnowySlopes | BiomeKind::Grove
+            BiomeKind::Jungle
+            | BiomeKind::SparseJungle
+            | BiomeKind::BambooJungle
+            | BiomeKind::MangroveSwamp
+            | BiomeKind::Desert => Self::Warm,
+            BiomeKind::SnowyPlains
+            | BiomeKind::SnowyTaiga
+            | BiomeKind::IceSpikes
+            | BiomeKind::FrozenPeaks
+            | BiomeKind::SnowySlopes
+            | BiomeKind::Grove
             | BiomeKind::JaggedPeaks => Self::Cold,
             _ => Self::Temperate,
         }
@@ -68,7 +75,7 @@ pub enum CatVariant {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WolfVariant {
-    Pale,     // default
+    Pale, // default
     Woods,
     Ashen,
     Black,
@@ -122,16 +129,25 @@ mod tests {
 
     #[test]
     fn frog_warm_in_desert() {
-        assert_eq!(FrogVariant::from_biome(BiomeKind::Desert), FrogVariant::Warm);
+        assert_eq!(
+            FrogVariant::from_biome(BiomeKind::Desert),
+            FrogVariant::Warm
+        );
     }
 
     #[test]
     fn frog_cold_in_snowy() {
-        assert_eq!(FrogVariant::from_biome(BiomeKind::SnowyPlains), FrogVariant::Cold);
+        assert_eq!(
+            FrogVariant::from_biome(BiomeKind::SnowyPlains),
+            FrogVariant::Cold
+        );
     }
 
     #[test]
     fn frog_temperate_default() {
-        assert_eq!(FrogVariant::from_biome(BiomeKind::Plains), FrogVariant::Temperate);
+        assert_eq!(
+            FrogVariant::from_biome(BiomeKind::Plains),
+            FrogVariant::Temperate
+        );
     }
 }

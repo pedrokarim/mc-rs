@@ -5,7 +5,7 @@ use crate::trading::VillagerProfession;
 #[derive(Debug, Clone)]
 pub struct Villager {
     pub profession: VillagerProfession,
-    pub level: u8,          // 1-5
+    pub level: u8, // 1-5
     pub experience: u32,
     pub is_baby: bool,
     pub has_job_site: Option<(i32, i32, i32)>,

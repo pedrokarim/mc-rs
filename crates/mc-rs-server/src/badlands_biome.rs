@@ -18,11 +18,15 @@ pub fn unique_blocks() -> &'static [&'static str] {
 }
 
 /// Extra gold ore generation.
-pub fn extra_gold_ore() -> bool { true }
+pub fn extra_gold_ore() -> bool {
+    true
+}
 pub const GOLD_ORE_MAX_Y: i32 = 80;
 
 /// No passive mobs spawn.
-pub fn passive_mobs_spawn() -> bool { false }
+pub fn passive_mobs_spawn() -> bool {
+    false
+}
 
 #[cfg(test)]
 mod tests {

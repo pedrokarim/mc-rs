@@ -2,14 +2,14 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WitchPotion {
-    Healing,      // Self-heal
+    Healing,        // Self-heal
     FireResistance, // Self-fire-res
-    Speed,        // Self-speed
+    Speed,          // Self-speed
     WaterBreathing, // Self-water breath
-    Harming,      // Throw at target
-    Poison,       // Throw at target
-    Slowness,     // Throw at target
-    Weakness,     // Throw at target
+    Harming,        // Throw at target
+    Poison,         // Throw at target
+    Slowness,       // Throw at target
+    Weakness,       // Throw at target
 }
 
 #[derive(Debug, Clone)]
@@ -72,11 +72,15 @@ impl Witch {
     }
 
     /// Damage reduction when drinking (immune to damage increase while drinking).
-    pub fn damage_reduction_drinking() -> f32 { 0.15 }
+    pub fn damage_reduction_drinking() -> f32 {
+        0.15
+    }
 }
 
 impl Default for Witch {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

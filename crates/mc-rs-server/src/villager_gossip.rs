@@ -4,10 +4,10 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GossipType {
-    MajorPositive,  // Cure zombie villager
-    MinorPositive,  // Trade
-    MajorNegative,  // Kill villager
-    MinorNegative,  // Hit villager
+    MajorPositive, // Cure zombie villager
+    MinorPositive, // Trade
+    MajorNegative, // Kill villager
+    MinorNegative, // Hit villager
     Trading,
 }
 

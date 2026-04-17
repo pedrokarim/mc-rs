@@ -66,10 +66,22 @@ impl DyeColor {
 
     pub fn all() -> [Self; 16] {
         [
-            Self::White, Self::Orange, Self::Magenta, Self::LightBlue,
-            Self::Yellow, Self::Lime, Self::Pink, Self::Gray,
-            Self::LightGray, Self::Cyan, Self::Purple, Self::Blue,
-            Self::Brown, Self::Green, Self::Red, Self::Black,
+            Self::White,
+            Self::Orange,
+            Self::Magenta,
+            Self::LightBlue,
+            Self::Yellow,
+            Self::Lime,
+            Self::Pink,
+            Self::Gray,
+            Self::LightGray,
+            Self::Cyan,
+            Self::Purple,
+            Self::Blue,
+            Self::Brown,
+            Self::Green,
+            Self::Red,
+            Self::Black,
         ]
     }
 }

@@ -14,7 +14,9 @@ impl SpawnPoint {
     pub fn new(x: i32, y: i32, z: i32) -> Self {
         Self {
             world: "overworld",
-            x, y, z,
+            x,
+            y,
+            z,
             angle: 0.0,
             forced: false,
         }

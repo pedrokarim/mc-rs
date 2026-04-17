@@ -50,6 +50,8 @@ mod tests {
 
     #[test]
     fn desert_well_has_sherds() {
-        assert!(desert_well_loot().iter().any(|(i, _, _, _)| i.contains("sherd")));
+        assert!(desert_well_loot()
+            .iter()
+            .any(|(i, _, _, _)| i.contains("sherd")));
     }
 }

@@ -61,7 +61,9 @@ impl Trident {
 }
 
 impl Default for Trident {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

@@ -35,7 +35,9 @@ impl Barrel {
     }
 
     /// Barrels don't care about blocks above them (unlike chests).
-    pub fn can_open_with_block_above() -> bool { true }
+    pub fn can_open_with_block_above() -> bool {
+        true
+    }
 }
 
 #[cfg(test)]

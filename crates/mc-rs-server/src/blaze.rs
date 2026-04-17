@@ -49,15 +49,25 @@ impl Blaze {
     }
 
     /// Damaged by water/snowballs.
-    pub fn damaged_by_water() -> bool { true }
-    pub fn damaged_by_snowball_amount() -> f32 { 3.0 }
+    pub fn damaged_by_water() -> bool {
+        true
+    }
+    pub fn damaged_by_snowball_amount() -> f32 {
+        3.0
+    }
 
-    pub fn drop_rod_chance() -> f32 { 0.5 }
-    pub fn drop_glowstone_dust_chance_looting() -> f32 { 0.3 }
+    pub fn drop_rod_chance() -> f32 {
+        0.5
+    }
+    pub fn drop_glowstone_dust_chance_looting() -> f32 {
+        0.3
+    }
 }
 
 impl Default for Blaze {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

@@ -25,7 +25,9 @@ pub const GRACE_TICKS: u64 = 5;
 impl MovementState {
     pub fn new(x: f64, y: f64, z: f64, tick: u64) -> Self {
         Self {
-            last_x: x, last_y: y, last_z: z,
+            last_x: x,
+            last_y: y,
+            last_z: z,
             last_update_tick: tick,
             velocity_sample: 0.0,
             on_ground: false,

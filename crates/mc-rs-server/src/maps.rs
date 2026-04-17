@@ -105,7 +105,8 @@ impl MapRegistry {
     pub fn allocate(&mut self, scale: MapScale, center: [i32; 2], dimension_id: u8) -> i64 {
         self.next_id += 1;
         let id = self.next_id;
-        self.maps.insert(id, MapData::new(id, scale, center, dimension_id));
+        self.maps
+            .insert(id, MapData::new(id, scale, center, dimension_id));
         id
     }
 }

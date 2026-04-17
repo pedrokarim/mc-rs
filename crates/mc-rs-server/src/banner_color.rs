@@ -4,10 +4,22 @@ use crate::dyes::DyeColor;
 
 pub fn banner_base_colors() -> Vec<DyeColor> {
     vec![
-        DyeColor::White, DyeColor::Orange, DyeColor::Magenta, DyeColor::LightBlue,
-        DyeColor::Yellow, DyeColor::Lime, DyeColor::Pink, DyeColor::Gray,
-        DyeColor::LightGray, DyeColor::Cyan, DyeColor::Purple, DyeColor::Blue,
-        DyeColor::Brown, DyeColor::Green, DyeColor::Red, DyeColor::Black,
+        DyeColor::White,
+        DyeColor::Orange,
+        DyeColor::Magenta,
+        DyeColor::LightBlue,
+        DyeColor::Yellow,
+        DyeColor::Lime,
+        DyeColor::Pink,
+        DyeColor::Gray,
+        DyeColor::LightGray,
+        DyeColor::Cyan,
+        DyeColor::Purple,
+        DyeColor::Blue,
+        DyeColor::Brown,
+        DyeColor::Green,
+        DyeColor::Red,
+        DyeColor::Black,
     ]
 }
 

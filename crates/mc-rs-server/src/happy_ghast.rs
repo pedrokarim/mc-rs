@@ -11,7 +11,9 @@ pub struct HappyGhast {
 /// Ghastling grows into happy ghast.
 pub const GHASTLING_GROW_TICKS: u32 = 24000 * 5; // 5 days
 /// Breeding item = snowball to wet dried ghast.
-pub fn hydration_item() -> &'static str { "minecraft:water_bucket" }
+pub fn hydration_item() -> &'static str {
+    "minecraft:water_bucket"
+}
 
 impl HappyGhast {
     pub fn new_adult() -> Self {
@@ -32,7 +34,9 @@ impl HappyGhast {
         }
     }
 
-    pub fn is_baby(&self) -> bool { self.age < 0 }
+    pub fn is_baby(&self) -> bool {
+        self.age < 0
+    }
 
     pub fn tick(&mut self) {
         if self.age < 0 {

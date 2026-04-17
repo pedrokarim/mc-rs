@@ -27,7 +27,9 @@ impl PrimedTnt {
         let angle = rng.gen::<f64>() * std::f64::consts::TAU;
         Self {
             fuse_ticks: DEFAULT_FUSE,
-            x, y, z,
+            x,
+            y,
+            z,
             motion_x: angle.cos() * 0.02,
             motion_y: INITIAL_UPWARD,
             motion_z: angle.sin() * 0.02,

@@ -2,7 +2,8 @@
 
 /// Can a block be waterlogged?
 pub fn can_waterlog(block_id: u16) -> bool {
-    matches!(block_id,
+    matches!(
+        block_id,
         44  // slab
         | 53 | 67 | 108 | 109 | 114 | 128 | 134 | 135 | 136 // stairs
         | 85 | 107  // fences
@@ -22,7 +23,7 @@ pub fn can_waterlog(block_id: u16) -> bool {
         | 315       // chain
         | 304       // lantern
         | 313       // sea pickle
-        | 461       // amethyst budding parts (no)
+        | 461 // amethyst budding parts (no)
     )
 }
 

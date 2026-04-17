@@ -44,6 +44,8 @@ mod tests {
 
     #[test]
     fn has_heart_of_sea() {
-        assert!(chest_loot().iter().any(|(i, _, _, _)| *i == "minecraft:heart_of_the_sea"));
+        assert!(chest_loot()
+            .iter()
+            .any(|(i, _, _, _)| *i == "minecraft:heart_of_the_sea"));
     }
 }

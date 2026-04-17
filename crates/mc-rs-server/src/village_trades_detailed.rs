@@ -58,6 +58,8 @@ mod tests {
     #[test]
     fn cleric_has_redstone() {
         let trades = cleric_trades_level_2();
-        assert!(trades.iter().any(|(_, _, sell, _)| *sell == "minecraft:redstone"));
+        assert!(trades
+            .iter()
+            .any(|(_, _, sell, _)| *sell == "minecraft:redstone"));
     }
 }

@@ -2,7 +2,10 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EndPortalFrameSlot {
-    Facing0, Facing1, Facing2, Facing3,
+    Facing0,
+    Facing1,
+    Facing2,
+    Facing3,
 }
 
 #[derive(Debug, Clone)]
@@ -13,7 +16,10 @@ pub struct EndPortalFrame {
 
 impl EndPortalFrame {
     pub fn new(facing: EndPortalFrameSlot) -> Self {
-        Self { facing, has_eye: false }
+        Self {
+            facing,
+            has_eye: false,
+        }
     }
 
     pub fn insert_eye(&mut self) -> bool {

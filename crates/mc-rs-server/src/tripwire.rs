@@ -3,7 +3,7 @@
 #[derive(Debug, Clone)]
 pub struct TripwireHook {
     pub facing: u8,
-    pub attached: bool,  // Has wire connected
+    pub attached: bool, // Has wire connected
     pub powered: bool,
 }
 
@@ -11,12 +11,16 @@ pub struct TripwireHook {
 pub struct Tripwire {
     pub connected: bool, // Has hooks on both ends
     pub powered: bool,
-    pub disarmed: bool,  // Cut with shears without triggering
+    pub disarmed: bool, // Cut with shears without triggering
 }
 
 impl TripwireHook {
     pub fn new(facing: u8) -> Self {
-        Self { facing, attached: false, powered: false }
+        Self {
+            facing,
+            attached: false,
+            powered: false,
+        }
     }
 
     pub fn trigger(&mut self) {
@@ -32,7 +36,11 @@ impl TripwireHook {
 
 impl Tripwire {
     pub fn new() -> Self {
-        Self { connected: false, powered: false, disarmed: false }
+        Self {
+            connected: false,
+            powered: false,
+            disarmed: false,
+        }
     }
 
     pub fn entity_steps_on(&mut self) -> bool {
@@ -45,7 +53,9 @@ impl Tripwire {
 }
 
 impl Default for Tripwire {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

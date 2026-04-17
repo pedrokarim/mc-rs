@@ -9,8 +9,12 @@ pub const MOB_CAP_WATER_AMBIENT: u32 = 20;
 pub const MOB_CAP_UNDERGROUND_WATER: u32 = 5;
 pub const MOB_CAP_MISC: u32 = 0;
 
-pub fn hostile_cap_per_player() -> u32 { MOB_CAP_HOSTILE }
-pub fn passive_cap_per_player() -> u32 { MOB_CAP_PASSIVE }
+pub fn hostile_cap_per_player() -> u32 {
+    MOB_CAP_HOSTILE
+}
+pub fn passive_cap_per_player() -> u32 {
+    MOB_CAP_PASSIVE
+}
 
 /// Radius within which to count per player (128 blocks).
 pub const COUNTING_RADIUS: u32 = 128;

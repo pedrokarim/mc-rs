@@ -23,7 +23,9 @@ pub fn native_mobs() -> &'static [&'static str] {
 }
 
 /// Eyeblossom cycles open/closed based on day/night.
-pub fn eyeblossom_opens_at_night() -> bool { true }
+pub fn eyeblossom_opens_at_night() -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {

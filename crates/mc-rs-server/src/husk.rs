@@ -27,14 +27,20 @@ impl Husk {
     }
 
     /// Husks don't burn in sunlight.
-    pub fn burns_in_sunlight() -> bool { false }
+    pub fn burns_in_sunlight() -> bool {
+        false
+    }
 
     /// Husk underwater converts to zombie.
-    pub fn converts_to_zombie_in_water() -> bool { true }
+    pub fn converts_to_zombie_in_water() -> bool {
+        true
+    }
 }
 
 impl Default for Husk {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

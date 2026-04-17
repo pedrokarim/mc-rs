@@ -1,7 +1,7 @@
 //! Path finder — A* basique.
 
-use std::collections::{BinaryHeap, HashMap};
 use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Node(pub i32, pub i32, pub i32);
@@ -37,16 +37,22 @@ pub fn find_path(
     walkable: impl Fn(Node) -> bool,
 ) -> Option<Vec<Node>> {
     let mut open = BinaryHeap::new();
-    open.push(PriorityNode { cost: 0, node: start });
+    open.push(PriorityNode {
+        cost: 0,
+        node: start,
+    });
     let mut came_from: HashMap<Node, Node> = HashMap::new();
     let mut g_score: HashMap<Node, i32> = HashMap::new();
     g_score.insert(start, 0);
     let mut iterations = 0;
 
     let neighbors = [
-        (1, 0, 0), (-1, 0, 0),
-        (0, 1, 0), (0, -1, 0),
-        (0, 0, 1), (0, 0, -1),
+        (1, 0, 0),
+        (-1, 0, 0),
+        (0, 1, 0),
+        (0, -1, 0),
+        (0, 0, 1),
+        (0, 0, -1),
     ];
 
     while let Some(PriorityNode { node, .. }) = open.pop() {
@@ -75,7 +81,10 @@ pub fn find_path(
                 came_from.insert(next, node);
                 g_score.insert(next, tentative);
                 let f = tentative + manhattan_distance(next, goal);
-                open.push(PriorityNode { cost: f, node: next });
+                open.push(PriorityNode {
+                    cost: f,
+                    node: next,
+                });
             }
         }
     }

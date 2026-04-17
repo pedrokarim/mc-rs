@@ -8,7 +8,10 @@ pub struct PlayerCraftingGrid {
 
 impl PlayerCraftingGrid {
     pub fn new() -> Self {
-        Self { slots: [None; 4], output: None }
+        Self {
+            slots: [None; 4],
+            output: None,
+        }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -28,7 +31,9 @@ impl PlayerCraftingGrid {
 }
 
 impl Default for PlayerCraftingGrid {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

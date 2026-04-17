@@ -106,7 +106,10 @@ mod tests {
 
     #[test]
     fn water_wart_becomes_awkward() {
-        assert_eq!(brew("minecraft:nether_wart", PotionBase::Water), Some(PotionBase::Awkward));
+        assert_eq!(
+            brew("minecraft:nether_wart", PotionBase::Water),
+            Some(PotionBase::Awkward)
+        );
     }
 
     #[test]

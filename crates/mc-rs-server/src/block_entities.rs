@@ -137,12 +137,7 @@ impl BlockEntity {
             kind: BlockEntityKind::Sign,
             position,
             items: vec![],
-            sign_text: Some([
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-            ]),
+            sign_text: Some([String::new(), String::new(), String::new(), String::new()]),
             custom_name: None,
             cook_time: 0,
             burn_time: 0,

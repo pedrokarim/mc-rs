@@ -34,7 +34,9 @@ impl GlassPane {
 }
 
 impl Default for GlassPane {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

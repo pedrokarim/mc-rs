@@ -2,10 +2,10 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IllagerKind {
-    Pillager,    // Crossbow
-    Vindicator,  // Iron axe
-    Evoker,      // Summons vex + fangs
-    Illusioner,  // Bow + illusions
+    Pillager,   // Crossbow
+    Vindicator, // Iron axe
+    Evoker,     // Summons vex + fangs
+    Illusioner, // Bow + illusions
 }
 
 #[derive(Debug, Clone)]
@@ -59,8 +59,12 @@ impl Illager {
     }
 
     /// Weakness to mob effects.
-    pub fn is_weak_to_vex() -> bool { true }
-    pub fn damage_by_axe_crit() -> f32 { 13.0 }
+    pub fn is_weak_to_vex() -> bool {
+        true
+    }
+    pub fn damage_by_axe_crit() -> f32 {
+        13.0
+    }
 }
 
 #[cfg(test)]

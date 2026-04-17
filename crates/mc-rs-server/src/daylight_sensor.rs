@@ -29,7 +29,9 @@ impl DaylightSensor {
 }
 
 impl Default for DaylightSensor {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

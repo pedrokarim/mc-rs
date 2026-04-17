@@ -17,7 +17,12 @@ pub struct LecternBook {
 
 impl Lectern {
     pub fn new(facing: u8) -> Self {
-        Self { book_placed: None, facing, current_page: 0, max_pages: 0 }
+        Self {
+            book_placed: None,
+            facing,
+            current_page: 0,
+            max_pages: 0,
+        }
     }
 
     pub fn place_book(&mut self, book: LecternBook) -> bool {

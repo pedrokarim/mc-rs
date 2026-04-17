@@ -34,6 +34,8 @@ mod tests {
 
     #[test]
     fn ominous_has_heavy_core() {
-        assert!(ominous_vault_loot().iter().any(|(i, _, _, _)| *i == "minecraft:heavy_core"));
+        assert!(ominous_vault_loot()
+            .iter()
+            .any(|(i, _, _, _)| *i == "minecraft:heavy_core"));
     }
 }

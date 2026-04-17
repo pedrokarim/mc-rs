@@ -8,7 +8,10 @@ pub struct SpyglassUse {
 
 impl SpyglassUse {
     pub fn new() -> Self {
-        Self { fov_multiplier: 0.1, usage_ticks: 0 }
+        Self {
+            fov_multiplier: 0.1,
+            usage_ticks: 0,
+        }
     }
 
     pub fn tick(&mut self) {
@@ -20,11 +23,15 @@ impl SpyglassUse {
     }
 
     /// Slows player movement while using.
-    pub fn movement_multiplier() -> f32 { 0.1 }
+    pub fn movement_multiplier() -> f32 {
+        0.1
+    }
 }
 
 impl Default for SpyglassUse {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

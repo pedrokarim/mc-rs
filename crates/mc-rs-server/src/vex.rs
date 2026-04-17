@@ -50,7 +50,9 @@ impl Vex {
     }
 
     /// Passes through blocks.
-    pub fn noclip() -> bool { true }
+    pub fn noclip() -> bool {
+        true
+    }
 }
 
 #[cfg(test)]

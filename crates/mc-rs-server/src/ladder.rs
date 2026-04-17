@@ -9,11 +9,16 @@ pub struct Ladder {
 /// Climbing speed (up/down).
 pub const CLIMBING_SPEED: f64 = 0.15;
 /// Hold onto ladder (no fall damage).
-pub fn cancels_fall_damage() -> bool { true }
+pub fn cancels_fall_damage() -> bool {
+    true
+}
 
 impl Ladder {
     pub fn new(facing: u8) -> Self {
-        Self { facing, waterlogged: false }
+        Self {
+            facing,
+            waterlogged: false,
+        }
     }
 
     /// Attached side must be solid.

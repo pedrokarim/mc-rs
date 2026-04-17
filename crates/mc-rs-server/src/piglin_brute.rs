@@ -24,17 +24,25 @@ impl PiglinBrute {
     }
 
     /// Piglin brutes ignore gold.
-    pub fn distracted_by_gold() -> bool { false }
+    pub fn distracted_by_gold() -> bool {
+        false
+    }
 
     /// Cannot be bartered with.
-    pub fn can_barter() -> bool { false }
+    pub fn can_barter() -> bool {
+        false
+    }
 
     /// Never zombifies in Overworld.
-    pub fn zombifies() -> bool { false }
+    pub fn zombifies() -> bool {
+        false
+    }
 }
 
 impl Default for PiglinBrute {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

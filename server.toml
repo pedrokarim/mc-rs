@@ -53,3 +53,28 @@ do_weather_cycle = false
 
 # Rayon de protection du spawn en blocs (0 = désactivé)
 spawn_protection = 16
+
+[logging]
+# Dossier où sont écrits les fichiers de log
+directory = "logs"
+
+# Politique de rotation : "daily" (nouveau fichier par jour), "hourly",
+# "minutely" (debug), ou "never" (un seul fichier, jamais recyclé).
+rotation = "daily"
+
+# Nombre maximum d'archives à conserver (0 = illimité).
+# Les plus anciennes sont supprimées automatiquement au-delà.
+max_files = 14
+
+# Niveau par défaut (format env_logger : "info", "debug,mc_rs_raknet=trace", ...).
+# La variable d'environnement RUST_LOG prend toujours le dessus si elle est définie.
+level = "info,mc_rs_raknet=debug"
+
+# Écrire les logs sur stdout (console)
+stdout = true
+
+# Écrire les logs dans le fichier `<directory>/server.<DATE>.log`
+file = true
+
+# Colorer les logs stdout avec ANSI (désactiver si le terminal ne gère pas)
+ansi = true

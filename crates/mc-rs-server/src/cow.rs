@@ -16,7 +16,9 @@ impl Cow {
         Self { age: -24000 }
     }
 
-    pub fn is_baby(&self) -> bool { self.age < 0 }
+    pub fn is_baby(&self) -> bool {
+        self.age < 0
+    }
 
     pub fn tick(&mut self) {
         if self.age < 0 {

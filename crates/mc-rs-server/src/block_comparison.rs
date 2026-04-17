@@ -7,11 +7,21 @@ pub fn same_block(a: (u16, u16), b: (u16, u16)) -> bool {
 
 /// Group blocks by "material" for dev scripting (crafting substitutions).
 pub fn wood_variants() -> &'static [&'static str] {
-    &["oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "bamboo"]
+    &[
+        "oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "bamboo",
+    ]
 }
 
 pub fn stone_variants() -> &'static [&'static str] {
-    &["stone", "granite", "diorite", "andesite", "deepslate", "tuff", "calcite"]
+    &[
+        "stone",
+        "granite",
+        "diorite",
+        "andesite",
+        "deepslate",
+        "tuff",
+        "calcite",
+    ]
 }
 
 pub fn sand_variants() -> &'static [&'static str] {

@@ -36,8 +36,12 @@ impl FishingHook {
         Self {
             owner,
             state: FishingHookState::Airborne,
-            x, y, z,
-            motion_x: mx, motion_y: my, motion_z: mz,
+            x,
+            y,
+            z,
+            motion_x: mx,
+            motion_y: my,
+            motion_z: mz,
             wait_ticks: 0,
             hooked_entity: None,
         }

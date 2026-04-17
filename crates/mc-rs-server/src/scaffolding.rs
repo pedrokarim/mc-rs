@@ -14,7 +14,11 @@ pub struct Scaffolding {
 
 impl Scaffolding {
     pub fn new() -> Self {
-        Self { distance: 0, waterlogged: false, is_bottom: false }
+        Self {
+            distance: 0,
+            waterlogged: false,
+            is_bottom: false,
+        }
     }
 
     /// Breaks if distance > max.
@@ -24,7 +28,9 @@ impl Scaffolding {
 }
 
 impl Default for Scaffolding {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

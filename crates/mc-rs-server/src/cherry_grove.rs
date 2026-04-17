@@ -13,7 +13,12 @@ pub fn unique_blocks() -> &'static [&'static str] {
 }
 
 pub fn native_mobs() -> &'static [&'static str] {
-    &["minecraft:pig", "minecraft:sheep", "minecraft:rabbit", "minecraft:bee"]
+    &[
+        "minecraft:pig",
+        "minecraft:sheep",
+        "minecraft:rabbit",
+        "minecraft:bee",
+    ]
 }
 
 /// Pink petals grow on grass.

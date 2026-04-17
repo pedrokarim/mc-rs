@@ -9,11 +9,16 @@ pub fn fortune_multiplier(block_name: &str, fortune_level: u8) -> u32 {
     }
     let mut rng = rand::thread_rng();
     match block_name {
-        "minecraft:coal_ore" | "minecraft:deepslate_coal_ore"
-        | "minecraft:diamond_ore" | "minecraft:deepslate_diamond_ore"
-        | "minecraft:emerald_ore" | "minecraft:deepslate_emerald_ore"
-        | "minecraft:redstone_ore" | "minecraft:deepslate_redstone_ore"
-        | "minecraft:lapis_ore" | "minecraft:deepslate_lapis_ore"
+        "minecraft:coal_ore"
+        | "minecraft:deepslate_coal_ore"
+        | "minecraft:diamond_ore"
+        | "minecraft:deepslate_diamond_ore"
+        | "minecraft:emerald_ore"
+        | "minecraft:deepslate_emerald_ore"
+        | "minecraft:redstone_ore"
+        | "minecraft:deepslate_redstone_ore"
+        | "minecraft:lapis_ore"
+        | "minecraft:deepslate_lapis_ore"
         | "minecraft:nether_quartz_ore" => {
             // Binomial-like drop : 1 + random(0, fortune)
             1 + rng.gen_range(0..=fortune_level as u32)

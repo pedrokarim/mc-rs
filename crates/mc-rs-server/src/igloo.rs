@@ -26,6 +26,8 @@ mod tests {
 
     #[test]
     fn chest_has_golden_apple() {
-        assert!(chest_loot().iter().any(|(i, _, _, _)| *i == "minecraft:golden_apple"));
+        assert!(chest_loot()
+            .iter()
+            .any(|(i, _, _, _)| *i == "minecraft:golden_apple"));
     }
 }

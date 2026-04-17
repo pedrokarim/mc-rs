@@ -21,8 +21,8 @@ pub fn new_v4() -> String {
 
 /// Offline mode UUID (deterministic from name using SipHash).
 pub fn offline_uuid(name: &str) -> String {
-    use std::hash::{Hash, Hasher, BuildHasher};
     use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hash, Hasher};
     // Use a fixed hasher seed for determinism.
     let seed1 = 0x0123_4567_89ab_cdef_u64;
     let seed2 = 0xfedc_ba98_7654_3210_u64;

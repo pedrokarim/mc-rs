@@ -6,7 +6,7 @@ pub struct PersistenceFlags {
     pub from_spawner: bool, // From mob spawner (despawns quickly)
     pub from_bucket: bool,  // Axolotl/fish from bucket (persistent)
     pub has_custom_name: bool,
-    pub is_pet: bool,       // Tamed
+    pub is_pet: bool, // Tamed
     pub is_leashed: bool,
 }
 
@@ -26,7 +26,11 @@ impl Default for PersistenceFlags {
 impl PersistenceFlags {
     /// Should mob persist through despawn?
     pub fn should_persist(&self) -> bool {
-        self.persistent || self.from_bucket || self.has_custom_name || self.is_pet || self.is_leashed
+        self.persistent
+            || self.from_bucket
+            || self.has_custom_name
+            || self.is_pet
+            || self.is_leashed
     }
 
     /// Should mob despawn more aggressively (from spawner)?

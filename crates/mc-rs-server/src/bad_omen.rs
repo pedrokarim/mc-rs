@@ -21,7 +21,9 @@ pub fn raid_waves(amplifier: u8, difficulty: u8) -> u32 {
 pub const TRIAL_OMEN_DURATION: u32 = 15 * 60 * 20; // 15 min
 
 /// Cured when milk is drunk.
-pub fn cured_by_milk() -> bool { true }
+pub fn cured_by_milk() -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {

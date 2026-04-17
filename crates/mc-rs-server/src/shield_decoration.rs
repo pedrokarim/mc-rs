@@ -11,7 +11,10 @@ pub const MAX_PATTERNS: usize = 6;
 
 impl ShieldDecoration {
     pub fn new(base: u8) -> Self {
-        Self { base_color: base, patterns: Vec::new() }
+        Self {
+            base_color: base,
+            patterns: Vec::new(),
+        }
     }
 
     pub fn apply_banner(&mut self, banner_color: u8, banner_patterns: Vec<(u8, u8)>) {

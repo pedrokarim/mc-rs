@@ -10,9 +10,13 @@ pub const JUMP_REDUCTION: f32 = 0.5;
 pub const SLIDE_SPEED: f64 = 0.05;
 
 /// Honey + piston → pushes diagonally-connected blocks.
-pub fn sticks_diagonally_with_pistons() -> bool { true }
+pub fn sticks_diagonally_with_pistons() -> bool {
+    true
+}
 /// But honey does NOT stick to slime blocks.
-pub fn sticks_to_slime() -> bool { false }
+pub fn sticks_to_slime() -> bool {
+    false
+}
 
 #[cfg(test)]
 mod tests {

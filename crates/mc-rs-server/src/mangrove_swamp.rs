@@ -18,8 +18,12 @@ pub fn unique_blocks() -> &'static [&'static str] {
 }
 
 /// Mangrove tree grows from hanging propagule.
-pub fn tree_min_height() -> u32 { 5 }
-pub fn tree_max_height() -> u32 { 14 }
+pub fn tree_min_height() -> u32 {
+    5
+}
+pub fn tree_max_height() -> u32 {
+    14
+}
 
 /// Mobs: frog, slime, mudfish (not real).
 pub fn native_mobs() -> &'static [&'static str] {
@@ -30,6 +34,8 @@ pub fn native_mobs() -> &'static [&'static str] {
 mod tests {
     #[test]
     fn unique_blocks_has_mangrove() {
-        assert!(super::unique_blocks().iter().any(|s| s.contains("mangrove")));
+        assert!(super::unique_blocks()
+            .iter()
+            .any(|s| s.contains("mangrove")));
     }
 }

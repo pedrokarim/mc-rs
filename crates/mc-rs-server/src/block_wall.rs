@@ -40,7 +40,9 @@ impl Wall {
 }
 
 impl Default for Wall {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

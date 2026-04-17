@@ -28,7 +28,8 @@ impl FallingBlock {
     }
 
     fn block_damages_entities(id: u16) -> bool {
-        matches!(id,
+        matches!(
+            id,
             145 // anvil
             | 146 // damaged anvil
             | 147 // very damaged anvil

@@ -139,15 +139,34 @@ impl BiomeKind {
     /// Température PMMP (0.0 = glace, 2.0+ = nether).
     pub fn temperature(&self) -> f32 {
         match self {
-            Self::SnowyPlains | Self::SnowyTaiga | Self::IceSpikes | Self::FrozenRiver
-            | Self::FrozenOcean | Self::DeepFrozenOcean | Self::FrozenPeaks | Self::SnowySlopes => 0.0,
-            Self::Taiga | Self::OldGrowthPineTaiga | Self::SnowyBeach | Self::Grove
-            | Self::ColdOcean | Self::DeepColdOcean => 0.25,
-            Self::Plains | Self::SunflowerPlains | Self::Forest | Self::FlowerForest
-            | Self::BirchForest | Self::Meadow | Self::River | Self::Beach => 0.7,
+            Self::SnowyPlains
+            | Self::SnowyTaiga
+            | Self::IceSpikes
+            | Self::FrozenRiver
+            | Self::FrozenOcean
+            | Self::DeepFrozenOcean
+            | Self::FrozenPeaks
+            | Self::SnowySlopes => 0.0,
+            Self::Taiga
+            | Self::OldGrowthPineTaiga
+            | Self::SnowyBeach
+            | Self::Grove
+            | Self::ColdOcean
+            | Self::DeepColdOcean => 0.25,
+            Self::Plains
+            | Self::SunflowerPlains
+            | Self::Forest
+            | Self::FlowerForest
+            | Self::BirchForest
+            | Self::Meadow
+            | Self::River
+            | Self::Beach => 0.7,
             Self::Jungle | Self::SparseJungle | Self::BambooJungle => 0.95,
             Self::Desert | Self::Savanna | Self::SavannaPlateau | Self::WindsweptSavanna => 1.2,
-            Self::NetherWastes | Self::CrimsonForest | Self::WarpedForest | Self::SoulSandValley
+            Self::NetherWastes
+            | Self::CrimsonForest
+            | Self::WarpedForest
+            | Self::SoulSandValley
             | Self::BasaltDeltas => 2.0,
             _ => 0.5,
         }

@@ -17,7 +17,9 @@ pub fn poison_duration(difficulty: u8) -> u32 {
 }
 
 /// Drop mushroom when sheared.
-pub fn shear_drop() -> &'static str { "minecraft:red_mushroom" }
+pub fn shear_drop() -> &'static str {
+    "minecraft:red_mushroom"
+}
 
 impl Bogged {
     pub fn new() -> Self {
@@ -38,7 +40,9 @@ impl Bogged {
 }
 
 impl Default for Bogged {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

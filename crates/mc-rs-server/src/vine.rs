@@ -17,7 +17,11 @@ pub const MAX_DISTANCE: u8 = 5;
 impl Vine {
     pub fn new() -> Self {
         Self {
-            north: false, south: false, east: false, west: false, up: false,
+            north: false,
+            south: false,
+            east: false,
+            west: false,
+            up: false,
         }
     }
 
@@ -27,17 +31,29 @@ impl Vine {
 
     pub fn face_count(&self) -> u8 {
         let mut count = 0;
-        if self.north { count += 1; }
-        if self.south { count += 1; }
-        if self.east { count += 1; }
-        if self.west { count += 1; }
-        if self.up { count += 1; }
+        if self.north {
+            count += 1;
+        }
+        if self.south {
+            count += 1;
+        }
+        if self.east {
+            count += 1;
+        }
+        if self.west {
+            count += 1;
+        }
+        if self.up {
+            count += 1;
+        }
         count
     }
 }
 
 impl Default for Vine {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

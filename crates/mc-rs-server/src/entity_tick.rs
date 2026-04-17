@@ -27,8 +27,12 @@ pub const FALL_DAMAGE_THRESHOLD: f32 = 3.0;
 impl EntityCommon {
     pub fn new(x: f64, y: f64, z: f64) -> Self {
         Self {
-            x, y, z,
-            motion_x: 0.0, motion_y: 0.0, motion_z: 0.0,
+            x,
+            y,
+            z,
+            motion_x: 0.0,
+            motion_y: 0.0,
+            motion_z: 0.0,
             on_ground: false,
             fall_distance: 0.0,
             air_ticks: MAX_AIR,

@@ -298,12 +298,9 @@ mod tests {
     fn unregister_owner_removes_handlers() {
         let mut mgr = EventManager::new();
         let owner = mgr.new_owner();
-        mgr.register_with_owner::<TestEvent, _>(
-            EventPriority::Normal,
-            false,
-            owner,
-            |ev| ev.value = 1,
-        );
+        mgr.register_with_owner::<TestEvent, _>(EventPriority::Normal, false, owner, |ev| {
+            ev.value = 1
+        });
         assert!(mgr.has_handlers::<TestEvent>());
         mgr.unregister_owner(owner);
         assert!(!mgr.has_handlers::<TestEvent>());

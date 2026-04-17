@@ -3,8 +3,22 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShulkerColor {
     Default,
-    White, Orange, Magenta, LightBlue, Yellow, Lime, Pink, Gray,
-    LightGray, Cyan, Purple, Blue, Brown, Green, Red, Black,
+    White,
+    Orange,
+    Magenta,
+    LightBlue,
+    Yellow,
+    Lime,
+    Pink,
+    Gray,
+    LightGray,
+    Cyan,
+    Purple,
+    Blue,
+    Brown,
+    Green,
+    Red,
+    Black,
 }
 
 #[derive(Debug, Clone)]
@@ -64,10 +78,14 @@ impl Shulker {
     }
 
     /// Teleport if damaged + no peek.
-    pub fn teleport_chance_damage() -> f32 { 0.25 }
+    pub fn teleport_chance_damage() -> f32 {
+        0.25
+    }
 
     /// Damage from shulker bullet.
-    pub fn bullet_damage() -> f32 { 4.0 }
+    pub fn bullet_damage() -> f32 {
+        4.0
+    }
 }
 
 #[cfg(test)]

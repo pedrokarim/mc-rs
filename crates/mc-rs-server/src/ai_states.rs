@@ -52,7 +52,9 @@ impl AiContext {
 }
 
 impl Default for AiContext {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Stuck detection — if position didn't change for N ticks.

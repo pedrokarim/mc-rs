@@ -8,43 +8,75 @@ pub fn compostable_items() -> HashMap<&'static str, f32> {
     let mut m = HashMap::new();
     // Chance 30%
     for item in &[
-        "minecraft:beetroot_seeds", "minecraft:dried_kelp", "minecraft:grass",
-        "minecraft:kelp", "minecraft:leaves", "minecraft:melon_seeds",
-        "minecraft:pumpkin_seeds", "minecraft:sapling", "minecraft:seagrass",
-        "minecraft:sweet_berries", "minecraft:wheat_seeds", "minecraft:moss_carpet",
-        "minecraft:pink_petals", "minecraft:small_dripleaf",
+        "minecraft:beetroot_seeds",
+        "minecraft:dried_kelp",
+        "minecraft:grass",
+        "minecraft:kelp",
+        "minecraft:leaves",
+        "minecraft:melon_seeds",
+        "minecraft:pumpkin_seeds",
+        "minecraft:sapling",
+        "minecraft:seagrass",
+        "minecraft:sweet_berries",
+        "minecraft:wheat_seeds",
+        "minecraft:moss_carpet",
+        "minecraft:pink_petals",
+        "minecraft:small_dripleaf",
     ] {
         m.insert(*item, 0.3);
     }
     // Chance 50%
     for item in &[
-        "minecraft:cactus", "minecraft:dried_kelp_block", "minecraft:flower",
-        "minecraft:melon_slice", "minecraft:sugar_cane", "minecraft:tall_grass",
-        "minecraft:vine", "minecraft:wheat", "minecraft:sea_pickle",
+        "minecraft:cactus",
+        "minecraft:dried_kelp_block",
+        "minecraft:flower",
+        "minecraft:melon_slice",
+        "minecraft:sugar_cane",
+        "minecraft:tall_grass",
+        "minecraft:vine",
+        "minecraft:wheat",
+        "minecraft:sea_pickle",
     ] {
         m.insert(*item, 0.5);
     }
     // Chance 65%
     for item in &[
-        "minecraft:apple", "minecraft:beetroot", "minecraft:carrot",
-        "minecraft:cocoa_beans", "minecraft:fern", "minecraft:lily_pad",
-        "minecraft:melon_block", "minecraft:mushroom", "minecraft:mushroom_block",
-        "minecraft:nether_wart", "minecraft:potato", "minecraft:pumpkin",
-        "minecraft:sunflower", "minecraft:lily_of_the_valley", "minecraft:tall_grass_top",
+        "minecraft:apple",
+        "minecraft:beetroot",
+        "minecraft:carrot",
+        "minecraft:cocoa_beans",
+        "minecraft:fern",
+        "minecraft:lily_pad",
+        "minecraft:melon_block",
+        "minecraft:mushroom",
+        "minecraft:mushroom_block",
+        "minecraft:nether_wart",
+        "minecraft:potato",
+        "minecraft:pumpkin",
+        "minecraft:sunflower",
+        "minecraft:lily_of_the_valley",
+        "minecraft:tall_grass_top",
     ] {
         m.insert(*item, 0.65);
     }
     // Chance 85%
     for item in &[
-        "minecraft:baked_potato", "minecraft:bread", "minecraft:cookie",
-        "minecraft:hay_block", "minecraft:brown_mushroom_block", "minecraft:nether_wart_block",
-        "minecraft:warped_wart_block", "minecraft:pumpkin_pie",
+        "minecraft:baked_potato",
+        "minecraft:bread",
+        "minecraft:cookie",
+        "minecraft:hay_block",
+        "minecraft:brown_mushroom_block",
+        "minecraft:nether_wart_block",
+        "minecraft:warped_wart_block",
+        "minecraft:pumpkin_pie",
     ] {
         m.insert(*item, 0.85);
     }
     // Chance 100%
     for item in &[
-        "minecraft:cake", "minecraft:pumpkin_pie", "minecraft:cocoa_beans_plant",
+        "minecraft:cake",
+        "minecraft:pumpkin_pie",
+        "minecraft:cocoa_beans_plant",
     ] {
         m.insert(*item, 1.0);
     }

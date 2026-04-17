@@ -56,7 +56,12 @@ impl Book {
         true
     }
 
-    pub fn sign(&mut self, title: impl Into<String>, author: impl Into<String>, xuid: impl Into<String>) -> bool {
+    pub fn sign(
+        &mut self,
+        title: impl Into<String>,
+        author: impl Into<String>,
+        xuid: impl Into<String>,
+    ) -> bool {
         if self.signed {
             return false;
         }

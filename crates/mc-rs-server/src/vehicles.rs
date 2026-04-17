@@ -32,8 +32,12 @@ impl VehicleKind {
 
     pub fn max_speed(&self) -> f32 {
         match self {
-            Self::Minecart | Self::ChestMinecart | Self::FurnaceMinecart
-            | Self::HopperMinecart | Self::TntMinecart | Self::CommandBlockMinecart => 0.4,
+            Self::Minecart
+            | Self::ChestMinecart
+            | Self::FurnaceMinecart
+            | Self::HopperMinecart
+            | Self::TntMinecart
+            | Self::CommandBlockMinecart => 0.4,
             Self::Boat | Self::ChestBoat => 0.35,
             Self::Horse | Self::Donkey | Self::Mule => 0.34, // varies with breed
             Self::Llama | Self::TraderLlama => 0.2,

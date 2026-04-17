@@ -28,6 +28,9 @@ mod tests {
 
     #[test]
     fn flowering_shears_to_flowering_leaves() {
-        assert_eq!(shear_drops(AzaleaKind::Flowering), "minecraft:flowering_azalea_leaves");
+        assert_eq!(
+            shear_drops(AzaleaKind::Flowering),
+            "minecraft:flowering_azalea_leaves"
+        );
     }
 }

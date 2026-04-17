@@ -2,13 +2,16 @@
 
 #[derive(Debug, Clone)]
 pub struct HeldItemState {
-    pub slot: u8, // 0-8
+    pub slot: u8,                      // 0-8
     pub item: Option<(u16, u16, u16)>, // (id, count, metadata)
 }
 
 impl HeldItemState {
     pub fn new() -> Self {
-        Self { slot: 0, item: None }
+        Self {
+            slot: 0,
+            item: None,
+        }
     }
 
     pub fn set_slot(&mut self, slot: u8) -> bool {
@@ -29,7 +32,9 @@ impl HeldItemState {
 }
 
 impl Default for HeldItemState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

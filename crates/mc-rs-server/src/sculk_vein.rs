@@ -2,12 +2,12 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SculkKind {
-    Basic,       // Plain sculk block
-    Vein,        // 1-6 faces attached
-    Catalyst,    // Spreads sculk on mob death
-    Sensor,      // Detects vibrations
-    Shrieker,    // Summons warden
-    Calibrated,  // Filtered sensor
+    Basic,      // Plain sculk block
+    Vein,       // 1-6 faces attached
+    Catalyst,   // Spreads sculk on mob death
+    Sensor,     // Detects vibrations
+    Shrieker,   // Summons warden
+    Calibrated, // Filtered sensor
 }
 
 #[derive(Debug, Clone)]
@@ -55,7 +55,9 @@ impl SculkShrieker {
     }
 
     /// Warning level decays over time (1200 ticks = 1 min between decay).
-    pub fn warning_decay_interval() -> u32 { 1200 }
+    pub fn warning_decay_interval() -> u32 {
+        1200
+    }
 }
 
 #[cfg(test)]

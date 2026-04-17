@@ -2,7 +2,7 @@
 
 #[derive(Debug, Clone)]
 pub struct Hoglin {
-    pub age: i32,         // -24000..0 = baby, 0+ = adult
+    pub age: i32, // -24000..0 = baby, 0+ = adult
     pub zombification_ticks: u32,
     pub love_mode_ticks: u32,
     pub is_immune_to_zombification: bool,

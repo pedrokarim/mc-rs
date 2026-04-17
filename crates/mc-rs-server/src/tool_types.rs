@@ -17,7 +17,7 @@ pub enum ToolTier {
     Wood = 0,
     Stone = 1,
     Iron = 2,
-    Gold = 3,   // Fastest but least durable
+    Gold = 3, // Fastest but least durable
     Diamond = 4,
     Netherite = 5,
 }

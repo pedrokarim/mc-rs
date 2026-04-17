@@ -19,7 +19,10 @@ pub const BERRY_LIGHT: u8 = 14;
 
 impl CaveVine {
     pub fn new() -> Self {
-        Self { state: VineState::Empty, berry_growth_chance: BERRY_GROWTH }
+        Self {
+            state: VineState::Empty,
+            berry_growth_chance: BERRY_GROWTH,
+        }
     }
 
     pub fn light_emission(&self) -> u8 {
@@ -41,7 +44,9 @@ impl CaveVine {
 }
 
 impl Default for CaveVine {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

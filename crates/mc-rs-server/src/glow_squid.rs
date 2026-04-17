@@ -13,7 +13,10 @@ pub const LIGHT_EMISSION: u8 = 5;
 
 impl GlowSquid {
     pub fn new() -> Self {
-        Self { glow_ticks: 0, dark_ticks: 0 }
+        Self {
+            glow_ticks: 0,
+            dark_ticks: 0,
+        }
     }
 
     pub fn tick(&mut self) {
@@ -33,11 +36,15 @@ impl GlowSquid {
         self.dark_ticks == 0
     }
 
-    pub fn drops() -> &'static str { "minecraft:glow_ink_sac" }
+    pub fn drops() -> &'static str {
+        "minecraft:glow_ink_sac"
+    }
 }
 
 impl Default for GlowSquid {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

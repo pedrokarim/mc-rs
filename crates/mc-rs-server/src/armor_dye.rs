@@ -8,7 +8,11 @@ pub struct LeatherDyeColor {
 }
 
 /// Default leather color (brown).
-pub const DEFAULT_LEATHER: LeatherDyeColor = LeatherDyeColor { r: 160, g: 101, b: 64 };
+pub const DEFAULT_LEATHER: LeatherDyeColor = LeatherDyeColor {
+    r: 160,
+    g: 101,
+    b: 64,
+};
 
 /// Combine current color with new dye colors (vanilla averaging).
 pub fn mix_dyes(base: LeatherDyeColor, dyes: &[LeatherDyeColor]) -> LeatherDyeColor {
@@ -30,7 +34,9 @@ pub fn mix_dyes(base: LeatherDyeColor, dyes: &[LeatherDyeColor]) -> LeatherDyeCo
 }
 
 /// Cauldron washes leather armor.
-pub fn cauldron_washes() -> bool { true }
+pub fn cauldron_washes() -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {
@@ -39,7 +45,11 @@ mod tests {
     #[test]
     fn mix_red_yellow() {
         let red = LeatherDyeColor { r: 255, g: 0, b: 0 };
-        let yellow = LeatherDyeColor { r: 255, g: 255, b: 0 };
+        let yellow = LeatherDyeColor {
+            r: 255,
+            g: 255,
+            b: 0,
+        };
         let mixed = mix_dyes(red, &[yellow]);
         assert!(mixed.r > 200);
     }

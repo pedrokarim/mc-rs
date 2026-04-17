@@ -74,8 +74,12 @@ impl StructureKind {
             Self::WoodlandMansion => 80,
             Self::OceanRuinCold | Self::OceanRuinWarm => 20,
             Self::ShipwreckBeached | Self::ShipwreckBuried => 24,
-            Self::DesertPyramid | Self::JungleTemple | Self::SwampHut | Self::IglooNormal
-            | Self::Igloo | Self::IglooIce => 32,
+            Self::DesertPyramid
+            | Self::JungleTemple
+            | Self::SwampHut
+            | Self::IglooNormal
+            | Self::Igloo
+            | Self::IglooIce => 32,
             Self::RuinedPortalOverworld => 40,
             Self::RuinedPortalNether => 25,
             Self::PillagerOutpost => 32,
@@ -88,9 +92,7 @@ impl StructureKind {
     /// Dimension dans laquelle la structure génère.
     pub fn dimension(&self) -> &'static str {
         match self {
-            Self::NetherFortress
-            | Self::BastionRemnant
-            | Self::RuinedPortalNether => "nether",
+            Self::NetherFortress | Self::BastionRemnant | Self::RuinedPortalNether => "nether",
             Self::EndCity => "the_end",
             _ => "overworld",
         }

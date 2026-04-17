@@ -30,7 +30,7 @@ impl SkullType {
 #[derive(Debug, Clone)]
 pub struct Skull {
     pub kind: SkullType,
-    pub rotation: u8,            // 0-15
+    pub rotation: u8, // 0-15
     pub player_name: Option<String>,
     pub player_uuid: Option<uuid::Uuid>,
     pub custom_skin_texture: Option<String>, // base64 URL for custom

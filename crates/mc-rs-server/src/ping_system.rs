@@ -46,7 +46,9 @@ impl PingTracker {
 }
 
 impl Default for PingTracker {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

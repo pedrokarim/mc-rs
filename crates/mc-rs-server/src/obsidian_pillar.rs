@@ -26,12 +26,7 @@ pub fn vanilla_pillar_locations() -> Vec<PillarLocation> {
 }
 
 /// Cage blocks prevent eye access (iron bars on top 4 sides).
-pub const CAGE_BARS_FACES: [[i32; 3]; 4] = [
-    [1, 0, 0],
-    [-1, 0, 0],
-    [0, 0, 1],
-    [0, 0, -1],
-];
+pub const CAGE_BARS_FACES: [[i32; 3]; 4] = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
 
 #[cfg(test)]
 mod tests {
@@ -47,10 +42,7 @@ mod tests {
         let pillars = vanilla_pillar_locations();
         for i in 0..pillars.len() {
             for j in (i + 1)..pillars.len() {
-                assert_ne!(
-                    (pillars[i].x, pillars[i].z),
-                    (pillars[j].x, pillars[j].z)
-                );
+                assert_ne!((pillars[i].x, pillars[i].z), (pillars[j].x, pillars[j].z));
             }
         }
     }

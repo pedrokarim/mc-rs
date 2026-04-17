@@ -213,7 +213,13 @@ mod tests {
 
     #[test]
     fn projectile_identifier() {
-        assert_eq!(ProjectileKind::Arrow.network_identifier(), "minecraft:arrow");
-        assert_eq!(ProjectileKind::EnderPearl.network_identifier(), "minecraft:ender_pearl");
+        assert_eq!(
+            ProjectileKind::Arrow.network_identifier(),
+            "minecraft:arrow"
+        );
+        assert_eq!(
+            ProjectileKind::EnderPearl.network_identifier(),
+            "minecraft:ender_pearl"
+        );
     }
 }

@@ -6,7 +6,7 @@ pub enum SaddleableMount {
     Horse,
     Donkey,
     Mule,
-    Llama,        // Carpet, not saddle
+    Llama, // Carpet, not saddle
     Strider,
     Camel,
     SkeletonHorse,

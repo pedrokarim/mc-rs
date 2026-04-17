@@ -43,7 +43,9 @@ impl Creaking {
     }
 
     /// Invulnerable to player damage (tied to heart).
-    pub fn damage_goes_to_heart() -> bool { true }
+    pub fn damage_goes_to_heart() -> bool {
+        true
+    }
 }
 
 #[cfg(test)]

@@ -2,8 +2,8 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CampfireKind {
-    Normal,   // Light 15, damage 1
-    Soul,     // Light 10, damage 2 (slower smoke)
+    Normal, // Light 15, damage 1
+    Soul,   // Light 10, damage 2 (slower smoke)
 }
 
 #[derive(Debug, Clone)]
@@ -71,7 +71,11 @@ impl Campfire {
 
     /// Signal fire range (hay bale increases smoke distance).
     pub fn smoke_range(&self) -> u32 {
-        if self.signal_boost { 24 } else { 8 }
+        if self.signal_boost {
+            24
+        } else {
+            8
+        }
     }
 }
 

@@ -2,8 +2,8 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SquidVariant {
-    Normal,  // Drops ink sac
-    Glow,    // Drops glow ink sac
+    Normal, // Drops ink sac
+    Glow,   // Drops glow ink sac
 }
 
 #[derive(Debug, Clone)]

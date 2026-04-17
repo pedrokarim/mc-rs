@@ -8,7 +8,11 @@ pub struct Vec3 {
 }
 
 impl Vec3 {
-    pub const ZERO: Self = Self { x: 0.0, y: 0.0, z: 0.0 };
+    pub const ZERO: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
 
     pub fn new(x: f64, y: f64, z: f64) -> Self {
         Self { x, y, z }
@@ -35,7 +39,11 @@ impl Vec3 {
         if len < 1e-10 {
             return Self::ZERO;
         }
-        Self { x: self.x / len, y: self.y / len, z: self.z / len }
+        Self {
+            x: self.x / len,
+            y: self.y / len,
+            z: self.z / len,
+        }
     }
 
     pub fn dot(&self, other: &Vec3) -> f64 {
@@ -51,15 +59,27 @@ impl Vec3 {
     }
 
     pub fn add(&self, other: &Vec3) -> Self {
-        Self { x: self.x + other.x, y: self.y + other.y, z: self.z + other.z }
+        Self {
+            x: self.x + other.x,
+            y: self.y + other.y,
+            z: self.z + other.z,
+        }
     }
 
     pub fn subtract(&self, other: &Vec3) -> Self {
-        Self { x: self.x - other.x, y: self.y - other.y, z: self.z - other.z }
+        Self {
+            x: self.x - other.x,
+            y: self.y - other.y,
+            z: self.z - other.z,
+        }
     }
 
     pub fn scale(&self, factor: f64) -> Self {
-        Self { x: self.x * factor, y: self.y * factor, z: self.z * factor }
+        Self {
+            x: self.x * factor,
+            y: self.y * factor,
+            z: self.z * factor,
+        }
     }
 
     /// Yaw/pitch to direction vector.

@@ -30,7 +30,11 @@ pub struct ArmorStand {
 }
 
 impl PoseRotation {
-    pub const ZERO: Self = Self { pitch: 0.0, yaw: 0.0, roll: 0.0 };
+    pub const ZERO: Self = Self {
+        pitch: 0.0,
+        yaw: 0.0,
+        roll: 0.0,
+    };
 }
 
 impl ArmorStand {
@@ -80,12 +84,19 @@ impl ArmorStand {
 }
 
 impl Default for ArmorStand {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArmorSlot {
-    Helmet, Chestplate, Leggings, Boots, MainHand, OffHand,
+    Helmet,
+    Chestplate,
+    Leggings,
+    Boots,
+    MainHand,
+    OffHand,
 }
 
 #[cfg(test)]

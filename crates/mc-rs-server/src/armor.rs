@@ -81,30 +81,90 @@ impl ArmorMaterial {
 pub fn armor_info(item_network_id: i32) -> Option<(ArmorMaterial, usize)> {
     use crate::item_registry::required_item_id;
     let table: &[(&str, ArmorMaterial, usize)] = &[
-        ("minecraft:leather_helmet", ArmorMaterial::Leather, SLOT_HEAD),
-        ("minecraft:leather_chestplate", ArmorMaterial::Leather, SLOT_CHEST),
-        ("minecraft:leather_leggings", ArmorMaterial::Leather, SLOT_LEGS),
+        (
+            "minecraft:leather_helmet",
+            ArmorMaterial::Leather,
+            SLOT_HEAD,
+        ),
+        (
+            "minecraft:leather_chestplate",
+            ArmorMaterial::Leather,
+            SLOT_CHEST,
+        ),
+        (
+            "minecraft:leather_leggings",
+            ArmorMaterial::Leather,
+            SLOT_LEGS,
+        ),
         ("minecraft:leather_boots", ArmorMaterial::Leather, SLOT_FEET),
-        ("minecraft:chainmail_helmet", ArmorMaterial::Chainmail, SLOT_HEAD),
-        ("minecraft:chainmail_chestplate", ArmorMaterial::Chainmail, SLOT_CHEST),
-        ("minecraft:chainmail_leggings", ArmorMaterial::Chainmail, SLOT_LEGS),
-        ("minecraft:chainmail_boots", ArmorMaterial::Chainmail, SLOT_FEET),
+        (
+            "minecraft:chainmail_helmet",
+            ArmorMaterial::Chainmail,
+            SLOT_HEAD,
+        ),
+        (
+            "minecraft:chainmail_chestplate",
+            ArmorMaterial::Chainmail,
+            SLOT_CHEST,
+        ),
+        (
+            "minecraft:chainmail_leggings",
+            ArmorMaterial::Chainmail,
+            SLOT_LEGS,
+        ),
+        (
+            "minecraft:chainmail_boots",
+            ArmorMaterial::Chainmail,
+            SLOT_FEET,
+        ),
         ("minecraft:iron_helmet", ArmorMaterial::Iron, SLOT_HEAD),
         ("minecraft:iron_chestplate", ArmorMaterial::Iron, SLOT_CHEST),
         ("minecraft:iron_leggings", ArmorMaterial::Iron, SLOT_LEGS),
         ("minecraft:iron_boots", ArmorMaterial::Iron, SLOT_FEET),
         ("minecraft:golden_helmet", ArmorMaterial::Gold, SLOT_HEAD),
-        ("minecraft:golden_chestplate", ArmorMaterial::Gold, SLOT_CHEST),
+        (
+            "minecraft:golden_chestplate",
+            ArmorMaterial::Gold,
+            SLOT_CHEST,
+        ),
         ("minecraft:golden_leggings", ArmorMaterial::Gold, SLOT_LEGS),
         ("minecraft:golden_boots", ArmorMaterial::Gold, SLOT_FEET),
-        ("minecraft:diamond_helmet", ArmorMaterial::Diamond, SLOT_HEAD),
-        ("minecraft:diamond_chestplate", ArmorMaterial::Diamond, SLOT_CHEST),
-        ("minecraft:diamond_leggings", ArmorMaterial::Diamond, SLOT_LEGS),
+        (
+            "minecraft:diamond_helmet",
+            ArmorMaterial::Diamond,
+            SLOT_HEAD,
+        ),
+        (
+            "minecraft:diamond_chestplate",
+            ArmorMaterial::Diamond,
+            SLOT_CHEST,
+        ),
+        (
+            "minecraft:diamond_leggings",
+            ArmorMaterial::Diamond,
+            SLOT_LEGS,
+        ),
         ("minecraft:diamond_boots", ArmorMaterial::Diamond, SLOT_FEET),
-        ("minecraft:netherite_helmet", ArmorMaterial::Netherite, SLOT_HEAD),
-        ("minecraft:netherite_chestplate", ArmorMaterial::Netherite, SLOT_CHEST),
-        ("minecraft:netherite_leggings", ArmorMaterial::Netherite, SLOT_LEGS),
-        ("minecraft:netherite_boots", ArmorMaterial::Netherite, SLOT_FEET),
+        (
+            "minecraft:netherite_helmet",
+            ArmorMaterial::Netherite,
+            SLOT_HEAD,
+        ),
+        (
+            "minecraft:netherite_chestplate",
+            ArmorMaterial::Netherite,
+            SLOT_CHEST,
+        ),
+        (
+            "minecraft:netherite_leggings",
+            ArmorMaterial::Netherite,
+            SLOT_LEGS,
+        ),
+        (
+            "minecraft:netherite_boots",
+            ArmorMaterial::Netherite,
+            SLOT_FEET,
+        ),
         ("minecraft:turtle_helmet", ArmorMaterial::Turtle, SLOT_HEAD),
     ];
     for (name, mat, slot) in table {
@@ -137,9 +197,8 @@ pub fn apply_armor_reduction(damage: f32, armor_slots: &[ItemStack; 4]) -> f32 {
         return damage;
     }
     let defense_f = total_defense as f32;
-    let reduction_pct = ((defense_f / 5.0)
-        .max(defense_f - damage / (2.0 + total_toughness / 4.0)))
-    .min(20.0);
+    let reduction_pct =
+        ((defense_f / 5.0).max(defense_f - damage / (2.0 + total_toughness / 4.0))).min(20.0);
     damage * (1.0 - reduction_pct / 25.0)
 }
 

@@ -61,9 +61,9 @@ impl BanList {
     }
 
     pub fn is_banned(&self, name: &str, now: u64) -> bool {
-        self.bans.iter().any(|b|
+        self.bans.iter().any(|b| {
             b.name.eq_ignore_ascii_case(name) && b.expires_at.map(|e| e > now).unwrap_or(true)
-        )
+        })
     }
 }
 

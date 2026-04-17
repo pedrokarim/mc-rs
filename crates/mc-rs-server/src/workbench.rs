@@ -41,7 +41,9 @@ impl WorkbenchGrid {
 }
 
 impl Default for WorkbenchGrid {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -51,9 +53,15 @@ mod tests {
     #[test]
     fn normalize_offset_pattern() {
         let items = vec![
-            (None, 0), (None, 0), (None, 0),
-            (None, 0), (Some(1u16), 1), (None, 0),
-            (None, 0), (None, 0), (None, 0),
+            (None, 0),
+            (None, 0),
+            (None, 0),
+            (None, 0),
+            (Some(1u16), 1),
+            (None, 0),
+            (None, 0),
+            (None, 0),
+            (None, 0),
         ];
         let norm = WorkbenchGrid::normalize_shape(&items);
         assert_eq!(norm, vec![(0, 0, 1u16)]);

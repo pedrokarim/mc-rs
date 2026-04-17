@@ -23,24 +23,89 @@ pub const LIFE_DURATION_MAX: u32 = 72_000;
 /// Vanilla wandering trader common trades.
 pub fn common_trades() -> Vec<TradeSimple> {
     vec![
-        TradeSimple { buy_emeralds: 1, sell_item: "minecraft:acacia_sapling", sell_count: 1, max_uses: 8 },
-        TradeSimple { buy_emeralds: 1, sell_item: "minecraft:birch_sapling", sell_count: 1, max_uses: 8 },
-        TradeSimple { buy_emeralds: 1, sell_item: "minecraft:dark_oak_sapling", sell_count: 1, max_uses: 8 },
-        TradeSimple { buy_emeralds: 1, sell_item: "minecraft:jungle_sapling", sell_count: 1, max_uses: 8 },
-        TradeSimple { buy_emeralds: 5, sell_item: "minecraft:oak_sapling", sell_count: 1, max_uses: 8 },
-        TradeSimple { buy_emeralds: 5, sell_item: "minecraft:spruce_sapling", sell_count: 1, max_uses: 8 },
-        TradeSimple { buy_emeralds: 1, sell_item: "minecraft:red_dye", sell_count: 3, max_uses: 12 },
-        TradeSimple { buy_emeralds: 1, sell_item: "minecraft:white_dye", sell_count: 3, max_uses: 12 },
-        TradeSimple { buy_emeralds: 1, sell_item: "minecraft:blue_dye", sell_count: 3, max_uses: 12 },
-        TradeSimple { buy_emeralds: 1, sell_item: "minecraft:green_dye", sell_count: 3, max_uses: 12 },
+        TradeSimple {
+            buy_emeralds: 1,
+            sell_item: "minecraft:acacia_sapling",
+            sell_count: 1,
+            max_uses: 8,
+        },
+        TradeSimple {
+            buy_emeralds: 1,
+            sell_item: "minecraft:birch_sapling",
+            sell_count: 1,
+            max_uses: 8,
+        },
+        TradeSimple {
+            buy_emeralds: 1,
+            sell_item: "minecraft:dark_oak_sapling",
+            sell_count: 1,
+            max_uses: 8,
+        },
+        TradeSimple {
+            buy_emeralds: 1,
+            sell_item: "minecraft:jungle_sapling",
+            sell_count: 1,
+            max_uses: 8,
+        },
+        TradeSimple {
+            buy_emeralds: 5,
+            sell_item: "minecraft:oak_sapling",
+            sell_count: 1,
+            max_uses: 8,
+        },
+        TradeSimple {
+            buy_emeralds: 5,
+            sell_item: "minecraft:spruce_sapling",
+            sell_count: 1,
+            max_uses: 8,
+        },
+        TradeSimple {
+            buy_emeralds: 1,
+            sell_item: "minecraft:red_dye",
+            sell_count: 3,
+            max_uses: 12,
+        },
+        TradeSimple {
+            buy_emeralds: 1,
+            sell_item: "minecraft:white_dye",
+            sell_count: 3,
+            max_uses: 12,
+        },
+        TradeSimple {
+            buy_emeralds: 1,
+            sell_item: "minecraft:blue_dye",
+            sell_count: 3,
+            max_uses: 12,
+        },
+        TradeSimple {
+            buy_emeralds: 1,
+            sell_item: "minecraft:green_dye",
+            sell_count: 3,
+            max_uses: 12,
+        },
     ]
 }
 
 pub fn rare_trades() -> Vec<TradeSimple> {
     vec![
-        TradeSimple { buy_emeralds: 1, sell_item: "minecraft:potion", sell_count: 1, max_uses: 1 },
-        TradeSimple { buy_emeralds: 6, sell_item: "minecraft:blue_ice", sell_count: 1, max_uses: 1 },
-        TradeSimple { buy_emeralds: 1, sell_item: "minecraft:podzol", sell_count: 3, max_uses: 1 },
+        TradeSimple {
+            buy_emeralds: 1,
+            sell_item: "minecraft:potion",
+            sell_count: 1,
+            max_uses: 1,
+        },
+        TradeSimple {
+            buy_emeralds: 6,
+            sell_item: "minecraft:blue_ice",
+            sell_count: 1,
+            max_uses: 1,
+        },
+        TradeSimple {
+            buy_emeralds: 1,
+            sell_item: "minecraft:podzol",
+            sell_count: 3,
+            max_uses: 1,
+        },
     ]
 }
 
@@ -73,7 +138,9 @@ impl WanderingTrader {
 }
 
 impl Default for WanderingTrader {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

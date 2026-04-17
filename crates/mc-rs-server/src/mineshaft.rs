@@ -3,8 +3,8 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MineshaftKind {
-    Normal,       // wooden supports
-    Mesa,         // dark oak variant
+    Normal, // wooden supports
+    Mesa,   // dark oak variant
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

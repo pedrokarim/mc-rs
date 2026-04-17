@@ -126,8 +126,16 @@ mod tests {
     fn luck_increases_treasure() {
         let none = modified_category_chances(0);
         let max = modified_category_chances(3);
-        let treasure_none = none.iter().find(|(c, _)| *c == FishLootCategory::Treasure).unwrap().1;
-        let treasure_max = max.iter().find(|(c, _)| *c == FishLootCategory::Treasure).unwrap().1;
+        let treasure_none = none
+            .iter()
+            .find(|(c, _)| *c == FishLootCategory::Treasure)
+            .unwrap()
+            .1;
+        let treasure_max = max
+            .iter()
+            .find(|(c, _)| *c == FishLootCategory::Treasure)
+            .unwrap()
+            .1;
         assert!(treasure_max > treasure_none);
     }
 }

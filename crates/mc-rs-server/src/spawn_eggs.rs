@@ -38,7 +38,10 @@ pub fn mob_for_egg(item_network_id: i32) -> Option<MobKind> {
         ("minecraft:drowned_spawn_egg", MobKind::Drowned),
         ("minecraft:husk_spawn_egg", MobKind::Husk),
         ("minecraft:stray_spawn_egg", MobKind::Stray),
-        ("minecraft:wither_skeleton_spawn_egg", MobKind::WitherSkeleton),
+        (
+            "minecraft:wither_skeleton_spawn_egg",
+            MobKind::WitherSkeleton,
+        ),
         ("minecraft:zombie_pigman_spawn_egg", MobKind::ZombiePigman),
         ("minecraft:ravager_spawn_egg", MobKind::Ravager),
         ("minecraft:vindicator_spawn_egg", MobKind::Vindicator),

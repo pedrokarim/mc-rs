@@ -3,16 +3,18 @@
 /// Max growth height.
 pub const MAX_HEIGHT: u8 = 3;
 /// Needs water adjacent to base block.
-pub fn needs_water() -> bool { true }
+pub fn needs_water() -> bool {
+    true
+}
 /// Growth chance per random tick.
 pub const GROWTH_CHANCE: f32 = 0.10;
 
 /// Valid ground blocks.
 pub fn valid_ground() -> &'static [u16] {
     &[
-        2,  // grass
-        3,  // dirt
-        12, // sand
+        2,   // grass
+        3,   // dirt
+        12,  // sand
         110, // mycelium
         208, // podzol
         152, // red sand

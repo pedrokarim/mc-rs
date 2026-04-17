@@ -15,7 +15,12 @@ pub struct ScheduledBlockTick {
 
 impl ScheduledBlockTick {
     pub fn new(pos: (i32, i32, i32), block_id: u16, delay: u32) -> Self {
-        Self { position: pos, block_id, delay_ticks: delay, priority: 0 }
+        Self {
+            position: pos,
+            block_id,
+            delay_ticks: delay,
+            priority: 0,
+        }
     }
 
     pub fn is_due(&self, tick: u32) -> bool {
@@ -25,7 +30,8 @@ impl ScheduledBlockTick {
 
 /// Random block tick handler per block (simplified).
 pub fn should_random_tick(block_id: u16) -> bool {
-    matches!(block_id,
+    matches!(
+        block_id,
         2   // grass
         | 6 // sapling
         | 31 // grass

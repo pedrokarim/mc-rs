@@ -24,7 +24,9 @@ pub fn loot_chest_entries() -> &'static [(&'static str, u32, u32, u32)] {
 
 /// Redstone needed to open reinforced deepslate vault (not possible).
 /// Instead, requires breaking the deepslate.
-pub fn reinforced_deepslate_breakable_only_by_wither() -> bool { true }
+pub fn reinforced_deepslate_breakable_only_by_wither() -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {
@@ -32,6 +34,8 @@ mod tests {
 
     #[test]
     fn loot_has_echo_shard() {
-        assert!(loot_chest_entries().iter().any(|(i, _, _, _)| *i == "minecraft:echo_shard"));
+        assert!(loot_chest_entries()
+            .iter()
+            .any(|(i, _, _, _)| *i == "minecraft:echo_shard"));
     }
 }

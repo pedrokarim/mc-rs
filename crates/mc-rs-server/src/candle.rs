@@ -13,7 +13,12 @@ pub const LIGHT_PER_CANDLE: u8 = 3;
 
 impl Candle {
     pub fn new(color: Option<u8>, count: u8) -> Self {
-        Self { color, count: count.clamp(1, 4), lit: false, on_cake: false }
+        Self {
+            color,
+            count: count.clamp(1, 4),
+            lit: false,
+            on_cake: false,
+        }
     }
 
     pub fn light_emission(&self) -> u8 {

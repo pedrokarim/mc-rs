@@ -24,8 +24,8 @@ pub fn random_horse_movement_speed() -> f32 {
 
 #[derive(Debug, Clone, Copy)]
 pub struct HorseVariant {
-    pub base_color: u8,  // 0-6
-    pub markings: u8,    // 0-4
+    pub base_color: u8, // 0-6
+    pub markings: u8,   // 0-4
 }
 
 impl HorseVariant {

@@ -35,13 +35,26 @@ impl Default for FireAge {
 /// PMMP `Fire::$materialFlameOdds` + `materialBurnOdds`.
 pub fn flame_odds(block_name: &str) -> u8 {
     match block_name {
-        "minecraft:oak_planks" | "minecraft:birch_planks" | "minecraft:spruce_planks"
-        | "minecraft:jungle_planks" | "minecraft:acacia_planks" | "minecraft:dark_oak_planks"
-        | "minecraft:log" | "minecraft:wood"
-        | "minecraft:oak_log" | "minecraft:birch_log" | "minecraft:spruce_log"
-        | "minecraft:jungle_log" | "minecraft:acacia_log" | "minecraft:dark_oak_log" => 5,
-        "minecraft:leaves" | "minecraft:oak_leaves" | "minecraft:birch_leaves"
-        | "minecraft:spruce_leaves" | "minecraft:jungle_leaves" | "minecraft:acacia_leaves"
+        "minecraft:oak_planks"
+        | "minecraft:birch_planks"
+        | "minecraft:spruce_planks"
+        | "minecraft:jungle_planks"
+        | "minecraft:acacia_planks"
+        | "minecraft:dark_oak_planks"
+        | "minecraft:log"
+        | "minecraft:wood"
+        | "minecraft:oak_log"
+        | "minecraft:birch_log"
+        | "minecraft:spruce_log"
+        | "minecraft:jungle_log"
+        | "minecraft:acacia_log"
+        | "minecraft:dark_oak_log" => 5,
+        "minecraft:leaves"
+        | "minecraft:oak_leaves"
+        | "minecraft:birch_leaves"
+        | "minecraft:spruce_leaves"
+        | "minecraft:jungle_leaves"
+        | "minecraft:acacia_leaves"
         | "minecraft:dark_oak_leaves" => 30,
         "minecraft:tall_grass" | "minecraft:tall_plants" => 60,
         "minecraft:bed" => 60,
@@ -55,13 +68,26 @@ pub fn flame_odds(block_name: &str) -> u8 {
 
 pub fn burn_odds(block_name: &str) -> u8 {
     match block_name {
-        "minecraft:oak_planks" | "minecraft:birch_planks" | "minecraft:spruce_planks"
-        | "minecraft:jungle_planks" | "minecraft:acacia_planks" | "minecraft:dark_oak_planks"
-        | "minecraft:log" | "minecraft:wood"
-        | "minecraft:oak_log" | "minecraft:birch_log" | "minecraft:spruce_log"
-        | "minecraft:jungle_log" | "minecraft:acacia_log" | "minecraft:dark_oak_log" => 20,
-        "minecraft:leaves" | "minecraft:oak_leaves" | "minecraft:birch_leaves"
-        | "minecraft:spruce_leaves" | "minecraft:jungle_leaves" | "minecraft:acacia_leaves"
+        "minecraft:oak_planks"
+        | "minecraft:birch_planks"
+        | "minecraft:spruce_planks"
+        | "minecraft:jungle_planks"
+        | "minecraft:acacia_planks"
+        | "minecraft:dark_oak_planks"
+        | "minecraft:log"
+        | "minecraft:wood"
+        | "minecraft:oak_log"
+        | "minecraft:birch_log"
+        | "minecraft:spruce_log"
+        | "minecraft:jungle_log"
+        | "minecraft:acacia_log"
+        | "minecraft:dark_oak_log" => 20,
+        "minecraft:leaves"
+        | "minecraft:oak_leaves"
+        | "minecraft:birch_leaves"
+        | "minecraft:spruce_leaves"
+        | "minecraft:jungle_leaves"
+        | "minecraft:acacia_leaves"
         | "minecraft:dark_oak_leaves" => 60,
         "minecraft:tall_grass" | "minecraft:tall_plants" => 100,
         "minecraft:bed" => 20,

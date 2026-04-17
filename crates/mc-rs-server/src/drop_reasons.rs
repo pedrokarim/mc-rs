@@ -31,8 +31,11 @@ impl DropContext {
 
     pub fn drop_rate_multiplier(&self) -> f32 {
         match self {
-            Self::PlayerBreak { has_silk_touch: true, .. } => 1.0,
-            Self::Explosion => 0.35, // vanilla : réduit
+            Self::PlayerBreak {
+                has_silk_touch: true,
+                ..
+            } => 1.0,
+            Self::Explosion => 0.35,   // vanilla : réduit
             Self::NaturalDecay => 0.2, // leaves only 20% drop sapling
             _ => 1.0,
         }

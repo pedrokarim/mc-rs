@@ -2,7 +2,7 @@
 
 #[derive(Debug, Clone)]
 pub struct SeaPickle {
-    pub count: u8,  // 1-4
+    pub count: u8, // 1-4
     pub in_water: bool,
 }
 
@@ -18,7 +18,10 @@ pub fn light_emission(count: u8, in_water: bool) -> u8 {
 
 impl SeaPickle {
     pub fn new(count: u8) -> Self {
-        Self { count: count.clamp(1, MAX_COUNT), in_water: false }
+        Self {
+            count: count.clamp(1, MAX_COUNT),
+            in_water: false,
+        }
     }
 
     pub fn add(&mut self) -> bool {

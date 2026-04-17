@@ -7,28 +7,28 @@ use std::net::SocketAddr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AchievementKind {
-    OpenInventory,    // Taking Inventory
-    MineWood,         // Getting Wood
-    BuildWorkbench,   // Benchmarking
-    BuildPickaxe,     // Time to Mine!
-    BuildFurnace,     // Hot Topic
-    AcquireIron,      // Acquire Hardware
-    BuildHoe,         // Time to Farm!
-    MakeBread,        // Bake Bread
-    BakeCake,         // The Lie
+    OpenInventory,      // Taking Inventory
+    MineWood,           // Getting Wood
+    BuildWorkbench,     // Benchmarking
+    BuildPickaxe,       // Time to Mine!
+    BuildFurnace,       // Hot Topic
+    AcquireIron,        // Acquire Hardware
+    BuildHoe,           // Time to Farm!
+    MakeBread,          // Bake Bread
+    BakeCake,           // The Lie
     BuildBetterPickaxe, // Getting an Upgrade
-    CookFish,         // Delicious Fish
-    OnARail,          // On A Rail (travel cart 1km)
-    BuildSword,       // Time to Strike!
-    KillEnemy,        // Monster Hunter
-    KillCow,          // Cow Tipper
-    DiamondsToYou,    // Sniper Duel
-    MakeMap,          // Map Room
-    PortalMaker,      // Portal Maker
-    PotionEffect,     // Local Brewery
-    SpawnWither,      // The Beginning?
-    KillWither,       // The Beginning.
-    FullBeacon,       // Beaconator
+    CookFish,           // Delicious Fish
+    OnARail,            // On A Rail (travel cart 1km)
+    BuildSword,         // Time to Strike!
+    KillEnemy,          // Monster Hunter
+    KillCow,            // Cow Tipper
+    DiamondsToYou,      // Sniper Duel
+    MakeMap,            // Map Room
+    PortalMaker,        // Portal Maker
+    PotionEffect,       // Local Brewery
+    SpawnWither,        // The Beginning?
+    KillWither,         // The Beginning.
+    FullBeacon,         // Beaconator
     Overkill,
     BookcaseBuilder,
     ReturnToSender,

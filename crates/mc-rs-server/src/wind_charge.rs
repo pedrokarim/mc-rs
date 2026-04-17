@@ -21,7 +21,16 @@ pub const DIRECT_DAMAGE: f32 = 1.0;
 
 impl WindCharge {
     pub fn new(x: f64, y: f64, z: f64, mx: f64, my: f64, mz: f64, owner: u64) -> Self {
-        Self { x, y, z, motion_x: mx, motion_y: my, motion_z: mz, owner, age: 0 }
+        Self {
+            x,
+            y,
+            z,
+            motion_x: mx,
+            motion_y: my,
+            motion_z: mz,
+            owner,
+            age: 0,
+        }
     }
 
     pub fn tick(&mut self) {
@@ -37,7 +46,8 @@ impl WindCharge {
 
     /// Wind charges activate certain blocks (bell, button, etc.)
     pub fn activates_block(block_id: u16) -> bool {
-        matches!(block_id,
+        matches!(
+            block_id,
             85 | 107    // fence gate
             | 64 | 193 | 194 | 195 | 196 | 197  // doors
             | 77 | 143  // buttons

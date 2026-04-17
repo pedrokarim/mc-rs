@@ -9,22 +9,35 @@ pub enum ArrowType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PotionEffect {
-    Strength, Weakness, Swiftness, Slowness,
-    FireResistance, NightVision, Invisibility,
-    Healing, Harming, Poison, Regeneration,
-    Leaping, WaterBreathing, Luck, Unluck,
-    SlowFalling, TurtleMaster, Blindness,
+    Strength,
+    Weakness,
+    Swiftness,
+    Slowness,
+    FireResistance,
+    NightVision,
+    Invisibility,
+    Healing,
+    Harming,
+    Poison,
+    Regeneration,
+    Leaping,
+    WaterBreathing,
+    Luck,
+    Unluck,
+    SlowFalling,
+    TurtleMaster,
+    Blindness,
 }
 
 #[derive(Debug, Clone)]
 pub struct Arrow {
     pub arrow_type: ArrowType,
-    pub power_level: u8,       // from Power enchant
-    pub punch_level: u8,       // from Punch enchant
-    pub flame: bool,           // from Flame enchant
-    pub infinity: bool,        // Infinity enchant (on bow, not arrow)
-    pub piercing_level: u8,    // From Piercing (crossbow)
-    pub critical: bool,        // Fully drawn bow
+    pub power_level: u8,    // from Power enchant
+    pub punch_level: u8,    // from Punch enchant
+    pub flame: bool,        // from Flame enchant
+    pub infinity: bool,     // Infinity enchant (on bow, not arrow)
+    pub piercing_level: u8, // From Piercing (crossbow)
+    pub critical: bool,     // Fully drawn bow
     pub pickup_mode: PickupMode,
     pub age: u32,
     pub shot_from_crossbow: bool,
@@ -62,7 +75,8 @@ impl Arrow {
     /// Damage scales: base × (power * 0.25 + 1) × velocity.
     pub fn damage_at(&self, velocity_factor: f32) -> f32 {
         let base = BASE_DAMAGE * velocity_factor;
-        let power_bonus = self.power_level as f32 * 0.25 + if self.power_level > 0 { 0.25 } else { 0.0 };
+        let power_bonus =
+            self.power_level as f32 * 0.25 + if self.power_level > 0 { 0.25 } else { 0.0 };
         let mut dmg = base + power_bonus * base;
         if self.critical {
             dmg += rand::random::<f32>() * (dmg / 2.0 + 2.0);

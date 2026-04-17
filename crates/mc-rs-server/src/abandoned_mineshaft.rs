@@ -28,6 +28,8 @@ mod tests {
 
     #[test]
     fn has_rail_items() {
-        assert!(minecart_chest_loot().iter().any(|(i, _, _, _)| i.contains("rail")));
+        assert!(minecart_chest_loot()
+            .iter()
+            .any(|(i, _, _, _)| i.contains("rail")));
     }
 }

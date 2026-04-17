@@ -20,12 +20,12 @@ pub enum RecipeIngredient {
 impl RecipeIngredient {
     pub fn matches(&self, stack: &ItemStack) -> bool {
         match self {
-            Self::Exact { item_id, meta, count } => {
-                stack.id == *item_id && stack.meta == *meta && stack.count >= *count
-            }
-            Self::AnyMeta { item_id, count } => {
-                stack.id == *item_id && stack.count >= *count
-            }
+            Self::Exact {
+                item_id,
+                meta,
+                count,
+            } => stack.id == *item_id && stack.meta == *meta && stack.count >= *count,
+            Self::AnyMeta { item_id, count } => stack.id == *item_id && stack.count >= *count,
             Self::Empty => stack.is_air(),
         }
     }
@@ -47,7 +47,12 @@ pub struct ShapedRecipe {
 }
 
 impl ShapedRecipe {
-    pub fn new(width: usize, height: usize, input: Vec<RecipeIngredient>, output: Vec<ItemStack>) -> Self {
+    pub fn new(
+        width: usize,
+        height: usize,
+        input: Vec<RecipeIngredient>,
+        output: Vec<ItemStack>,
+    ) -> Self {
         assert_eq!(input.len(), width * height);
         assert!(width <= 3 && height <= 3, "max crafting grid is 3x3");
         Self {
@@ -91,7 +96,8 @@ impl ShapedRecipe {
         // Vérif que les slots HORS de la zone recipe sont air.
         for gy in 0..grid_size {
             for gx in 0..grid_size {
-                let in_recipe = gx >= ox && gx < ox + self.width && gy >= oy && gy < oy + self.height;
+                let in_recipe =
+                    gx >= ox && gx < ox + self.width && gy >= oy && gy < oy + self.height;
                 let cell = &grid[gy * grid_size + gx];
                 if !in_recipe {
                     if !cell.is_air() {
@@ -280,9 +286,15 @@ impl CraftingManager {
             3,
             3,
             vec![
-                c.clone(), c.clone(), c.clone(),
-                c.clone(), RecipeIngredient::Empty, c.clone(),
-                c.clone(), c.clone(), c.clone(),
+                c.clone(),
+                c.clone(),
+                c.clone(),
+                c.clone(),
+                RecipeIngredient::Empty,
+                c.clone(),
+                c.clone(),
+                c.clone(),
+                c.clone(),
             ],
             vec![ItemStack::new(required_item_id("minecraft:furnace"), 1, 0)],
         ));
@@ -295,9 +307,15 @@ impl CraftingManager {
             3,
             3,
             vec![
-                pp.clone(), pp.clone(), pp.clone(),
-                pp.clone(), RecipeIngredient::Empty, pp.clone(),
-                pp.clone(), pp.clone(), pp.clone(),
+                pp.clone(),
+                pp.clone(),
+                pp.clone(),
+                pp.clone(),
+                RecipeIngredient::Empty,
+                pp.clone(),
+                pp.clone(),
+                pp.clone(),
+                pp.clone(),
             ],
             vec![ItemStack::new(required_item_id("minecraft:chest"), 1, 0)],
         ));
@@ -340,8 +358,14 @@ mod tests {
     fn shapeless_matches_regardless_of_position() {
         let r = ShapelessRecipe::new(
             vec![
-                RecipeIngredient::AnyMeta { item_id: 1, count: 1 },
-                RecipeIngredient::AnyMeta { item_id: 2, count: 1 },
+                RecipeIngredient::AnyMeta {
+                    item_id: 1,
+                    count: 1,
+                },
+                RecipeIngredient::AnyMeta {
+                    item_id: 2,
+                    count: 1,
+                },
             ],
             vec![stack(3, 1)],
         );
@@ -360,8 +384,14 @@ mod tests {
             1,
             2,
             vec![
-                RecipeIngredient::AnyMeta { item_id: 1, count: 1 },
-                RecipeIngredient::AnyMeta { item_id: 1, count: 1 },
+                RecipeIngredient::AnyMeta {
+                    item_id: 1,
+                    count: 1,
+                },
+                RecipeIngredient::AnyMeta {
+                    item_id: 1,
+                    count: 1,
+                },
             ],
             vec![stack(5, 4)],
         );
@@ -376,8 +406,14 @@ mod tests {
             1,
             2,
             vec![
-                RecipeIngredient::AnyMeta { item_id: 1, count: 1 },
-                RecipeIngredient::AnyMeta { item_id: 1, count: 1 },
+                RecipeIngredient::AnyMeta {
+                    item_id: 1,
+                    count: 1,
+                },
+                RecipeIngredient::AnyMeta {
+                    item_id: 1,
+                    count: 1,
+                },
             ],
             vec![stack(5, 4)],
         );

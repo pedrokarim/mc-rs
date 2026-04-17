@@ -24,7 +24,10 @@ pub fn next_exit_position(previous: (i32, i32, i32), gateway_index: u32) -> (i32
 
 impl EndGateway {
     pub fn new(exit: (i32, i32, i32)) -> Self {
-        Self { exit_position: exit, age: 0 }
+        Self {
+            exit_position: exit,
+            age: 0,
+        }
     }
 
     pub fn tick(&mut self) {

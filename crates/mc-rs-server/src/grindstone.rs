@@ -13,9 +13,12 @@ pub struct GrindstoneOperation {
 impl GrindstoneOperation {
     /// Compute output enchantments (keep only curses).
     pub fn result_enchantments(&self) -> Vec<(EnchantmentKind, u8)> {
-        let keep = |e: &(EnchantmentKind, u8)| matches!(e.0,
-            EnchantmentKind::BindingCurse | EnchantmentKind::VanishingCurse
-        );
+        let keep = |e: &(EnchantmentKind, u8)| {
+            matches!(
+                e.0,
+                EnchantmentKind::BindingCurse | EnchantmentKind::VanishingCurse
+            )
+        };
         let mut out: Vec<_> = self.enchants_a.iter().copied().filter(keep).collect();
         out.extend(self.enchants_b.iter().copied().filter(keep));
         out
@@ -23,12 +26,26 @@ impl GrindstoneOperation {
 
     /// XP dropped when grinding (based on enchantments).
     pub fn xp_dropped(&self) -> u32 {
-        let count = self.enchants_a.iter().filter(|e|
-            !matches!(e.0, EnchantmentKind::BindingCurse | EnchantmentKind::VanishingCurse)
-        ).count()
-            + self.enchants_b.iter().filter(|e|
-            !matches!(e.0, EnchantmentKind::BindingCurse | EnchantmentKind::VanishingCurse)
-        ).count();
+        let count = self
+            .enchants_a
+            .iter()
+            .filter(|e| {
+                !matches!(
+                    e.0,
+                    EnchantmentKind::BindingCurse | EnchantmentKind::VanishingCurse
+                )
+            })
+            .count()
+            + self
+                .enchants_b
+                .iter()
+                .filter(|e| {
+                    !matches!(
+                        e.0,
+                        EnchantmentKind::BindingCurse | EnchantmentKind::VanishingCurse
+                    )
+                })
+                .count();
         (count * 5) as u32
     }
 

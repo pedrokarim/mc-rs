@@ -8,7 +8,12 @@ pub const FRICTION_PACKED_ICE: f32 = 0.98;
 pub const FRICTION_BLUE_ICE: f32 = 0.989;
 
 /// Applique gravité + drag à la motion. Modifie motion en place.
-pub fn apply_gravity_and_drag(motion: &mut [f32; 3], gravity: f32, drag: f32, drag_before_gravity: bool) {
+pub fn apply_gravity_and_drag(
+    motion: &mut [f32; 3],
+    gravity: f32,
+    drag: f32,
+    drag_before_gravity: bool,
+) {
     if drag_before_gravity {
         motion[1] *= 1.0 - drag;
         motion[1] -= gravity;

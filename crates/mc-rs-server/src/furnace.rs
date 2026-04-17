@@ -11,10 +11,18 @@ pub fn fuel_burn_time(item_name: &str) -> u32 {
         "minecraft:blaze_rod" => 2400,
         "minecraft:coal" | "minecraft:charcoal" => 1600,
         "minecraft:boat" | "minecraft:oak_boat" | "minecraft:birch_boat" => 1200,
-        "minecraft:oak_log" | "minecraft:birch_log" | "minecraft:spruce_log"
-        | "minecraft:jungle_log" | "minecraft:acacia_log" | "minecraft:dark_oak_log" => 300,
-        "minecraft:oak_planks" | "minecraft:birch_planks" | "minecraft:spruce_planks"
-        | "minecraft:jungle_planks" | "minecraft:acacia_planks" | "minecraft:dark_oak_planks" => 300,
+        "minecraft:oak_log"
+        | "minecraft:birch_log"
+        | "minecraft:spruce_log"
+        | "minecraft:jungle_log"
+        | "minecraft:acacia_log"
+        | "minecraft:dark_oak_log" => 300,
+        "minecraft:oak_planks"
+        | "minecraft:birch_planks"
+        | "minecraft:spruce_planks"
+        | "minecraft:jungle_planks"
+        | "minecraft:acacia_planks"
+        | "minecraft:dark_oak_planks" => 300,
         "minecraft:stick" => 100,
         _ => 0,
     }
@@ -92,7 +100,8 @@ impl FurnaceState {
 
         let recipe = recipe.unwrap();
         if self.cook_time_total == 0 {
-            self.cook_time_total = (recipe.cook_time_ticks as f32 / self.kind.speed_multiplier()) as u32;
+            self.cook_time_total =
+                (recipe.cook_time_ticks as f32 / self.kind.speed_multiplier()) as u32;
         }
 
         // Consomme fuel si nécessaire.

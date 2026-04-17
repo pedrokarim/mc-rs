@@ -8,7 +8,10 @@ pub struct Bat {
 
 impl Bat {
     pub fn new() -> Self {
-        Self { hanging: false, hang_position: None }
+        Self {
+            hanging: false,
+            hang_position: None,
+        }
     }
 
     pub fn hang(&mut self, pos: (i32, i32, i32)) {
@@ -22,7 +25,9 @@ impl Bat {
     }
 
     /// Bats don't spawn in bright areas.
-    pub fn max_spawn_light() -> u8 { 3 }
+    pub fn max_spawn_light() -> u8 {
+        3
+    }
 
     /// Spawns in caves.
     pub fn spawn_biomes() -> &'static [&'static str] {
@@ -31,7 +36,9 @@ impl Bat {
 }
 
 impl Default for Bat {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

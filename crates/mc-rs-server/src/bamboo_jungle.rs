@@ -14,7 +14,9 @@ pub fn unique_features() -> &'static [&'static str] {
 }
 
 /// Panda spawn exclusive to bamboo jungle.
-pub fn panda_spawns_here() -> bool { true }
+pub fn panda_spawns_here() -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {

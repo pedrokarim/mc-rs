@@ -25,15 +25,13 @@ impl RabbitVariant {
                 // Desert
                 Self::Gold
             }
-            _ => {
-                match rand::random::<u8>() % 5 {
-                    0 => Self::Brown,
-                    1 => Self::White,
-                    2 => Self::Black,
-                    3 => Self::WhiteAndBlack,
-                    _ => Self::SaltAndPepper,
-                }
-            }
+            _ => match rand::random::<u8>() % 5 {
+                0 => Self::Brown,
+                1 => Self::White,
+                2 => Self::Black,
+                3 => Self::WhiteAndBlack,
+                _ => Self::SaltAndPepper,
+            },
         }
     }
 

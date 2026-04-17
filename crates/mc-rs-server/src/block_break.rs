@@ -1,6 +1,6 @@
 //! Block breaking logic — tool compat + hardness.
 
-use crate::tool_types::{ToolType, ToolTier};
+use crate::tool_types::{ToolTier, ToolType};
 
 /// Material classification for block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,10 +60,21 @@ impl BlockMaterial {
 
     /// Drops items when broken without correct tool?
     pub fn drops_with_hand(&self) -> bool {
-        matches!(self,
-            Self::Air | Self::Wood | Self::Dirt | Self::Gravel | Self::Sand
-            | Self::Wool | Self::Leaves | Self::Plant | Self::Pumpkin | Self::Melon
-            | Self::Snow | Self::Glass | Self::Cobweb
+        matches!(
+            self,
+            Self::Air
+                | Self::Wood
+                | Self::Dirt
+                | Self::Gravel
+                | Self::Sand
+                | Self::Wool
+                | Self::Leaves
+                | Self::Plant
+                | Self::Pumpkin
+                | Self::Melon
+                | Self::Snow
+                | Self::Glass
+                | Self::Cobweb
         )
     }
 }

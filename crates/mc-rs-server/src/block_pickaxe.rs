@@ -6,7 +6,9 @@ use crate::tool_types::ToolTier;
 pub fn required_tier(block_id: u16) -> ToolTier {
     match block_id {
         // Wood tier (stone, coal, copper)
-        1 | 4 | 7 | 15 | 16 | 45 | 47 | 48 | 97 | 98 | 108 | 109 | 139 | 215 | 281 | 282 | 283 => ToolTier::Wood,
+        1 | 4 | 7 | 15 | 16 | 45 | 47 | 48 | 97 | 98 | 108 | 109 | 139 | 215 | 281 | 282 | 283 => {
+            ToolTier::Wood
+        }
         // Stone tier (iron, lapis)
         14 | 21 | 42 | 56 | 73 | 74 | 120 | 122 | 129 | 153 => ToolTier::Stone,
         // Iron tier (diamond, gold, emerald, redstone)
@@ -21,7 +23,8 @@ pub fn required_tier(block_id: u16) -> ToolTier {
 
 /// Does breaking this block drop an item?
 pub fn drops_without_tool(block_id: u16) -> bool {
-    matches!(block_id,
+    matches!(
+        block_id,
         2 | 3  // dirt/grass
         | 5 | 17 | 162 // wood
         | 10 | 11 // lava (no drop)

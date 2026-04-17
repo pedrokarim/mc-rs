@@ -17,11 +17,17 @@ pub struct PlacedBanner {
 pub const OMINOUS_BANNER_PATTERN_COUNT: usize = 6;
 
 /// Wash banner in cauldron removes top pattern.
-pub fn wash_in_cauldron() -> bool { true }
+pub fn wash_in_cauldron() -> bool {
+    true
+}
 
 impl PlacedBanner {
     pub fn new(color: u8, placement: BannerPlacement) -> Self {
-        Self { color, placement, patterns: Vec::new() }
+        Self {
+            color,
+            placement,
+            patterns: Vec::new(),
+        }
     }
 
     pub fn wash(&mut self) -> bool {

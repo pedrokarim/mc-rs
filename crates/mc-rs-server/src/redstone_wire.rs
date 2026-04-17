@@ -35,7 +35,9 @@ impl RedstoneWire {
 }
 
 impl Default for RedstoneWire {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

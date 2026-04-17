@@ -29,10 +29,14 @@ impl ShulkerBox {
     }
 
     /// Can't be placed with contents dropped — keeps contents in item form.
-    pub fn drops_self_as_item() -> bool { true }
+    pub fn drops_self_as_item() -> bool {
+        true
+    }
 
     /// Shulker boxes can't be put inside other shulker boxes.
-    pub fn can_contain_shulker_box() -> bool { false }
+    pub fn can_contain_shulker_box() -> bool {
+        false
+    }
 
     pub fn open(&mut self) {
         self.opening_progress = self.opening_progress.saturating_add(1).min(OPEN_DURATION);

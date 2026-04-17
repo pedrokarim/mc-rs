@@ -110,13 +110,25 @@ impl AttributeMap {
         map.add(Attribute::new(ids::ABSORPTION, 0.0, f, 0.0, true));
         map.add(Attribute::new(ids::SATURATION, 0.0, 20.0, 20.0, true));
         map.add(Attribute::new(ids::EXHAUSTION, 0.0, 5.0, 0.0, false));
-        map.add(Attribute::new(ids::KNOCKBACK_RESISTANCE, 0.0, 1.0, 0.0, true));
+        map.add(Attribute::new(
+            ids::KNOCKBACK_RESISTANCE,
+            0.0,
+            1.0,
+            0.0,
+            true,
+        ));
         map.add(Attribute::new(ids::HEALTH, 0.0, 20.0, 20.0, true));
         map.add(Attribute::new(ids::MOVEMENT_SPEED, 0.0, f, 0.1, true));
         map.add(Attribute::new(ids::FOLLOW_RANGE, 0.0, 2048.0, 16.0, false));
         map.add(Attribute::new(ids::HUNGER, 0.0, 20.0, 20.0, true));
         map.add(Attribute::new(ids::ATTACK_DAMAGE, 0.0, f, 1.0, false));
-        map.add(Attribute::new(ids::EXPERIENCE_LEVEL, 0.0, 24791.0, 0.0, true));
+        map.add(Attribute::new(
+            ids::EXPERIENCE_LEVEL,
+            0.0,
+            24791.0,
+            0.0,
+            true,
+        ));
         map.add(Attribute::new(ids::EXPERIENCE, 0.0, 1.0, 0.0, true));
         map.add(Attribute::new(ids::UNDERWATER_MOVEMENT, 0.0, f, 0.02, true));
         map.add(Attribute::new(ids::LUCK, -1024.0, 1024.0, 0.0, true));

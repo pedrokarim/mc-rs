@@ -13,7 +13,9 @@ impl FrogSpawn {
     pub fn new() -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        Self { hatch_ticks: rng.gen_range(HATCH_MIN..=HATCH_MAX) }
+        Self {
+            hatch_ticks: rng.gen_range(HATCH_MIN..=HATCH_MAX),
+        }
     }
 
     pub fn tick(&mut self) -> bool {
@@ -25,7 +27,9 @@ impl FrogSpawn {
 }
 
 impl Default for FrogSpawn {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Tadpole mob (grows into frog).
@@ -37,7 +41,10 @@ pub struct Tadpole {
 
 impl Tadpole {
     pub fn new(warmth: f32) -> Self {
-        Self { age: -24000, warmth_temperature: warmth }
+        Self {
+            age: -24000,
+            warmth_temperature: warmth,
+        }
     }
 
     pub fn is_ready_to_become_frog(&self) -> bool {

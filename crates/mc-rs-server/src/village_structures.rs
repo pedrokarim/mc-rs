@@ -21,8 +21,12 @@ impl VillageBiomeType {
         }
     }
 
-    pub fn bell_count_per_village() -> u32 { 1 }
-    pub fn max_radius_blocks() -> f64 { 64.0 }
+    pub fn bell_count_per_village() -> u32 {
+        1
+    }
+    pub fn max_radius_blocks() -> f64 {
+        64.0
+    }
 }
 
 /// Village structures (buildings).

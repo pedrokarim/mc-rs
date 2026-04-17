@@ -278,9 +278,7 @@ pub fn consume_food(attrs: &mut AttributeMap, info: ConsumableInfo) -> bool {
     attrs.must_get_mut(ids::HUNGER).set_value(new_hunger, true);
     let sat = attrs.must_get(ids::SATURATION).current_value;
     let new_sat = (sat + info.saturation).min(new_hunger);
-    attrs
-        .must_get_mut(ids::SATURATION)
-        .set_value(new_sat, true);
+    attrs.must_get_mut(ids::SATURATION).set_value(new_sat, true);
     true
 }
 

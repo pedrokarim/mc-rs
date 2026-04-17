@@ -15,7 +15,9 @@ pub const HOSTILE_DAMAGE_RANGE: f64 = 8.0;
 pub const HOSTILE_DAMAGE: f32 = 4.0;
 
 /// Only active while touching water.
-pub fn needs_water_contact() -> bool { true }
+pub fn needs_water_contact() -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {

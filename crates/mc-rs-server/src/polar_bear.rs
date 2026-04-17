@@ -17,14 +17,24 @@ pub const ADULT_HP: f32 = 30.0;
 
 impl PolarBear {
     pub fn new_adult() -> Self {
-        Self { age: 0, parent_of: Vec::new(), provoked_ticks: 0 }
+        Self {
+            age: 0,
+            parent_of: Vec::new(),
+            provoked_ticks: 0,
+        }
     }
 
     pub fn new_baby() -> Self {
-        Self { age: -24000, parent_of: Vec::new(), provoked_ticks: 0 }
+        Self {
+            age: -24000,
+            parent_of: Vec::new(),
+            provoked_ticks: 0,
+        }
     }
 
-    pub fn is_baby(&self) -> bool { self.age < 0 }
+    pub fn is_baby(&self) -> bool {
+        self.age < 0
+    }
 
     pub fn tick(&mut self) {
         if self.age < 0 {
@@ -36,7 +46,11 @@ impl PolarBear {
     }
 
     pub fn hp(&self) -> f32 {
-        if self.is_baby() { BABY_HP } else { ADULT_HP }
+        if self.is_baby() {
+            BABY_HP
+        } else {
+            ADULT_HP
+        }
     }
 
     pub fn provoke(&mut self) {

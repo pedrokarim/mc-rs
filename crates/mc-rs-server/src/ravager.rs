@@ -60,11 +60,15 @@ impl Ravager {
     }
 
     /// Ravagers can destroy crops + leaves.
-    pub fn destroys_leaves() -> bool { true }
+    pub fn destroys_leaves() -> bool {
+        true
+    }
 }
 
 impl Default for Ravager {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

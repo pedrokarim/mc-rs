@@ -59,7 +59,9 @@ impl ElytraState {
 }
 
 impl Default for ElytraState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

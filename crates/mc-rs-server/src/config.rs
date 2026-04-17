@@ -59,6 +59,31 @@ do_weather_cycle = false
 
 # Rayon de protection du spawn en blocs (0 = désactivé)
 spawn_protection = 16
+
+[logging]
+# Dossier où sont écrits les fichiers de log
+directory = "logs"
+
+# Politique de rotation : "daily" (nouveau fichier par jour), "hourly",
+# "minutely" (debug), ou "never" (un seul fichier, jamais recyclé).
+rotation = "daily"
+
+# Nombre maximum d'archives à conserver (0 = illimité).
+# Les plus anciennes sont supprimées automatiquement au-delà.
+max_files = 14
+
+# Niveau par défaut (format env_logger : "info", "debug,mc_rs_raknet=trace", ...).
+# La variable d'environnement RUST_LOG prend toujours le dessus si elle est définie.
+level = "info,mc_rs_raknet=debug"
+
+# Écrire les logs sur stdout (console)
+stdout = true
+
+# Écrire les logs dans le fichier `<directory>/server.<DATE>.log`
+file = true
+
+# Colorer les logs stdout avec ANSI (désactiver si le terminal ne gère pas)
+ansi = true
 "#;
 
 #[derive(Debug, Deserialize)]
@@ -69,6 +94,26 @@ pub struct ServerConfig {
     pub world: WorldSection,
     #[serde(default)]
     pub gameplay: GameplaySection,
+    #[serde(default)]
+    pub logging: LoggingSection,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct LoggingSection {
+    #[serde(default = "default_log_dir")]
+    pub directory: String,
+    #[serde(default = "default_log_rotation")]
+    pub rotation: String,
+    #[serde(default = "default_log_max_files")]
+    pub max_files: usize,
+    #[serde(default = "default_log_level")]
+    pub level: String,
+    #[serde(default = "default_true")]
+    pub stdout: bool,
+    #[serde(default = "default_true")]
+    pub file: bool,
+    #[serde(default = "default_true")]
+    pub ansi: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -174,6 +219,18 @@ fn default_true() -> bool {
 fn default_spawn_protection() -> i32 {
     16
 }
+fn default_log_dir() -> String {
+    "logs".to_string()
+}
+fn default_log_rotation() -> String {
+    "daily".to_string()
+}
+fn default_log_max_files() -> usize {
+    14
+}
+fn default_log_level() -> String {
+    "info,mc_rs_raknet=debug".to_string()
+}
 
 impl Default for ServerConfig {
     fn default() -> Self {
@@ -181,6 +238,21 @@ impl Default for ServerConfig {
             server: default_server(),
             world: WorldSection::default(),
             gameplay: GameplaySection::default(),
+            logging: LoggingSection::default(),
+        }
+    }
+}
+
+impl Default for LoggingSection {
+    fn default() -> Self {
+        Self {
+            directory: default_log_dir(),
+            rotation: default_log_rotation(),
+            max_files: default_log_max_files(),
+            level: default_log_level(),
+            stdout: true,
+            file: true,
+            ansi: true,
         }
     }
 }
@@ -240,41 +312,73 @@ impl GameplaySection {
     }
 }
 
+/// Notes d'amorçage produites pendant `ServerConfig::load`, à émettre via
+/// `tracing` **après** l'initialisation du subsystem de logs.
+///
+/// La config doit être chargée avant d'initialiser les logs (la section
+/// `[logging]` pilote le niveau, la rotation, etc.), mais `tracing` n'est pas
+/// encore prêt — on stocke donc ici les messages en attente.
+#[derive(Debug, Default)]
+pub struct ConfigBootstrapNotes {
+    pub info: Vec<String>,
+    pub warn: Vec<String>,
+}
+
+impl ConfigBootstrapNotes {
+    pub fn flush(self) {
+        for m in self.info {
+            info!("{m}");
+        }
+        for m in self.warn {
+            tracing::warn!("{m}");
+        }
+    }
+}
+
 impl ServerConfig {
-    pub fn load(path: &str) -> Self {
-        // Auto-generate default config if missing
+    /// Charge `server.toml` sans émettre de logs (indispensable : cette fonction
+    /// tourne avant l'init de `tracing`). Retourne la config et des notes à
+    /// `flush()` après l'init.
+    pub fn load(path: &str) -> (Self, ConfigBootstrapNotes) {
+        let mut notes = ConfigBootstrapNotes::default();
+
         if !std::path::Path::new(path).exists() {
-            if let Err(e) = std::fs::write(path, DEFAULT_CONFIG_TOML) {
-                info!("Could not write default {}: {}", path, e);
-            } else {
-                info!("Generated default {}", path);
+            match std::fs::write(path, DEFAULT_CONFIG_TOML) {
+                Ok(()) => notes.info.push(format!("Generated default {path}")),
+                Err(e) => notes
+                    .warn
+                    .push(format!("Could not write default {path}: {e}")),
             }
         }
 
-        match std::fs::read_to_string(path) {
+        let config = match std::fs::read_to_string(path) {
             Ok(content) => {
-                let config: Self = toml::from_str(&content).unwrap_or_default();
-                info!(
+                let parsed: Self = toml::from_str(&content).unwrap_or_default();
+                notes.info.push(format!(
                     "Config loaded from {}\n  Server: {}:{} (max {} players)\n  World: \"{}\" ({}, seed={})\n  Gameplay: {}, {}, daylight={}, weather={}",
                     path,
-                    config.server.motd,
-                    config.server.port,
-                    config.server.max_players,
-                    config.world.name,
-                    config.world.generator,
-                    config.world.seed,
-                    config.gameplay.gamemode,
-                    config.gameplay.difficulty,
-                    if config.gameplay.do_daylight_cycle { "on" } else { "off" },
-                    if config.gameplay.do_weather_cycle { "on" } else { "off" },
-                );
-                config
+                    parsed.server.motd,
+                    parsed.server.port,
+                    parsed.server.max_players,
+                    parsed.world.name,
+                    parsed.world.generator,
+                    parsed.world.seed,
+                    parsed.gameplay.gamemode,
+                    parsed.gameplay.difficulty,
+                    if parsed.gameplay.do_daylight_cycle { "on" } else { "off" },
+                    if parsed.gameplay.do_weather_cycle { "on" } else { "off" },
+                ));
+                parsed
             }
             Err(e) => {
-                info!("Could not read {}: {}, using defaults", path, e);
+                notes
+                    .warn
+                    .push(format!("Could not read {path}: {e}, using defaults"));
                 Self::default()
             }
-        }
+        };
+
+        (config, notes)
     }
 
     /// Resolve the effective world seed.

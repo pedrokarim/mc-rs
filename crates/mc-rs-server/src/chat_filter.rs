@@ -2,8 +2,7 @@
 
 const BANNED_PATTERNS: &[&str] = &[
     // Just a few examples — real list would be way bigger.
-    "fuck",
-    "shit",
+    "fuck", "shit",
 ];
 
 pub fn is_profanity(text: &str) -> bool {

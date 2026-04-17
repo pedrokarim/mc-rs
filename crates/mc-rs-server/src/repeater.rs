@@ -3,7 +3,7 @@
 #[derive(Debug, Clone)]
 pub struct Repeater {
     pub facing: u8,
-    pub delay: u8,          // 1-4 ticks
+    pub delay: u8, // 1-4 ticks
     pub powered: bool,
     pub locked: bool,
     pub pending_tick: u32,

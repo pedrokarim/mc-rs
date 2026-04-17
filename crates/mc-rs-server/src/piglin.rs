@@ -73,7 +73,9 @@ impl Piglin {
     }
 
     /// Baby piglins don't zombify.
-    pub fn baby_never_zombifies() -> bool { false } // Actually they do zombify
+    pub fn baby_never_zombifies() -> bool {
+        false
+    } // Actually they do zombify
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

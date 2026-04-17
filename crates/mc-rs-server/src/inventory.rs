@@ -146,10 +146,10 @@ pub struct PlayerInventory {
     pub slots: Vec<ItemStackWrapper>, // 36 slots (hotbar 0-8, main 9-35)
     pub armor: Vec<ItemStackWrapper>, // 4 slots
     pub offhand: ItemStackWrapper,
-    pub cursor: ItemStackWrapper,           // 1 slot (UI slot 0)
-    pub craft_grid: [ItemStackWrapper; 4],  // 2x2 (UI slots 28..32)
-    pub craft_result: ItemStackWrapper,     // (UI slot 50)
-    pub held_slot: u8, // 0-8 hotbar index
+    pub cursor: ItemStackWrapper,          // 1 slot (UI slot 0)
+    pub craft_grid: [ItemStackWrapper; 4], // 2x2 (UI slots 28..32)
+    pub craft_result: ItemStackWrapper,    // (UI slot 50)
+    pub held_slot: u8,                     // 0-8 hotbar index
     next_stack_id: i32,
 }
 
@@ -221,7 +221,11 @@ impl PlayerInventory {
 
     /// Get a mutable reference to a slot inside the logical inventory identified by `key`.
     /// Returns None if the slot is out of range for that inventory.
-    pub fn slot_mut(&mut self, key: crate::inventory_manager::InvKey, core_slot: usize) -> Option<&mut ItemStackWrapper> {
+    pub fn slot_mut(
+        &mut self,
+        key: crate::inventory_manager::InvKey,
+        core_slot: usize,
+    ) -> Option<&mut ItemStackWrapper> {
         use crate::inventory_manager::InvKey;
         match key {
             InvKey::Main => self.slots.get_mut(core_slot),
@@ -233,7 +237,11 @@ impl PlayerInventory {
         }
     }
 
-    pub fn slot_ref(&self, key: crate::inventory_manager::InvKey, core_slot: usize) -> Option<&ItemStackWrapper> {
+    pub fn slot_ref(
+        &self,
+        key: crate::inventory_manager::InvKey,
+        core_slot: usize,
+    ) -> Option<&ItemStackWrapper> {
         use crate::inventory_manager::InvKey;
         match key {
             InvKey::Main => self.slots.get(core_slot),

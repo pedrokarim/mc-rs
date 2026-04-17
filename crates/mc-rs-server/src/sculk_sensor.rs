@@ -77,7 +77,9 @@ impl SculkSensor {
 }
 
 impl Default for SculkSensor {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

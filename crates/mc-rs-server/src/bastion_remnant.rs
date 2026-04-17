@@ -53,6 +53,8 @@ mod tests {
 
     #[test]
     fn treasure_has_netherite() {
-        assert!(treasure_room_loot().iter().any(|(i, _, _, _)| *i == "minecraft:netherite_ingot"));
+        assert!(treasure_room_loot()
+            .iter()
+            .any(|(i, _, _, _)| *i == "minecraft:netherite_ingot"));
     }
 }

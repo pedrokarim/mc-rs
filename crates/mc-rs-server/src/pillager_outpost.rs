@@ -29,6 +29,8 @@ mod tests {
 
     #[test]
     fn has_crossbow() {
-        assert!(chest_loot().iter().any(|(i, _, _, _)| *i == "minecraft:crossbow"));
+        assert!(chest_loot()
+            .iter()
+            .any(|(i, _, _, _)| *i == "minecraft:crossbow"));
     }
 }

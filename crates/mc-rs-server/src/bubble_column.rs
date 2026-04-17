@@ -9,10 +9,14 @@ pub enum BubbleDirection {
 /// Push speed.
 pub const PUSH_SPEED: f64 = 0.04;
 /// Negate fall damage.
-pub fn negates_fall_damage() -> bool { true }
+pub fn negates_fall_damage() -> bool {
+    true
+}
 
 /// Propels boat/player vertically.
-pub fn propels_boat() -> bool { true }
+pub fn propels_boat() -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {

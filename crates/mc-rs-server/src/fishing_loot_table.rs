@@ -15,7 +15,8 @@ pub fn outcome_weight(outcome: FishingOutcome, luck_of_sea: u8) -> f32 {
         FishingOutcome::Fish => 85.0 - 2.0 * luck_of_sea as f32,
         FishingOutcome::Treasure => 5.0 + 2.0 * luck_of_sea as f32,
         FishingOutcome::Junk => 10.0 - 2.5 * luck_of_sea as f32,
-    }.max(0.0)
+    }
+    .max(0.0)
 }
 
 pub fn fish_loot() -> &'static [(&'static str, u32)] {
@@ -79,7 +80,10 @@ mod tests {
 
     #[test]
     fn luck_increases_treasure() {
-        assert!(outcome_weight(FishingOutcome::Treasure, 3) > outcome_weight(FishingOutcome::Treasure, 0));
+        assert!(
+            outcome_weight(FishingOutcome::Treasure, 3)
+                > outcome_weight(FishingOutcome::Treasure, 0)
+        );
     }
 
     #[test]

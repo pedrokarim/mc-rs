@@ -53,7 +53,9 @@ impl Dolphin {
 }
 
 impl Default for Dolphin {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

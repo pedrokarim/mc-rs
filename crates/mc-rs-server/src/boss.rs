@@ -47,16 +47,16 @@ impl BossKind {
 /// phases de respawn / charge / attack / perch).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BossPhase {
-    Armored,     // Wither initial
-    Normal,      // Wither après armor
-    Perching,    // Dragon sitting on portal
-    Charging,    // Dragon charge attack
+    Armored,  // Wither initial
+    Normal,   // Wither après armor
+    Perching, // Dragon sitting on portal
+    Charging, // Dragon charge attack
     HoveringStrafing,
     LandingApproach,
     Landing,
     TakeOff,
     Dying,
-    Regen,       // Warden post-hit
+    Regen, // Warden post-hit
 }
 
 #[derive(Debug, Clone)]

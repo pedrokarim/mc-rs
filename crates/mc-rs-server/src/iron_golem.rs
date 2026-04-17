@@ -18,9 +18,9 @@ pub struct IronGolem {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CrackLevel {
     None,
-    Low,     // 75% hp
-    Medium,  // 50% hp
-    High,    // 25% hp
+    Low,    // 75% hp
+    Medium, // 50% hp
+    High,   // 25% hp
 }
 
 /// Damage melee (randomized vanilla 7-21 sur normal).

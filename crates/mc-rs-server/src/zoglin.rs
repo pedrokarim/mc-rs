@@ -9,15 +9,26 @@ pub struct Zoglin {
 
 /// Hostile envers tout sauf zombies (creeper, hoglin etc).
 pub fn target_filter(kind: &str) -> bool {
-    !matches!(kind,
-        "zombie" | "zombie_villager" | "husk" | "drowned" |
-        "zoglin" | "piglin_brute" | "piglin" | "zombified_piglin"
+    !matches!(
+        kind,
+        "zombie"
+            | "zombie_villager"
+            | "husk"
+            | "drowned"
+            | "zoglin"
+            | "piglin_brute"
+            | "piglin"
+            | "zombified_piglin"
     )
 }
 
 impl Zoglin {
     pub fn new() -> Self {
-        Self { age: 0, attack_cooldown: 0, target_entity: None }
+        Self {
+            age: 0,
+            attack_cooldown: 0,
+            target_entity: None,
+        }
     }
 
     pub fn tick(&mut self) {
@@ -30,11 +41,15 @@ impl Zoglin {
     }
 
     /// Knockback chance on attack (50%).
-    pub fn knockback_chance() -> f32 { 0.5 }
+    pub fn knockback_chance() -> f32 {
+        0.5
+    }
 }
 
 impl Default for Zoglin {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

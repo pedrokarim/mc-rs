@@ -4,8 +4,8 @@ use crate::piston::Facing;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DispenserKind {
-    Dispenser,  // Can shoot items (arrows, fire charges)
-    Dropper,    // Only drops items
+    Dispenser, // Can shoot items (arrows, fire charges)
+    Dropper,   // Only drops items
 }
 
 #[derive(Debug, Clone)]

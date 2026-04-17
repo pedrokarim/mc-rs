@@ -2,11 +2,11 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WardenState {
-    Emerging,    // Spawning depuis sculk shrieker
-    Roaring,     // Sonic roar
-    Pursuing,    // Chasing target
-    Digging,     // Returning to ground
-    Sniffing,    // Seeking
+    Emerging, // Spawning depuis sculk shrieker
+    Roaring,  // Sonic roar
+    Pursuing, // Chasing target
+    Digging,  // Returning to ground
+    Sniffing, // Seeking
     Idle,
 }
 

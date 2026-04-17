@@ -41,7 +41,7 @@ impl CauldronContent {
     pub fn can_fill_bottle(&self) -> bool {
         matches!(
             self,
-            Self::Water { level: 1.. } | Self::Potion { level: 1.. , .. }
+            Self::Water { level: 1.. } | Self::Potion { level: 1.., .. }
         )
     }
 }

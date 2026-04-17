@@ -2,15 +2,15 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DragonPhase {
-    Holding,       // Circles in air, idle
-    Strafing,      // Attacking flybys
-    Landing,       // Coming to perch
-    Sitting,       // On end portal, breath attack
-    Roaring,       // Before breath
-    Breath,        // Breathing fire
-    TakingOff,     // Leaving perch
-    ChargePlayer,  // Direct charge
-    Dying,         // Death animation
+    Holding,      // Circles in air, idle
+    Strafing,     // Attacking flybys
+    Landing,      // Coming to perch
+    Sitting,      // On end portal, breath attack
+    Roaring,      // Before breath
+    Breath,       // Breathing fire
+    TakingOff,    // Leaving perch
+    ChargePlayer, // Direct charge
+    Dying,        // Death animation
 }
 
 #[derive(Debug, Clone)]
@@ -85,7 +85,9 @@ impl EnderDragon {
 }
 
 impl Default for EnderDragon {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
