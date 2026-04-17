@@ -19,16 +19,15 @@ use mc_rs_proto::codec;
 use mc_rs_proto::io::ProtoReader;
 use mc_rs_proto::packets::packet_id;
 
-use crate::config::ConnectionConfig;
 use crate::attribute::{AttributeMap, HungerManager};
 use crate::combat::CombatState;
+use crate::config::ConnectionConfig;
 use crate::event::EventManager;
 use crate::inventory::PlayerInventory;
 use crate::inventory_manager::InventoryManager;
 use crate::item_entities::PendingItemEntitySpawn;
 use crate::player_registry;
 use crate::world::chunk_cache::ChunkCache;
-
 
 /// Connection state for a single player.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -330,6 +329,10 @@ impl Connection {
             (ConnectionState::InGame, packet_id::COMMAND_REQUEST) => {
                 self.handle_command_request(reader)
             }
+            // RespawnPacket C→S : client envoie CLIENT_READY_TO_SPAWN (state=2)
+            // après avoir reçu READY_TO_SPAWN. PMMP DeathPacketHandler::handleRespawn
+            // renvoie un READY_TO_SPAWN pour confirmer la transition.
+            (ConnectionState::InGame, packet_id::RESPAWN) => self.handle_client_respawn(reader),
 
             // -- Silently ignored --
             (_, packet_id::EMOTE_LIST)
@@ -389,10 +392,21 @@ impl Connection {
     pub fn encode_compressed_packet(&self, pkt_id: u32, payload: &[u8]) -> Vec<u8> {
         // DEBUG DUMP — même format que PMMP NetworkSession.php.
         // Dumpe le (pktId, payload) de chaque paquet envoyé, pour diff contre PMMP.
-        let hex: String = payload.iter().take(256).map(|b| format!("{:02X}", b)).collect();
-        let line = format!("[{}] 0x{:03X} len={} hex={}\n",
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis(),
-            pkt_id, payload.len(), hex);
+        let hex: String = payload
+            .iter()
+            .take(256)
+            .map(|b| format!("{:02X}", b))
+            .collect();
+        let line = format!(
+            "[{}] 0x{:03X} len={} hex={}\n",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis(),
+            pkt_id,
+            payload.len(),
+            hex
+        );
         let _ = std::fs::OpenOptions::new()
             .create(true)
             .append(true)

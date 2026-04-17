@@ -51,9 +51,7 @@ impl Connection {
                 self.addr, dropped.count, dropped.id
             );
             self.pending_item_spawns
-                .push(PendingItemEntitySpawn::with_throw(
-                    dropped, spawn_pos, dir,
-                ));
+                .push(PendingItemEntitySpawn::with_throw(dropped, spawn_pos, dir));
         }
 
         for (pkt_id, payload) in outcome.packets {
@@ -303,8 +301,18 @@ impl Connection {
                 out.len(),
             );
             for (pkt_id, payload) in &out {
-                let preview: String = payload.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ");
-                info!("[{}] E-key pkt 0x{:03X} len={} hex={}", self.addr, pkt_id, payload.len(), preview);
+                let preview: String = payload
+                    .iter()
+                    .map(|b| format!("{:02X}", b))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                info!(
+                    "[{}] E-key pkt 0x{:03X} len={} hex={}",
+                    self.addr,
+                    pkt_id,
+                    payload.len(),
+                    preview
+                );
             }
             return out
                 .into_iter()
@@ -362,7 +370,8 @@ impl Connection {
                     stack_id,
                     item: self.inventory.slots[hotbar_slot as usize].item.clone(),
                 };
-                let bcast = MobEquipment::encode_item(self.entity_runtime_id, &wrapper, hotbar_slot);
+                let bcast =
+                    MobEquipment::encode_item(self.entity_runtime_id, &wrapper, hotbar_slot);
                 let bcast_pkt = self.encode_compressed_packet(
                     mc_rs_proto::packets::packet_id::MOB_EQUIPMENT,
                     &bcast,
@@ -434,10 +443,11 @@ impl Connection {
     }
 
     /// Respawn : restaure HEALTH/hunger/position, envoie Respawn(READY) au
-    /// client. À appeler sur réception de PlayerAction::RESPAWN (type 7).
+    /// client + re-sync complet (attributes, SetActorData, abilities, inventory)
+    /// comme PMMP `NetworkSession::onServerRespawn`. À appeler sur PlayerAction::RESPAWN.
     pub fn handle_respawn_request(&mut self) -> Vec<Vec<u8>> {
         use mc_rs_proto::packets::packet_id;
-        use mc_rs_proto::packets::player::MovePlayer;
+        use mc_rs_proto::packets::player::{MovePlayer, SetActorData, UpdateAbilities};
 
         if !self.dead {
             return Vec::new();
@@ -450,6 +460,7 @@ impl Connection {
             crate::attribute::ids::HUNGER,
             crate::attribute::ids::SATURATION,
             crate::attribute::ids::EXHAUSTION,
+            crate::attribute::ids::ABSORPTION,
         ] {
             let a = self.attributes.must_get_mut(id);
             a.reset_to_default();
@@ -460,6 +471,37 @@ impl Connection {
         self.position = self.spawn_position;
         self.fall_peak_y = None;
 
+        let mut out = Vec::new();
+
+        // PMMP onServerRespawn : syncAttributes.
+        let desync = self.attributes.drain_desync();
+        if !desync.is_empty() {
+            let payload = encode_update_attributes(self.entity_runtime_id, &desync);
+            out.push(self.encode_compressed_packet(packet_id::UPDATE_ATTRIBUTES, &payload));
+        }
+
+        // PMMP onServerRespawn : sendData (SetActorData) — reset metadata (remove
+        // DEAD flag si on en avait un). player_in_game() rétablit les flags vivants.
+        let player_name = self.display_name.clone().unwrap_or_default();
+        let actor_data = SetActorData::player_in_game(self.entity_runtime_id, &player_name);
+        out.push(self.encode_compressed_packet(packet_id::SET_ACTOR_DATA, &actor_data.encode()));
+
+        // PMMP onServerRespawn : syncAbilities — réapplique les abilities
+        // selon le gamemode actuel (créatif = fly, survival = no fly, etc.).
+        let abilities = if self.gamemode == 1 {
+            UpdateAbilities::default_creative(self.entity_runtime_id as i64)
+        } else {
+            UpdateAbilities::default_survival(self.entity_runtime_id as i64)
+        };
+        out.push(
+            self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities.encode()),
+        );
+
+        // PMMP onServerRespawn : invManager.syncAll() — resync tous les
+        // inventaires (utile si mort a modifié ou vidé l'inventaire).
+        self.push_inventory_sync(&mut out);
+
+        // Téléportation.
         let move_pkt = MovePlayer {
             runtime_entity_id: self.entity_runtime_id,
             position: self.position,
@@ -471,10 +513,9 @@ impl Connection {
             riding_runtime_id: 0,
             tick: self.tick,
         };
-
-        let mut out = Vec::new();
         out.push(self.encode_compressed_packet(packet_id::MOVE_PLAYER, &move_pkt.encode()));
 
+        // Respawn(READY_TO_SPAWN) → le client se téléporte.
         let respawn = crate::combat_packets::encode_respawn(
             self.spawn_position,
             crate::combat_packets::respawn_state::READY_TO_SPAWN,
@@ -484,6 +525,34 @@ impl Connection {
 
         info!("[{}] Player respawned at spawn", self.addr);
         out
+    }
+
+    /// RespawnPacket C→S : reçu quand le client a terminé sa téléportation et
+    /// envoie CLIENT_READY_TO_SPAWN (state=2). PMMP `DeathPacketHandler::handleRespawn`
+    /// répond par un autre Respawn(READY_TO_SPAWN) pour confirmer la transition
+    /// et débloquer l'écran de réapparition.
+    pub(super) fn handle_client_respawn(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
+        use mc_rs_proto::packets::packet_id;
+
+        // Payload : Vec3 position (f32×3), u8 state, VarU64 runtime_id.
+        let _px = reader.read_f32_le().unwrap_or(0.0);
+        let _py = reader.read_f32_le().unwrap_or(0.0);
+        let _pz = reader.read_f32_le().unwrap_or(0.0);
+        let state = reader.read_u8().unwrap_or(0);
+        let _rid = reader.read_var_u64().unwrap_or(0);
+
+        if state != crate::combat_packets::respawn_state::CLIENT_READY_TO_SPAWN {
+            return Vec::new();
+        }
+
+        // Confirme au client qu'il peut reprendre la main.
+        let respawn = crate::combat_packets::encode_respawn(
+            self.spawn_position,
+            crate::combat_packets::respawn_state::READY_TO_SPAWN,
+            self.entity_runtime_id,
+        );
+        info!("[{}] CLIENT_READY_TO_SPAWN ACK → sending READY_TO_SPAWN", self.addr);
+        vec![self.encode_compressed_packet(packet_id::RESPAWN, &respawn)]
     }
 }
 
@@ -505,8 +574,8 @@ fn encode_update_attributes(
         w.write_f32_le(a.min_value);
         w.write_f32_le(a.max_value);
         w.write_f32_le(a.current_value);
-        w.write_f32_le(a.min_value);  // DefaultMin
-        w.write_f32_le(a.max_value);  // DefaultMax
+        w.write_f32_le(a.min_value); // DefaultMin
+        w.write_f32_le(a.max_value); // DefaultMax
         w.write_f32_le(a.default_value);
         w.write_string(&a.id);
         w.write_var_u32(0); // mod count
