@@ -117,6 +117,9 @@ pub struct Connection {
     /// Horloge game-tick (20 TPS = 1 tick / 5 server-ticks).
     pub(super) game_tick_accum: u64,
 
+    /// Y du pic pendant le fall en cours ; None si pas en chute.
+    pub(super) fall_peak_y: Option<f32>,
+
     // Event manager partagé (fire events pour plugins).
     pub events: Arc<Mutex<EventManager>>,
 
@@ -183,6 +186,7 @@ impl Connection {
             combat: CombatState::new(),
             hunger: HungerManager::new(),
             game_tick_accum: 0,
+            fall_peak_y: None,
             events,
             next_form_id: 1,
             server_keypair,

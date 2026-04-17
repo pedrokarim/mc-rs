@@ -64,6 +64,43 @@ impl Connection {
             return vec![self.encode_compressed_packet(packet_id::MOVE_PLAYER, &reset.encode())];
         }
 
+        // Fall damage detection : on suit le pic Y pendant la chute ; à
+        // l'atterrissage (Y stable après descente) on applique les dégâts.
+        //
+        // Survival only — le mode créatif/spectateur est exempt. Cette logique
+        // touche directement `attributes.HEALTH` donc sera propagée au client
+        // via UpdateAttributes dans le prochain `tick_game_state`.
+        let dy = pkt.position[1] - self.position[1];
+        if self.gamemode == 0 {
+            if dy > 0.01 {
+                // Monte (saut/eau) → reset fall tracking.
+                self.fall_peak_y = None;
+            } else if dy < -0.01 {
+                // Descend → mémorise le pic (le max Y depuis le début de la chute).
+                let peak = self.fall_peak_y.unwrap_or(self.position[1]);
+                self.fall_peak_y = Some(peak.max(self.position[1]));
+            } else if let Some(peak) = self.fall_peak_y.take() {
+                // Y stable après chute → atterrissage.
+                let fall_distance = peak - pkt.position[1];
+                if fall_distance > crate::entity_fall::FALL_THRESHOLD {
+                    let damage = crate::entity_fall::compute_damage(fall_distance, 0);
+                    if damage > 0.0 {
+                        let current = self.attributes
+                            .must_get(crate::attribute::ids::HEALTH)
+                            .current_value;
+                        let new_hp = (current - damage).max(0.0);
+                        self.attributes
+                            .must_get_mut(crate::attribute::ids::HEALTH)
+                            .set_value(new_hp, true);
+                        info!(
+                            "[{}] Fall damage: distance={:.2}, damage={:.1}, hp={:.1}",
+                            self.addr, fall_distance, damage, new_hp
+                        );
+                    }
+                }
+            }
+        }
+
         // Update player position
         self.position = pkt.position;
         self.pitch = pkt.pitch;
