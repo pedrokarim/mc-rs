@@ -122,6 +122,14 @@ pub struct Connection {
     /// Player est mort (HEALTH=0) et attend l'action RESPAWN du client.
     pub(super) dead: bool,
 
+    /// Réserve d'air en game ticks (15 sec = 300). Décrémentée quand les
+    /// yeux sont dans l'eau ; drowning damage quand = 0.
+    pub(super) air_supply: i32,
+
+    /// Compteur interne entre tick (drowning, lava) — incrémenté à chaque
+    /// tick_game_state, utilisé pour espacer les tics de dégâts.
+    pub(super) environment_tick: i32,
+
     // Event manager partagé (fire events pour plugins).
     pub events: Arc<Mutex<EventManager>>,
 
@@ -190,6 +198,8 @@ impl Connection {
             game_tick_accum: 0,
             fall_peak_y: None,
             dead: false,
+            air_supply: 300,
+            environment_tick: 0,
             events,
             next_form_id: 1,
             server_keypair,

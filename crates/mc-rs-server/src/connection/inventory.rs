@@ -396,7 +396,7 @@ impl Connection {
     }
 
     /// Tick game state : hunger, combat timers, attribute desync sync,
-    /// détection de mort.
+    /// dégâts environnementaux (drowning/lava), détection de mort.
     /// À appeler à chaque game-tick (20 TPS = 1 tick / 5 server-ticks).
     /// Retourne les paquets à envoyer au joueur (UpdateAttributes si desync).
     pub fn tick_game_state(&mut self) -> Vec<Vec<u8>> {
@@ -407,6 +407,11 @@ impl Connection {
         // Hunger (exhaustion drain + regen/starvation).
         self.hunger
             .tick(&mut self.attributes, self.current_difficulty);
+
+        // Dégâts environnementaux (survival only).
+        if self.gamemode == 0 && !self.dead {
+            self.tick_environment_damage();
+        }
 
         // Détection de mort — quand HEALTH tombe à 0, bascule en état "dead"
         // et envoie Respawn(SEARCHING_FOR_SPAWN) + DeathAnimation. Le joueur
@@ -442,6 +447,71 @@ impl Connection {
         out
     }
 
+    /// Tick des dégâts environnementaux : drowning (eyes in water),
+    /// lava (feet in lava), fire (on_fire ticks). Port simplifié PMMP
+    /// `Living::entityBaseTick` + `Living::updateAir`.
+    ///
+    /// Fréquence : 20 TPS (appel par tick_game_state). Air supply max=300
+    /// (15s). Sous l'eau : décrément d'air, dégâts 2 HP/s quand air≤0.
+    /// Dans la lave : 4 HP toutes les 10 ticks (0.5s) + met le joueur en feu.
+    fn tick_environment_damage(&mut self) {
+        self.environment_tick = self.environment_tick.wrapping_add(1);
+
+        let feet_x = self.position[0].floor() as i32;
+        let feet_y = self.position[1].floor() as i32;
+        let feet_z = self.position[2].floor() as i32;
+        // Eyes ≈ feet + 1.62. Block contenant les yeux = feet_y + 1.
+        let eye_block_y = (self.position[1] + 1.62).floor() as i32;
+
+        let (eye_block, feet_block) = {
+            let Ok(mut cache) = self.chunk_cache.lock() else {
+                return;
+            };
+            (
+                cache.get_block(feet_x, eye_block_y, feet_z),
+                cache.get_block(feet_x, feet_y, feet_z),
+            )
+        };
+
+        // ── Drowning ──
+        let water_id = crate::world::block_registry::BLOCKS.water;
+        if eye_block == water_id {
+            self.air_supply = (self.air_supply - 1).max(-20);
+            if self.air_supply <= 0 && self.environment_tick % 20 == 0 {
+                // 2 HP de dégâts toutes les secondes.
+                let hp = self
+                    .attributes
+                    .must_get(crate::attribute::ids::HEALTH)
+                    .current_value;
+                let new_hp = (hp - 2.0).max(0.0);
+                self.attributes
+                    .must_get_mut(crate::attribute::ids::HEALTH)
+                    .set_value(new_hp, true);
+                info!("[{}] Drowning damage: hp={:.1}", self.addr, new_hp);
+            }
+        } else {
+            // Hors de l'eau → recharge rapide de l'air.
+            if self.air_supply < 300 {
+                self.air_supply = (self.air_supply + 4).min(300);
+            }
+        }
+
+        // ── Lava ──
+        let lava_id = crate::world::block_registry::BLOCKS.lava;
+        if feet_block == lava_id && self.environment_tick % 10 == 0 {
+            // 4 HP toutes les 10 ticks (0.5s) — PMMP `EntityCombustEvent` damage.
+            let hp = self
+                .attributes
+                .must_get(crate::attribute::ids::HEALTH)
+                .current_value;
+            let new_hp = (hp - 4.0).max(0.0);
+            self.attributes
+                .must_get_mut(crate::attribute::ids::HEALTH)
+                .set_value(new_hp, true);
+            info!("[{}] Lava damage: hp={:.1}", self.addr, new_hp);
+        }
+    }
+
     /// Respawn : restaure HEALTH/hunger/position, envoie Respawn(READY) au
     /// client + re-sync complet (attributes, SetActorData, abilities, inventory)
     /// comme PMMP `NetworkSession::onServerRespawn`. À appeler sur PlayerAction::RESPAWN.
@@ -467,9 +537,11 @@ impl Connection {
             a.desynchronized = true;
         }
 
-        // Téléportation au spawn.
+        // Téléportation au spawn + reset état environnemental.
         self.position = self.spawn_position;
         self.fall_peak_y = None;
+        self.air_supply = 300;
+        self.environment_tick = 0;
 
         let mut out = Vec::new();
 
