@@ -466,15 +466,27 @@ impl Connection {
         interaction: &ItemInteractionData,
         responses: &mut Vec<Vec<u8>>,
     ) {
-        let held = &self.inventory.slots[self.inventory.held_slot as usize];
+        let held_slot_idx = self.inventory.held_slot as usize;
+        let held = &self.inventory.slots[held_slot_idx];
+        info!(
+            "[{}] block_place attempt: held_slot={} item_id={} count={} face={} gamemode={}",
+            self.addr, held_slot_idx, held.item.id, held.item.count, interaction.face, self.gamemode
+        );
         if held.item.is_air() {
+            info!("[{}] block_place: held is AIR, abort", self.addr);
             return;
         }
 
         // Check if held item is a placeable block
         let block_runtime_id = match crate::inventory::item_to_block(held.item.id) {
             Some(id) => id,
-            None => return, // Not a block item
+            None => {
+                info!(
+                    "[{}] block_place: item_id={} not in item_to_block map → NO decrement",
+                    self.addr, held.item.id
+                );
+                return; // Not a block item
+            }
         };
 
         // Calculate target position from face offset
@@ -526,23 +538,39 @@ impl Connection {
         self.broadcasts.push(sound_bytes);
 
         // Decrement item count in inventory via manager (track + queue sync).
-        let slot = self.inventory.held_slot as usize;
-        let new_item = {
-            let cur = &self.inventory.slots[slot].item;
-            if cur.count > 1 {
-                let mut n = cur.clone();
-                n.count -= 1;
-                n
-            } else {
+        // Survival only — en créatif/spectateur les items sont infinis.
+        if self.gamemode == 0 {
+            let slot = self.inventory.held_slot as usize;
+            let (prev_count, new_count, was_air) = {
+                let cur = &self.inventory.slots[slot].item;
+                let was_air = cur.is_air();
+                let prev = cur.count;
+                let next = if prev > 1 { prev - 1 } else { 0 };
+                (prev, next, was_air)
+            };
+            let new_item = if new_count == 0 {
                 mc_rs_proto::packets::player::ItemStack::AIR
-            }
-        };
-        self.inventory_manager.set_slot(
-            &mut self.inventory,
-            crate::inventory_manager::InvKey::Main,
-            slot,
-            new_item,
-        );
+            } else {
+                let mut n = self.inventory.slots[slot].item.clone();
+                n.count = new_count;
+                n
+            };
+            self.inventory_manager.set_slot(
+                &mut self.inventory,
+                crate::inventory_manager::InvKey::Main,
+                slot,
+                new_item,
+            );
+            info!(
+                "[{}] block_place: decrement slot={} count={}→{} (was_air={})",
+                self.addr, slot, prev_count, new_count, was_air
+            );
+        } else {
+            info!(
+                "[{}] block_place: gamemode={} (creative/other) — no decrement",
+                self.addr, self.gamemode
+            );
+        }
         // Le sync sera émis à la fin du tick via flush_pending_updates (boucle
         // principale). Pas d'envoi inline ici.
 
