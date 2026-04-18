@@ -392,8 +392,33 @@ impl Connection {
                 self.addr, interaction.action_type, interaction.face, interaction.hotbar_slot
             );
             if interaction.action_type == 0 {
-                // ACTION_CLICK_BLOCK
-                self.handle_block_place(interaction, &mut responses);
+                // ACTION_CLICK_BLOCK : d'abord check si on clique sur un bed →
+                // mise à jour du spawn (PMMP BedBlock::onInteract). Sinon on
+                // tente une pose de bloc normale.
+                let bx = interaction.block_position[0];
+                let by = interaction.block_position[1];
+                let bz = interaction.block_position[2];
+                let clicked_id = if let Ok(mut cache) = self.chunk_cache.lock() {
+                    cache.get_block(bx, by, bz)
+                } else {
+                    0
+                };
+                if BLOCKS.is_bed(clicked_id) {
+                    self.spawn_position =
+                        [bx as f32 + 0.5, by as f32 + 1.0, bz as f32 + 0.5];
+                    info!(
+                        "[{}] Bed interact → spawn override ({}, {}, {})",
+                        self.addr, bx, by, bz
+                    );
+                    let msg = mc_rs_proto::packets::player::Text::system(
+                        "§eRespawn point set",
+                    );
+                    responses.push(
+                        self.encode_compressed_packet(packet_id::TEXT, &msg),
+                    );
+                } else {
+                    self.handle_block_place(interaction, &mut responses);
+                }
             }
         }
 

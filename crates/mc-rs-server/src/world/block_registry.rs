@@ -178,6 +178,23 @@ impl BlockRegistry {
     pub fn get(&self, name: &str) -> u32 {
         self.name_to_id.get(name).copied().unwrap_or(self.air)
     }
+
+    /// Vrai si `block_id` correspond à un bed (toutes couleurs confondues).
+    /// Utilisé pour détecter les right-clicks sur lit (sleep / spawn override).
+    pub fn is_bed(&self, block_id: u32) -> bool {
+        const BED_COLORS: &[&str] = &[
+            "white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray",
+            "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black",
+        ];
+        for color in BED_COLORS {
+            let name = format!("minecraft:{}_bed", color);
+            if self.get(&name) == block_id && block_id != self.air {
+                return true;
+            }
+        }
+        // Legacy name (protocol < 1.13).
+        self.get("minecraft:bed") == block_id && block_id != self.air
+    }
 }
 
 /// Build the block name → first runtime ID mapping from generated Rust data.
