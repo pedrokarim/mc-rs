@@ -192,16 +192,38 @@ impl Connection {
             match action.action_type {
                 // START_BREAK (0) or CONTINUE_DESTROY_BLOCK (27)
                 0 | 27 => {
+                    // PMMP InGamePacketHandler.php:678-685 : si on reçoit
+                    // CONTINUE_DESTROY_BLOCK pour le MÊME bloc qu'on est déjà
+                    // en train de casser, on IGNORE. Le client envoie
+                    // spuriousement 27 pour le bloc courant, si on répond on
+                    // reset son animation → crack repart à zéro → il ne casse
+                    // jamais. (Source du bug "je mine indéfiniment sans rien
+                    // obtenir" rapporté par l'utilisateur.)
+                    if self.last_block_attacked == Some(action.position) {
+                        continue;
+                    }
+                    self.last_block_attacked = Some(action.position);
+
+                    // Break speed basé sur la hardness du bloc (par nom).
+                    // PMMP : break_time_secs ≈ hardness × 1.5 (avec bon outil)
+                    // ou × 5 (main nue / mauvais outil). event_data envoyé au
+                    // client est `65535 × (1 / (break_time_secs × 20 TPS))`.
+                    let block_id = if let Ok(mut cache) = self.chunk_cache.lock() {
+                        cache.get_block(bx, by, bz)
+                    } else {
+                        0
+                    };
                     let break_speed: f32 = {
-                        let block_id = if let Ok(mut cache) = self.chunk_cache.lock() {
-                            cache.get_block(bx, by, bz)
+                        let name = BLOCKS.name_for(block_id).unwrap_or("");
+                        let h = crate::block_hardness::hardness(name);
+                        if h < 0.0 {
+                            0.0 // unbreakable (bedrock, ...)
+                        } else if h == 0.0 {
+                            1.0 // instant-break (grass, air, plants)
                         } else {
-                            0
-                        };
-                        match block_id {
-                            13079 => 0.0,         // bedrock -- unbreakable
-                            12421 | 11669 => 1.0, // short grass/tall grass -- instant
-                            _ => 1.0 / 30.0,      // default ~1.5s with hand
+                            // Main nue par défaut → facteur 5.
+                            let secs = h * 5.0;
+                            1.0 / (secs * 20.0)
                         }
                     };
 
@@ -218,6 +240,7 @@ impl Connection {
 
                 // ABORT_BREAK (1) or STOP_BREAK (2)
                 1 | 2 => {
+                    self.last_block_attacked = None;
                     let event = LevelEvent {
                         event_id: LevelEvent::BLOCK_STOP_BREAK,
                         position: block_pos,
@@ -231,6 +254,8 @@ impl Connection {
 
                 // PREDICT_DESTROY_BLOCK (26)
                 26 => {
+                    // Le bloc vient d'être cassé, on peut en re-cibler un autre.
+                    self.last_block_attacked = None;
                     let air_id = BLOCKS.air;
 
                     // Send BLOCK_STOP_BREAK to clear crack animation

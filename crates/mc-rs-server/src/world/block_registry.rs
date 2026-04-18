@@ -179,6 +179,16 @@ impl BlockRegistry {
         self.name_to_id.get(name).copied().unwrap_or(self.air)
     }
 
+    /// Retourne le nom (`minecraft:xxx`) du block pour un `block_id` donné.
+    /// Recherche linéaire dans name_to_id — utilisé rarement (hardness /
+    /// debug), pas d'index inverse maintenu.
+    pub fn name_for(&self, block_id: u32) -> Option<&str> {
+        self.name_to_id
+            .iter()
+            .find(|(_, id)| **id == block_id)
+            .map(|(name, _)| *name)
+    }
+
     /// Vrai si `block_id` correspond à un bed (toutes couleurs confondues).
     /// Utilisé pour détecter les right-clicks sur lit (sleep / spawn override).
     pub fn is_bed(&self, block_id: u32) -> bool {

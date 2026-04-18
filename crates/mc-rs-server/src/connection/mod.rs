@@ -130,6 +130,12 @@ pub struct Connection {
     /// tick_game_state, utilisé pour espacer les tics de dégâts.
     pub(super) environment_tick: i32,
 
+    /// Position du dernier bloc attaqué (en cours de cassage). PMMP
+    /// `InGamePacketHandler::lastBlockAttacked` — permet d'ignorer les
+    /// CONTINUE_DESTROY_BLOCK spuriousement renvoyés par le client pour le
+    /// même bloc (bug client qui reset l'animation de crack).
+    pub(super) last_block_attacked: Option<[i32; 3]>,
+
     // Event manager partagé (fire events pour plugins).
     pub events: Arc<Mutex<EventManager>>,
 
@@ -200,6 +206,7 @@ impl Connection {
             dead: false,
             air_supply: 300,
             environment_tick: 0,
+            last_block_attacked: None,
             events,
             next_form_id: 1,
             server_keypair,
