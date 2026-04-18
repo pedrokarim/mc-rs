@@ -1135,6 +1135,8 @@ async fn main() {
     let mut registry = PlayerRegistry::new();
     let mut item_entities = ItemEntityManager::new();
     let mut mob_entities = MobEntityManager::new();
+    let mut furnace_manager = crate::furnace::FurnaceManager::new();
+    let crafting_manager = crate::crafting::CraftingManager::default();
     // Passive entities (TNT / FallingBlock / XPOrb) — spawned via commands or events.
     let _passive_entities = crate::passive_entities::PassiveEntityManager::new();
     // Event manager partagé (tous les Connection le clonent).
@@ -1291,6 +1293,7 @@ async fn main() {
 
                 // Game tick (20 TPS = 1 game tick / 5 server ticks).
                 // Met à jour : combat i-frames, hunger drain/regen, attribute desync sync.
+                let mut world_gametick_fired = false;
                 for (addr, conn) in connections.iter_mut() {
                     if !conn.is_in_game() {
                         continue;
@@ -1298,6 +1301,7 @@ async fn main() {
                     conn.game_tick_accum = conn.game_tick_accum.saturating_add(1);
                     if conn.game_tick_accum >= 5 {
                         conn.game_tick_accum = 0;
+                        world_gametick_fired = true;
                         for pkt in conn.tick_game_state() {
                             let prepared = conn.prepare_for_send(pkt);
                             raknet.send_to_session(
@@ -1305,6 +1309,24 @@ async fn main() {
                                 prepared,
                                 Reliability::ReliableOrdered,
                                 false,
+                            );
+                        }
+                    }
+                }
+
+                // Furnace tick (20 TPS, partagé — une seule passe par game tick
+                // quel que soit le nombre de joueurs). Les furnaces enregistrés
+                // burn leur fuel + cook leur input. Les résultats (completed /
+                // xp_to_give) sont loggés pour l'instant ; la vraie notif UI au
+                // joueur ayant la fenêtre ouverte sera branchée quand la UI
+                // furnace complète sera implémentée.
+                if world_gametick_fired {
+                    let results = furnace_manager.tick_all(&crafting_manager);
+                    for ((x, y, z), r) in results {
+                        if r.completed {
+                            tracing::debug!(
+                                "Furnace at ({x}, {y}, {z}) finished cooking (+{:.1} xp)",
+                                r.xp_to_give
                             );
                         }
                     }

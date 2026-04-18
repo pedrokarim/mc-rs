@@ -150,6 +150,53 @@ pub struct FurnaceTickResult {
     pub xp_to_give: f32,
 }
 
+/// Manager serveur : track (x, y, z) → FurnaceState. Persisté en mémoire ;
+/// la persistance disque fera l'objet d'un chantier ultérieur.
+#[derive(Debug, Default)]
+pub struct FurnaceManager {
+    pub furnaces: std::collections::HashMap<(i32, i32, i32), FurnaceState>,
+}
+
+impl FurnaceManager {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Enregistre un nouveau furnace quand le bloc est placé.
+    pub fn register(&mut self, pos: (i32, i32, i32), kind: FurnaceKind) {
+        self.furnaces
+            .entry(pos)
+            .or_insert_with(|| FurnaceState::new(kind));
+    }
+
+    /// Retire un furnace quand le bloc est cassé. Renvoie le state (pour
+    /// éventuellement dropper les items in/fuel/output).
+    pub fn unregister(&mut self, pos: (i32, i32, i32)) -> Option<FurnaceState> {
+        self.furnaces.remove(&pos)
+    }
+
+    pub fn get_mut(&mut self, pos: (i32, i32, i32)) -> Option<&mut FurnaceState> {
+        self.furnaces.get_mut(&pos)
+    }
+
+    /// Tick toutes les furnaces (20 TPS). Retourne la liste des (position,
+    /// result) pour les furnaces ayant complété une cuisson, utile pour
+    /// notifier les viewers ou attribuer XP au joueur qui a ouvert.
+    pub fn tick_all(
+        &mut self,
+        crafting: &CraftingManager,
+    ) -> Vec<((i32, i32, i32), FurnaceTickResult)> {
+        let mut out = Vec::new();
+        for (pos, state) in self.furnaces.iter_mut() {
+            let r = state.tick(crafting);
+            if r.completed || r.xp_to_give > 0.0 {
+                out.push((*pos, r));
+            }
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
