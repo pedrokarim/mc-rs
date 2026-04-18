@@ -63,13 +63,14 @@ impl Connection {
                 self.order_chunks();
                 self.chunk_order_countdown = u32::MAX; // idle until next trigger
 
-                debug!(
-                    "[{}] order_chunks: queue={}, sent_chunks={}, pos=({},{})",
+                tracing::info!(
+                    "[{}] order_chunks: queue={}, sent_chunks={}, pos=({},{}), view_distance={}",
                     self.addr,
                     self.chunk_load_queue.len(),
                     self.sent_chunks.len(),
                     self.last_chunk_x,
                     self.last_chunk_z,
+                    self.view_distance,
                 );
 
                 // Send NetworkChunkPublisherUpdate when there are chunks to load/unload
@@ -134,12 +135,14 @@ impl Connection {
         }
 
         if sent > 0 {
-            debug!(
-                "[{}] send_chunk_batch: sent={}, queue_remaining={} (was {})",
+            tracing::info!(
+                "[{}] send_chunk_batch: sent={}, queue_before={}, queue_after={}, sent_chunks_total={}, countdown={}",
                 self.addr,
                 sent,
-                self.chunk_load_queue.len(),
                 queue_before,
+                self.chunk_load_queue.len(),
+                self.sent_chunks.len(),
+                self.chunk_order_countdown,
             );
         }
 
