@@ -76,6 +76,18 @@ pub trait ServerCommandRuntime: CommandSender + SoftEnumSource {
     fn set_time(&mut self, time: i32);
     fn current_time(&self) -> i32;
     fn set_weather(&mut self, rain: bool, thunder: bool);
+    /// Ajoute `amount` XP (positif) ou retire (négatif) au joueur. Retourne
+    /// le nouveau level après application.
+    fn add_player_xp(&mut self, addr: SocketAddr, amount: i32) -> Result<i32, String>;
+    /// Applique un effet potion sur le joueur. `effect_id` = PMMP MobEffectIds,
+    /// `duration_ticks` (20/s), `amplifier` (0 = I, 1 = II, ...).
+    fn apply_player_effect(
+        &mut self,
+        addr: SocketAddr,
+        effect_id: i32,
+        duration_ticks: i32,
+        amplifier: u8,
+    ) -> Result<(), String>;
     fn set_difficulty(&mut self, difficulty: i32);
     fn current_difficulty(&self) -> i32;
     fn set_default_gamemode(&mut self, gamemode: i32);
@@ -1075,6 +1087,37 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
 
     fn set_weather(&mut self, rain: bool, thunder: bool) {
         self.world_state.set_weather(rain, thunder);
+    }
+
+    fn add_player_xp(&mut self, addr: SocketAddr, amount: i32) -> Result<i32, String> {
+        let Some(connection) = self.connections.get_mut(&addr) else {
+            return Err("Player not connected".into());
+        };
+        let (level, _progress) = if amount >= 0 {
+            crate::attribute::ExperienceManager::add_xp(&mut connection.attributes, amount)
+        } else {
+            crate::attribute::ExperienceManager::remove_xp(&mut connection.attributes, -amount)
+        };
+        Ok(level)
+    }
+
+    fn apply_player_effect(
+        &mut self,
+        addr: SocketAddr,
+        effect_id: i32,
+        duration_ticks: i32,
+        amplifier: u8,
+    ) -> Result<(), String> {
+        let Some(_connection) = self.connections.get_mut(&addr) else {
+            return Err("Player not connected".into());
+        };
+        // TODO : brancher sur le système effects::apply_effect qui existe mais
+        // n'est pas intégré au game tick des joueurs. Pour l'instant on log et
+        // on renvoie un message — la commande est visible mais no-op.
+        tracing::info!(
+            "/effect request: addr={addr} effect_id={effect_id} duration={duration_ticks} amplifier={amplifier} (not implemented)"
+        );
+        Err("Effect system not wired to player tick yet".into())
     }
 
     fn set_difficulty(&mut self, difficulty: i32) {
@@ -2861,6 +2904,195 @@ pub fn build_command_system() -> ServerCommandSystem {
         },
     );
 
+    // ── /weather <clear|rain|thunder> ──
+    let mut weather = CommandDefinition::new("weather", "Control world weather");
+    weather.usage = "/weather <clear|rain|thunder>".into();
+    weather.permissions = vec!["server.command.weather".into()];
+    weather.overloads.push(CommandOverload {
+        parameters: vec![hard_enum_param(
+            "state",
+            "weather_state",
+            &["clear", "rain", "thunder"],
+            false,
+        )],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        weather,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            let Some(state) = invocation.arg(0) else {
+                return usage("Usage: /weather <clear|rain|thunder>");
+            };
+            match state.to_ascii_lowercase().as_str() {
+                "clear" => {
+                    runtime.set_weather(false, false);
+                    runtime.send_feedback("Weather set to clear.");
+                }
+                "rain" => {
+                    runtime.set_weather(true, false);
+                    runtime.send_feedback("Weather set to rain.");
+                }
+                "thunder" => {
+                    runtime.set_weather(true, true);
+                    runtime.send_feedback("Weather set to thunder.");
+                }
+                _ => return usage("Usage: /weather <clear|rain|thunder>"),
+            }
+            Ok(())
+        },
+    );
+
+    // ── /xp <add|set|query> [amount] [target] ──
+    let mut xp = CommandDefinition::new("xp", "Manage player experience");
+    xp.usage = "/xp <add|set|query> [amount] [target]".into();
+    xp.permissions = vec!["server.command.xp".into()];
+    xp.overloads.push(CommandOverload {
+        parameters: vec![
+            hard_enum_param("action", "xp_action", &["add", "set", "query"], false),
+            param("amount", ParamType::Int, true),
+            param("target", ParamType::Target, true),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        xp,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            let Some(action) = invocation.arg(0) else {
+                return usage("Usage: /xp <add|set|query> [amount] [target]");
+            };
+
+            // Cible par défaut = self si possible.
+            let addr = match invocation.arg(2) {
+                Some(target_name) => {
+                    let entity_id = runtime
+                        .selector_entities()
+                        .into_iter()
+                        .find(|e| {
+                            e.name
+                                .as_deref()
+                                .map(|n| n.eq_ignore_ascii_case(target_name))
+                                .unwrap_or(false)
+                        })
+                        .map(|e| e.id);
+                    entity_id.and_then(|id| runtime.player_addr_by_entity(id))
+                }
+                None => runtime.sender_addr(),
+            }
+            .ok_or_else(|| {
+                CommandDispatchError::Message(
+                    "No target player (specify a name or run as a player)".into(),
+                )
+            })?;
+
+            match action.to_ascii_lowercase().as_str() {
+                "add" => {
+                    let Some(amount_tok) = invocation.arg(1) else {
+                        return usage("Usage: /xp add <amount> [target]");
+                    };
+                    let amount: i32 = amount_tok.parse().map_err(|_| {
+                        CommandDispatchError::Message(format!(
+                            "Invalid amount: {amount_tok}"
+                        ))
+                    })?;
+                    let new_level = runtime
+                        .add_player_xp(addr, amount)
+                        .map_err(CommandDispatchError::Message)?;
+                    runtime.send_feedback(&format!(
+                        "Added {amount} XP (level now {new_level})"
+                    ));
+                }
+                "set" => {
+                    // set = query current then add diff (pour récupérer diff
+                    // il faudrait query_xp ; on simplifie en retirant tout puis
+                    // réajoutant).
+                    let Some(amount_tok) = invocation.arg(1) else {
+                        return usage("Usage: /xp set <amount> [target]");
+                    };
+                    let amount: i32 = amount_tok.parse().map_err(|_| {
+                        CommandDispatchError::Message(format!(
+                            "Invalid amount: {amount_tok}"
+                        ))
+                    })?;
+                    // Clear total puis ajouter — simple et correct pour une
+                    // 1ère version.
+                    let _ = runtime.add_player_xp(addr, i32::MIN / 2);
+                    let level = runtime
+                        .add_player_xp(addr, amount)
+                        .map_err(CommandDispatchError::Message)?;
+                    runtime.send_feedback(&format!("Set XP to {amount} (level {level})"));
+                }
+                "query" => {
+                    let level = runtime
+                        .add_player_xp(addr, 0)
+                        .map_err(CommandDispatchError::Message)?;
+                    runtime.send_feedback(&format!("Level: {level}"));
+                }
+                _ => return usage("Usage: /xp <add|set|query> [amount] [target]"),
+            }
+            Ok(())
+        },
+    );
+
+    // ── /effect <target> <effect_id> [duration] [amplifier] ──
+    let mut effect = CommandDefinition::new("effect", "Apply a potion effect");
+    effect.usage = "/effect <target> <effect_id> [duration] [amplifier]".into();
+    effect.permissions = vec!["server.command.effect".into()];
+    effect.overloads.push(CommandOverload {
+        parameters: vec![
+            param("target", ParamType::Target, false),
+            param("effect_id", ParamType::Int, false),
+            param("duration", ParamType::Int, true),
+            param("amplifier", ParamType::Int, true),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        effect,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            let Some(target_name) = invocation.arg(0) else {
+                return usage("Usage: /effect <target> <effect_id> [duration] [amplifier]");
+            };
+            let Some(effect_tok) = invocation.arg(1) else {
+                return usage("Usage: /effect <target> <effect_id> [duration] [amplifier]");
+            };
+            let effect_id: i32 = effect_tok.parse().map_err(|_| {
+                CommandDispatchError::Message(format!("Invalid effect id: {effect_tok}"))
+            })?;
+            let duration: i32 = invocation.arg(2).and_then(|s| s.parse().ok()).unwrap_or(600);
+            let amplifier: u8 = invocation.arg(3).and_then(|s| s.parse().ok()).unwrap_or(0);
+
+            let entity_id = runtime
+                .selector_entities()
+                .into_iter()
+                .find(|e| {
+                    e.name
+                        .as_deref()
+                        .map(|n| n.eq_ignore_ascii_case(target_name))
+                        .unwrap_or(false)
+                })
+                .map(|e| e.id);
+            let addr = entity_id
+                .and_then(|id| runtime.player_addr_by_entity(id))
+                .ok_or_else(|| {
+                    CommandDispatchError::Message(format!("Player not found: {target_name}"))
+                })?;
+
+            runtime
+                .apply_player_effect(addr, effect_id, duration, amplifier)
+                .map_err(CommandDispatchError::Message)?;
+            runtime.send_feedback(&format!(
+                "Applied effect {effect_id} (duration={duration}, amplifier={amplifier})"
+            ));
+            Ok(())
+        },
+    );
+
     let mut title = CommandDefinition::new("title", "Send Bedrock title packets");
     title.usage = "/title <target> <clear|reset|title|subtitle|actionbar|times> [...]".into();
     title.permissions = vec!["server.command.title".into()];
@@ -3340,6 +3572,22 @@ mod tests {
         }
 
         fn set_weather(&mut self, _rain: bool, _thunder: bool) {}
+        fn add_player_xp(
+            &mut self,
+            _addr: SocketAddr,
+            _amount: i32,
+        ) -> Result<i32, String> {
+            Ok(0)
+        }
+        fn apply_player_effect(
+            &mut self,
+            _addr: SocketAddr,
+            _effect_id: i32,
+            _duration_ticks: i32,
+            _amplifier: u8,
+        ) -> Result<(), String> {
+            Ok(())
+        }
 
         fn set_difficulty(&mut self, difficulty: i32) {
             self.difficulty = difficulty;

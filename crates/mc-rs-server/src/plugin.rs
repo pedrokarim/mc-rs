@@ -1470,6 +1470,24 @@ mod tests {
 
         fn set_weather(&mut self, _rain: bool, _thunder: bool) {}
 
+        fn add_player_xp(
+            &mut self,
+            _addr: SocketAddr,
+            _amount: i32,
+        ) -> Result<i32, String> {
+            Ok(0)
+        }
+
+        fn apply_player_effect(
+            &mut self,
+            _addr: SocketAddr,
+            _effect_id: i32,
+            _duration_ticks: i32,
+            _amplifier: u8,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+
         fn set_difficulty(&mut self, _difficulty: i32) {}
 
         fn current_difficulty(&self) -> i32 {
