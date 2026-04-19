@@ -318,22 +318,66 @@ impl Connection {
                         self.broadcasts.push(sound_bytes);
                     }
 
-                    // Spawn a dropped item entity
-                    if old_block_id != air_id {
-                        if let Some(drop_item) = crate::inventory::block_drop(old_block_id) {
-                            let item_id = drop_item.id;
-                            let drop_summary = item_stack_debug_summary(&drop_item);
-                            self.pending_item_spawns
-                                .push(PendingItemEntitySpawn::with_scatter(
-                                    drop_item,
-                                    [bx as f32 + 0.5, by as f32 + 0.25, bz as f32 + 0.5],
-                                ));
-                            info!(
-                                "[{}] Queued dropped item entity: item_id={} at ({}, {}, {}) :: {}",
-                                self.addr, item_id, bx, by, bz, drop_summary
-                            );
+                    // Spawn a dropped item entity — sous condition que l'outil
+                    // tenu soit adéquat. PMMP `Block::onBreak` + `Block::isCompatibleWithTool`
+                    // : certains blocs ne droppent rien si outil incorrect (ex: stone
+                    // sans pickaxe, iron_ore avec pickaxe bois, etc.). En créatif on
+                    // skip même le drop (pas de ramassage, le bloc disparaît).
+                    if old_block_id != air_id && self.gamemode != 1 {
+                        let block_name = crate::world::block_registry::BLOCKS
+                            .name_for(old_block_id)
+                            .unwrap_or("");
+                        let held_item_id =
+                            self.inventory.slots[self.inventory.held_slot as usize].item.id;
+                        let held_tool = crate::durability::durable_info(held_item_id);
+                        let needs_tool =
+                            crate::block_hardness::required_tool_type(block_name);
+                        let min_tier =
+                            crate::block_hardness::min_tool_tier_for_drop(block_name);
+
+                        let tool_ok = match (needs_tool, held_tool) {
+                            (None, _) => true, // le bloc ne requiert aucun outil (dirt, wool, etc.)
+                            (Some(req_type), Some(info)) => info.tool_type == req_type,
+                            (Some(_), None) => false, // main nue sur bloc qui requiert un outil
+                        };
+                        let tier_ok = match (min_tier, held_tool) {
+                            (None, _) => true,
+                            (Some(req_tier), Some(info)) => {
+                                info.tier.mining_tier() >= req_tier.mining_tier()
+                            }
+                            (Some(_), None) => false,
+                        };
+
+                        if tool_ok && tier_ok {
+                            if let Some(drop_item) = crate::inventory::block_drop(old_block_id) {
+                                let item_id = drop_item.id;
+                                let drop_summary = item_stack_debug_summary(&drop_item);
+                                self.pending_item_spawns
+                                    .push(PendingItemEntitySpawn::with_scatter(
+                                        drop_item,
+                                        [bx as f32 + 0.5, by as f32 + 0.25, bz as f32 + 0.5],
+                                    ));
+                                info!(
+                                    "[{}] Queued dropped item entity: item_id={} at ({}, {}, {}) :: {}",
+                                    self.addr, item_id, bx, by, bz, drop_summary
+                                );
+                            } else {
+                                info!(
+                                    "[{}] Block {} broken but has no drop",
+                                    self.addr, block_name
+                                );
+                            }
                         } else {
-                            info!("[{}] No drop for block {}", self.addr, old_block_id);
+                            info!(
+                                "[{}] Block {} broken but tool mismatch (tool_ok={}, tier_ok={}, held={:?}, need={:?}/{:?})",
+                                self.addr,
+                                block_name,
+                                tool_ok,
+                                tier_ok,
+                                held_tool,
+                                needs_tool,
+                                min_tier
+                            );
                         }
                     }
 

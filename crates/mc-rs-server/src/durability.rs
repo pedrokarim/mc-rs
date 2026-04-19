@@ -33,6 +33,19 @@ impl ToolTier {
         }
     }
 
+    /// Rang de minage (PMMP `TieredTool::getMiningTier`). Utilisé pour
+    /// décider si un outil peut drop un ore (comparé à `min_tool_tier_for_drop`).
+    /// Gold == Wood (Gold pickaxe n'améliore pas le mining tier).
+    pub fn mining_tier(self) -> u8 {
+        match self {
+            Self::Wood | Self::Gold => 0,
+            Self::Stone => 1,
+            Self::Iron => 2,
+            Self::Diamond => 3,
+            Self::Netherite => 4,
+        }
+    }
+
     /// Attack damage en demi-cœurs (PMMP `TieredTool::getBaseAttackPoints()`).
     pub fn base_attack_points(self) -> u32 {
         match self {
