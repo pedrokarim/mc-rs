@@ -7,134 +7,111 @@ fn required_item_id(name: &str) -> i32 {
 }
 
 /// Block runtime ID → (item network ID, item block runtime ID) mapping.
-/// Item network IDs come from Bedrock's required_item_list.json for protocol 944.
-/// Block runtime IDs resolved dynamically from block registry.
+///
+/// Generic : on récupère le nom du block via `BLOCKS.name_for`, puis on
+/// demande l'item_id correspondant via `required_item_id`. Couvre donc
+/// automatiquement tous les blocs du registry qui ont un item avec le
+/// MÊME nom (ce qui est le cas de la plupart : stone/dirt/oak_log/etc.).
 pub fn block_to_item(block_runtime_id: u32) -> Option<(i32, i32)> {
-    let b = &*BLOCKS;
-    let item_id: i32 = if block_runtime_id == b.dirt {
-        required_item_id("minecraft:dirt")
-    } else if block_runtime_id == b.grass_block {
-        required_item_id("minecraft:grass_block")
-    } else if block_runtime_id == b.bedrock {
-        required_item_id("minecraft:bedrock")
-    } else if block_runtime_id == b.stone {
-        required_item_id("minecraft:stone")
-    } else if block_runtime_id == b.sand {
-        required_item_id("minecraft:sand")
-    } else if block_runtime_id == b.sandstone {
-        required_item_id("minecraft:sandstone")
-    } else if block_runtime_id == b.gravel {
-        required_item_id("minecraft:gravel")
-    } else if block_runtime_id == b.oak_log {
-        required_item_id("minecraft:oak_log")
-    } else if block_runtime_id == b.oak_leaves {
-        required_item_id("minecraft:oak_leaves")
-    } else if block_runtime_id == b.snow_layer {
-        required_item_id("minecraft:snow_layer")
-    } else if block_runtime_id == b.coal_ore {
-        required_item_id("minecraft:coal_ore")
-    } else if block_runtime_id == b.iron_ore {
-        required_item_id("minecraft:iron_ore")
-    } else if block_runtime_id == b.gold_ore {
-        required_item_id("minecraft:gold_ore")
-    } else if block_runtime_id == b.diamond_ore {
-        required_item_id("minecraft:diamond_ore")
-    } else if block_runtime_id == b.redstone_ore {
-        required_item_id("minecraft:redstone_ore")
-    } else if block_runtime_id == b.lapis_ore {
-        required_item_id("minecraft:lapis_ore")
-    } else if block_runtime_id == b.mycelium {
-        required_item_id("minecraft:mycelium")
-    } else if block_runtime_id == b.red_sand {
-        required_item_id("minecraft:red_sand")
-    } else if block_runtime_id == b.hardened_clay {
-        required_item_id("minecraft:hardened_clay")
-    } else if block_runtime_id == b.snow_block {
-        required_item_id("minecraft:snow")
-    } else if block_runtime_id == b.podzol {
-        required_item_id("minecraft:podzol")
-    } else if block_runtime_id == b.coarse_dirt {
-        required_item_id("minecraft:coarse_dirt")
-    } else if block_runtime_id == b.red_sandstone {
-        required_item_id("minecraft:red_sandstone")
-    } else if block_runtime_id == b.deepslate {
-        required_item_id("minecraft:deepslate")
-    } else if block_runtime_id == b.tuff {
-        required_item_id("minecraft:tuff")
-    } else if block_runtime_id == b.granite {
-        required_item_id("minecraft:granite")
-    } else if block_runtime_id == b.diorite {
-        required_item_id("minecraft:diorite")
-    } else if block_runtime_id == b.andesite {
-        required_item_id("minecraft:andesite")
-    } else {
+    let name = BLOCKS.name_for(block_runtime_id)?;
+    let item_id = item_registry::network_id(name).unwrap_or(0);
+    if item_id == 0 {
         return None;
-    };
+    }
     Some((item_id, block_runtime_id as i32))
 }
 
 /// Get the drop item for a broken block.
-/// Some blocks drop different items (stone → cobblestone, grass → dirt).
+///
+/// Règles :
+/// - `bedrock` → None (incassable, ne devrait jamais être appelé)
+/// - `stone` → cobblestone
+/// - `grass_block` → dirt
+/// - `coal_ore` → coal, `diamond_ore` → diamond, `lapis_ore` → lapis, `redstone_ore` → redstone (PMMP-like)
+/// - `short_grass`/`tall_grass`/`fern`/`large_fern` → None sans shears (hand drop rien)
+/// - `oak_leaves`/autres leaves → None sans shears (PMMP : drop rare sapling/apple avec proba)
+/// - fleurs (dandelion, poppy, blue_orchid, etc.) → **se droppent elles-mêmes**
+/// - Tous les autres blocs → se droppent eux-mêmes (logs, planks, sand, etc.)
 pub fn block_drop(block_runtime_id: u32) -> Option<ItemStack> {
     let b = &*BLOCKS;
+
+    // 1. Blocs incassables / spéciaux — pas de drop.
+    if block_runtime_id == b.bedrock {
+        return None;
+    }
+
+    // 2. Remplacements — bloc → autre item.
     if block_runtime_id == b.stone {
-        Some(ItemStack::new(
+        return Some(ItemStack::new(
             required_item_id("minecraft:cobblestone"),
             1,
             b.cobblestone as i32,
-        ))
-    } else if block_runtime_id == b.grass_block {
-        Some(ItemStack::new(
+        ));
+    }
+    if block_runtime_id == b.grass_block {
+        return Some(ItemStack::new(
             required_item_id("minecraft:dirt"),
             1,
             b.dirt as i32,
-        ))
-    } else if block_runtime_id == b.oak_leaves {
-        None
-    } else if block_runtime_id == b.short_grass {
-        None
-    } else if block_runtime_id == b.bedrock {
-        None
-    } else {
-        block_to_item(block_runtime_id).map(|(item_id, brid)| ItemStack::new(item_id, 1, brid))
+        ));
     }
+    if block_runtime_id == b.coal_ore {
+        return Some(ItemStack::new(required_item_id("minecraft:coal"), 1, 0));
+    }
+    if block_runtime_id == b.diamond_ore {
+        return Some(ItemStack::new(required_item_id("minecraft:diamond"), 1, 0));
+    }
+    if block_runtime_id == b.lapis_ore {
+        // 4..8 lapis en vanilla ; on met 4 constant (simplification).
+        return Some(ItemStack::new(required_item_id("minecraft:lapis_lazuli"), 4, 0));
+    }
+    if block_runtime_id == b.redstone_ore {
+        return Some(ItemStack::new(required_item_id("minecraft:redstone"), 4, 0));
+    }
+
+    // 3. Feuilles / herbes / plantes fragiles : rien à la main (hand-break).
+    // Pour être plus fidèle à PMMP, il faudrait vérifier l'outil (shears,
+    // épée) et retourner selon l'outil. Pour l'instant simplification : hand
+    // → rien sur ces blocs.
+    let leaves = [
+        b.oak_leaves,
+        b.birch_leaves,
+        b.spruce_leaves,
+        b.acacia_leaves,
+        b.dark_oak_leaves,
+        b.jungle_leaves,
+    ];
+    if leaves.contains(&block_runtime_id) {
+        return None;
+    }
+    if block_runtime_id == b.short_grass
+        || block_runtime_id == b.tall_grass
+        || block_runtime_id == b.fern
+        || block_runtime_id == b.large_fern
+        || block_runtime_id == b.deadbush
+        || block_runtime_id == b.seagrass
+    {
+        return None;
+    }
+
+    // 4. Défaut : le bloc se drop lui-même via block_to_item.
+    block_to_item(block_runtime_id).map(|(item_id, brid)| ItemStack::new(item_id, 1, brid))
 }
 
 /// Item network ID → block runtime ID mapping for placement.
+///
+/// Générique : pour un item_id, on récupère son nom via item_registry, puis on
+/// lookup le block correspondant dans BLOCKS. Couvre tous les items placables
+/// dont le nom item == nom block (cas vanilla de la plupart des items).
 pub fn item_to_block(item_id: i32) -> Option<u32> {
-    let b = &*BLOCKS;
-    match item_id {
-        id if id == required_item_id("minecraft:dirt") => Some(b.dirt),
-        id if id == required_item_id("minecraft:grass_block") => Some(b.grass_block),
-        id if id == required_item_id("minecraft:bedrock") => Some(b.bedrock),
-        id if id == required_item_id("minecraft:stone") => Some(b.stone),
-        id if id == required_item_id("minecraft:cobblestone") => Some(b.cobblestone),
-        id if id == required_item_id("minecraft:sand") => Some(b.sand),
-        id if id == required_item_id("minecraft:sandstone") => Some(b.sandstone),
-        id if id == required_item_id("minecraft:gravel") => Some(b.gravel),
-        id if id == required_item_id("minecraft:oak_log") => Some(b.oak_log),
-        id if id == required_item_id("minecraft:oak_leaves") => Some(b.oak_leaves),
-        id if id == required_item_id("minecraft:coal_ore") => Some(b.coal_ore),
-        id if id == required_item_id("minecraft:iron_ore") => Some(b.iron_ore),
-        id if id == required_item_id("minecraft:gold_ore") => Some(b.gold_ore),
-        id if id == required_item_id("minecraft:diamond_ore") => Some(b.diamond_ore),
-        id if id == required_item_id("minecraft:redstone_ore") => Some(b.redstone_ore),
-        id if id == required_item_id("minecraft:lapis_ore") => Some(b.lapis_ore),
-        id if id == required_item_id("minecraft:mycelium") => Some(b.mycelium),
-        id if id == required_item_id("minecraft:red_sand") => Some(b.red_sand),
-        id if id == required_item_id("minecraft:podzol") => Some(b.podzol),
-        id if id == required_item_id("minecraft:coarse_dirt") => Some(b.coarse_dirt),
-        id if id == required_item_id("minecraft:red_sandstone") => Some(b.red_sandstone),
-        id if id == required_item_id("minecraft:snow_layer") => Some(b.snow_layer),
-        id if id == required_item_id("minecraft:snow") => Some(b.snow_block),
-        id if id == required_item_id("minecraft:hardened_clay") => Some(b.hardened_clay),
-        id if id == required_item_id("minecraft:deepslate") => Some(b.deepslate),
-        id if id == required_item_id("minecraft:tuff") => Some(b.tuff),
-        id if id == required_item_id("minecraft:granite") => Some(b.granite),
-        id if id == required_item_id("minecraft:diorite") => Some(b.diorite),
-        id if id == required_item_id("minecraft:andesite") => Some(b.andesite),
-        _ => None,
+    let item_name = item_registry::item_name_by_id(item_id)?;
+    let block_id = BLOCKS.get(item_name);
+    // BLOCKS.get retourne air (0) si non trouvé ; on exclut ce cas sauf si
+    // item_name == "minecraft:air" (hypothèse invraisemblable pour un place).
+    if block_id == BLOCKS.air && item_name != "minecraft:air" {
+        return None;
     }
+    Some(block_id)
 }
 
 /// Player inventory: 36 main slots + 4 armor + 1 offhand + cursor + 2x2 craft grid.
