@@ -136,7 +136,7 @@ impl RakNetServer {
             return;
         };
         let motd_string = self.motd.to_string_payload();
-        debug!("UnconnectedPing from {} — replying with MOTD", addr);
+        // Ping broadcast fire 1/s/interface → trop bruyant même en debug. Muted.
         let pong = offline::encode_unconnected_pong(send_time, self.server_guid, &motd_string);
         let _ = self.socket.send_to(&pong, addr).await;
     }
