@@ -7,6 +7,7 @@ members = [
     "crates/mc-rs-command",
     "crates/mc-rs-nbt",
     "crates/mc-rs-server",
+    "benchmark",
 ]
 exclude = [
     "old_crates",

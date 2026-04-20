@@ -287,6 +287,19 @@ impl Connection {
 
     /// Handle a single decoded packet. Returns response packets to send.
     fn handle_packet(&mut self, pkt_id: u32, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
+        // DIAG : log TOUS les paquets reçus en état InGame. Désactivable plus
+        // tard en debug. Pour l'instant on cherche quel paquet le client
+        // envoie pour un placement de bloc (bit 34 jamais set dans
+        // PlayerAuthInput, block_action types tous break-related).
+        if self.state == ConnectionState::InGame
+            && pkt_id != packet_id::PLAYER_AUTH_INPUT
+        {
+            info!(
+                "[{}] recv pkt 0x{:03X} in InGame",
+                self.addr, pkt_id
+            );
+        }
+
         match (self.state, pkt_id) {
             // -- SessionStart --
             (ConnectionState::SessionStart, packet_id::REQUEST_NETWORK_SETTINGS) => {
@@ -431,7 +444,10 @@ impl Connection {
             .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
 
         let pkt_bytes = codec::encode_packet(pkt_id, payload);
-        let batch_payload = batch::encode_batch(&[pkt_bytes], self.compression_algo, 7);
+        // Level 1 (fastest) : bench `batch_compression` montre ratio quasi
+        // identique à L6 (0.71 vs 0.73 small / 0.64 vs 0.67 medium) pour 4-5×
+        // moins de CPU. Sur un chunk 150 KB : L1 = 2.1 ms vs L6 = 12 ms.
+        let batch_payload = batch::encode_batch(&[pkt_bytes], self.compression_algo, 1);
 
         let mut result = Vec::with_capacity(1 + batch_payload.len());
         result.push(0xFE);

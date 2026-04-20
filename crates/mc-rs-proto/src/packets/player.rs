@@ -89,6 +89,9 @@ pub struct PlayerAuthInput {
     pub move_vec_x: f32,
     pub move_vec_z: f32,
     pub head_yaw: f32,
+    /// Bitset brut des PlayerAuthInputFlags — exposé pour diag côté server
+    /// (ex: vérifier si PERFORM_ITEM_INTERACTION=34 est bien set au placement).
+    pub input_flags: u128,
     pub block_actions: Vec<BlockAction>,
     pub item_interaction: Option<ItemInteractionData>,
     pub item_stack_request: Option<ItemStackRequest>,
@@ -596,7 +599,7 @@ impl PlayerAuthInput {
         let item_interaction = if (input_flags >> FLAG_PERFORM_ITEM_INTERACTION) & 1 == 1 {
             match decode_item_interaction(reader) {
                 Ok(data) => Some(data),
-                Err(_) => {
+                Err(_e) => {
                     return Ok(Self {
                         pitch,
                         yaw,
@@ -604,6 +607,7 @@ impl PlayerAuthInput {
                         move_vec_x,
                         move_vec_z,
                         head_yaw,
+                        input_flags,
                         block_actions: Vec::new(),
                         item_interaction: None,
                         item_stack_request: None,
@@ -618,7 +622,7 @@ impl PlayerAuthInput {
         let item_stack_request = if (input_flags >> FLAG_PERFORM_ITEM_STACK_REQUEST) & 1 == 1 {
             match decode_item_stack_request(reader) {
                 Ok(req) => Some(req),
-                Err(_) => {
+                Err(_e) => {
                     return Ok(Self {
                         pitch,
                         yaw,
@@ -626,6 +630,7 @@ impl PlayerAuthInput {
                         move_vec_x,
                         move_vec_z,
                         head_yaw,
+                        input_flags,
                         block_actions: Vec::new(),
                         item_interaction,
                         item_stack_request: None,
@@ -672,6 +677,7 @@ impl PlayerAuthInput {
             move_vec_x,
             move_vec_z,
             head_yaw,
+            input_flags,
             block_actions,
             item_interaction,
             item_stack_request,
@@ -1314,24 +1320,26 @@ impl UpdateAbilities {
         w.into_bytes()
     }
 
-    /// Survival mode abilities — no fly, can walk/mine/build/attack
-    pub fn default_survival(entity_id: i64) -> Self {
-        // ALL abilities are SET (we provide values for all of them)
+    /// Survival mode abilities — no fly, can walk/mine/build/attack.
+    /// `is_op` drives `permission_level` + `command_permission` + OPERATOR bit,
+    /// strictement comme PMMP `NetworkSession::syncAbilities` (permissions liées
+    /// à `hasPermission(ROOT_OPERATOR)`, pas au gamemode).
+    pub fn default_survival(entity_id: i64, is_op: bool) -> Self {
         let set = ability::ALL;
-        // Only these are ENABLED (true):
-        let values = ability::BUILD
+        let mut values = ability::BUILD
             | ability::MINE
             | ability::DOORS_AND_SWITCHES
             | ability::OPEN_CONTAINERS
             | ability::ATTACK_PLAYERS
             | ability::ATTACK_MOBS;
-        // All others are false: FLYING, ALLOW_FLIGHT, NO_CLIP, INVULNERABLE,
-        // OPERATOR, TELEPORT, INFINITE_RESOURCES, etc.
+        if is_op {
+            values |= ability::OPERATOR | ability::TELEPORT;
+        }
 
         Self {
             entity_id,
-            permission_level: 1, // MEMBER (PMMP PlayerPermissions::MEMBER = 1, NOT 0 which is VISITOR)
-            command_permission: 0, // NORMAL
+            permission_level: if is_op { 2 } else { 1 },
+            command_permission: if is_op { 1 } else { 0 },
             layers: vec![AbilitiesLayer {
                 layer_type: 1, // BASE
                 abilities_set: set,
@@ -1343,27 +1351,31 @@ impl UpdateAbilities {
         }
     }
 
-    /// Creative mode abilities — fly, invulnerable, infinite resources
-    pub fn default_creative(entity_id: i64) -> Self {
+    /// Creative mode abilities — allow_flight + invulnerable + infinite_resources.
+    /// FLYING n'est pas auto-enabled (PMMP lit `isFlying()` courant ; le joueur
+    /// double-jump pour activer le vol). NO_CLIP reste désactivé (collision
+    /// normale en créatif — seul le spectator a `!hasBlockCollision()`).
+    pub fn default_creative(entity_id: i64, is_op: bool) -> Self {
         let set = ability::ALL;
-        let values = ability::BUILD
+        let mut values = ability::BUILD
             | ability::MINE
             | ability::DOORS_AND_SWITCHES
             | ability::OPEN_CONTAINERS
             | ability::ATTACK_PLAYERS
             | ability::ATTACK_MOBS
             | ability::ALLOW_FLIGHT
-            | ability::FLYING
             | ability::INVULNERABLE
             | ability::INFINITE_RESOURCES
             | ability::FLY_SPEED
-            | ability::WALK_SPEED
-            | ability::NO_CLIP;
+            | ability::WALK_SPEED;
+        if is_op {
+            values |= ability::OPERATOR | ability::TELEPORT;
+        }
 
         Self {
             entity_id,
-            permission_level: 2,   // OPERATOR
-            command_permission: 1, // GAME_DIRECTORS
+            permission_level: if is_op { 2 } else { 1 },
+            command_permission: if is_op { 1 } else { 0 },
             layers: vec![AbilitiesLayer {
                 layer_type: 1, // BASE
                 abilities_set: set,
@@ -1376,20 +1388,22 @@ impl UpdateAbilities {
     }
 
     /// Spectator mode abilities — fly, noclip, no interactions (PMMP syncAbilities)
-    pub fn default_spectator(entity_id: i64) -> Self {
+    pub fn default_spectator(entity_id: i64, is_op: bool) -> Self {
         let set = ability::ALL;
-        // Spectator: fly + noclip + invulnerable, NO build/mine/attack
-        let values = ability::ALLOW_FLIGHT
+        let mut values = ability::ALLOW_FLIGHT
             | ability::FLYING
             | ability::INVULNERABLE
             | ability::NO_CLIP
             | ability::FLY_SPEED
             | ability::WALK_SPEED;
+        if is_op {
+            values |= ability::OPERATOR | ability::TELEPORT;
+        }
 
         Self {
             entity_id,
-            permission_level: 1,   // MEMBER
-            command_permission: 0, // NORMAL
+            permission_level: if is_op { 2 } else { 1 },
+            command_permission: if is_op { 1 } else { 0 },
             layers: vec![
                 // BASE layer
                 AbilitiesLayer {

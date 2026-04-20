@@ -64,8 +64,18 @@ pub fn decode_batch(raw: &[u8], algo: CompressionAlgorithm) -> Result<Vec<Vec<u8
     Ok(packets)
 }
 
+/// En dessous de ce seuil raw-payload, `encode_batch` ignore l'algorithme
+/// demandé et envoie `None` — bench `batch_compression` :
+/// zlib(L6) ~400 µs vs None ~700 ns sur 290 B, pour un gain de compression
+/// marginal (< 30% de ratio amélioré sur ces tailles). PMMP applique une
+/// logique similaire via `getCompressionThreshold()` côté `NetworkSession`.
+pub const COMPRESSION_THRESHOLD: usize = 512;
+
 /// Encode multiple packet buffers into a compressed batch payload.
 /// Returns the bytes AFTER 0xFE (i.e., algo_byte + compressed_data).
+///
+/// Si `raw < COMPRESSION_THRESHOLD`, `algo` est downgradé en `None` : le coût
+/// CPU de zlib/snappy sur les petits paquets l'emporte sur la taille gagnée.
 pub fn encode_batch(
     packets: &[Vec<u8>],
     algo: CompressionAlgorithm,
@@ -80,8 +90,17 @@ pub fn encode_batch(
 
     let raw = payload.into_bytes();
 
+    // Threshold : pour les petits payloads, compresser coûte plus cher que
+    // l'octet gagné. L'algo effectif est encodé dans l'en-tête, le client
+    // suit sans se poser de question.
+    let effective_algo = if raw.len() < COMPRESSION_THRESHOLD {
+        CompressionAlgorithm::None
+    } else {
+        algo
+    };
+
     // Compress
-    let compressed = match algo {
+    let compressed = match effective_algo {
         CompressionAlgorithm::Zlib => {
             let level = Compression::new(compression_level);
             let mut encoder = DeflateEncoder::new(Vec::new(), level);
@@ -96,7 +115,7 @@ pub fn encode_batch(
 
     // Prepend algorithm byte
     let mut result = Vec::with_capacity(1 + compressed.len());
-    result.push(algo as u8);
+    result.push(effective_algo as u8);
     result.extend_from_slice(&compressed);
     result
 }
@@ -132,7 +151,8 @@ mod tests {
 
     #[test]
     fn test_batch_roundtrip_zlib() {
-        let packets = vec![vec![0x01, 0x02, 0x03], vec![0x04, 0x05]];
+        // Payload > COMPRESSION_THRESHOLD pour éviter le downgrade automatique.
+        let packets = vec![vec![0xAB; 600], vec![0xCD; 300]];
         let encoded = encode_batch(&packets, CompressionAlgorithm::Zlib, 6);
         assert_eq!(encoded[0], 0x00); // zlib algo byte
 
@@ -152,7 +172,7 @@ mod tests {
 
     #[test]
     fn test_batch_roundtrip_snappy() {
-        let packets = vec![vec![0x01; 100], vec![0x02; 50]];
+        let packets = vec![vec![0x01; 600], vec![0x02; 300]];
         let encoded = encode_batch(&packets, CompressionAlgorithm::Snappy, 0);
         assert_eq!(encoded[0], 0x01); // snappy algo byte
 
@@ -166,5 +186,18 @@ mod tests {
         let wrapped = wrap_batch(&payload);
         assert_eq!(wrapped[0], 0xFE);
         assert_eq!(&wrapped[1..], &payload);
+    }
+
+    #[test]
+    fn test_small_payload_downgrades_to_none() {
+        // Demande zlib mais payload raw < COMPRESSION_THRESHOLD : l'algo
+        // effectif doit être None (0xFF), et le roundtrip doit marcher en
+        // décodant avec None.
+        let packets = vec![vec![0x42; 10]];
+        let encoded = encode_batch(&packets, CompressionAlgorithm::Zlib, 6);
+        assert_eq!(encoded[0], CompressionAlgorithm::None as u8);
+
+        let decoded = decode_batch(&encoded[1..], CompressionAlgorithm::None).unwrap();
+        assert_eq!(decoded, packets);
     }
 }

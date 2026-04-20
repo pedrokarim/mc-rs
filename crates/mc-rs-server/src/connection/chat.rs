@@ -109,11 +109,13 @@ impl Connection {
             self.encode_compressed_packet(packet_id::SET_PLAYER_GAME_TYPE, gt_writer.as_bytes()),
         );
 
-        // 2. UpdateAbilities -- per-gamemode
+        // 2. UpdateAbilities -- per-gamemode. is_op est indépendant du gamemode
+        // (PMMP NetworkSession::syncAbilities lit hasPermission(ROOT_OPERATOR)).
+        let is_op = self.is_op;
         let abilities = match mode {
-            1 => UpdateAbilities::default_creative(self.entity_runtime_id as i64),
-            3 => UpdateAbilities::default_spectator(self.entity_runtime_id as i64),
-            _ => UpdateAbilities::default_survival(self.entity_runtime_id as i64),
+            1 => UpdateAbilities::default_creative(self.entity_runtime_id as i64, is_op),
+            3 => UpdateAbilities::default_spectator(self.entity_runtime_id as i64, is_op),
+            _ => UpdateAbilities::default_survival(self.entity_runtime_id as i64, is_op),
         };
         responses
             .push(self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities.encode()));

@@ -1,0 +1,39 @@
+[package]
+name = "benchmark"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+mc-rs-nbt = { path = "../crates/mc-rs-nbt" }
+mc-rs-proto = { path = "../crates/mc-rs-proto" }
+mc-rs-crypto = { path = "../crates/mc-rs-crypto" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+flate2 = { workspace = true }
+snap = { workspace = true }
+bytes = { workspace = true }
+base64 = { workspace = true }
+
+[[bin]]
+name = "player_data_format"
+path = "src/bin/player_data_format.rs"
+
+[[bin]]
+name = "batch_compression"
+path = "src/bin/batch_compression.rs"
+
+[[bin]]
+name = "proto_io"
+path = "src/bin/proto_io.rs"
+
+[[bin]]
+name = "nbt_variants"
+path = "src/bin/nbt_variants.rs"
+
+[[bin]]
+name = "aes_ctr"
+path = "src/bin/aes_ctr.rs"

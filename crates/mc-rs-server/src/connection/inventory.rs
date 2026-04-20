@@ -121,8 +121,22 @@ impl Connection {
             changed_slots,
             data,
         } = transaction;
+        info!(
+            "[{}] InventoryTransaction id={} variant={} changed_slots_count={}",
+            self.addr,
+            request_id,
+            match &data {
+                InventoryTransactionData::Normal { .. } => "Normal",
+                InventoryTransactionData::Mismatch { .. } => "Mismatch",
+                InventoryTransactionData::UseItem { .. } => "UseItem",
+                InventoryTransactionData::ReleaseItem { .. } => "ReleaseItem",
+                InventoryTransactionData::UseItemOnEntity { .. } => "UseItemOnEntity",
+                InventoryTransactionData::Unknown { .. } => "Unknown",
+            },
+            changed_slots.len(),
+        );
 
-        let responses = Vec::new();
+        let mut responses = Vec::new();
 
         // PMMP : `setCurrentItemStackRequestId` + `addRawPredictedSlotChanges`
         // doivent encadrer toute transaction legacy. Sans ça, les set_slot
@@ -223,8 +237,40 @@ impl Connection {
             InventoryTransactionData::Mismatch { .. } => {
                 self.inventory_manager.request_sync_all();
             }
-            InventoryTransactionData::UseItem { .. }
-            | InventoryTransactionData::ReleaseItem { .. }
+            InventoryTransactionData::UseItem { data, .. } => {
+                // PMMP handleUseItemTransaction — placement de bloc arrive ici
+                // avec data.action_type = 0 (ACTION_CLICK_BLOCK). C'est le
+                // SEUL endroit où le client envoie l'info placement en proto
+                // 944 (le bit 34 de PlayerAuthInput n'est jamais set).
+                info!(
+                    "[{}] UseItem action_type={} block_pos=({},{},{}) face={} hotbar={}",
+                    self.addr,
+                    data.action_type,
+                    data.block_position[0],
+                    data.block_position[1],
+                    data.block_position[2],
+                    data.face,
+                    data.hotbar_slot,
+                );
+                match data.action_type {
+                    0 => {
+                        // ACTION_CLICK_BLOCK : placement ou right-click sur bloc
+                        // (bed, crafting table, coffre, etc.).
+                        self.handle_block_place(&data, &mut responses);
+                    }
+                    1 => {
+                        // ACTION_CLICK_AIR : use held item (food, potion, eat).
+                        // Pas implémenté pour l'instant.
+                    }
+                    2 => {
+                        // ACTION_BREAK_BLOCK : legacy break (avant server-auth
+                        // block breaking). Normalement passe par PREDICT_DESTROY_BLOCK
+                        // en proto 944. On ignore ici.
+                    }
+                    _ => {}
+                }
+            }
+            InventoryTransactionData::ReleaseItem { .. }
             | InventoryTransactionData::Unknown { .. } => {}
             InventoryTransactionData::UseItemOnEntity {
                 actor_runtime_id,
@@ -560,10 +606,11 @@ impl Connection {
 
         // PMMP onServerRespawn : syncAbilities — réapplique les abilities
         // selon le gamemode actuel (créatif = fly, survival = no fly, etc.).
-        let abilities = if self.gamemode == 1 {
-            UpdateAbilities::default_creative(self.entity_runtime_id as i64)
-        } else {
-            UpdateAbilities::default_survival(self.entity_runtime_id as i64)
+        let is_op = self.is_op;
+        let abilities = match self.gamemode {
+            1 => UpdateAbilities::default_creative(self.entity_runtime_id as i64, is_op),
+            3 => UpdateAbilities::default_spectator(self.entity_runtime_id as i64, is_op),
+            _ => UpdateAbilities::default_survival(self.entity_runtime_id as i64, is_op),
         };
         out.push(
             self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities.encode()),

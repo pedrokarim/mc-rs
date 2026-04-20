@@ -169,10 +169,11 @@ impl Connection {
         ));
 
         // 7. UpdateAbilities
-        let abilities = if self.gamemode == 1 {
-            UpdateAbilities::default_creative(self.entity_runtime_id as i64)
-        } else {
-            UpdateAbilities::default_survival(self.entity_runtime_id as i64)
+        let is_op = self.is_op;
+        let abilities = match self.gamemode {
+            1 => UpdateAbilities::default_creative(self.entity_runtime_id as i64, is_op),
+            3 => UpdateAbilities::default_spectator(self.entity_runtime_id as i64, is_op),
+            _ => UpdateAbilities::default_survival(self.entity_runtime_id as i64, is_op),
         };
         responses
             .push(self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities.encode()));

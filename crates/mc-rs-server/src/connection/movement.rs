@@ -185,6 +185,10 @@ impl Connection {
             let bx = action.position[0];
             let by = action.position[1];
             let bz = action.position[2];
+            info!(
+                "[{}] block_action type={} pos=({},{},{}) face={}",
+                self.addr, action.action_type, bx, by, bz, action.face
+            );
             // PMMP uses integer block position (cast to float), NOT +0.5 center
             let block_pos = [bx as f32, by as f32, bz as f32];
             let block_center = [bx as f32 + 0.5, by as f32 + 0.5, bz as f32 + 0.5];
@@ -469,6 +473,23 @@ impl Connection {
         }
 
         // Handle block placement (item interaction with ACTION_CLICK_BLOCK)
+        // Diag : log les bits PlayerAuthInput d'intérêt quand au moins un
+        // est set. Permet de savoir si le client envoie bien bit 34
+        // (PERFORM_ITEM_INTERACTION) au moment d'un placement.
+        let bit_interaction = (pkt.input_flags >> 34) & 1 == 1;
+        let bit_block_actions = (pkt.input_flags >> 35) & 1 == 1;
+        let bit_stack_req = (pkt.input_flags >> 36) & 1 == 1;
+        if bit_interaction || bit_block_actions || bit_stack_req {
+            info!(
+                "[{}] PlayerAuthInput bits: interaction={} block_actions={} stack_req={} flags=0x{:x}",
+                self.addr,
+                bit_interaction as u8,
+                bit_block_actions as u8,
+                bit_stack_req as u8,
+                pkt.input_flags,
+            );
+        }
+
         if let Some(ref interaction) = pkt.item_interaction {
             info!(
                 "[{}] item_interaction: action_type={} face={} hotbar_slot={}",
