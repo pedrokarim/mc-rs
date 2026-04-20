@@ -63,7 +63,7 @@ impl Connection {
                 self.order_chunks();
                 self.chunk_order_countdown = u32::MAX; // idle until next trigger
 
-                tracing::info!(
+                debug!(
                     "[{}] order_chunks: queue={}, sent_chunks={}, pos=({},{}), view_distance={}",
                     self.addr,
                     self.chunk_load_queue.len(),
@@ -135,7 +135,7 @@ impl Connection {
         }
 
         if sent > 0 {
-            tracing::info!(
+            debug!(
                 "[{}] send_chunk_batch: sent={}, queue_before={}, queue_after={}, sent_chunks_total={}, countdown={}",
                 self.addr,
                 sent,
