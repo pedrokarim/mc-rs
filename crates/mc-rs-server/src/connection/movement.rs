@@ -318,11 +318,14 @@ impl Connection {
                         self.broadcasts.push(sound_bytes);
                     }
 
-                    // Spawn a dropped item entity — sous condition que l'outil
-                    // tenu soit adéquat. PMMP `Block::onBreak` + `Block::isCompatibleWithTool`
-                    // : certains blocs ne droppent rien si outil incorrect (ex: stone
-                    // sans pickaxe, iron_ore avec pickaxe bois, etc.). En créatif on
-                    // skip même le drop (pas de ramassage, le bloc disparaît).
+                    // Spawn a dropped item entity — règle vanilla :
+                    // - Seuls les blocs dont l'outil requis est Pickaxe sont
+                    //   REELLEMENT tool-gated (stone/cobblestone/ores/obsidian).
+                    //   Les blocs Axe/Shovel/Shears sont juste "plus rapides"
+                    //   avec le bon outil mais droppent à main nue aussi.
+                    // - Tier check ne s'applique QUE sur les blocs pickaxe
+                    //   (iron_ore → stone+, diamond_ore → iron+, obsidian → diamond+).
+                    // En créatif on skip le drop entièrement.
                     if old_block_id != air_id && self.gamemode != 1 {
                         let block_name = crate::world::block_registry::BLOCKS
                             .name_for(old_block_id)
@@ -335,10 +338,21 @@ impl Connection {
                         let min_tier =
                             crate::block_hardness::min_tool_tier_for_drop(block_name);
 
-                        let tool_ok = match (needs_tool, held_tool) {
-                            (None, _) => true, // le bloc ne requiert aucun outil (dirt, wool, etc.)
-                            (Some(req_type), Some(info)) => info.tool_type == req_type,
-                            (Some(_), None) => false, // main nue sur bloc qui requiert un outil
+                        // Seuls les blocs pickaxe-required sont gate-és côté outil.
+                        let needs_pickaxe = matches!(
+                            needs_tool,
+                            Some(crate::durability::ToolType::Pickaxe)
+                        );
+                        let tool_ok = if needs_pickaxe {
+                            matches!(
+                                held_tool,
+                                Some(crate::durability::DurableInfo {
+                                    tool_type: crate::durability::ToolType::Pickaxe,
+                                    ..
+                                })
+                            )
+                        } else {
+                            true // logs/dirt/sand/etc. droppent à main nue
                         };
                         let tier_ok = match (min_tier, held_tool) {
                             (None, _) => true,
