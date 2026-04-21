@@ -25,6 +25,7 @@ use rand::Rng;
 use serde::Deserialize;
 
 const ENTITIES_JSON: &str = include_str!("../data/loot_tables/entities.json");
+const CHESTS_JSON: &str = include_str!("../data/loot_tables/chests.json");
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(untagged)]
@@ -124,6 +125,10 @@ pub type LootDrops = Vec<(String, u32)>;
 
 static ENTITY_LOOT: LazyLock<HashMap<String, RawLootTable>> = LazyLock::new(|| {
     serde_json::from_str(ENTITIES_JSON).expect("valid entities.json loot data")
+});
+
+static CHEST_LOOT: LazyLock<HashMap<String, RawLootTable>> = LazyLock::new(|| {
+    serde_json::from_str(CHESTS_JSON).expect("valid chests.json loot data")
 });
 
 fn check_condition<R: Rng>(cond: &RawCondition, ctx: &LootContext, rng: &mut R) -> bool {
@@ -263,6 +268,59 @@ pub fn entity_count() -> usize {
     ENTITY_LOOT.len()
 }
 
+/// Rolle la loot table d'un coffre vanilla (ex. `minecraft:simple_dungeon`).
+pub fn roll_chest_loot(chest_name: &str) -> LootDrops {
+    let mut rng = rand::thread_rng();
+    let Some(table) = CHEST_LOOT.get(chest_name) else {
+        return Vec::new();
+    };
+
+    let ctx = LootContext {
+        killed_by_player: true, // coffres : conditions joueur toujours true
+        ..Default::default()
+    };
+    let mut drops: LootDrops = Vec::new();
+    for pool in &table.pools {
+        let mut pool_ok = true;
+        for c in &pool.conditions {
+            if !check_condition(c, &ctx, &mut rng) {
+                pool_ok = false;
+                break;
+            }
+        }
+        if !pool_ok {
+            continue;
+        }
+        let rolls = pool.rolls.as_ref().map(|r| r.roll(&mut rng)).unwrap_or(1);
+        for _ in 0..rolls.max(0) {
+            let Some(entry) = pick_weighted_entry(&pool.entries, &mut rng) else {
+                continue;
+            };
+            if entry.entry_type != "item" {
+                continue;
+            }
+            let Some(name) = entry.name.as_deref() else {
+                continue;
+            };
+            let base_count = entry
+                .count
+                .as_ref()
+                .map(|c| c.roll(&mut rng).max(0) as u32)
+                .unwrap_or(1);
+            let final_count = apply_functions(&entry.functions, name, base_count, &ctx, &mut rng);
+            if final_count == 0 {
+                continue;
+            }
+            drops.push((name.to_string(), final_count));
+        }
+    }
+    drops
+}
+
+pub fn chest_count() -> usize {
+    CHEST_LOOT.len()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -298,5 +356,23 @@ mod tests {
     fn nonexistent_entity_empty_drops() {
         let drops = roll_entity_loot("minecraft:foobar", LootContext::default());
         assert!(drops.is_empty());
+    }
+
+    #[test]
+    fn chest_loot_tables_load() {
+        assert!(chest_count() > 20);
+    }
+
+    #[test]
+    fn simple_dungeon_chest_drops_something() {
+        let mut found = false;
+        for _ in 0..50 {
+            let drops = roll_chest_loot("minecraft:simple_dungeon");
+            if !drops.is_empty() {
+                found = true;
+                break;
+            }
+        }
+        assert!(found);
     }
 }
