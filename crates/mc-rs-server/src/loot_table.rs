@@ -26,6 +26,11 @@ use serde::Deserialize;
 
 const ENTITIES_JSON: &str = include_str!("../data/loot_tables/entities.json");
 const CHESTS_JSON: &str = include_str!("../data/loot_tables/chests.json");
+const EQUIPMENT_JSON: &str = include_str!("../data/loot_tables/equipment.json");
+const GAMEPLAY_JSON: &str = include_str!("../data/loot_tables/gameplay.json");
+const DISPENSERS_JSON: &str = include_str!("../data/loot_tables/dispensers.json");
+const POTS_JSON: &str = include_str!("../data/loot_tables/pots.json");
+const SPAWNERS_JSON: &str = include_str!("../data/loot_tables/spawners.json");
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(untagged)]
@@ -129,6 +134,26 @@ static ENTITY_LOOT: LazyLock<HashMap<String, RawLootTable>> = LazyLock::new(|| {
 
 static CHEST_LOOT: LazyLock<HashMap<String, RawLootTable>> = LazyLock::new(|| {
     serde_json::from_str(CHESTS_JSON).expect("valid chests.json loot data")
+});
+
+static EQUIPMENT_LOOT: LazyLock<HashMap<String, RawLootTable>> = LazyLock::new(|| {
+    serde_json::from_str(EQUIPMENT_JSON).expect("valid equipment.json loot data")
+});
+
+static GAMEPLAY_LOOT: LazyLock<HashMap<String, RawLootTable>> = LazyLock::new(|| {
+    serde_json::from_str(GAMEPLAY_JSON).expect("valid gameplay.json loot data")
+});
+
+static DISPENSERS_LOOT: LazyLock<HashMap<String, RawLootTable>> = LazyLock::new(|| {
+    serde_json::from_str(DISPENSERS_JSON).expect("valid dispensers.json loot data")
+});
+
+static POTS_LOOT: LazyLock<HashMap<String, RawLootTable>> = LazyLock::new(|| {
+    serde_json::from_str(POTS_JSON).expect("valid pots.json loot data")
+});
+
+static SPAWNERS_LOOT: LazyLock<HashMap<String, RawLootTable>> = LazyLock::new(|| {
+    serde_json::from_str(SPAWNERS_JSON).expect("valid spawners.json loot data")
 });
 
 fn check_condition<R: Rng>(cond: &RawCondition, ctx: &LootContext, rng: &mut R) -> bool {
@@ -321,6 +346,84 @@ pub fn chest_count() -> usize {
     CHEST_LOOT.len()
 }
 
+/// Roll générique — cherche la table dans toutes les catégories.
+pub fn roll_any(table_name: &str) -> LootDrops {
+    for dict in [
+        &*ENTITY_LOOT,
+        &*CHEST_LOOT,
+        &*EQUIPMENT_LOOT,
+        &*GAMEPLAY_LOOT,
+        &*DISPENSERS_LOOT,
+        &*POTS_LOOT,
+        &*SPAWNERS_LOOT,
+    ] {
+        if dict.contains_key(table_name) {
+            return roll_table_generic(dict, table_name);
+        }
+    }
+    Vec::new()
+}
+
+fn roll_table_generic(
+    dict: &HashMap<String, RawLootTable>,
+    table_name: &str,
+) -> LootDrops {
+    let mut rng = rand::thread_rng();
+    let Some(table) = dict.get(table_name) else {
+        return Vec::new();
+    };
+    let ctx = LootContext {
+        killed_by_player: true,
+        ..Default::default()
+    };
+    let mut drops: LootDrops = Vec::new();
+    for pool in &table.pools {
+        let mut pool_ok = true;
+        for c in &pool.conditions {
+            if !check_condition(c, &ctx, &mut rng) {
+                pool_ok = false;
+                break;
+            }
+        }
+        if !pool_ok {
+            continue;
+        }
+        let rolls = pool.rolls.as_ref().map(|r| r.roll(&mut rng)).unwrap_or(1);
+        for _ in 0..rolls.max(0) {
+            let Some(entry) = pick_weighted_entry(&pool.entries, &mut rng) else {
+                continue;
+            };
+            if entry.entry_type != "item" {
+                continue;
+            }
+            let Some(name) = entry.name.as_deref() else {
+                continue;
+            };
+            let base_count = entry
+                .count
+                .as_ref()
+                .map(|c| c.roll(&mut rng).max(0) as u32)
+                .unwrap_or(1);
+            let final_count = apply_functions(&entry.functions, name, base_count, &ctx, &mut rng);
+            if final_count == 0 {
+                continue;
+            }
+            drops.push((name.to_string(), final_count));
+        }
+    }
+    drops
+}
+
+pub fn total_table_count() -> usize {
+    ENTITY_LOOT.len()
+        + CHEST_LOOT.len()
+        + EQUIPMENT_LOOT.len()
+        + GAMEPLAY_LOOT.len()
+        + DISPENSERS_LOOT.len()
+        + POTS_LOOT.len()
+        + SPAWNERS_LOOT.len()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -361,6 +464,11 @@ mod tests {
     #[test]
     fn chest_loot_tables_load() {
         assert!(chest_count() > 20);
+    }
+
+    #[test]
+    fn all_categories_loaded() {
+        assert!(total_table_count() > 150);
     }
 
     #[test]

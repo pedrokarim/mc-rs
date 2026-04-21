@@ -356,6 +356,7 @@ pub mod enderman;
 pub mod endermite;
 #[allow(dead_code)]
 mod entity;
+pub mod entities_vanilla;
 #[allow(dead_code)]
 pub mod entity_drops;
 #[allow(dead_code)]
@@ -486,6 +487,7 @@ pub mod item_frame;
 pub mod item_properties;
 #[allow(dead_code)]
 mod item_registry;
+pub mod items_vanilla;
 #[allow(dead_code)]
 pub mod item_stack_merge;
 #[allow(dead_code)]
@@ -924,6 +926,7 @@ pub mod trade_offer_packet;
 pub mod trading;
 #[allow(dead_code)]
 pub mod trading_generator;
+pub mod trading_vanilla;
 #[allow(dead_code)]
 pub mod transfer;
 #[allow(dead_code)]
@@ -956,6 +959,8 @@ pub mod vault;
 pub mod vector_math;
 #[allow(dead_code)]
 pub mod vehicles;
+#[allow(dead_code)]
+pub mod vanilla_registries;
 #[allow(dead_code)]
 pub mod velocity_broadcast;
 #[allow(dead_code)]
