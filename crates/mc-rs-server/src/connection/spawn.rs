@@ -224,8 +224,7 @@ impl Connection {
         let entries = crate::item_registry::all_entries();
         let creative_items: Vec<CreativeItemEntry> = entries
             .iter()
-            .enumerate()
-            .filter_map(|(idx, (name, item_id))| {
+            .filter_map(|(name, item_id)| {
                 // Skip air et les items invalides (runtime_id négatif ou 0).
                 if *item_id <= 0 || *name == "minecraft:air" {
                     return None;
@@ -236,11 +235,13 @@ impl Connection {
                 } else {
                     0
                 };
+                // entry_id = item_id (stable entre runs, mapping trivial lors
+                // de CraftCreative où le client renvoie l'entry_id choisi).
                 Some(CreativeItemEntry {
-                    entry_id: (idx + 1) as u32, // id unique, client l'utilise dans CraftCreative
+                    entry_id: *item_id as u32,
                     item_id: *item_id,
                     block_runtime_id: brid,
-                    group_id: 0, // tout dans le groupe 0
+                    group_id: 0,
                 })
             })
             .collect();

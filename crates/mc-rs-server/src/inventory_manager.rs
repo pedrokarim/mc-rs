@@ -118,6 +118,10 @@ pub struct InventoryManager {
 
     pub client_selected_hotbar_slot: i32,
     pub full_sync_requested: bool,
+    /// Item créé par un CraftCreative, en attente qu'un Place action depuis
+    /// le container CREATED_OUTPUT (60) slot 50 le déplace dans un vrai slot.
+    /// PMMP `ItemStackRequestExecutor::nextCreatedItem`.
+    pub pending_creative_item: Option<ItemStack>,
 }
 
 impl InventoryManager {
@@ -134,6 +138,7 @@ impl InventoryManager {
             pending_open_main_inventory: None,
             client_selected_hotbar_slot: -1,
             full_sync_requested: false,
+            pending_creative_item: None,
         };
         // PMMP `__construct` :
         //   add(INVENTORY, main); add(OFFHAND, offhand); add(ARMOR, armor);
@@ -876,6 +881,43 @@ impl InventoryManager {
                     source,
                     destination,
                 } => {
+                    // Cas créatif : source = CREATED_OUTPUT (60) → on utilise
+                    // pending_creative_item stocké par CraftCreative.
+                    if source.container_id == ui_id::CREATED_OUTPUT {
+                        if let Some(creative_item) = self.pending_creative_item.clone() {
+                            let dst = match self.resolve_slot_info(destination) {
+                                Some(v) => v,
+                                None => {
+                                    had_error = true;
+                                    continue;
+                                }
+                            };
+                            record(
+                                &mut touched,
+                                &mut touched_logical,
+                                destination,
+                                dst.0,
+                                dst.1,
+                            );
+                            // Pose l'item (count demandé, clampé à 64).
+                            let mut item = creative_item.clone();
+                            item.count = (*count as u16).min(64);
+                            self.set_slot(inv, dst.0, dst.1, item);
+                            tracing::debug!(
+                                "Creative pick: placed item_id={} count={} in slot {:?}/{}",
+                                creative_item.id,
+                                count,
+                                dst.0,
+                                dst.1
+                            );
+                            continue;
+                        } else {
+                            // CraftCreative jamais reçu avant ce Place → no-op.
+                            had_error = true;
+                            continue;
+                        }
+                    }
+
                     let src = match self.resolve_slot_info(source) {
                         Some(v) => v,
                         None => {
@@ -982,13 +1024,32 @@ impl InventoryManager {
                     }
                 }
                 StackRequestAction::CraftCreative {
-                    creative_item_network_id: _,
+                    creative_item_network_id,
                 } => {
-                    // En créatif, la prochaine action Take/Place portera sur
-                    // le « créé » : sans CreativeInventoryCache on ne peut pas
-                    // matérialiser l'item. On marque l'erreur mais sans full
-                    // resync (les Take/Place suivants seront ignorés naturellement).
-                    had_error = true;
+                    // L'entry_id envoyé par le client = item_runtime_id (on
+                    // encode l'inventaire créatif avec entry_id == item_id
+                    // dans spawn.rs pour cette raison).
+                    let item_id = *creative_item_network_id as i32;
+                    if let Some(name) = crate::item_registry::item_name_by_id(item_id) {
+                        let brid = {
+                            let b = &*crate::world::block_registry::BLOCKS;
+                            let candidate = b.get(name);
+                            if candidate != b.air { candidate as i32 } else { 0 }
+                        };
+                        self.pending_creative_item = Some(ItemStack::new(
+                            item_id, 64, brid,
+                        ));
+                        tracing::debug!(
+                            "CraftCreative: pending item={} ({}) stack=64",
+                            item_id, name
+                        );
+                    } else {
+                        tracing::debug!(
+                            "CraftCreative: unknown creative_item_network_id={}",
+                            creative_item_network_id
+                        );
+                        had_error = true;
+                    }
                 }
                 StackRequestAction::Unknown(code) => {
                     // PMMP throw `ItemStackRequestProcessException`. Côté Rust,
