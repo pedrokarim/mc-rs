@@ -151,6 +151,13 @@ pub struct Connection {
     /// même bloc (bug client qui reset l'animation de crack).
     pub(super) last_block_attacked: Option<[i32; 3]>,
 
+    /// État sprint/sneak/swim — pour détecter les changements et broadcaster
+    /// SetActorData aux autres viewers. Bits PlayerAuthInputFlags::SPRINTING=20,
+    /// SNEAKING=8.
+    pub(super) is_sprinting: bool,
+    pub(super) is_sneaking: bool,
+    pub(super) is_swimming: bool,
+
     // Event manager partagé (fire events pour plugins).
     pub events: Arc<Mutex<EventManager>>,
 
@@ -223,6 +230,9 @@ impl Connection {
             air_supply: 300,
             environment_tick: 0,
             last_block_attacked: None,
+            is_sprinting: false,
+            is_sneaking: false,
+            is_swimming: false,
             events,
             next_form_id: 1,
             server_keypair,

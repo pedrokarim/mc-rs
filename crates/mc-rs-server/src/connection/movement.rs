@@ -486,21 +486,69 @@ impl Connection {
         }
 
         // Handle block placement (item interaction with ACTION_CLICK_BLOCK)
-        // Diag : log les bits PlayerAuthInput d'intérêt quand au moins un
-        // est set. Permet de savoir si le client envoie bien bit 34
-        // (PERFORM_ITEM_INTERACTION) au moment d'un placement.
-        let bit_interaction = (pkt.input_flags >> 34) & 1 == 1;
-        let bit_block_actions = (pkt.input_flags >> 35) & 1 == 1;
-        let bit_stack_req = (pkt.input_flags >> 36) & 1 == 1;
-        if bit_interaction || bit_block_actions || bit_stack_req {
-            info!(
-                "[{}] PlayerAuthInput bits: interaction={} block_actions={} stack_req={} flags=0x{:x}",
-                self.addr,
-                bit_interaction as u8,
-                bit_block_actions as u8,
-                bit_stack_req as u8,
-                pkt.input_flags,
-            );
+        // State edge-triggered : sprint/sneak/swim. Les bits 25/26/27/28/29/30
+        // de input_flags sont edge-triggered par le client (START_* / STOP_*).
+        // On détecte le changement → update Connection state → broadcast
+        // SetActorData aux autres viewers.
+        let start_sprint = (pkt.input_flags >> 25) & 1 == 1;
+        let stop_sprint = (pkt.input_flags >> 26) & 1 == 1;
+        let start_sneak = (pkt.input_flags >> 27) & 1 == 1;
+        let stop_sneak = (pkt.input_flags >> 28) & 1 == 1;
+        let start_swim = (pkt.input_flags >> 29) & 1 == 1;
+        let stop_swim = (pkt.input_flags >> 30) & 1 == 1;
+
+        let mut state_changed = false;
+        if start_sprint && !self.is_sprinting {
+            self.is_sprinting = true;
+            state_changed = true;
+        }
+        if stop_sprint && self.is_sprinting {
+            self.is_sprinting = false;
+            state_changed = true;
+        }
+        if start_sneak && !self.is_sneaking {
+            self.is_sneaking = true;
+            state_changed = true;
+        }
+        if stop_sneak && self.is_sneaking {
+            self.is_sneaking = false;
+            state_changed = true;
+        }
+        if start_swim && !self.is_swimming {
+            self.is_swimming = true;
+            state_changed = true;
+        }
+        if stop_swim && self.is_swimming {
+            self.is_swimming = false;
+            state_changed = true;
+        }
+
+        if state_changed {
+            // Build SetActorData avec flags actuels (sprint, sneak, swim + base).
+            use mc_rs_proto::packets::player::entity_flags;
+            let mut flags = entity_flags::CAN_SHOW_NAMETAG
+                | entity_flags::BREATHING
+                | entity_flags::HAS_GRAVITY
+                | entity_flags::HAS_COLLISION;
+            if self.is_sprinting {
+                flags |= entity_flags::SPRINTING;
+            }
+            if self.is_sneaking {
+                flags |= entity_flags::SNEAKING;
+            }
+            let player_name = self.display_name.clone().unwrap_or_default();
+            let actor_data = SetActorData {
+                runtime_entity_id: self.entity_runtime_id,
+                metadata: vec![(
+                    0,
+                    7, // MetadataValue::Long type id
+                    mc_rs_proto::packets::player::MetadataValue::Long(flags),
+                )],
+                tick: self.tick,
+            };
+            let bytes = self
+                .encode_compressed_packet(packet_id::SET_ACTOR_DATA, &actor_data.encode());
+            self.broadcasts.push(bytes);
         }
 
         if let Some(ref interaction) = pkt.item_interaction {
