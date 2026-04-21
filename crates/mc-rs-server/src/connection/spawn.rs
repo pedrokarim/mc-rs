@@ -48,6 +48,7 @@ fn encode_update_attrs_inline(
     w.into_bytes()
 }
 
+
 pub(super) fn make_spawn_position(world_x: i32, world_y: i32, world_z: i32) -> [f32; 3] {
     let feet_y = (world_y + 1) as f32;
     [world_x as f32 + 0.5, feet_y + 1.621, world_z as f32 + 0.5]
@@ -210,46 +211,16 @@ impl Connection {
         let mob_eq = MobEquipment::encode_item(self.entity_runtime_id, &held_wrapper, held_slot);
         responses.push(self.encode_compressed_packet(packet_id::MOB_EQUIPMENT, &mob_eq));
 
-        // 12. CreativeContent (PMMP syncCreative — AVANT CraftingData).
-        // On envoie tous les items du registry dans un seul groupe "All".
-        // PMMP a 4 catégories (Construction, Nature, Equipment, Items) + plein
-        // de sous-groupes ; on fait minimal pour l'instant.
-        let creative_groups = vec![
-            CreativeGroupEntry {
-                category_id: 1, // CATEGORY_CONSTRUCTION
-                category_name: "itemGroup.name.all",
-                icon_item_id: crate::item_registry::required_item_id("minecraft:crafting_table"),
-            },
-        ];
-        let entries = crate::item_registry::all_entries();
-        let creative_items: Vec<CreativeItemEntry> = entries
-            .iter()
-            .filter_map(|(name, item_id)| {
-                // Skip air et les items invalides (runtime_id négatif ou 0).
-                if *item_id <= 0 || *name == "minecraft:air" {
-                    return None;
-                }
-                // Résout le block_runtime_id si l'item est un bloc.
-                let brid = if BLOCKS.get(name) != BLOCKS.air {
-                    BLOCKS.get(name) as i32
-                } else {
-                    0
-                };
-                // entry_id = item_id (stable entre runs, mapping trivial lors
-                // de CraftCreative où le client renvoie l'entry_id choisi).
-                Some(CreativeItemEntry {
-                    entry_id: *item_id as u32,
-                    item_id: *item_id,
-                    block_runtime_id: brid,
-                    group_id: 0,
-                })
-            })
-            .collect();
+        // 12. CreativeContent — classification vanilla EXACTE chargée depuis
+        //     `data/creative/{construction,nature,equipment,items}.json`
+        //     (copiés depuis bedrock-data de PMMP). Chaque fichier définit
+        //     les sous-groupes avec leurs icônes et noms i18n.
+        let creative_groups = crate::creative_content::groups();
+        let creative_items = crate::creative_content::items();
+        let (n_groups, n_items) = crate::creative_content::stats();
         info!(
-            "[{}] CreativeContent: {} groups + {} items",
-            self.addr,
-            creative_groups.len(),
-            creative_items.len()
+            "[{}] CreativeContent: {} groups + {} items (vanilla PMMP)",
+            self.addr, n_groups, n_items
         );
         responses.push(self.encode_compressed_packet(
             packet_id::CREATIVE_CONTENT,

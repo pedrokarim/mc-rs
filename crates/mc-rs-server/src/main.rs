@@ -256,6 +256,7 @@ pub mod crafting_recipes;
 pub mod crash_report;
 #[allow(dead_code)]
 pub mod creaking;
+pub mod creative_content;
 #[allow(dead_code)]
 pub mod creative_inventory;
 #[allow(dead_code)]
