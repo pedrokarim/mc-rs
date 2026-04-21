@@ -394,7 +394,7 @@ impl Connection {
                                 self.pending_item_spawns
                                     .push(PendingItemEntitySpawn::with_scatter(
                                         drop_item,
-                                        [bx as f32 + 0.5, by as f32 + 0.25, bz as f32 + 0.5],
+                                        [bx as f32 + 0.5, by as f32 + 0.5, bz as f32 + 0.5],
                                     ));
                                 info!(
                                     "[{}] Queued dropped item entity: item_id={} at ({}, {}, {}) :: {}",
@@ -895,7 +895,7 @@ impl Connection {
             self.pending_item_spawns
                 .push(PendingItemEntitySpawn::with_scatter(
                     drop_item,
-                    [bx as f32 + 0.5, by as f32 + 0.25, bz as f32 + 0.5],
+                    [bx as f32 + 0.5, by as f32 + 0.5, bz as f32 + 0.5],
                 ));
         }
 

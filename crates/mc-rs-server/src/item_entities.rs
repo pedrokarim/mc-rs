@@ -18,18 +18,23 @@ use crate::world::chunk_cache::ChunkCache;
 const SERVER_TICKS_PER_SECOND: u32 = 100;
 const BASELINE_TICKS_PER_SECOND: f32 = 20.0;
 const SERVER_TICKS_PER_SECOND_F: f32 = 100.0;
-const PICKUP_DELAY_TICKS: u32 = SERVER_TICKS_PER_SECOND * 2;
+// PMMP `ItemEntity::DEFAULT_DESPAWN_DELAY` = 6000 game ticks (5 min).
+// Pickup delay "typique" quand un bloc drop : 10 game ticks = 0.5s.
+const PICKUP_DELAY_TICKS: u32 = SERVER_TICKS_PER_SECOND / 2;
 const DESPAWN_AFTER_TICKS: u32 = SERVER_TICKS_PER_SECOND * 300;
 const PICKUP_RADIUS_SQ: f32 = 1.5 * 1.5;
 
 // PMMP ItemEntity physics constants (per game tick @ 20 TPS):
-//   gravity      = 0.04 blocks / tick² (half of mobs, ItemEntity::getInitialGravity)
-//   drag         = 0.02 (applyDragBeforeGravity → v *= (1 - 0.02))
-// Scaled to the server's 100 TPS tick rate.
+//   gravity      = 0.04 blocks / tick² (ItemEntity::getInitialGravity)
+//   drag         = 0.02 (applyDragBeforeGravity → v *= (1 - 0.02) = 0.98)
+//   horizontal drag == vertical drag == 0.98 (cf Entity::tryChangeMovement)
+//   friction on-ground : block.frictionFactor ≈ 0.6 pour la plupart des blocs,
+//     appliqué en plus de la drag chaque tick.
+// Scaled to the server's 100 TPS tick rate (5 server ticks = 1 game tick).
 const GRAVITY_PER_TICK: f32 = 0.04 * (BASELINE_TICKS_PER_SECOND / SERVER_TICKS_PER_SECOND_F);
 const AIR_DRAG: f32 = 0.996; // ~= 0.98^(1/5)
-const HORIZONTAL_DRAG: f32 = 0.992; // slightly stronger, simulates friction
-const MAX_FALL_SPEED: f32 = -0.784;
+// Friction au sol : 0.6/game tick → 0.6^(1/5) ≈ 0.902/server tick.
+const GROUND_FRICTION: f32 = 0.902;
 const MOVEMENT_EPSILON: f32 = 1.0 / 128.0;
 
 #[derive(Clone)]
@@ -282,12 +287,16 @@ impl ItemEntityManager {
             let old_position = entity.position;
             let old_velocity = entity.velocity;
 
-            // Apply horizontal drag + vertical drag BEFORE gravity (PMMP
-            // applyDragBeforeGravity = true for items).
-            entity.velocity[0] *= HORIZONTAL_DRAG;
-            entity.velocity[2] *= HORIZONTAL_DRAG;
+            // PMMP `Entity::tryChangeMovement` + `ItemEntity::applyDragBeforeGravity=true` :
+            //   v_y *= drag
+            //   v_y -= gravity
+            //   v_x/z *= drag
+            //   if on_ground: v_x/z *= block.frictionFactor (0.6)
+            // Les drags horizontal ET vertical sont identiques dans PMMP.
             entity.velocity[1] *= AIR_DRAG;
-            entity.velocity[1] = (entity.velocity[1] - GRAVITY_PER_TICK).max(MAX_FALL_SPEED);
+            entity.velocity[1] -= GRAVITY_PER_TICK;
+            entity.velocity[0] *= AIR_DRAG;
+            entity.velocity[2] *= AIR_DRAG;
 
             // Integrate position
             let mut next_x = entity.position[0] + entity.velocity[0];
@@ -305,10 +314,10 @@ impl ItemEntityManager {
                 if next_y <= floor_y {
                     next_y = floor_y;
                     entity.velocity[1] = 0.0;
-                    // Items lose horizontal momentum quickly once they settle.
-                    entity.velocity[0] *= 0.6;
-                    entity.velocity[2] *= 0.6;
                 }
+                // Friction au sol continue (PMMP Entity::tryChangeMovement).
+                entity.velocity[0] *= GROUND_FRICTION;
+                entity.velocity[2] *= GROUND_FRICTION;
             }
 
             // Very small residual velocities are clamped so we don't jitter
