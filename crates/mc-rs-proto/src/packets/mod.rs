@@ -44,6 +44,7 @@ pub mod packet_id {
     pub const BIOME_DEFINITION_LIST: u32 = 0x7A;
     pub const NETWORK_SETTINGS: u32 = 0x8F;
     pub const PLAYER_AUTH_INPUT: u32 = 0x90;
+    pub const PLAYER_ACTION: u32 = 0x24;
     pub const CREATIVE_CONTENT: u32 = 0x91;
     pub const UPDATE_ABILITIES: u32 = 0xBB;
     pub const UPDATE_ADVENTURE_SETTINGS: u32 = 0xBC;

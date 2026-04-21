@@ -363,6 +363,16 @@ impl Connection {
             // après avoir reçu READY_TO_SPAWN. PMMP DeathPacketHandler::handleRespawn
             // renvoie un READY_TO_SPAWN pour confirmer la transition.
             (ConnectionState::InGame, packet_id::RESPAWN) => self.handle_client_respawn(reader),
+            // PlayerActionPacket (0x24) : paquet standalone pour RESPAWN,
+            // START_SPRINT, STOP_SPRINT, START_SNEAK, STOP_SNEAK, JUMP, etc.
+            // PMMP `InGamePacketHandler::handlePlayerAction` → dispatch vers
+            // `handlePlayerActionFromData` (mêmes actions que block_actions de
+            // PlayerAuthInput). Critique : le client envoie les sprint/sneak
+            // states ici. Sans ça, les metadata entity SPRINTING/SNEAKING ne
+            // sont jamais mis à jour server-side.
+            (ConnectionState::InGame, packet_id::PLAYER_ACTION) => {
+                self.handle_player_action(reader)
+            }
 
             // -- Silently ignored --
             (_, packet_id::EMOTE_LIST)
@@ -370,8 +380,7 @@ impl Connection {
             | (_, packet_id::ANIMATE)
             | (_, packet_id::INTERACT)
             | (ConnectionState::SpawnResponse, packet_id::PLAYER_AUTH_INPUT)
-            | (_, 0x081)
-            | (_, 0x024) => Vec::new(),
+            | (_, 0x081) => Vec::new(),
 
             _ => {
                 info!(

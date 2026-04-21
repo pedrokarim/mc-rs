@@ -540,6 +540,37 @@ impl Connection {
         responses
     }
 
+    /// PlayerActionPacket standalone (0x24) handler. Port PMMP
+    /// `InGamePacketHandler::handlePlayerAction` → `handlePlayerActionFromData`.
+    /// Structure : actorRuntimeId(varU64) + action(varI32) + blockPos(3×VarInt)
+    /// + resultPos(3×VarInt) + face(varI32). Action = PlayerAction constants.
+    pub(super) fn handle_player_action(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
+        let _actor_runtime_id = reader.read_var_u64().unwrap_or(0);
+        let action = reader.read_var_i32().unwrap_or(-1);
+        // blockPosition (3 VarInts)
+        let _bx = reader.read_var_i32().unwrap_or(0);
+        let _by = reader.read_var_u32().unwrap_or(0) as i32;
+        let _bz = reader.read_var_i32().unwrap_or(0);
+        // resultPosition (3 VarInts)
+        let _rx = reader.read_var_i32().unwrap_or(0);
+        let _ry = reader.read_var_u32().unwrap_or(0) as i32;
+        let _rz = reader.read_var_i32().unwrap_or(0);
+        let _face = reader.read_var_i32().unwrap_or(0);
+
+        info!("[{}] PlayerAction action={}", self.addr, action);
+
+        match action {
+            // RESPAWN (7) — client clique "respawn" après l'écran de mort.
+            // Duplique le handler qu'on a déjà dans block_actions (même action
+            // peut arriver par les deux voies selon version client).
+            7 => self.handle_respawn_request(),
+            // 5/6 SLEEPING, 8 JUMP, 9/10 START/STOP_SPRINT, 11/12 START/STOP_SNEAK :
+            // PMMP met à jour les metadata entity flags. Pas encore implémenté
+            // côté mc-rs (nécessite SetActorData push aux autres viewers).
+            _ => Vec::new(),
+        }
+    }
+
     pub(super) fn handle_block_place(
         &mut self,
         interaction: &ItemInteractionData,
