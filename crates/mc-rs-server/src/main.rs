@@ -96,6 +96,7 @@ pub mod biome_color;
 pub mod biome_spawning;
 #[allow(dead_code)]
 pub mod biomes_registry;
+pub mod biomes_vanilla;
 #[allow(dead_code)]
 pub mod blaze;
 #[allow(dead_code)]
