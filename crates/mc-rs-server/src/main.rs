@@ -534,6 +534,7 @@ pub mod loom;
 pub mod loot_chest;
 #[allow(dead_code)]
 pub mod loot_context;
+pub mod loot_table;
 #[allow(dead_code)]
 pub mod loot_tables;
 #[allow(dead_code)]
