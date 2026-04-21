@@ -42,6 +42,22 @@ impl FurnaceKind {
             Self::BlastFurnace | Self::Smoker => 2.0,
         }
     }
+
+    /// Essaye de deviner le kind depuis un block_id via le registry.
+    /// Retourne None si ce n'est pas un furnace.
+    pub fn from_block_id(block_id: u32) -> Option<Self> {
+        use crate::world::block_registry::BLOCKS;
+        if block_id == BLOCKS.air {
+            return None;
+        }
+        let name = BLOCKS.name_for(block_id)?;
+        match name {
+            "minecraft:furnace" | "minecraft:lit_furnace" => Some(Self::Normal),
+            "minecraft:blast_furnace" | "minecraft:lit_blast_furnace" => Some(Self::BlastFurnace),
+            "minecraft:smoker" | "minecraft:lit_smoker" => Some(Self::Smoker),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

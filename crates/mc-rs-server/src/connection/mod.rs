@@ -52,6 +52,20 @@ pub struct PendingEntityAttack {
     pub action_type: u32,
 }
 
+/// Event poussé par Connection quand un bloc de type furnace est placé ou
+/// cassé ; main.rs consomme ces events pour register/unregister dans le
+/// FurnaceManager server-wide.
+#[derive(Debug, Clone)]
+pub enum PendingFurnaceEvent {
+    Register {
+        pos: (i32, i32, i32),
+        kind: crate::furnace::FurnaceKind,
+    },
+    Unregister {
+        pos: (i32, i32, i32),
+    },
+}
+
 /// Manages a single client connection's protocol state machine.
 pub struct Connection {
     pub addr: SocketAddr,
@@ -96,6 +110,7 @@ pub struct Connection {
     pub pending_commands: Vec<String>,
     pub pending_item_spawns: Vec<PendingItemEntitySpawn>,
     pub pending_entity_attacks: Vec<PendingEntityAttack>,
+    pub pending_furnace_events: Vec<PendingFurnaceEvent>,
 
     // Server-driven Bedrock forms
     pub(super) next_form_id: u32,
@@ -194,6 +209,7 @@ impl Connection {
             pending_commands: Vec::new(),
             pending_item_spawns: Vec::new(),
             pending_entity_attacks: Vec::new(),
+            pending_furnace_events: Vec::new(),
             inventory,
             inventory_manager: InventoryManager::new(),
             player_inventory_window_id: PLAYER_INVENTORY_SCREEN_ID,
@@ -399,6 +415,10 @@ impl Connection {
 
     pub fn take_pending_commands(&mut self) -> Vec<String> {
         std::mem::take(&mut self.pending_commands)
+    }
+
+    pub fn take_pending_furnace_events(&mut self) -> Vec<PendingFurnaceEvent> {
+        std::mem::take(&mut self.pending_furnace_events)
     }
 
     pub fn take_pending_entity_attacks(&mut self) -> Vec<PendingEntityAttack> {

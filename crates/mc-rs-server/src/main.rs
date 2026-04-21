@@ -1264,6 +1264,7 @@ async fn main() {
                     &chunk_cache,
                     &mut should_stop,
                     &event_manager,
+                    &mut furnace_manager,
                 );
             }
 
@@ -1549,6 +1550,7 @@ async fn main() {
                     &chunk_cache,
                     &mut should_stop,
                     &event_manager,
+                    &mut furnace_manager,
                 );
             }
 
@@ -1634,6 +1636,7 @@ fn process_peer_events(
     chunk_cache: &std::sync::Arc<std::sync::Mutex<ChunkCache>>,
     should_stop: &mut bool,
     event_manager: &Arc<std::sync::Mutex<crate::event::EventManager>>,
+    furnace_manager: &mut crate::furnace::FurnaceManager,
 ) {
     let addrs: Vec<SocketAddr> = peers.keys().copied().collect();
     for addr in addrs {
@@ -1666,6 +1669,7 @@ fn process_peer_events(
                         pending_commands,
                         item_spawns,
                         pending_entity_attacks,
+                        pending_furnace_events,
                     ) = {
                         let Some(conn) = connections.get_mut(&addr) else {
                             continue;
@@ -1702,6 +1706,7 @@ fn process_peer_events(
                         let pending_commands = conn.take_pending_commands();
                         let item_spawns = std::mem::take(&mut conn.pending_item_spawns);
                         let pending_entity_attacks = conn.take_pending_entity_attacks();
+                        let pending_furnace_events = conn.take_pending_furnace_events();
 
                         (
                             responses,
@@ -1710,6 +1715,7 @@ fn process_peer_events(
                             pending_commands,
                             item_spawns,
                             pending_entity_attacks,
+                            pending_furnace_events,
                         )
                     };
                     // Borrow of conn dropped here
@@ -1925,6 +1931,31 @@ fn process_peer_events(
                             item_entities,
                             spawn,
                         );
+                    }
+
+                    // Apply furnace register/unregister events queued par Connection
+                    // lors des place/break de blocs furnace/blast_furnace/smoker.
+                    for ev in pending_furnace_events {
+                        match ev {
+                            crate::connection::PendingFurnaceEvent::Register { pos, kind } => {
+                                furnace_manager.register(pos, kind);
+                                tracing::info!(
+                                    "[{}] Furnace registered at {:?} kind={:?}",
+                                    addr,
+                                    pos,
+                                    kind
+                                );
+                            }
+                            crate::connection::PendingFurnaceEvent::Unregister { pos } => {
+                                if furnace_manager.unregister(pos).is_some() {
+                                    tracing::info!(
+                                        "[{}] Furnace unregistered at {:?}",
+                                        addr,
+                                        pos
+                                    );
+                                }
+                            }
+                        }
                     }
 
                     for attack in pending_entity_attacks {

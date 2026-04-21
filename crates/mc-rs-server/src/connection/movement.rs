@@ -283,6 +283,19 @@ impl Connection {
                         air_id
                     };
 
+                    // Si c'était un furnace → queue unregister pour que main.rs
+                    // retire l'entrée du FurnaceManager et drop les items in/fuel/output.
+                    if crate::furnace::FurnaceKind::from_block_id(old_block_id).is_some() {
+                        self.pending_furnace_events
+                            .push(super::PendingFurnaceEvent::Unregister {
+                                pos: (bx, by, bz),
+                            });
+                        info!(
+                            "[{}] Queued furnace unregister at ({bx},{by},{bz})",
+                            self.addr
+                        );
+                    }
+
                     // Send UpdateBlock
                     let update = UpdateBlock {
                         position: action.position,
@@ -688,6 +701,17 @@ impl Connection {
             "[{}] Block placed at ({}, {}, {}) block_id={}",
             self.addr, tx, ty, tz, block_runtime_id
         );
+
+        // Si c'est un furnace → queue un event register pour que main.rs
+        // l'ajoute au FurnaceManager (tick global 20 TPS).
+        if let Some(kind) = crate::furnace::FurnaceKind::from_block_id(block_runtime_id) {
+            self.pending_furnace_events
+                .push(super::PendingFurnaceEvent::Register {
+                    pos: (tx, ty, tz),
+                    kind,
+                });
+            info!("[{}] Queued furnace register at ({tx},{ty},{tz})", self.addr);
+        }
 
         // PMMP `BlockPlaceEvent` (post-place).
         if let Ok(mut ev_mgr) = self.events.lock() {
