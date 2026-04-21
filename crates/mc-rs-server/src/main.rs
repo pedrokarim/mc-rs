@@ -840,6 +840,7 @@ pub mod spawn_egg_list;
 pub mod spawn_eggs;
 #[allow(dead_code)]
 pub mod spawn_rules;
+pub mod spawn_rules_vanilla;
 #[allow(dead_code)]
 pub mod spawner;
 #[allow(dead_code)]
