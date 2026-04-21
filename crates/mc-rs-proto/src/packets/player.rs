@@ -284,8 +284,12 @@ fn decode_use_item_transaction_data(
     let trigger_type = reader.read_var_u32()?;
     let _ = trigger_type;
 
+    // Bedrock `BlockPosition` = 3 VarInt SIGNED (PMMP CommonTypes::getBlockPosition
+    // + gophertunnel BlockPos). Lire Y comme unsigned donnait Y=zig-zag(vrai_Y)
+    // (ex: vrai_Y=68 → reçu comme 136), décalant toute la suite de la chaîne
+    // place → break.
     let bx = reader.read_var_i32()?;
-    let by = reader.read_var_u32()? as i32;
+    let by = reader.read_var_i32()?;
     let bz = reader.read_var_i32()?;
 
     let face = reader.read_var_i32()?;

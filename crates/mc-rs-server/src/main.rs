@@ -101,6 +101,7 @@ pub mod biomes_vanilla;
 pub mod blaze;
 #[allow(dead_code)]
 pub mod blaze_loot;
+pub mod block_attachment;
 #[allow(dead_code)]
 pub mod block_behaviors;
 #[allow(dead_code)]

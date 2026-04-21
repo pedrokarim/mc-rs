@@ -84,13 +84,37 @@ pub fn block_drop(block_runtime_id: u32) -> Option<ItemStack> {
     if leaves.contains(&block_runtime_id) {
         return None;
     }
+    // short_grass / tall_grass / fern / large_fern : 1/8 chance de wheat_seeds
+    // à la main (PMMP TallGrassTrait::getDropsForIncompatibleTool +
+    // FortuneDropHelper::bonusChanceDivisor(8, 2)).
     if block_runtime_id == b.short_grass
         || block_runtime_id == b.tall_grass
         || block_runtime_id == b.fern
         || block_runtime_id == b.large_fern
-        || block_runtime_id == b.deadbush
-        || block_runtime_id == b.seagrass
     {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        if rng.gen_range(0..8) == 0 {
+            return Some(ItemStack::new(
+                required_item_id("minecraft:wheat_seeds"),
+                1,
+                0,
+            ));
+        }
+        return None;
+    }
+    // deadbush : 0..2 sticks à la main (PMMP `DeadBush::getDropsForIncompatibleTool`).
+    if block_runtime_id == b.deadbush {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let n = rng.gen_range(0..=2);
+        if n == 0 {
+            return None;
+        }
+        return Some(ItemStack::new(required_item_id("minecraft:stick"), n, 0));
+    }
+    // seagrass : rien à la main.
+    if block_runtime_id == b.seagrass {
         return None;
     }
 

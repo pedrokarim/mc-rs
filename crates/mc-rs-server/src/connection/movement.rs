@@ -103,15 +103,21 @@ impl Connection {
         }
 
         // Exhaustion par mouvement (survival only) — PMMP `Human::onMovement`
-        // utilise 0.005/block en walk, 0.1/block en sprint, 0.015/block en swim.
-        // On approxime avec 0.01/block horizontal (entre walk et run). Sans
-        // exhaustion la faim ne descend jamais et la régénération compense tout.
+        // utilise 0.005/block walk, 0.1/block sprint, 0.015/block swim.
+        // On discrimine via `is_sprinting` pour respecter les valeurs vanilla.
         if self.gamemode == 0 {
             let dx = pkt.position[0] - self.position[0];
             let dz = pkt.position[2] - self.position[2];
             let horizontal = (dx * dx + dz * dz).sqrt();
             if horizontal > 0.01 {
-                self.hunger.exhaust(&mut self.attributes, horizontal * 0.01);
+                let rate = if self.is_sprinting {
+                    0.1
+                } else if self.is_swimming {
+                    0.015
+                } else {
+                    0.005
+                };
+                self.hunger.exhaust(&mut self.attributes, horizontal * rate);
             }
         }
 
@@ -217,18 +223,20 @@ impl Connection {
                     } else {
                         0
                     };
-                    let break_speed: f32 = {
-                        let name = BLOCKS.name_for(block_id).unwrap_or("");
-                        let h = crate::block_hardness::hardness(name);
-                        if h < 0.0 {
-                            0.0 // unbreakable (bedrock, ...)
-                        } else if h == 0.0 {
-                            1.0 // instant-break (grass, air, plants)
-                        } else {
-                            // Main nue par défaut → facteur 5.
-                            let secs = h * 5.0;
-                            1.0 / (secs * 20.0)
-                        }
+                    let block_name = BLOCKS.name_for(block_id).unwrap_or("");
+                    let h = crate::block_hardness::hardness(block_name);
+                    info!(
+                        "[{}] start_break pos=({},{},{}) rid={} name={:?} hardness={}",
+                        self.addr, bx, by, bz, block_id, block_name, h
+                    );
+                    let break_speed: f32 = if h < 0.0 {
+                        0.0 // unbreakable (bedrock, ...)
+                    } else if h == 0.0 {
+                        1.0 // instant-break (grass, air, plants)
+                    } else {
+                        // Main nue par défaut → facteur 5.
+                        let secs = h * 5.0;
+                        1.0 / (secs * 20.0)
                     };
 
                     let event = LevelEvent {
@@ -416,6 +424,40 @@ impl Connection {
                         "[{}] Block broken at ({}, {}, {}) old_id={}",
                         self.addr, bx, by, bz, old_block_id
                     );
+
+                    // Pop des blocs attachés qui ont perdu leur support.
+                    // On check les 6 voisins : si leur règle d'attachement n'est
+                    // plus satisfaite, on les casse récursivement (drops inclus).
+                    let neighbors: [(i32, i32, i32); 6] = [
+                        (bx, by + 1, bz),
+                        (bx, by - 1, bz),
+                        (bx + 1, by, bz),
+                        (bx - 1, by, bz),
+                        (bx, by, bz + 1),
+                        (bx, by, bz - 1),
+                    ];
+                    let mut pop_queue: Vec<(i32, i32, i32)> = Vec::new();
+                    for (nx, ny, nz) in neighbors {
+                        if let Ok(mut cache) = self.chunk_cache.lock() {
+                            let nid = cache.get_block(nx, ny, nz);
+                            if nid == air_id {
+                                continue;
+                            }
+                            let nname = BLOCKS.name_for(nid).unwrap_or("");
+                            let Some(rule) = crate::block_attachment::attachment_rule(nname) else {
+                                continue;
+                            };
+                            let ok = crate::block_attachment::check_support(
+                                &mut cache, nx, ny, nz, rule,
+                            );
+                            if !ok {
+                                pop_queue.push((nx, ny, nz));
+                            }
+                        }
+                    }
+                    for (nx, ny, nz) in pop_queue {
+                        self.pop_attached_block(nx, ny, nz, &mut responses);
+                    }
 
                     // Exhaustion mining (survival only) — PMMP `Human::onBlockBreak` : 0.005
                     // d'exhaustion par bloc cassé (en plus du damage à l'outil).
@@ -660,7 +702,18 @@ impl Connection {
             }
         };
 
-        // Calculate target position from face offset
+        // Calculate target position.
+        //
+        // PMMP / Allay pattern (cf Allay InventoryTransactionPacketProcessor:80-81
+        // + PMMP World::useItemOn:2306-2308) :
+        //   si le bloc CLIQUÉ est replaceable (tall_grass, fern, snow_layer, etc.)
+        //     → place AU MÊME ENDROIT (remplace le bloc cliqué)
+        //   sinon
+        //     → offset par face (comportement normal)
+        //
+        // Sans cette logique, cliquer sur une touffe d'herbe plaçait la dirt
+        // au-dessus (ou côté) de l'herbe au lieu de la remplacer → 2 blocs
+        // visibles (le bloc posé + l'herbe toujours en place).
         let (dx, dy, dz) = match interaction.face {
             0 => (0, -1, 0), // down
             1 => (0, 1, 0),  // up
@@ -671,15 +724,33 @@ impl Connection {
             _ => return,
         };
 
-        let tx = interaction.block_position[0] + dx;
-        let ty = interaction.block_position[1] + dy;
-        let tz = interaction.block_position[2] + dz;
+        let cx = interaction.block_position[0];
+        let cy = interaction.block_position[1];
+        let cz = interaction.block_position[2];
 
-        // Set the block
+        let (tx, ty, tz) = if let Ok(mut cache) = self.chunk_cache.lock() {
+            let clicked_id = cache.get_block(cx, cy, cz);
+            let clicked_name = BLOCKS.name_for(clicked_id).unwrap_or("");
+            if crate::block_attachment::is_replaceable(clicked_name) {
+                (cx, cy, cz)
+            } else {
+                (cx + dx, cy + dy, cz + dz)
+            }
+        } else {
+            (cx + dx, cy + dy, cz + dz)
+        };
+
+        // Le TARGET doit être replaceable (air ou autre) pour accepter le
+        // placement. Sinon on abort (empêche les doubles blocs).
         if let Ok(mut cache) = self.chunk_cache.lock() {
-            let existing = cache.get_block(tx, ty, tz);
-            if existing != BLOCKS.air {
-                return; // Can't place on a non-air block
+            let existing_id = cache.get_block(tx, ty, tz);
+            let existing_name = BLOCKS.name_for(existing_id).unwrap_or("");
+            if !crate::block_attachment::is_replaceable(existing_name) {
+                info!(
+                    "[{}] block_place: target ({},{},{}) non-replaceable ({:?}), abort",
+                    self.addr, tx, ty, tz, existing_name
+                );
+                return;
             }
             cache.set_block(tx, ty, tz, block_runtime_id);
             cache.save_chunk_now(tx.div_euclid(16), tz.div_euclid(16));
@@ -771,6 +842,97 @@ impl Connection {
                 cancelled: false,
             };
             ev_mgr.call(&mut ev);
+        }
+    }
+
+    /// Pop un bloc attaché qui a perdu son support (plante, torche, snow,
+    /// etc.). Applique le drop standard + UpdateBlock + particules/son, puis
+    /// relance le check de support sur les voisins (cascade naturelle).
+    pub(super) fn pop_attached_block(
+        &mut self,
+        bx: i32,
+        by: i32,
+        bz: i32,
+        responses: &mut Vec<Vec<u8>>,
+    ) {
+        let air_id = BLOCKS.air;
+        let old_block_id = if let Ok(mut cache) = self.chunk_cache.lock() {
+            let old = cache.get_block(bx, by, bz);
+            if old == air_id {
+                return;
+            }
+            cache.set_block(bx, by, bz, air_id);
+            cache.save_chunk_now(bx.div_euclid(16), bz.div_euclid(16));
+            old
+        } else {
+            return;
+        };
+
+        let block_center = [bx as f32 + 0.5, by as f32 + 0.5, bz as f32 + 0.5];
+
+        let update = UpdateBlock {
+            position: [bx, by, bz],
+            runtime_id: air_id,
+            flags: 3,
+            layer: 0,
+        };
+        let bytes = self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &update.encode());
+        responses.push(bytes.clone());
+        self.broadcasts.push(bytes);
+
+        let particle = LevelEvent {
+            event_id: LevelEvent::PARTICLE_DESTROY,
+            position: block_center,
+            event_data: old_block_id as i32,
+        };
+        let pbytes =
+            self.encode_compressed_packet(packet_id::LEVEL_EVENT, &particle.encode());
+        responses.push(pbytes.clone());
+        self.broadcasts.push(pbytes);
+
+        // Drop standard (pas de tool-gating : les plantes tombent toujours).
+        if let Some(drop_item) = crate::inventory::block_drop(old_block_id) {
+            self.pending_item_spawns
+                .push(PendingItemEntitySpawn::with_scatter(
+                    drop_item,
+                    [bx as f32 + 0.5, by as f32 + 0.25, bz as f32 + 0.5],
+                ));
+        }
+
+        info!(
+            "[{}] Popped attached block at ({bx},{by},{bz}) old_id={}",
+            self.addr, old_block_id
+        );
+
+        // Cascade : vérifier si d'autres blocs s'appuyaient sur celui-ci.
+        let neighbors: [(i32, i32, i32); 6] = [
+            (bx, by + 1, bz),
+            (bx, by - 1, bz),
+            (bx + 1, by, bz),
+            (bx - 1, by, bz),
+            (bx, by, bz + 1),
+            (bx, by, bz - 1),
+        ];
+        let mut cascade: Vec<(i32, i32, i32)> = Vec::new();
+        for (nx, ny, nz) in neighbors {
+            if let Ok(mut cache) = self.chunk_cache.lock() {
+                let nid = cache.get_block(nx, ny, nz);
+                if nid == air_id {
+                    continue;
+                }
+                let nname = BLOCKS.name_for(nid).unwrap_or("");
+                let Some(rule) = crate::block_attachment::attachment_rule(nname) else {
+                    continue;
+                };
+                let ok =
+                    crate::block_attachment::check_support(&mut cache, nx, ny, nz, rule);
+                if !ok {
+                    cascade.push((nx, ny, nz));
+                }
+            }
+        }
+        for (nx, ny, nz) in cascade {
+            self.pop_attached_block(nx, ny, nz, responses);
         }
     }
 }
