@@ -211,6 +211,40 @@ Quand une fonctionnalité doit être implémentée :
 
 ---
 
+## Phase DATA : Import complet bedrock-samples Mojang (2026-04-21) — ✅ TERMINÉE
+
+**Objectif :** Remplacer toutes les tables hardcodées par les **données canoniques Mojang** (bedrock-samples 1.26.10.4) et PMMP (bedrock-data). Voir [`30-VANILLA-DATA-IMPORT.md`](30-VANILLA-DATA-IMPORT.md) pour le détail complet.
+
+### Modules data-driven créés (branchés runtime)
+- [x] `creative_content` — 4 catégories + ~150 sous-groupes (PMMP bedrock-data) → envoyé dans CreativeContent au PreSpawn
+- [x] `recipes_vanilla` — 1601 recettes (939 shaped + 513 shapeless + 149 furnace) → registrées au boot dans `CraftingManager`
+
+### Modules data-driven créés (data-only, consommateurs runtime à venir)
+- [x] `loot_table` — 176 tables (122 mobs + 29 chests + 25 equipment/gameplay/dispensers/pots/spawners) avec parser pools/conditions/functions
+- [x] `spawn_rules_vanilla` — 56 règles de spawn mobs (brightness, surface, weight, population_control)
+- [x] `biomes_vanilla` — 87 biomes vanilla (temperature, downfall, surface materials, tags)
+- [x] `trading_vanilla` — 24 trades (villagers + piglins + hero_of_the_village)
+- [x] `entities_vanilla` — 126 mobs (runtime_identifier, family, health, spawnable, summonable)
+- [x] `items_vanilla` — 77 items Bedrock data-driven (nourriture + bundles, nutrition/saturation/tags)
+- [x] `vanilla_registries` — registres de noms canoniques (37 effects + 42 enchants + 47 potions + 3 dims)
+
+### Consommateurs runtime à brancher
+- [ ] **Loot tables mobs** : quand un mob meurt, appeler `loot_table::roll_entity_loot()` au lieu des fonctions hardcodées de `entity_drops.rs` (obsolète)
+- [ ] **Loot tables chests** : quand on génère un donjon / ancient_city / bastion, remplir le chest avec `loot_table::roll_chest_loot(kind)`
+- [ ] **Spawn naturel** : implémenter un spawner runtime qui consulte `spawn_rules_vanilla` (biome → weight par mob → light check → surface/underground → spawn)
+- [ ] **Biomes étendus** : le terrain generator utilise encore 11 biomes hardcodés, migrer vers `biomes_vanilla` (top_material/tags) pour passer aux 87
+- [ ] **Villager trading** : quand un villager a un profession, utiliser `trading_vanilla::for_profession(name)` pour peupler son TradeOffersPacket
+- [ ] **Validation /effect et /enchant** : tab-complete + check arg contre `vanilla_registries::is_effect/is_enchantment`
+- [ ] **Entity spawn factory** : quand on `/summon X`, lire `entities_vanilla::health(x)` / `family(x)` pour initialiser le mob
+- [ ] **Food system** : `items_vanilla::nutrition/saturation` pour `PlayerHungerManager::eat`
+
+### Compteurs
+- **Tests** : 998 passent (record précédent : ~985)
+- **Fichiers data ajoutés** : 15 JSON consolidés dans `crates/mc-rs-server/data/{creative,loot_tables,recipes,vanilla}/`
+- **Commits** : 8 feat commits (creative, loot entities, recipes, loot chests, spawn_rules, biomes, data-final)
+
+---
+
 ## Phase 4 : Entities & Combat
 
 **Objectif :** Entités, dégâts, mort, respawn.
