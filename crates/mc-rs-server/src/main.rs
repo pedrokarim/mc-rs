@@ -719,6 +719,7 @@ pub mod rcon;
 pub mod recipe_book;
 #[allow(dead_code)]
 pub mod recipe_unlock;
+pub mod recipes_vanilla;
 #[allow(dead_code)]
 pub mod redstone;
 #[allow(dead_code)]
@@ -1138,7 +1139,15 @@ async fn main() {
     let mut item_entities = ItemEntityManager::new();
     let mut mob_entities = MobEntityManager::new();
     let mut furnace_manager = crate::furnace::FurnaceManager::new();
-    let crafting_manager = crate::crafting::CraftingManager::default();
+    let mut crafting_manager = crate::crafting::CraftingManager::default();
+    let (sh, sl, fu) = crate::recipes_vanilla::register_all(&mut crafting_manager);
+    tracing::info!(
+        "Loaded vanilla recipes: {} shaped + {} shapeless + {} furnace",
+        sh,
+        sl,
+        fu
+    );
+    let crafting_manager = crafting_manager;
     // Passive entities (TNT / FallingBlock / XPOrb) — spawned via commands or events.
     let _passive_entities = crate::passive_entities::PassiveEntityManager::new();
     // Event manager partagé (tous les Connection le clonent).
