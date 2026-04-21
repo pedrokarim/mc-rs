@@ -541,7 +541,13 @@ fn decode_item_stack_request(
                 StackRequestAction::Unknown(13)
             }
             14 => {
+                // PMMP CreativeCreateStackRequestAction::read :
+                //   creativeItemId: VarU32
+                //   repetitions:    u8
+                // Sans le read du u8, les actions suivantes (Place/Take) se
+                // décodent 1 byte trop tôt → slot_info corrompu → items disparus.
                 let creative_item_network_id = reader.read_var_u32()?;
+                let _repetitions = reader.read_u8()?;
                 StackRequestAction::CraftCreative {
                     creative_item_network_id,
                 }
