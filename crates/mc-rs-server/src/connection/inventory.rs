@@ -270,8 +270,21 @@ impl Connection {
                     _ => {}
                 }
             }
-            InventoryTransactionData::ReleaseItem { .. }
-            | InventoryTransactionData::Unknown { .. } => {}
+            InventoryTransactionData::ReleaseItem {
+                action_type,
+                hotbar_slot,
+                ..
+            } => {
+                // PMMP `handleReleaseItemTransaction` : action_type 0 = RELEASE
+                // (shoot bow / throw trident), 1 = CONSUME (finish eating).
+                // Pas implémenté pour l'instant — le client gère visuellement
+                // mais server ne crée pas d'entité arrow/projectile.
+                info!(
+                    "[{}] ReleaseItem action_type={} hotbar={} (not implemented)",
+                    self.addr, action_type, hotbar_slot
+                );
+            }
+            InventoryTransactionData::Unknown { .. } => {}
             InventoryTransactionData::UseItemOnEntity {
                 actor_runtime_id,
                 action_type,
