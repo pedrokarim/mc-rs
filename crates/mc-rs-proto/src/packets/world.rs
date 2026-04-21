@@ -660,17 +660,86 @@ impl CraftingData {
     }
 }
 
-// ── CreativeContent (S→C) — empty ──
+// ── CreativeContent (S→C, 0x91) ──
+
+/// Entry pour un groupe de l'inventaire créatif (catégorie).
+pub struct CreativeGroupEntry<'a> {
+    pub category_id: i32,
+    pub category_name: &'a str,
+    /// Icône du groupe — encodé via `ItemStackWithoutStackId` (pas de net_id,
+    /// pas de extra_data ItemStackExtraData).
+    pub icon_item_id: i32,
+}
+
+/// Entry pour un item de l'inventaire créatif.
+pub struct CreativeItemEntry {
+    pub entry_id: u32, // creative_item_net_id (utilisé par client pour CraftCreative)
+    pub item_id: i32,
+    pub block_runtime_id: i32,
+    pub group_id: u32, // index dans le tableau de groupes
+}
 
 pub struct CreativeContent;
 
 impl CreativeContent {
+    /// Paquet vide (pas d'items en créatif). Utilisé pour les modes non-créatifs.
     pub fn encode_empty() -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(8);
         w.write_var_u32(0); // groups count
         w.write_var_u32(0); // items count
         w.into_bytes()
     }
+
+    /// Encode un CreativeContent avec groupes + items.
+    ///
+    /// Format PMMP (`CreativeContentPacket::encodePayload`) :
+    /// ```
+    /// groups_count (VarU32)
+    /// for each group: category_id (i32 LE) + category_name (string) + icon (ItemStackWithoutStackId)
+    /// items_count (VarU32)
+    /// for each item: entry_id (VarU32) + item (ItemStackWithoutStackId) + group_id (VarU32)
+    /// ```
+    ///
+    /// `ItemStackWithoutStackId` = même format que `ItemStackWrapper` MAIS :
+    /// - PAS de `has_net_id` bool
+    /// - PAS de `stack_id` varint
+    /// - sinon id/count/meta/block_rid/extra_data identique
+    pub fn encode(groups: &[CreativeGroupEntry], items: &[CreativeItemEntry]) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(16384);
+
+        // Groupes.
+        w.write_var_u32(groups.len() as u32);
+        for g in groups {
+            w.write_i32_le(g.category_id);
+            w.write_string(g.category_name);
+            write_item_stack_without_id(&mut w, g.icon_item_id, 1, 0);
+        }
+
+        // Items.
+        w.write_var_u32(items.len() as u32);
+        for item in items {
+            w.write_var_u32(item.entry_id);
+            write_item_stack_without_id(&mut w, item.item_id, 1, item.block_runtime_id);
+            w.write_var_u32(item.group_id);
+        }
+
+        w.into_bytes()
+    }
+}
+
+/// Encode un `ItemStackWithoutStackId` : id + count + meta + block_rid + extra_data.
+/// Pas de has_net_id/stack_id (contrairement à ItemStackWrapper).
+fn write_item_stack_without_id(w: &mut ProtoWriter, item_id: i32, count: u16, block_runtime_id: i32) {
+    w.write_var_i32(item_id);
+    if item_id == 0 {
+        return;
+    }
+    w.write_u16_le(count);
+    w.write_var_u32(0); // meta = 0
+    w.write_var_i32(block_runtime_id);
+    // extra_data minimal : 2 bytes NBT_len=0 + 4 canPlace + 4 canDestroy
+    let extra = [0u8; 10];
+    w.write_byte_array(&extra);
 }
 
 // ── ItemRegistry (S→C, 0x161) — empty ──

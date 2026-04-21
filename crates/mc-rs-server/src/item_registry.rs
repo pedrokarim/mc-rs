@@ -137,6 +137,16 @@ pub fn is_known_network_id(id: i32) -> bool {
     ITEM_REGISTRY.by_runtime_id.contains_key(&id)
 }
 
+/// Retourne tous les (name, runtime_id) connus. Utilisé pour populer
+/// l'inventaire créatif ou la soft-enum commands.
+pub fn all_entries() -> Vec<(&'static str, i32)> {
+    ITEM_REGISTRY
+        .entries
+        .iter()
+        .map(|e| (e.string_id.as_str(), e.runtime_id))
+        .collect()
+}
+
 pub fn required_item_id(name: &str) -> i32 {
     network_id(name).unwrap_or_else(|| panic!("missing required item registry entry for {name}"))
 }

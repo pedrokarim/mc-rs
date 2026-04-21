@@ -211,9 +211,48 @@ impl Connection {
         responses.push(self.encode_compressed_packet(packet_id::MOB_EQUIPMENT, &mob_eq));
 
         // 12. CreativeContent (PMMP syncCreative — AVANT CraftingData).
+        // On envoie tous les items du registry dans un seul groupe "All".
+        // PMMP a 4 catégories (Construction, Nature, Equipment, Items) + plein
+        // de sous-groupes ; on fait minimal pour l'instant.
+        let creative_groups = vec![
+            CreativeGroupEntry {
+                category_id: 1, // CATEGORY_CONSTRUCTION
+                category_name: "itemGroup.name.all",
+                icon_item_id: crate::item_registry::required_item_id("minecraft:crafting_table"),
+            },
+        ];
+        let entries = crate::item_registry::all_entries();
+        let creative_items: Vec<CreativeItemEntry> = entries
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, (name, item_id))| {
+                // Skip air et les items invalides (runtime_id négatif ou 0).
+                if *item_id <= 0 || *name == "minecraft:air" {
+                    return None;
+                }
+                // Résout le block_runtime_id si l'item est un bloc.
+                let brid = if BLOCKS.get(name) != BLOCKS.air {
+                    BLOCKS.get(name) as i32
+                } else {
+                    0
+                };
+                Some(CreativeItemEntry {
+                    entry_id: (idx + 1) as u32, // id unique, client l'utilise dans CraftCreative
+                    item_id: *item_id,
+                    block_runtime_id: brid,
+                    group_id: 0, // tout dans le groupe 0
+                })
+            })
+            .collect();
+        info!(
+            "[{}] CreativeContent: {} groups + {} items",
+            self.addr,
+            creative_groups.len(),
+            creative_items.len()
+        );
         responses.push(self.encode_compressed_packet(
             packet_id::CREATIVE_CONTENT,
-            &CreativeContent::encode_empty(),
+            &CreativeContent::encode(&creative_groups, &creative_items),
         ));
 
         // 13. CraftingData
