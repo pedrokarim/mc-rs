@@ -1,11 +1,39 @@
 <aside class="sidebar">
-  <h2>mc-rs admin</h2>
+  <div class="brand">
+    <i data-lucide="server-cog" class="icon-lg"></i>
+    <div>
+      <div class="brand-name">mc-rs</div>
+      <div class="brand-sub">admin panel</div>
+    </div>
+  </div>
   <nav>
-    <a href="/" {% if current_page == "dashboard" %}class="active"{% endif %}>📊 Dashboard</a>
-    <a href="/players" {% if current_page == "players" %}class="active"{% endif %}>👥 Joueurs</a>
-    <a href="/console" {% if current_page == "console" %}class="active"{% endif %}>🖥️ Console</a>
-    <a href="/config" {% if current_page == "config" %}class="active"{% endif %}>⚙️ Configuration</a>
-    <a href="/audit" {% if current_page == "audit" %}class="active"{% endif %}>📜 Audit</a>
-    <a href="/users" {% if current_page == "users" %}class="active"{% endif %}>🔐 Utilisateurs</a>
+    <a href="/" class="{% if current_page == "dashboard" %}active{% endif %}">
+      <i data-lucide="gauge"></i>
+      <span>Dashboard</span>
+    </a>
+    <a href="/players" class="{% if current_page == "players" %}active{% endif %}">
+      <i data-lucide="users"></i>
+      <span>Joueurs</span>
+    </a>
+    <a href="/console" class="{% if current_page == "console" %}active{% endif %}">
+      <i data-lucide="terminal-square"></i>
+      <span>Console</span>
+    </a>
+    <a href="/world" class="{% if current_page == "world" %}active{% endif %}">
+      <i data-lucide="globe"></i>
+      <span>Monde</span>
+    </a>
+    <a href="/config" class="{% if current_page == "config" %}active{% endif %}">
+      <i data-lucide="sliders-horizontal"></i>
+      <span>Configuration</span>
+    </a>
+    <a href="/audit" class="{% if current_page == "audit" %}active{% endif %}">
+      <i data-lucide="scroll-text"></i>
+      <span>Audit log</span>
+    </a>
+    <a href="/users" class="{% if current_page == "users" %}active{% endif %}">
+      <i data-lucide="shield-check"></i>
+      <span>Utilisateurs</span>
+    </a>
   </nav>
 </aside>

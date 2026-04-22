@@ -27,7 +27,7 @@ pub async fn get_world(
         Err(resp) => return resp,
     };
     let tpl = WorldTemplate {
-        current_page: "config",
+        current_page: "world",
         user_name: user.name,
         user_role: user.role.as_str().to_string(),
     };

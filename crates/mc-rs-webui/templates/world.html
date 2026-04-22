@@ -7,35 +7,35 @@
     {% include "_topbar.html" %}
     <main class="main" x-data="world()">
       <h1>Contrôles monde</h1>
-      <p class="note">Les actions passent par le dispatcher de commandes (comme la console). Effet immédiat sans redémarrer.</p>
+      <p class="note">Les actions passent par le dispatcher de commandes — effet immédiat, logged dans l'audit.</p>
 
-      <section class="card" style="margin-bottom:20px">
-        <h3>Temps</h3>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
-          <button @click="timeSet('day')">☀️ Jour</button>
-          <button @click="timeSet('noon')">🌞 Midi</button>
-          <button @click="timeSet('sunset')">🌇 Coucher</button>
-          <button @click="timeSet('night')">🌙 Nuit</button>
-          <button @click="timeSet('midnight')">🌌 Minuit</button>
+      <section class="card" style="margin-bottom:16px">
+        <h3 style="display:flex;align-items:center;gap:8px"><i data-lucide="sun"></i>Temps</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+          <button class="ghost" @click="timeSet('day')"><i data-lucide="sun"></i><span>Jour</span></button>
+          <button class="ghost" @click="timeSet('noon')"><i data-lucide="sun-medium"></i><span>Midi</span></button>
+          <button class="ghost" @click="timeSet('sunset')"><i data-lucide="sunset"></i><span>Coucher</span></button>
+          <button class="ghost" @click="timeSet('night')"><i data-lucide="moon"></i><span>Nuit</span></button>
+          <button class="ghost" @click="timeSet('midnight')"><i data-lucide="moon-star"></i><span>Minuit</span></button>
         </div>
       </section>
 
-      <section class="card" style="margin-bottom:20px">
-        <h3>Météo</h3>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
-          <button @click="weather('clear')">🌤️ Clair</button>
-          <button @click="weather('rain')">🌧️ Pluie</button>
-          <button @click="weather('thunder')">⛈️ Orage</button>
+      <section class="card" style="margin-bottom:16px">
+        <h3 style="display:flex;align-items:center;gap:8px"><i data-lucide="cloud"></i>Météo</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+          <button class="ghost" @click="weather('clear')"><i data-lucide="sun"></i><span>Clair</span></button>
+          <button class="ghost" @click="weather('rain')"><i data-lucide="cloud-rain"></i><span>Pluie</span></button>
+          <button class="ghost" @click="weather('thunder')"><i data-lucide="cloud-lightning"></i><span>Orage</span></button>
         </div>
       </section>
 
       <section class="card">
-        <h3>Difficulté</h3>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
-          <button @click="difficulty('peaceful')">☮️ Peaceful</button>
-          <button @click="difficulty('easy')">🙂 Easy</button>
-          <button @click="difficulty('normal')">😐 Normal</button>
-          <button @click="difficulty('hard')">😤 Hard</button>
+        <h3 style="display:flex;align-items:center;gap:8px"><i data-lucide="swords"></i>Difficulté</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+          <button class="ghost" @click="difficulty('peaceful')"><i data-lucide="leaf"></i><span>Peaceful</span></button>
+          <button class="ghost" @click="difficulty('easy')"><i data-lucide="smile"></i><span>Easy</span></button>
+          <button class="ghost" @click="difficulty('normal')"><i data-lucide="meh"></i><span>Normal</span></button>
+          <button class="ghost" @click="difficulty('hard')"><i data-lucide="flame"></i><span>Hard</span></button>
         </div>
       </section>
     </main>

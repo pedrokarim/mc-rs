@@ -1,6 +1,13 @@
 <header class="topbar">
-  <div class="user">Bienvenue, <strong>{{ user_name }}</strong> <span class="badge {{ user_role }}">{{ user_role }}</span></div>
+  <div class="user">
+    <i data-lucide="user-round"></i>
+    <span>Connecté comme <strong>{{ user_name }}</strong></span>
+    <span class="badge {{ user_role }}">{{ user_role }}</span>
+  </div>
   <form method="post" action="/logout" style="margin:0">
-    <button class="ghost" type="submit">Déconnexion</button>
+    <button class="ghost" type="submit">
+      <i data-lucide="log-out"></i>
+      <span>Déconnexion</span>
+    </button>
   </form>
 </header>

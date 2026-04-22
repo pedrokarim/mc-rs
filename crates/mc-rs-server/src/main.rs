@@ -1277,6 +1277,9 @@ async fn main() {
     let mut console_input_open = true;
     let mut webui_tps_tracker = mc_rs_webui::metrics::TpsTracker::new();
     let mut webui_snapshot_counter: u32 = 0;
+    let mut webui_system_probe = mc_rs_webui::metrics::SystemProbe::new();
+    // Ring-buffer push tous les 100 server ticks (~1 Hz à 100 TPS).
+    let mut webui_history_counter: u32 = 0;
 
     // ── Web admin panel (mc-rs-webui) ──
     // Channels + snapshot partagés avec le crate webui. La main loop met à
@@ -1418,13 +1421,58 @@ async fn main() {
                         "clear"
                     }
                     .to_string();
+                    let item_count = item_entities.all().count() as u32;
+                    let mob_count = mob_entities.all().count() as u32;
+                    let passive_count = (_passive_entities.tnt.len()
+                        + _passive_entities.falling_blocks.len()
+                        + _passive_entities.xp_orbs.len())
+                        as u32;
+                    let sessions = raknet.session_count() as u32;
                     if let Ok(mut snap) = webui_snapshot.try_write() {
                         snap.tps = current_tps;
                         snap.total_ticks = webui_tps_tracker.total_ticks();
-                        snap.players = players_snap;
                         snap.chunks_loaded = chunks_loaded;
                         snap.world_time = world_time;
                         snap.weather = weather;
+                        snap.entities = mc_rs_webui::snapshot::EntityStats {
+                            players: players_snap.len() as u32,
+                            mobs: mob_count,
+                            items: item_count,
+                            passive: passive_count,
+                        };
+                        snap.net.active_sessions = sessions;
+                        snap.players = players_snap;
+                    }
+                }
+
+                // Push history rings ~1 Hz (tous les 100 server ticks à 100 TPS).
+                webui_history_counter = webui_history_counter.wrapping_add(1);
+                if webui_history_counter % 100 == 0 {
+                    let sys = webui_system_probe.sample();
+                    let now_unix = chrono::Utc::now().timestamp();
+                    if let Ok(mut snap) = webui_snapshot.try_write() {
+                        snap.system = sys;
+                        // Collecte toutes les valeurs dans des locaux avant d'emprunter
+                        // les rings mutablement (borrow checker).
+                        let v_tps = snap.tps;
+                        let v_players = snap.players.len() as f32;
+                        let v_chunks = snap.chunks_loaded as f32;
+                        let v_mem = snap.system.mem_mb;
+                        let v_cpu = snap.system.cpu_percent;
+                        let v_bi = snap.net.bytes_in_per_sec as f32;
+                        let v_bo = snap.net.bytes_out_per_sec as f32;
+                        let v_ent = (snap.entities.mobs
+                            + snap.entities.items
+                            + snap.entities.passive
+                            + snap.entities.players) as f32;
+                        snap.history_tps.push(v_tps, now_unix);
+                        snap.history_players.push(v_players, now_unix);
+                        snap.history_chunks.push(v_chunks, now_unix);
+                        snap.history_mem_mb.push(v_mem, now_unix);
+                        snap.history_cpu_percent.push(v_cpu, now_unix);
+                        snap.history_bytes_in_per_sec.push(v_bi, now_unix);
+                        snap.history_bytes_out_per_sec.push(v_bo, now_unix);
+                        snap.history_entities_total.push(v_ent, now_unix);
                     }
                 }
 

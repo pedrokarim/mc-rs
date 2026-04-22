@@ -1,10 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Login — mc-rs admin{% endblock %}
+{% block title %}Connexion — mc-rs admin{% endblock %}
 {% block body %}
 <main class="auth-page">
-  <h1>mc-rs admin</h1>
+  <h1><i data-lucide="server-cog" class="icon-lg"></i> mc-rs admin</h1>
+  <p class="note">Connexion au panneau d'administration.</p>
   {% if let Some(err) = error %}
-  <p class="error">{{ err }}</p>
+  <p class="error"><i data-lucide="alert-circle"></i><span>{{ err }}</span></p>
   {% endif %}
   <form method="post" action="/login" class="auth-form">
     <label>Nom d'utilisateur
@@ -13,7 +14,7 @@
     <label>Mot de passe
       <input type="password" name="password" required autocomplete="current-password">
     </label>
-    <button type="submit">Se connecter</button>
+    <button type="submit"><i data-lucide="log-in"></i><span>Se connecter</span></button>
   </form>
 </main>
 {% endblock %}

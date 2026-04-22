@@ -5,54 +5,92 @@
   {% include "_sidebar.html" %}
   <div>
     {% include "_topbar.html" %}
-    <main class="main" x-data="dashboard()">
+    <main class="main" x-data="dashboard()" x-init="init()">
       <h1>Dashboard</h1>
 
+      <!-- ═══ Cards instantanées ═══ -->
       <section class="grid">
         <div class="card" :class="tpsClass">
-          <div class="label">TPS</div>
-          <div class="value" x-text="snapshot.tps.toFixed(1)">—</div>
+          <div class="label"><i data-lucide="activity"></i><span>TPS</span></div>
+          <div class="value" x-text="snap.tps.toFixed(1)">—</div>
+          <div class="spark" x-ref="sparkTps"></div>
         </div>
         <div class="card">
-          <div class="label">Joueurs en ligne</div>
-          <div class="value"><span x-text="snapshot.players.length"></span><span style="opacity:.4"> / <span x-text="snapshot.max_players"></span></span></div>
+          <div class="label"><i data-lucide="users"></i><span>Joueurs</span></div>
+          <div class="value"><span x-text="snap.players.length"></span><span class="dim"> / <span x-text="snap.max_players"></span></span></div>
+          <div class="spark" x-ref="sparkPlayers"></div>
         </div>
         <div class="card">
-          <div class="label">Chunks chargés</div>
-          <div class="value" x-text="snapshot.chunks_loaded">—</div>
+          <div class="label"><i data-lucide="boxes"></i><span>Chunks</span></div>
+          <div class="value" x-text="snap.chunks_loaded">—</div>
+          <div class="spark" x-ref="sparkChunks"></div>
         </div>
         <div class="card">
-          <div class="label">Uptime</div>
-          <div class="value" x-text="formatUptime(snapshot.uptime_seconds)">—</div>
+          <div class="label"><i data-lucide="memory-stick"></i><span>Mémoire</span></div>
+          <div class="value"><span x-text="snap.system.mem_mb.toFixed(0)"></span><span class="dim">MB</span></div>
+          <div class="sub" x-text="`/ ${(snap.system.mem_total_mb/1024).toFixed(1)} GB host`"></div>
+          <div class="spark" x-ref="sparkMem"></div>
         </div>
         <div class="card">
-          <div class="label">Monde</div>
-          <div class="value" style="font-size:18px" x-text="snapshot.world_name"></div>
+          <div class="label"><i data-lucide="cpu"></i><span>CPU</span></div>
+          <div class="value"><span x-text="snap.system.cpu_percent.toFixed(1)"></span><span class="dim">%</span></div>
+          <div class="sub" x-text="`${snap.system.threads} threads · ${snap.system.host_cpu_count} cores`"></div>
+          <div class="spark" x-ref="sparkCpu"></div>
         </div>
         <div class="card">
-          <div class="label">Temps / Météo</div>
-          <div class="value" style="font-size:18px"><span x-text="formatTime(snapshot.world_time)"></span> <span x-text="snapshot.weather" style="color:var(--text-muted);font-size:14px"></span></div>
+          <div class="label"><i data-lucide="bot"></i><span>Entités</span></div>
+          <div class="value" x-text="(snap.entities.mobs+snap.entities.items+snap.entities.passive+snap.entities.players)"></div>
+          <div class="sub" x-text="`${snap.entities.mobs} mobs · ${snap.entities.items} items · ${snap.entities.passive} passive`"></div>
+          <div class="spark" x-ref="sparkEnt"></div>
+        </div>
+        <div class="card">
+          <div class="label"><i data-lucide="clock"></i><span>Uptime</span></div>
+          <div class="value" x-text="formatUptime(snap.uptime_seconds)">—</div>
+          <div class="sub" x-text="`${snap.total_ticks} ticks`"></div>
+        </div>
+        <div class="card">
+          <div class="label"><i data-lucide="globe"></i><span>Monde</span></div>
+          <div class="value" style="font-size:18px" x-text="`${snap.world_name}`"></div>
+          <div class="sub"><span x-text="formatTime(snap.world_time)"></span> · <span x-text="snap.weather"></span> · <span x-text="diffName(snap.difficulty)"></span></div>
         </div>
       </section>
 
-      <h2 style="margin-top:32px">Joueurs</h2>
+      <!-- ═══ Graphs principaux ═══ -->
+      <section style="margin-top:24px;display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(380px,1fr))">
+        <div class="card" style="padding:14px">
+          <div class="label" style="padding:0 2px 10px"><i data-lucide="activity"></i><span>TPS (5 min)</span></div>
+          <div x-ref="chartTps"></div>
+        </div>
+        <div class="card" style="padding:14px">
+          <div class="label" style="padding:0 2px 10px"><i data-lucide="cpu"></i><span>Mémoire &amp; CPU</span></div>
+          <div x-ref="chartSystem"></div>
+        </div>
+        <div class="card" style="padding:14px">
+          <div class="label" style="padding:0 2px 10px"><i data-lucide="bar-chart-3"></i><span>Joueurs · Chunks · Entités</span></div>
+          <div x-ref="chartLoad"></div>
+        </div>
+      </section>
+
+      <!-- ═══ Joueurs ═══ -->
+      <h2 style="margin-top:32px;display:flex;align-items:center;gap:8px"><i data-lucide="users"></i>Joueurs connectés</h2>
       <table>
         <thead><tr><th>Nom</th><th>Position</th><th>Gamemode</th><th>XUID</th></tr></thead>
         <tbody>
-          <template x-for="p in snapshot.players" :key="p.entity_id">
+          <template x-for="p in snap.players" :key="p.entity_id">
             <tr>
               <td x-text="p.name"></td>
               <td class="mono" x-text="`${p.position[0].toFixed(1)}, ${p.position[1].toFixed(1)}, ${p.position[2].toFixed(1)}`"></td>
-              <td x-text="gamemodeName(p.gamemode)"></td>
+              <td x-text="gmName(p.gamemode)"></td>
               <td style="color:var(--text-muted);font-family:var(--mono);font-size:11px" x-text="p.xuid"></td>
             </tr>
           </template>
-          <tr x-show="snapshot.players.length === 0"><td colspan="4" style="color:var(--text-muted);text-align:center;padding:24px">Aucun joueur connecté</td></tr>
+          <tr x-show="snap.players.length === 0"><td colspan="4" style="color:var(--text-muted);text-align:center;padding:24px">Aucun joueur connecté</td></tr>
         </tbody>
       </table>
 
-      <h2 style="margin-top:32px">Events live</h2>
-      <div class="terminal" x-ref="eventsLog" style="height:200px" x-html="eventsHtml"></div>
+      <!-- ═══ Events live ═══ -->
+      <h2 style="margin-top:32px;display:flex;align-items:center;gap:8px"><i data-lucide="radio"></i>Events en direct</h2>
+      <div class="terminal" x-ref="eventsLog" style="height:180px" x-html="eventsHtml"></div>
     </main>
   </div>
 </div>
@@ -60,52 +98,159 @@
 <script>
 function dashboard() {
   return {
-    snapshot: {
-      tps: 0, players: [], chunks_loaded: 0, uptime_seconds: 0,
-      world_time: 0, weather: 'clear', world_name: '{{ world_name }}',
-      max_players: {{ max_players }},
-    },
+    snap: null,
     eventsHtml: '',
-    get tpsClass() {
-      if (this.snapshot.tps >= 95) return 'ok';
-      if (this.snapshot.tps >= 60) return 'warn';
-      return 'err';
-    },
+    charts: {},
+    sparks: {},
     init() {
-      // WebSocket snapshot (push ~20 Hz depuis serveur)
-      this.wsSnap = new WebSocket(`ws://${location.host}/ws/snapshot`);
-      this.wsSnap.onmessage = (ev) => { this.snapshot = JSON.parse(ev.data); };
+      this.snap = { tps:0, players:[], chunks_loaded:0, uptime_seconds:0, world_time:0,
+        weather:'clear', difficulty:2, world_name:'{{ world_name }}',
+        max_players:{{ max_players }}, total_ticks:0,
+        system:{mem_mb:0,mem_total_mb:0,cpu_percent:0,threads:0,host_cpu_count:0,pid:0},
+        entities:{mobs:0,items:0,passive:0,players:0},
+        net:{bytes_in_per_sec:0,bytes_out_per_sec:0,active_sessions:0},
+        history_tps:{values:[],last_ts:0}, history_players:{values:[],last_ts:0},
+        history_chunks:{values:[],last_ts:0}, history_mem_mb:{values:[],last_ts:0},
+        history_cpu_percent:{values:[],last_ts:0},
+        history_bytes_in_per_sec:{values:[],last_ts:0},
+        history_bytes_out_per_sec:{values:[],last_ts:0},
+        history_entities_total:{values:[],last_ts:0},
+      };
 
-      // WebSocket events (PlayerJoin/Chat/etc.)
+      this.wsSnap = new WebSocket(`ws://${location.host}/ws/snapshot`);
+      this.wsSnap.onmessage = (ev) => {
+        this.snap = JSON.parse(ev.data);
+        this.updateCharts();
+        this.updateSparks();
+      };
+
       this.wsEvents = new WebSocket(`ws://${location.host}/ws/events`);
       this.wsEvents.onmessage = (ev) => {
         const e = JSON.parse(ev.data);
         const ts = new Date().toLocaleTimeString();
         let line = '';
         switch (e.kind) {
-          case 'player_join':        line = `→ ${e.name} joined`; break;
-          case 'player_quit':        line = `← ${e.name} left`; break;
-          case 'player_chat':        line = `<${e.name}> ${e.message}`; break;
-          case 'player_death':       line = `💀 ${e.name} died (${e.cause})`; break;
-          case 'player_gamemode_change': line = `${e.name} → gamemode ${e.new_mode}`; break;
-          case 'server_shutdown':    line = `⛔ server shutdown initiated`; break;
-          case 'admin_action':       line = `[${e.actor}] ${e.action}: ${e.detail}`; break;
+          case 'player_join':            line = `[JOIN]  ${e.name}`; break;
+          case 'player_quit':            line = `[QUIT]  ${e.name}`; break;
+          case 'player_chat':            line = `[CHAT]  <${e.name}> ${e.message}`; break;
+          case 'player_death':           line = `[DEATH] ${e.name} — ${e.cause}`; break;
+          case 'player_gamemode_change': line = `[GM]    ${e.name} → ${e.new_mode}`; break;
+          case 'server_shutdown':        line = `[STOP]  server shutdown initiated`; break;
+          case 'admin_action':           line = `[ADMIN] ${e.actor} · ${e.action} : ${e.detail}`; break;
           default: line = JSON.stringify(e);
         }
         this.eventsHtml += `<span class="log-ts">${ts}</span>  ${this.escape(line)}\n`;
         this.$nextTick(() => { const el = this.$refs.eventsLog; if (el) el.scrollTop = el.scrollHeight; });
       };
+
+      // Setup une fois les refs dispo.
+      this.$nextTick(() => this.createCharts());
+    },
+
+    createCharts() {
+      const dark = {
+        stroke: '#4f8cff',
+        fill: 'rgba(79,140,255,0.15)',
+      };
+      const commonOpts = (title, series) => ({
+        width: this.$refs.chartTps.offsetWidth || 400,
+        height: 220,
+        cursor: { show: true, drag: { setScale: false } },
+        scales: { x: { time: true } },
+        axes: [
+          { stroke: '#8a8f99', grid: { stroke: '#2a2d35', width: 1 } },
+          { stroke: '#8a8f99', grid: { stroke: '#2a2d35', width: 1 } },
+        ],
+        series: series,
+      });
+      // TPS
+      this.charts.tps = new uPlot(commonOpts('TPS', [
+        {}, { label: 'TPS', stroke: '#3ccf7a', width: 2, fill: 'rgba(60,207,122,0.15)' },
+      ]), this.dataOf(['history_tps'], ['tps']), this.$refs.chartTps);
+      // System : mem + cpu (axes partagés)
+      this.charts.system = new uPlot({
+        ...commonOpts('System', [
+          {}, { label: 'Mem MB', stroke: '#4f8cff', width: 2, fill: 'rgba(79,140,255,0.15)' },
+          { label: 'CPU %', stroke: '#ffb347', width: 2 },
+        ]),
+        scales: { x: { time: true }, y: { auto: true } },
+      }, this.dataOf(['history_mem_mb','history_cpu_percent'], ['mem','cpu']), this.$refs.chartSystem);
+      // Load : players + chunks + entities
+      this.charts.load = new uPlot({
+        ...commonOpts('Load', [
+          {}, { label: 'Players', stroke: '#3ccf7a', width: 2 },
+          { label: 'Chunks', stroke: '#4f8cff', width: 2 },
+          { label: 'Entities', stroke: '#ff5d6c', width: 2 },
+        ]),
+      }, this.dataOf(['history_players','history_chunks','history_entities_total'], ['p','c','e']), this.$refs.chartLoad);
+    },
+
+    /** Construit le tableau [timestamps[], series1[], series2[], ...] pour uPlot. */
+    dataOf(ringKeys, _labels) {
+      const ring = this.snap[ringKeys[0]];
+      const n = ring.values.length;
+      const lastTs = ring.last_ts || Math.floor(Date.now()/1000);
+      const xs = new Array(n);
+      for (let i = 0; i < n; i++) xs[i] = lastTs - (n - 1 - i);
+      const series = ringKeys.map(k => Array.from(this.snap[k].values));
+      return [xs, ...series];
+    },
+
+    updateCharts() {
+      if (this.charts.tps) this.charts.tps.setData(this.dataOf(['history_tps'], ['tps']));
+      if (this.charts.system) this.charts.system.setData(this.dataOf(['history_mem_mb','history_cpu_percent'], ['mem','cpu']));
+      if (this.charts.load) this.charts.load.setData(this.dataOf(['history_players','history_chunks','history_entities_total'], ['p','c','e']));
+    },
+
+    /** Sparklines dans chaque card : mini SVG polyline. */
+    sparkSvg(values, color) {
+      if (!values || values.length < 2) return '';
+      const w = 140, h = 28, p = 2;
+      let min = Infinity, max = -Infinity;
+      for (const v of values) { if (v<min) min=v; if (v>max) max=v; }
+      if (min === max) { min -= 1; max += 1; }
+      const n = values.length;
+      const pts = values.map((v, i) => {
+        const x = p + (i/(n-1))*(w-2*p);
+        const y = h - p - ((v-min)/(max-min))*(h-2*p);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+      return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+        <polyline fill="none" stroke="${color}" stroke-width="1.5" points="${pts}"/>
+      </svg>`;
+    },
+
+    updateSparks() {
+      const s = this.snap;
+      const put = (ref, ring, color) => {
+        const el = this.$refs[ref];
+        if (el) el.innerHTML = this.sparkSvg(ring.values, color);
+      };
+      put('sparkTps', s.history_tps, '#3ccf7a');
+      put('sparkPlayers', s.history_players, '#3ccf7a');
+      put('sparkChunks', s.history_chunks, '#4f8cff');
+      put('sparkMem', s.history_mem_mb, '#4f8cff');
+      put('sparkCpu', s.history_cpu_percent, '#ffb347');
+      put('sparkEnt', s.history_entities_total, '#ff5d6c');
+    },
+
+    get tpsClass() {
+      if (!this.snap) return '';
+      if (this.snap.tps >= 95) return 'ok';
+      if (this.snap.tps >= 60) return 'warn';
+      return 'err';
     },
     escape(s) { return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]); },
-    gamemodeName(g) { return ['survival','creative','adventure','spectator'][g] || String(g); },
+    gmName(g) { return ['survival','creative','adventure','spectator'][g] || String(g); },
+    diffName(d) { return ['peaceful','easy','normal','hard'][d] || String(d); },
     formatUptime(s) {
-      const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
-      if (d > 0) return `${d}j ${h}h`;
-      if (h > 0) return `${h}h ${m}m`;
-      return `${m}m`;
+      const d = Math.floor(s/86400), h = Math.floor(s%86400/3600), m = Math.floor(s%3600/60);
+      if (d>0) return `${d}j ${h}h`;
+      if (h>0) return `${h}h ${m}m`;
+      return `${m}m ${s%60}s`;
     },
     formatTime(t) {
-      const hours = Math.floor((t / 1000 + 6) % 24);
+      const hours = Math.floor((t/1000 + 6) % 24);
       const mins = Math.floor((t % 1000) / 1000 * 60);
       return `${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}`;
     },

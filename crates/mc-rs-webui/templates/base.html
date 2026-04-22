@@ -5,10 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}mc-rs admin{% endblock %}</title>
     <link rel="stylesheet" href="/static/app.css">
+    <link rel="stylesheet" href="/static/uplot.min.css">
+    <script src="/static/lucide.min.js"></script>
     <script src="/static/htmx.min.js" defer></script>
     <script src="/static/alpine.min.js" defer></script>
+    <script src="/static/uplot.min.js"></script>
 </head>
 <body>
 {% block body %}{% endblock %}
+
+<script>
+// Hydrate les icônes Lucide à chaque (re)render (Alpine + htmx triggers).
+function hydrateIcons() { if (window.lucide && window.lucide.createIcons) window.lucide.createIcons(); }
+document.addEventListener('DOMContentLoaded', hydrateIcons);
+document.addEventListener('htmx:afterSwap', hydrateIcons);
+document.addEventListener('alpine:initialized', hydrateIcons);
+// Petit MutationObserver pour capturer tout nouvel <i data-lucide> injecté par Alpine.
+new MutationObserver(hydrateIcons).observe(document.body, { childList: true, subtree: true });
+</script>
 </body>
 </html>
