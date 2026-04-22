@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Joueurs — mc-rs admin{% endblock %}
+{% block body %}
+<div class="app">
+  {% include "_sidebar.html" %}
+  <div>
+    {% include "_topbar.html" %}
+    <main class="main" x-data="players()">
+      <h1>Joueurs connectés</h1>
+
+      <table>
+        <thead><tr>
+          <th>Nom</th><th>Position</th><th>Gamemode</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          <template x-for="p in list" :key="p.entity_id">
+            <tr>
+              <td x-text="p.name"></td>
+              <td class="mono" x-text="`${p.position[0].toFixed(1)}, ${p.position[1].toFixed(1)}, ${p.position[2].toFixed(1)}`"></td>
+              <td x-text="gmName(p.gamemode)"></td>
+              <td>
+                <button class="ghost" @click="doAction(p.name, 'kick')" style="margin-right:4px">Kick</button>
+                <button class="ghost" @click="doAction(p.name, 'op')" style="margin-right:4px">Op</button>
+                <button class="ghost" @click="doAction(p.name, 'deop')" style="margin-right:4px">Deop</button>
+                <select x-model="p._gm" @change="doGamemode(p.name, p._gm)">
+                  <option value="">Gamemode ↓</option>
+                  <option value="0">Survival</option>
+                  <option value="1">Creative</option>
+                  <option value="2">Adventure</option>
+                  <option value="3">Spectator</option>
+                </select>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="list.length === 0"><td colspan="4" style="color:var(--text-muted);text-align:center;padding:24px">Aucun joueur connecté</td></tr>
+        </tbody>
+      </table>
+    </main>
+  </div>
+</div>
+
+<script>
+function players() {
+  return {
+    list: [],
+    init() {
+      this.ws = new WebSocket(`ws://${location.host}/ws/snapshot`);
+      this.ws.onmessage = (ev) => {
+        const snap = JSON.parse(ev.data);
+        this.list = snap.players.map(p => ({...p, _gm: ''}));
+      };
+    },
+    gmName(g) { return ['survival','creative','adventure','spectator'][g] || String(g); },
+    async doAction(name, action) {
+      if (action === 'kick' && !confirm(`Kick ${name} ?`)) return;
+      const res = await fetch(`/players/${encodeURIComponent(name)}/${action}`, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'htmx' },
+      });
+      if (!res.ok) alert(await res.text());
+    },
+    async doGamemode(name, gm) {
+      if (!gm) return;
+      const res = await fetch(`/players/${encodeURIComponent(name)}/gamemode`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'htmx' },
+        body: new URLSearchParams({ mode: gm }),
+      });
+      if (!res.ok) alert(await res.text());
+    },
+  };
+}
+</script>
+{% endblock %}

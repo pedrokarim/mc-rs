@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Setup — mc-rs admin{% endblock %}
+{% block body %}
+<main class="auth-page">
+  <h1>Bienvenue sur mc-rs admin</h1>
+  <p class="note">Aucun administrateur n'existe encore. Crée le premier compte pour débloquer le panel.</p>
+  {% if let Some(err) = error %}
+  <p class="error">{{ err }}</p>
+  {% endif %}
+  <form method="post" action="/setup" class="auth-form">
+    <label>Nom d'utilisateur
+      <input type="text" name="username" required minlength="3" maxlength="32" autocomplete="username">
+    </label>
+    <label>Mot de passe (8 chars min)
+      <input type="password" name="password" required minlength="8" autocomplete="new-password">
+    </label>
+    <label>Confirmation
+      <input type="password" name="password_confirm" required minlength="8" autocomplete="new-password">
+    </label>
+    <button type="submit">Créer l'administrateur</button>
+  </form>
+</main>
+{% endblock %}

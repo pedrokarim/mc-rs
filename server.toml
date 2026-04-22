@@ -78,3 +78,14 @@ file = true
 
 # Colorer les logs stdout avec ANSI (désactiver si le terminal ne gère pas)
 ansi = true
+
+[webui]
+enabled = true
+bind = "127.0.0.1:8080"
+database_url = "sqlite://webui.db"
+session_duration_hours = 24
+
+[webui.tls]
+enabled = false
+cert_path = ""
+key_path = ""

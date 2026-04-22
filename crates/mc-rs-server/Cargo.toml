@@ -24,4 +24,5 @@ rand = { workspace = true }
 base64 = { workspace = true }
 rusty-leveldb = "3"
 mc-rs-nbt = { path = "../mc-rs-nbt" }
+mc-rs-webui = { path = "../mc-rs-webui", features = ["tls"] }
 flate2 = "1"

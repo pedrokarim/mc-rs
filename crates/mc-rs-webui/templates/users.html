@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Utilisateurs — mc-rs admin{% endblock %}
+{% block body %}
+<div class="app">
+  {% include "_sidebar.html" %}
+  <div>
+    {% include "_topbar.html" %}
+    <main class="main">
+      <h1>Utilisateurs du panel</h1>
+      <p class="note">Admin uniquement. Les actions (création / suppression / changement de mot de passe / rôle) sont audit-loggées.</p>
+
+      {% if let Some(err) = error %}
+      <p class="error">{{ err }}</p>
+      {% endif %}
+      {% if let Some(ok) = success %}
+      <p style="color:var(--success);background:rgba(60,207,122,.1);padding:10px 12px;border-radius:6px;margin:8px 0">{{ ok }}</p>
+      {% endif %}
+
+      <h2>Créer un utilisateur</h2>
+      <form method="post" action="/users/create" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;max-width:800px">
+        <label>Nom<input type="text" name="username" required minlength="3" maxlength="32"></label>
+        <label>Mot de passe<input type="password" name="password" required minlength="8"></label>
+        <label>Rôle
+          <select name="role">
+            <option value="admin">admin</option>
+            <option value="moderator" selected>moderator</option>
+          </select>
+        </label>
+        <button type="submit">Créer</button>
+      </form>
+
+      <h2 style="margin-top:32px">Liste</h2>
+      <table>
+        <thead><tr>
+          <th>Nom</th><th>Rôle</th><th>Créé</th><th>Dernière connexion</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          {% for u in users %}
+          <tr>
+            <td>{{ u.username }}</td>
+            <td><span class="badge {{ u.role }}">{{ u.role }}</span></td>
+            <td style="color:var(--text-muted);font-size:12px">{{ u.created_str }}</td>
+            <td style="color:var(--text-muted);font-size:12px">{{ u.last_login_str }}</td>
+            <td>
+              <details style="display:inline-block">
+                <summary class="ghost" style="display:inline-block;padding:4px 10px;border-radius:4px;background:var(--bg-elev);cursor:pointer;border:1px solid var(--border)">Modifier</summary>
+                <div style="position:absolute;margin-top:6px;background:var(--bg-card);border:1px solid var(--border);padding:12px;border-radius:8px;display:flex;flex-direction:column;gap:8px;min-width:260px;z-index:10">
+                  <form method="post" action="/users/{{ u.id_str }}/password" style="display:flex;gap:6px;align-items:center">
+                    <input type="password" name="password" placeholder="Nouveau mot de passe" minlength="8" required>
+                    <button type="submit">OK</button>
+                  </form>
+                  <form method="post" action="/users/{{ u.id_str }}/role" style="display:flex;gap:6px;align-items:center">
+                    <select name="role">
+                      <option value="admin" {% if u.role == "admin" %}selected{% endif %}>admin</option>
+                      <option value="moderator" {% if u.role == "moderator" %}selected{% endif %}>moderator</option>
+                    </select>
+                    <button type="submit">Changer rôle</button>
+                  </form>
+                  {% if !u.is_self %}
+                  <form method="post" action="/users/{{ u.id_str }}/delete" onsubmit="return confirm('Supprimer {{ u.username }} ?')">
+                    <button class="danger" type="submit" style="width:100%">Supprimer</button>
+                  </form>
+                  {% else %}
+                  <span class="note">(c'est vous — impossible de se supprimer)</span>
+                  {% endif %}
+                </div>
+              </details>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </main>
+  </div>
+</div>
+{% endblock %}

@@ -13,3 +13,7 @@ plugin_data/
 .reference/
 tools/
 .tmp/
+webui.db
+webui.db-journal
+webui.db-wal
+webui.db-shm

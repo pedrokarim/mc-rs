@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Console — mc-rs admin{% endblock %}
+{% block body %}
+<div class="app">
+  {% include "_sidebar.html" %}
+  <div>
+    {% include "_topbar.html" %}
+    <main class="main" x-data="console()">
+      <h1>Console</h1>
+      <p class="note">Logs temps réel + envoi de commandes serveur. Toutes les commandes sont routées via <code>dispatch_command_line(CommandSource::Console)</code> — même dispatcher que la stdin du binaire.</p>
+
+      <div class="terminal" x-ref="logs" x-html="buffer"></div>
+
+      <form class="console-input" @submit.prevent="submit()">
+        <input x-model="input" placeholder="/help, /stop, /gamemode creative <player>, ..." autofocus>
+        <button type="submit">Exécuter</button>
+      </form>
+    </main>
+  </div>
+</div>
+
+<script>
+function console() {
+  return {
+    input: '',
+    buffer: '',
+    init() {
+      this.ws = new WebSocket(`ws://${location.host}/ws/logs`);
+      this.ws.onmessage = (ev) => {
+        const line = JSON.parse(ev.data);
+        const cls = `log-${line.level}`;
+        const safe = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]);
+        this.buffer += `<span class="log-ts">${safe(line.ts)}</span> <span class="${cls}">${safe(line.level.padEnd(5))}</span> <span class="log-target">${safe(line.target)}</span>: <span class="${cls}">${safe(line.message)}</span>\n`;
+        this.$nextTick(() => { this.$refs.logs.scrollTop = this.$refs.logs.scrollHeight; });
+      };
+    },
+    async submit() {
+      if (!this.input.trim()) return;
+      const cmd = this.input;
+      this.input = '';
+      const res = await fetch('/console/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'htmx' },
+        body: new URLSearchParams({ command: cmd }),
+      });
+      if (!res.ok) {
+        const msg = await res.text();
+        alert(`Erreur: ${msg}`);
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

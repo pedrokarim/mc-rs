@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Configuration — mc-rs admin{% endblock %}
+{% block body %}
+<div class="app">
+  {% include "_sidebar.html" %}
+  <div>
+    {% include "_topbar.html" %}
+    <main class="main" x-data="{ saving:false, msg:'', err:'' }">
+      <h1>Configuration serveur</h1>
+      <p class="note">Éditeur <code>server.toml</code>. Le contenu est validé (parse TOML + structure <code>ServerConfig</code>) avant écriture atomique. Certains champs (<code>port</code>, <code>tick_rate</code>, <code>webui.*</code>) nécessitent un redémarrage pour s'appliquer ; les settings gameplay hot-reload via les commandes console (<a href="/world">panneau monde</a>).</p>
+
+      <form @submit.prevent="save($event)" style="display:flex;flex-direction:column;gap:12px">
+        <textarea name="toml" id="toml-editor" class="mono" style="height:60vh;font-size:12.5px;background:#0b0c10">{{ toml_content }}</textarea>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button type="submit" :disabled="saving" x-text="saving ? 'Enregistrement…' : 'Enregistrer'"></button>
+          <span style="color:var(--success)" x-text="msg"></span>
+          <span style="color:var(--danger)" x-text="err"></span>
+        </div>
+      </form>
+    </main>
+  </div>
+</div>
+
+<script>
+async function saveConfig(ev) {
+  const self = ev.target.closest('[x-data]').__x.$data;
+  self.msg = ''; self.err = ''; self.saving = true;
+  try {
+    const toml = document.getElementById('toml-editor').value;
+    const res = await fetch('/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain', 'X-Requested-With': 'htmx' },
+      body: toml,
+    });
+    const body = await res.text();
+    if (res.ok) {
+      self.msg = body || 'Sauvegardé. Certains settings nécessitent un redémarrage.';
+    } else {
+      self.err = body;
+    }
+  } catch (e) {
+    self.err = `Erreur réseau : ${e}`;
+  } finally {
+    self.saving = false;
+  }
+}
+// Bridge nommage Alpine.
+document.addEventListener('alpine:init', () => {});
+window.save = saveConfig;
+</script>
+{% endblock %}

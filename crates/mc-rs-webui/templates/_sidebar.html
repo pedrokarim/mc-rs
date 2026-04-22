@@ -1,0 +1,11 @@
+<aside class="sidebar">
+  <h2>mc-rs admin</h2>
+  <nav>
+    <a href="/" {% if current_page == "dashboard" %}class="active"{% endif %}>📊 Dashboard</a>
+    <a href="/players" {% if current_page == "players" %}class="active"{% endif %}>👥 Joueurs</a>
+    <a href="/console" {% if current_page == "console" %}class="active"{% endif %}>🖥️ Console</a>
+    <a href="/config" {% if current_page == "config" %}class="active"{% endif %}>⚙️ Configuration</a>
+    <a href="/audit" {% if current_page == "audit" %}class="active"{% endif %}>📜 Audit</a>
+    <a href="/users" {% if current_page == "users" %}class="active"{% endif %}>🔐 Utilisateurs</a>
+  </nav>
+</aside>

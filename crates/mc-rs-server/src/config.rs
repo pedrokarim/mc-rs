@@ -84,6 +84,34 @@ file = true
 
 # Colorer les logs stdout avec ANSI (désactiver si le terminal ne gère pas)
 ansi = true
+
+[webui]
+# Panel web d'administration (http://<bind>/). Créer un admin au premier boot
+# via la page /setup si la DB est vide.
+#
+# ATTENTION : exposer ce panel sur un réseau non-loopback sans TLS = gros risque
+# de sécurité (token + mot de passe transitent en clair). Pour exposer hors
+# localhost : mettre derrière un reverse proxy (nginx/caddy) avec HTTPS, OU
+# activer la section [webui.tls] ci-dessous.
+enabled = false
+
+# Adresse IP + port d'écoute (par défaut loopback uniquement)
+bind = "127.0.0.1:8080"
+
+# URL de connexion base de données :
+#   "sqlite://webui.db"     — SQLite local (défaut, zéro setup)
+#   "postgres://user:pass@host/db"   — nécessite feature 'postgres'
+#   "mongodb://host:27017/webui"     — nécessite feature 'mongodb'
+database_url = "sqlite://webui.db"
+
+# Durée de vie des sessions JWT (heures)
+session_duration_hours = 24
+
+[webui.tls]
+# HTTPS pour le panel (recommandé dès que bind != 127.0.0.1)
+enabled = false
+cert_path = ""
+key_path = ""
 "#;
 
 #[derive(Debug, Deserialize)]
@@ -96,6 +124,9 @@ pub struct ServerConfig {
     pub gameplay: GameplaySection,
     #[serde(default)]
     pub logging: LoggingSection,
+    /// Section `[webui]` — panel d'administration web optionnel.
+    #[serde(default)]
+    pub webui: mc_rs_webui::WebUiConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -239,6 +270,7 @@ impl Default for ServerConfig {
             world: WorldSection::default(),
             gameplay: GameplaySection::default(),
             logging: LoggingSection::default(),
+            webui: mc_rs_webui::WebUiConfig::default(),
         }
     }
 }

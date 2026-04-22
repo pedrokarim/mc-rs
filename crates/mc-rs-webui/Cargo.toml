@@ -1,0 +1,45 @@
+[package]
+name = "mc-rs-webui"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+tokio = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+async-trait = "0.1"
+thiserror = { workspace = true }
+futures-util = "0.3"
+
+axum = { version = "0.7", features = ["ws", "macros"] }
+axum-extra = { version = "0.9", features = ["cookie", "cookie-private"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "limit", "cors", "compression-gzip"] }
+
+askama = { version = "0.12", features = ["with-axum"] }
+askama_axum = "0.4"
+
+jsonwebtoken = "9"
+argon2 = "0.5"
+uuid = { version = "1", features = ["v4", "serde"] }
+rand = { workspace = true }
+rust-embed = "8"
+mime_guess = "2"
+toml = "0.8"
+
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "macros", "migrate", "chrono", "uuid"], optional = true }
+mongodb = { version = "3", optional = true }
+axum-server = { version = "0.7", optional = true, features = ["tls-rustls"] }
+
+[features]
+default = ["sqlite"]
+sqlite = ["dep:sqlx", "sqlx/sqlite"]
+postgres = ["dep:sqlx", "sqlx/postgres"]
+mongodb = ["dep:mongodb"]
+tls = ["dep:axum-server"]

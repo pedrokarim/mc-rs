@@ -1083,8 +1083,14 @@ async fn main() {
     // émettre une fois le logger prêt.
     let (config, bootstrap_notes) = ServerConfig::load("server.toml");
 
+    // Broadcast channel logs → webui (créé AVANT logging::init pour que les
+    // tout premiers logs du boot soient captés). Un receiver est consommé par
+    // chaque client WebSocket `/ws/logs`.
+    let (webui_log_tx, _) = tokio::sync::broadcast::channel::<mc_rs_webui::LogLine>(1024);
+    let webui_log_tx_for_logging = config.webui.enabled.then(|| webui_log_tx.clone());
+
     // Le guard doit rester vivant toute la durée du process (flush au Drop).
-    let _log_guard = crate::logging::init(&config.logging);
+    let _log_guard = crate::logging::init(&config.logging, webui_log_tx_for_logging);
     crate::logging::install_panic_hook();
 
     info!("MC-RS Server starting...");
@@ -1161,6 +1167,63 @@ async fn main() {
     // Event manager partagé (tous les Connection le clonent).
     let event_manager: Arc<std::sync::Mutex<crate::event::EventManager>> =
         Arc::new(std::sync::Mutex::new(crate::event::EventManager::new()));
+
+    // Broadcast channel events webui — créé tôt pour que les event handlers
+    // puissent le capturer dans leurs closures avant que la main loop ne parte.
+    let (webui_event_tx, _) = tokio::sync::broadcast::channel::<mc_rs_webui::WebEvent>(256);
+
+    // Webui event bridge : priority Monitor (read-only observer, dernier dans la
+    // chaîne PMMP). Converti chaque event serveur en WebEvent et push dans le
+    // broadcast. `try_send` via broadcast : si aucun client, le send est no-op.
+    if config.webui.enabled {
+        use crate::event::player::{
+            PlayerChatEvent, PlayerDeathEvent, PlayerGameModeChangeEvent, PlayerJoinEvent,
+            PlayerQuitEvent,
+        };
+        use crate::event::EventPriority;
+        if let Ok(mut mgr) = event_manager.lock() {
+            let tx = webui_event_tx.clone();
+            mgr.register(EventPriority::Monitor, true, move |ev: &mut PlayerJoinEvent| {
+                let _ = tx.send(mc_rs_webui::WebEvent::PlayerJoin {
+                    name: ev.display_name.clone(),
+                    addr: ev.player_addr.to_string(),
+                    xuid: ev.xuid.clone(),
+                });
+            });
+            let tx = webui_event_tx.clone();
+            mgr.register(EventPriority::Monitor, true, move |ev: &mut PlayerQuitEvent| {
+                let _ = tx.send(mc_rs_webui::WebEvent::PlayerQuit {
+                    name: ev.display_name.clone(),
+                    addr: ev.player_addr.to_string(),
+                });
+            });
+            let tx = webui_event_tx.clone();
+            mgr.register(EventPriority::Monitor, true, move |ev: &mut PlayerChatEvent| {
+                let _ = tx.send(mc_rs_webui::WebEvent::PlayerChat {
+                    name: ev.sender_name.clone(),
+                    message: ev.message.clone(),
+                });
+            });
+            let tx = webui_event_tx.clone();
+            mgr.register(EventPriority::Monitor, true, move |ev: &mut PlayerDeathEvent| {
+                let _ = tx.send(mc_rs_webui::WebEvent::PlayerDeath {
+                    name: ev.death_message.clone(),
+                    cause: "unknown".to_string(),
+                });
+            });
+            let tx = webui_event_tx.clone();
+            mgr.register(
+                EventPriority::Monitor,
+                true,
+                move |ev: &mut PlayerGameModeChangeEvent| {
+                    let _ = tx.send(mc_rs_webui::WebEvent::PlayerGamemodeChange {
+                        name: ev.player_addr.to_string(),
+                        new_mode: ev.new_gamemode,
+                    });
+                },
+            );
+        }
+    }
     let mut world_state = WorldState::new(
         config.gameplay.do_daylight_cycle,
         config.gameplay.do_weather_cycle,
@@ -1179,6 +1242,7 @@ async fn main() {
     }
     let mut auto_save_counter: u32 = 0;
     let (console_tx, mut console_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    let console_tx_stdin = console_tx.clone();
     tokio::spawn(async move {
         let mut lines = BufReader::new(tokio::io::stdin()).lines();
         loop {
@@ -1188,7 +1252,7 @@ async fn main() {
                     if trimmed.is_empty() {
                         continue;
                     }
-                    if console_tx.send(trimmed.to_string()).is_err() {
+                    if console_tx_stdin.send(trimmed.to_string()).is_err() {
                         break;
                     }
                 }
@@ -1211,6 +1275,40 @@ async fn main() {
     let mut tick_timer = interval(Duration::from_millis(config.server.tick_rate));
     let mut should_stop = false;
     let mut console_input_open = true;
+    let mut webui_tps_tracker = mc_rs_webui::metrics::TpsTracker::new();
+    let mut webui_snapshot_counter: u32 = 0;
+
+    // ── Web admin panel (mc-rs-webui) ──
+    // Channels + snapshot partagés avec le crate webui. La main loop met à
+    // jour le snapshot ~20 Hz, push les events+logs dans les broadcasts.
+    let webui_snapshot = std::sync::Arc::new(tokio::sync::RwLock::new({
+        let mut snap = mc_rs_webui::ServerSnapshot::default();
+        snap.motd = config.server.motd.clone();
+        snap.world_name = config.world.name.clone();
+        snap.max_players = config.server.max_players;
+        snap.gamemode = config.gameplay.gamemode_id();
+        snap.difficulty = config.gameplay.difficulty_id();
+        snap.boot_instant = Some(std::time::Instant::now());
+        snap.uptime_start_unix = chrono::Utc::now().timestamp();
+        snap
+    }));
+
+    let webui_task = if config.webui.enabled {
+        let handle = mc_rs_webui::WebUiHandle::new(
+            console_tx.clone(),
+            webui_snapshot.clone(),
+            webui_event_tx.clone(),
+            webui_log_tx.clone(),
+        );
+        info!(
+            "[webui] web admin panel enabled — http://{}",
+            config.webui.bind
+        );
+        Some(mc_rs_webui::serve(handle, config.webui.clone()))
+    } else {
+        None
+    };
+    drop(webui_task); // detach — la tâche vit tant que le process tourne
 
     loop {
         if should_stop {
@@ -1289,6 +1387,47 @@ async fn main() {
 
             // Tick sessions periodically
             _ = tick_timer.tick() => {
+                let current_tps = webui_tps_tracker.on_tick();
+                webui_snapshot_counter = webui_snapshot_counter.wrapping_add(1);
+
+                // Snapshot update ~20 Hz (tous les 5 server ticks à 100 TPS).
+                if webui_snapshot_counter % 5 == 0 {
+                    let players_snap: Vec<mc_rs_webui::PlayerSnapshot> = registry
+                        .players
+                        .values()
+                        .map(|p| mc_rs_webui::PlayerSnapshot {
+                            addr: p.addr.to_string(),
+                            name: p.name.clone(),
+                            uuid: p.uuid,
+                            xuid: p.xuid.clone(),
+                            entity_id: p.entity_id as u64,
+                            position: p.position,
+                            yaw: p.yaw,
+                            pitch: p.pitch,
+                            head_yaw: p.head_yaw,
+                            gamemode: p.gamemode,
+                        })
+                        .collect();
+                    let chunks_loaded = chunk_cache.lock().map(|c| c.cached_count()).unwrap_or(0);
+                    let world_time = world_state.time as i64;
+                    let weather = if world_state.is_thundering {
+                        "thunder"
+                    } else if world_state.is_raining {
+                        "rain"
+                    } else {
+                        "clear"
+                    }
+                    .to_string();
+                    if let Ok(mut snap) = webui_snapshot.try_write() {
+                        snap.tps = current_tps;
+                        snap.total_ticks = webui_tps_tracker.total_ticks();
+                        snap.players = players_snap;
+                        snap.chunks_loaded = chunks_loaded;
+                        snap.world_time = world_time;
+                        snap.weather = weather;
+                    }
+                }
+
                 raknet.tick_sessions().await;
 
                 // World tick (day/night cycle, weather)

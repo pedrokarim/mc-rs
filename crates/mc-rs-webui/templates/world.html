@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Monde — mc-rs admin{% endblock %}
+{% block body %}
+<div class="app">
+  {% include "_sidebar.html" %}
+  <div>
+    {% include "_topbar.html" %}
+    <main class="main" x-data="world()">
+      <h1>Contrôles monde</h1>
+      <p class="note">Les actions passent par le dispatcher de commandes (comme la console). Effet immédiat sans redémarrer.</p>
+
+      <section class="card" style="margin-bottom:20px">
+        <h3>Temps</h3>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+          <button @click="timeSet('day')">☀️ Jour</button>
+          <button @click="timeSet('noon')">🌞 Midi</button>
+          <button @click="timeSet('sunset')">🌇 Coucher</button>
+          <button @click="timeSet('night')">🌙 Nuit</button>
+          <button @click="timeSet('midnight')">🌌 Minuit</button>
+        </div>
+      </section>
+
+      <section class="card" style="margin-bottom:20px">
+        <h3>Météo</h3>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+          <button @click="weather('clear')">🌤️ Clair</button>
+          <button @click="weather('rain')">🌧️ Pluie</button>
+          <button @click="weather('thunder')">⛈️ Orage</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Difficulté</h3>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+          <button @click="difficulty('peaceful')">☮️ Peaceful</button>
+          <button @click="difficulty('easy')">🙂 Easy</button>
+          <button @click="difficulty('normal')">😐 Normal</button>
+          <button @click="difficulty('hard')">😤 Hard</button>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+function world() {
+  async function post(url) {
+    const res = await fetch(url, { method: 'POST', headers: { 'X-Requested-With': 'htmx' } });
+    if (!res.ok) alert(await res.text());
+  }
+  return {
+    timeSet(v)     { post(`/world/time/${encodeURIComponent(v)}`); },
+    weather(v)     { post(`/world/weather/${encodeURIComponent(v)}`); },
+    difficulty(v)  { post(`/world/difficulty/${encodeURIComponent(v)}`); },
+  };
+}
+</script>
+{% endblock %}

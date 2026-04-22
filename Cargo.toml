@@ -6,6 +6,7 @@ members = [
     "crates/mc-rs-crypto",
     "crates/mc-rs-command",
     "crates/mc-rs-nbt",
+    "crates/mc-rs-webui",
     "crates/mc-rs-server",
     "benchmark",
 ]

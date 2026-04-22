@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Audit — mc-rs admin{% endblock %}
+{% block body %}
+<div class="app">
+  {% include "_sidebar.html" %}
+  <div>
+    {% include "_topbar.html" %}
+    <main class="main">
+      <h1>Audit log</h1>
+      <p class="note">Historique de toutes les actions admin (inchangeable, logged côté DB).</p>
+
+      <table>
+        <thead><tr><th>Horodatage</th><th>Utilisateur</th><th>Action</th><th>Détails</th></tr></thead>
+        <tbody>
+          {% for e in entries %}
+          <tr>
+            <td class="mono" style="font-size:12px">{{ e.ts_str }}</td>
+            <td>{{ e.username }}</td>
+            <td><code>{{ e.action }}</code></td>
+            <td class="mono" style="font-size:11px;color:var(--text-muted)">{{ e.detail_str }}</td>
+          </tr>
+          {% endfor %}
+          {% if entries.is_empty() %}
+          <tr><td colspan="4" style="color:var(--text-muted);text-align:center;padding:24px">Aucune entrée (encore)</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+
+      <div style="margin-top:16px;display:flex;gap:8px;align-items:center">
+        <span class="note">Total : <strong>{{ total }}</strong> entrées</span>
+        <span style="flex:1"></span>
+        {% if offset > 0 %}
+        <a class="button" href="/audit?offset={{ prev_offset }}">← Précédent</a>
+        {% endif %}
+        {% if has_next %}
+        <a class="button" href="/audit?offset={{ next_offset }}">Suivant →</a>
+        {% endif %}
+      </div>
+    </main>
+  </div>
+</div>
+{% endblock %}

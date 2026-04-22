@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — mc-rs admin{% endblock %}
+{% block body %}
+<div class="app">
+  {% include "_sidebar.html" %}
+  <div>
+    {% include "_topbar.html" %}
+    <main class="main" x-data="dashboard()">
+      <h1>Dashboard</h1>
+
+      <section class="grid">
+        <div class="card" :class="tpsClass">
+          <div class="label">TPS</div>
+          <div class="value" x-text="snapshot.tps.toFixed(1)">—</div>
+        </div>
+        <div class="card">
+          <div class="label">Joueurs en ligne</div>
+          <div class="value"><span x-text="snapshot.players.length"></span><span style="opacity:.4"> / <span x-text="snapshot.max_players"></span></span></div>
+        </div>
+        <div class="card">
+          <div class="label">Chunks chargés</div>
+          <div class="value" x-text="snapshot.chunks_loaded">—</div>
+        </div>
+        <div class="card">
+          <div class="label">Uptime</div>
+          <div class="value" x-text="formatUptime(snapshot.uptime_seconds)">—</div>
+        </div>
+        <div class="card">
+          <div class="label">Monde</div>
+          <div class="value" style="font-size:18px" x-text="snapshot.world_name"></div>
+        </div>
+        <div class="card">
+          <div class="label">Temps / Météo</div>
+          <div class="value" style="font-size:18px"><span x-text="formatTime(snapshot.world_time)"></span> <span x-text="snapshot.weather" style="color:var(--text-muted);font-size:14px"></span></div>
+        </div>
+      </section>
+
+      <h2 style="margin-top:32px">Joueurs</h2>
+      <table>
+        <thead><tr><th>Nom</th><th>Position</th><th>Gamemode</th><th>XUID</th></tr></thead>
+        <tbody>
+          <template x-for="p in snapshot.players" :key="p.entity_id">
+            <tr>
+              <td x-text="p.name"></td>
+              <td class="mono" x-text="`${p.position[0].toFixed(1)}, ${p.position[1].toFixed(1)}, ${p.position[2].toFixed(1)}`"></td>
+              <td x-text="gamemodeName(p.gamemode)"></td>
+              <td style="color:var(--text-muted);font-family:var(--mono);font-size:11px" x-text="p.xuid"></td>
+            </tr>
+          </template>
+          <tr x-show="snapshot.players.length === 0"><td colspan="4" style="color:var(--text-muted);text-align:center;padding:24px">Aucun joueur connecté</td></tr>
+        </tbody>
+      </table>
+
+      <h2 style="margin-top:32px">Events live</h2>
+      <div class="terminal" x-ref="eventsLog" style="height:200px" x-html="eventsHtml"></div>
+    </main>
+  </div>
+</div>
+
+<script>
+function dashboard() {
+  return {
+    snapshot: {
+      tps: 0, players: [], chunks_loaded: 0, uptime_seconds: 0,
+      world_time: 0, weather: 'clear', world_name: '{{ world_name }}',
+      max_players: {{ max_players }},
+    },
+    eventsHtml: '',
+    get tpsClass() {
+      if (this.snapshot.tps >= 95) return 'ok';
+      if (this.snapshot.tps >= 60) return 'warn';
+      return 'err';
+    },
+    init() {
+      // WebSocket snapshot (push ~20 Hz depuis serveur)
+      this.wsSnap = new WebSocket(`ws://${location.host}/ws/snapshot`);
+      this.wsSnap.onmessage = (ev) => { this.snapshot = JSON.parse(ev.data); };
+
+      // WebSocket events (PlayerJoin/Chat/etc.)
+      this.wsEvents = new WebSocket(`ws://${location.host}/ws/events`);
+      this.wsEvents.onmessage = (ev) => {
+        const e = JSON.parse(ev.data);
+        const ts = new Date().toLocaleTimeString();
+        let line = '';
+        switch (e.kind) {
+          case 'player_join':        line = `→ ${e.name} joined`; break;
+          case 'player_quit':        line = `← ${e.name} left`; break;
+          case 'player_chat':        line = `<${e.name}> ${e.message}`; break;
+          case 'player_death':       line = `💀 ${e.name} died (${e.cause})`; break;
+          case 'player_gamemode_change': line = `${e.name} → gamemode ${e.new_mode}`; break;
+          case 'server_shutdown':    line = `⛔ server shutdown initiated`; break;
+          case 'admin_action':       line = `[${e.actor}] ${e.action}: ${e.detail}`; break;
+          default: line = JSON.stringify(e);
+        }
+        this.eventsHtml += `<span class="log-ts">${ts}</span>  ${this.escape(line)}\n`;
+        this.$nextTick(() => { const el = this.$refs.eventsLog; if (el) el.scrollTop = el.scrollHeight; });
+      };
+    },
+    escape(s) { return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]); },
+    gamemodeName(g) { return ['survival','creative','adventure','spectator'][g] || String(g); },
+    formatUptime(s) {
+      const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+      if (d > 0) return `${d}j ${h}h`;
+      if (h > 0) return `${h}h ${m}m`;
+      return `${m}m`;
+    },
+    formatTime(t) {
+      const hours = Math.floor((t / 1000 + 6) % 24);
+      const mins = Math.floor((t % 1000) / 1000 * 60);
+      return `${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}`;
+    },
+  };
+}
+</script>
+{% endblock %}

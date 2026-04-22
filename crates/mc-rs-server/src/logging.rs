@@ -8,13 +8,16 @@
 //! - Format de ligne : `HH:MM:SS.mmm  LEVEL  target: message`
 //! - Niveau par défaut via config ; `RUST_LOG` env var prend toujours le dessus
 
+use std::fmt as stdfmt;
 use std::path::Path;
 
+use tokio::sync::broadcast;
+use tracing::field::Visit;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::fmt::format::Writer;
 use tracing_subscriber::fmt::time::FormatTime;
-use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::layer::{Context, SubscriberExt};
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter, Layer, Registry};
 
@@ -56,7 +59,10 @@ fn parse_rotation(value: &str) -> Rotation {
 ///
 /// À appeler **une seule fois** en tout début de `main()`, *après* avoir chargé
 /// la config (voir `ServerConfig::load`), *avant* toute autre initialisation.
-pub fn init(cfg: &LoggingSection) -> LogGuard {
+pub fn init(
+    cfg: &LoggingSection,
+    webui_log_tx: Option<broadcast::Sender<mc_rs_webui::LogLine>>,
+) -> LogGuard {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&cfg.level));
 
     let stdout_layer = cfg.stdout.then(|| {
@@ -103,14 +109,62 @@ pub fn init(cfg: &LoggingSection) -> LogGuard {
         (None, None)
     };
 
+    let webui_layer = webui_log_tx.map(|tx| WebUiBroadcastLayer { tx }.boxed());
+
     Registry::default()
         .with(filter)
         .with(stdout_layer)
         .with(file_layer)
+        .with(webui_layer)
         .init();
 
     LogGuard {
         _file_worker: file_worker,
+    }
+}
+
+/// Layer tracing qui sérialise chaque `Event` en `mc_rs_webui::LogLine` et
+/// push dans un `broadcast::Sender`. Non-bloquant : si le channel est full
+/// (aucun receiver ou lag), la ligne est silencieusement droppée — priorité à
+/// ne pas freiner la main loop pour un panel admin.
+struct WebUiBroadcastLayer {
+    tx: broadcast::Sender<mc_rs_webui::LogLine>,
+}
+
+struct MessageVisitor {
+    message: String,
+}
+
+impl Visit for MessageVisitor {
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn stdfmt::Debug) {
+        if field.name() == "message" {
+            use std::fmt::Write;
+            let _ = write!(&mut self.message, "{:?}", value);
+        }
+    }
+
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        if field.name() == "message" {
+            self.message.push_str(value);
+        }
+    }
+}
+
+impl<S: tracing::Subscriber> Layer<S> for WebUiBroadcastLayer {
+    fn on_event(&self, event: &tracing::Event<'_>, _ctx: Context<'_, S>) {
+        let mut visitor = MessageVisitor {
+            message: String::new(),
+        };
+        event.record(&mut visitor);
+        let meta = event.metadata();
+        let line = mc_rs_webui::LogLine {
+            ts: chrono::Local::now().format("%H:%M:%S%.3f").to_string(),
+            level: meta.level().to_string(),
+            target: meta.target().to_string(),
+            message: visitor.message,
+        };
+        // send renvoie Err uniquement si aucun receiver — on ignore.
+        let _ = self.tx.send(line);
     }
 }
 
