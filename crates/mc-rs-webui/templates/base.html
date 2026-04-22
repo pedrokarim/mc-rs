@@ -15,13 +15,21 @@
 {% block body %}{% endblock %}
 
 <script>
-// Hydrate les icônes Lucide à chaque (re)render (Alpine + htmx triggers).
-function hydrateIcons() { if (window.lucide && window.lucide.createIcons) window.lucide.createIcons(); }
+// Hydrate les icônes Lucide.
+//
+// ATTENTION : Lucide remplace les <i data-lucide="X"> par des <svg>. On ne
+// doit appeler createIcons() QUE quand de nouveaux <i data-lucide> sont
+// susceptibles d'exister — jamais en réponse à chaque mutation DOM (Alpine
+// update le snapshot à 20 Hz → 20× scan/s + feedback observer = CPU burn).
+function hydrateIcons() {
+  if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
+}
 document.addEventListener('DOMContentLoaded', hydrateIcons);
 document.addEventListener('htmx:afterSwap', hydrateIcons);
-document.addEventListener('alpine:initialized', hydrateIcons);
-// Petit MutationObserver pour capturer tout nouvel <i data-lucide> injecté par Alpine.
-new MutationObserver(hydrateIcons).observe(document.body, { childList: true, subtree: true });
+// Hydrate aussi juste après qu'Alpine ait rendu ses templates initiaux.
+document.addEventListener('alpine:initialized', () => setTimeout(hydrateIcons, 0));
+// Expose pour appel manuel depuis un composant Alpine qui aurait injecté des icônes.
+window.hydrateIcons = hydrateIcons;
 </script>
 </body>
 </html>
