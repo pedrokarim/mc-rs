@@ -1428,12 +1428,23 @@ async fn main() {
                         + _passive_entities.xp_orbs.len())
                         as u32;
                     let sessions = raknet.session_count() as u32;
+                    // Live values (peuvent changer via commandes /difficulty, /gamemode, etc.)
+                    let live_difficulty = server_state
+                        .persistent
+                        .difficulty
+                        .unwrap_or_else(|| config.gameplay.difficulty_id());
+                    let live_gamemode = server_state
+                        .persistent
+                        .default_gamemode
+                        .unwrap_or_else(|| config.gameplay.gamemode_id());
                     if let Ok(mut snap) = webui_snapshot.try_write() {
                         snap.tps = current_tps;
                         snap.total_ticks = webui_tps_tracker.total_ticks();
                         snap.chunks_loaded = chunks_loaded;
                         snap.world_time = world_time;
                         snap.weather = weather;
+                        snap.difficulty = live_difficulty;
+                        snap.gamemode = live_gamemode;
                         snap.entities = mc_rs_webui::snapshot::EntityStats {
                             players: players_snap.len() as u32,
                             mobs: mob_count,
