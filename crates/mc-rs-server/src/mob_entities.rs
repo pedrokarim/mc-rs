@@ -300,26 +300,46 @@ impl MobEntityManager {
     }
 }
 
+/// Les blocs "non-solides" (passable par les items/mobs en chute).
+/// Un item drop qui tombe dans un bambou / un massif de fleurs doit
+/// continuer sa chute jusqu'au sol réel, pas se poser sur le bambou.
+///
+/// Source canonique : `.reference/Allay/data/resources/block_tags_custom.json`
+/// (`minecraft:replaceable` + blocs sans collision comme bamboo/cactus/torches).
 pub(crate) fn is_supporting_block(runtime_id: u32) -> bool {
-    runtime_id != BLOCKS.air
-        && runtime_id != BLOCKS.water
-        && runtime_id != BLOCKS.lava
-        && runtime_id != BLOCKS.short_grass
-        && runtime_id != BLOCKS.tall_grass
-        && runtime_id != BLOCKS.fern
-        && runtime_id != BLOCKS.large_fern
-        && runtime_id != BLOCKS.dandelion
-        && runtime_id != BLOCKS.poppy
-        && runtime_id != BLOCKS.blue_orchid
-        && runtime_id != BLOCKS.allium
-        && runtime_id != BLOCKS.azure_bluet
-        && runtime_id != BLOCKS.oxeye_daisy
-        && runtime_id != BLOCKS.cornflower
-        && runtime_id != BLOCKS.waterlily
-        && runtime_id != BLOCKS.seagrass
-        && runtime_id != BLOCKS.brown_mushroom
-        && runtime_id != BLOCKS.red_mushroom
-        && runtime_id != BLOCKS.reeds
+    // Plantes, fluides, décorations : items passent à travers.
+    let b = &*BLOCKS;
+    if runtime_id == b.air
+        || runtime_id == b.water
+        || runtime_id == b.lava
+        // Petites plantes
+        || runtime_id == b.short_grass
+        || runtime_id == b.tall_grass
+        || runtime_id == b.fern
+        || runtime_id == b.large_fern
+        || runtime_id == b.dandelion
+        || runtime_id == b.poppy
+        || runtime_id == b.blue_orchid
+        || runtime_id == b.allium
+        || runtime_id == b.azure_bluet
+        || runtime_id == b.oxeye_daisy
+        || runtime_id == b.cornflower
+        || runtime_id == b.waterlily
+        || runtime_id == b.seagrass
+        || runtime_id == b.brown_mushroom
+        || runtime_id == b.red_mushroom
+        || runtime_id == b.reeds
+        // Bamboo + plants / décorations qui n'étaient pas exclues.
+        || runtime_id == b.bamboo
+        || runtime_id == b.deadbush
+        || runtime_id == b.pumpkin
+    {
+        return false;
+    }
+
+    // Fallback : check par nom via block_attachment::is_solid_support.
+    let name = b.name_for(runtime_id).unwrap_or("");
+    crate::block_attachment::is_solid_support(name)
 }
 
 #[cfg(test)]

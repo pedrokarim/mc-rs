@@ -57,12 +57,19 @@ pub(super) fn make_spawn_position(world_x: i32, world_y: i32, world_z: i32) -> [
 fn find_surface_in_loaded_world(cache: &mut ChunkCache, world_x: i32, world_z: i32) -> Option<i32> {
     for world_y in (-64..=319).rev() {
         let block_id = cache.get_block(world_x, world_y, world_z);
-        if block_id != BLOCKS.air && block_id != BLOCKS.water {
-            let head = cache.get_block(world_x, world_y + 1, world_z);
-            let head_above = cache.get_block(world_x, world_y + 2, world_z);
-            if head == BLOCKS.air && head_above == BLOCKS.air {
-                return Some(world_y);
-            }
+        if block_id == BLOCKS.air || block_id == BLOCKS.water {
+            continue;
+        }
+        // Exclure les non-solides (bamboo, fleurs, herbes, torches, vines…)
+        // pour éviter un spawn perché sur un bambou ou une touffe d'herbe.
+        let name = BLOCKS.name_for(block_id).unwrap_or("");
+        if !crate::block_attachment::is_solid_support(name) {
+            continue;
+        }
+        let head = cache.get_block(world_x, world_y + 1, world_z);
+        let head_above = cache.get_block(world_x, world_y + 2, world_z);
+        if head == BLOCKS.air && head_above == BLOCKS.air {
+            return Some(world_y);
         }
     }
 

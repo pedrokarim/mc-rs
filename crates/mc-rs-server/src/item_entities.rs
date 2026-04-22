@@ -56,30 +56,35 @@ impl PendingItemEntitySpawn {
     }
 
     /// Spawn with PMMP-style scatter:
-    ///   motion = (rand * 0.2 - 0.1, 0.2, rand * 0.2 - 0.1)
-    /// See `World::dropItem()` in PMMP.
+    ///   motion = (rand * 0.2 - 0.1, 0.2, rand * 0.2 - 0.1) PAR game tick 20 TPS.
+    /// Notre serveur tick à 100 TPS → on divise par 5 pour que la vitesse
+    /// instantanée/s reste identique. Sans ce scaling les items partent 5×
+    /// trop vite et fusent hors du bloc cassé (observé sur screenshot user).
     pub fn with_scatter(item: ItemStack, position: [f32; 3]) -> Self {
         let mut rng = rand::thread_rng();
-        let vx: f32 = rng.gen::<f32>() * 0.2 - 0.1;
-        let vz: f32 = rng.gen::<f32>() * 0.2 - 0.1;
+        let scale = BASELINE_TICKS_PER_SECOND / SERVER_TICKS_PER_SECOND_F; // 0.2
+        let vx: f32 = (rng.gen::<f32>() * 0.2 - 0.1) * scale;
+        let vz: f32 = (rng.gen::<f32>() * 0.2 - 0.1) * scale;
         Self {
             item,
             position,
-            velocity: [vx, 0.2, vz],
+            velocity: [vx, 0.2 * scale, vz],
         }
     }
 
     /// Spawn with a directed throw (drop from inventory / player toss).
-    /// PMMP `Player::dropItem` uses motion = directionVector * 0.4 exactly.
+    /// PMMP `Player::dropItem` : motion = direction * 0.4 par game tick.
+    /// Scalé 5× ↓ pour 100 TPS (cf `with_scatter`).
     pub fn with_throw(item: ItemStack, position: [f32; 3], direction: [f32; 3]) -> Self {
-        const THROW_FORCE: f32 = 0.4;
+        let scale = BASELINE_TICKS_PER_SECOND / SERVER_TICKS_PER_SECOND_F;
+        let force = 0.4 * scale;
         Self {
             item,
             position,
             velocity: [
-                direction[0] * THROW_FORCE,
-                direction[1] * THROW_FORCE,
-                direction[2] * THROW_FORCE,
+                direction[0] * force,
+                direction[1] * force,
+                direction[2] * force,
             ],
         }
     }
@@ -298,12 +303,43 @@ impl ItemEntityManager {
             entity.velocity[0] *= AIR_DRAG;
             entity.velocity[2] *= AIR_DRAG;
 
-            // Integrate position
-            let mut next_x = entity.position[0] + entity.velocity[0];
-            let mut next_y = entity.position[1] + entity.velocity[1];
-            let mut next_z = entity.position[2] + entity.velocity[2];
+            // Integrate position avec collisions axis-aligned.
+            //
+            // PMMP `Entity::tryChangeMovement` fait une passe axe par axe sur
+            // la bounding box. Ici l'item est un point (pas de box 0.25) : on
+            // teste juste si le prochain bloc sur chaque axe est solide et on
+            // annule la vitesse sur l'axe concerné. Évite que l'item se
+            // retrouve coincé DANS un bloc (observé sur screenshot user).
+            let old_x = entity.position[0];
+            let old_y = entity.position[1];
+            let old_z = entity.position[2];
 
-            // Vertical collision against the supporting block directly below.
+            // X axis
+            let mut next_x = old_x + entity.velocity[0];
+            {
+                let bx = next_x.floor() as i32;
+                let by = old_y.floor() as i32;
+                let bz = old_z.floor() as i32;
+                if is_supporting_block(chunk_cache.get_block(bx, by, bz)) {
+                    next_x = old_x;
+                    entity.velocity[0] = 0.0;
+                }
+            }
+
+            // Z axis
+            let mut next_z = old_z + entity.velocity[2];
+            {
+                let bx = next_x.floor() as i32;
+                let by = old_y.floor() as i32;
+                let bz = next_z.floor() as i32;
+                if is_supporting_block(chunk_cache.get_block(bx, by, bz)) {
+                    next_z = old_z;
+                    entity.velocity[2] = 0.0;
+                }
+            }
+
+            // Y axis + floor collision
+            let mut next_y = old_y + entity.velocity[1];
             let world_x = next_x.floor() as i32;
             let world_z = next_z.floor() as i32;
             let support_y = (next_y - 0.01).floor() as i32;
@@ -318,6 +354,14 @@ impl ItemEntityManager {
                 // Friction au sol continue (PMMP Entity::tryChangeMovement).
                 entity.velocity[0] *= GROUND_FRICTION;
                 entity.velocity[2] *= GROUND_FRICTION;
+            }
+            // Ceiling collision (si l'item remonte sous un plafond).
+            if entity.velocity[1] > 0.0 {
+                let ceiling_y = (next_y + 0.5).floor() as i32;
+                if is_supporting_block(chunk_cache.get_block(world_x, ceiling_y, world_z)) {
+                    entity.velocity[1] = 0.0;
+                    next_y = old_y;
+                }
             }
 
             // Very small residual velocities are clamped so we don't jitter
