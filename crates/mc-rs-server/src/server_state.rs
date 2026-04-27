@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::fs;
+use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 
 const SERVER_STATE_FILE: &str = "server-state.json";
@@ -31,6 +32,8 @@ pub struct ServerState {
     pub world_name: String,
     pub world_seed: u64,
     pub max_players: u32,
+    /// Scoreboard manager partagé (pour /scoreboard).
+    pub scoreboards: Arc<Mutex<crate::scoreboard::ScoreboardManager>>,
 }
 
 impl ServerState {
@@ -64,6 +67,7 @@ impl ServerState {
             world_name,
             world_seed,
             max_players,
+            scoreboards: Arc::new(Mutex::new(crate::scoreboard::ScoreboardManager::default())),
         }
     }
 

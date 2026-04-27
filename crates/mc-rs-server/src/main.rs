@@ -184,6 +184,7 @@ pub mod chatchannels;
 pub mod cherry_grove;
 #[allow(dead_code)]
 pub mod chest_system;
+pub mod chest_storage;
 #[allow(dead_code)]
 pub mod chicken;
 #[allow(dead_code)]
@@ -519,6 +520,7 @@ pub mod lectern;
 pub mod lectern_book;
 #[allow(dead_code)]
 pub mod level_db_keys;
+pub mod level_dat;
 #[allow(dead_code)]
 pub mod light_level;
 #[allow(dead_code)]
@@ -1154,6 +1156,7 @@ async fn main() {
     let mut item_entities = ItemEntityManager::new();
     let mut mob_entities = MobEntityManager::new();
     let mut furnace_manager = crate::furnace::FurnaceManager::new();
+    let mut chest_manager = crate::chest_storage::ChestManager::new();
     let mut crafting_manager = crate::crafting::CraftingManager::default();
     let (sh, sl, fu) = crate::recipes_vanilla::register_all(&mut crafting_manager);
     tracing::info!(
@@ -1229,6 +1232,19 @@ async fn main() {
         config.gameplay.do_daylight_cycle,
         config.gameplay.do_weather_cycle,
     );
+
+    // Restore level.dat metadata si présent (sinon reste sur défauts).
+    if let Some(level) = crate::level_dat::LevelData::load(&world_dir) {
+        world_state.time = level.time;
+        world_state.is_raining = level.is_raining;
+        world_state.is_thundering = level.is_thundering;
+        tracing::info!(
+            "Restored level.dat : time={}, rain={}, thunder={}",
+            level.time,
+            level.is_raining,
+            level.is_thundering
+        );
+    }
 
     // World chunk cache with LevelDB persistence
     let chunk_cache = std::sync::Arc::new(std::sync::Mutex::new(ChunkCache::new(
@@ -1325,6 +1341,29 @@ async fn main() {
             // Save all dirty chunks
             if let Ok(mut cache) = chunk_cache.lock() {
                 cache.save_dirty();
+            }
+            // level.dat snapshot
+            let level = crate::level_dat::LevelData {
+                seed: world_seed,
+                generator: config.world.generator.clone(),
+                time: world_state.time,
+                spawn_x: 0.5,
+                spawn_y: 64.0,
+                spawn_z: 0.5,
+                do_daylight_cycle: world_state.do_daylight_cycle,
+                do_weather_cycle: world_state.do_weather_cycle,
+                is_raining: world_state.is_raining,
+                is_thundering: world_state.is_thundering,
+                last_played_unix: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0),
+                world_name: config.world.name.clone(),
+            };
+            if let Err(e) = level.save(&world_dir) {
+                warn!("level.dat save failed: {e}");
+            } else {
+                info!("level.dat saved");
             }
             // Save all connected players
             for (_, conn) in connections.iter() {
@@ -1539,6 +1578,61 @@ async fn main() {
                 // xp_to_give) sont loggés pour l'instant ; la vraie notif UI au
                 // joueur ayant la fenêtre ouverte sera branchée quand la UI
                 // furnace complète sera implémentée.
+                // Process pending chest opens (broadcast ContainerOpen +
+                // InventoryContent pour les 27 slots du chest cliqué).
+                for (addr, conn) in connections.iter_mut() {
+                    let Some((cx, cy, cz)) = conn.pending_chest_open.take() else {
+                        continue;
+                    };
+                    let pos = (cx, cy, cz);
+                    chest_manager.add_viewer(pos);
+                    let data = chest_manager.get_or_create(pos).clone();
+                    // Window ID dynamique (1-100 plage block container).
+                    let window_id: u8 = 50;
+                    let open_pkt = mc_rs_proto::packets::world::ContainerOpen {
+                        window_id,
+                        window_type: 0, // CONTAINER (chest)
+                        position: [cx, cy, cz],
+                        actor_unique_id: -1,
+                    };
+                    let open_bytes = conn
+                        .encode_compressed_packet(packet_id::CONTAINER_OPEN, &open_pkt.encode());
+                    let prepared = conn.prepare_for_send(open_bytes);
+                    raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, true);
+                    // InventoryContent : 27 slots du chest.
+                    let mut content_writer = mc_rs_proto::io::ProtoWriter::with_capacity(64);
+                    content_writer.write_var_u32(window_id as u32);
+                    content_writer.write_var_u32(data.slots.len() as u32);
+                    for slot in &data.slots {
+                        let wrapper = mc_rs_proto::packets::player::ItemStackWrapper::legacy(
+                            slot.clone(),
+                        );
+                        wrapper.encode(&mut content_writer);
+                    }
+                    // FullContainerName + storage stack id
+                    content_writer.write_u8(0); // container_name_id
+                    content_writer.write_bool(false); // dynamic_id
+                    content_writer.write_var_i32(0); // storage_stack_id
+                    let bytes = conn.encode_compressed_packet(
+                        packet_id::INVENTORY_CONTENT,
+                        content_writer.as_bytes(),
+                    );
+                    let prepared = conn.prepare_for_send(bytes);
+                    raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, true);
+                    tracing::info!(
+                        "[{}] Opened chest at ({},{},{}) — viewers={}, slots={}",
+                        addr,
+                        cx,
+                        cy,
+                        cz,
+                        chest_manager
+                            .get(pos)
+                            .map(|d| d.viewers)
+                            .unwrap_or(0),
+                        data.slots.len()
+                    );
+                }
+
                 if world_gametick_fired {
                     let results = furnace_manager.tick_all(&crafting_manager);
                     for ((x, y, z), r) in results {

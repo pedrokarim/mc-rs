@@ -628,6 +628,8 @@ impl Connection {
                 } else {
                     0
                 };
+                let chest_id = BLOCKS.get("minecraft:chest");
+                let trapped_chest_id = BLOCKS.get("minecraft:trapped_chest");
                 if BLOCKS.is_bed(clicked_id) {
                     self.spawn_position =
                         [bx as f32 + 0.5, by as f32 + 1.0, bz as f32 + 0.5];
@@ -640,6 +642,12 @@ impl Connection {
                     );
                     responses.push(
                         self.encode_compressed_packet(packet_id::TEXT, &msg),
+                    );
+                } else if clicked_id == chest_id || clicked_id == trapped_chest_id {
+                    self.pending_chest_open = Some((bx, by, bz));
+                    info!(
+                        "[{}] Chest interact request at ({}, {}, {}) — queued for main loop",
+                        self.addr, bx, by, bz
                     );
                 } else {
                     self.handle_block_place(interaction, &mut responses);

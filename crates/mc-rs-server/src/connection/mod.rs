@@ -111,6 +111,9 @@ pub struct Connection {
     pub pending_item_spawns: Vec<PendingItemEntitySpawn>,
     pub pending_entity_attacks: Vec<PendingEntityAttack>,
     pub pending_furnace_events: Vec<PendingFurnaceEvent>,
+    /// Right-click sur chest queue ici, processé par main.rs (qui a accès
+    /// au ChestManager partagé).
+    pub pending_chest_open: Option<(i32, i32, i32)>,
 
     // Server-driven Bedrock forms
     pub(super) next_form_id: u32,
@@ -217,6 +220,7 @@ impl Connection {
             pending_item_spawns: Vec::new(),
             pending_entity_attacks: Vec::new(),
             pending_furnace_events: Vec::new(),
+            pending_chest_open: None,
             inventory,
             inventory_manager: InventoryManager::new(),
             player_inventory_window_id: PLAYER_INVENTORY_SCREEN_ID,

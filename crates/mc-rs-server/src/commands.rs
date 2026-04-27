@@ -90,6 +90,13 @@ pub trait ServerCommandRuntime: CommandSender + SoftEnumSource {
     ) -> Result<(), String>;
     /// Spawn une particule à la position donnée pour tous les joueurs.
     fn spawn_particle(&mut self, position: [f32; 3], particle_name: &str);
+    /// Affiche un boss bar serveur-wide avec titre + health (0..1).
+    fn boss_show(&mut self, title: &str, health_percent: f32);
+    fn boss_hide(&mut self);
+    fn boss_set_title(&mut self, title: &str);
+    fn boss_set_health(&mut self, health_percent: f32);
+    /// Set un score sur un objectif (créé si nécessaire), display = sidebar.
+    fn scoreboard_set(&mut self, objective: &str, player: &str, score: i32);
     /// Ajoute un enchantement au held item du joueur (NBT `ench` list).
     fn apply_held_enchant(
         &mut self,
@@ -1115,6 +1122,35 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
         self.broadcast_compressed(packet_id::SPAWN_PARTICLE_EFFECT, &bytes);
     }
 
+    fn boss_show(&mut self, title: &str, health_percent: f32) {
+        // Server boss = id -1 (PMMP convention pour boss "fictif" non lié à entity).
+        let bytes = crate::visuals::boss_show(-1, title, health_percent.clamp(0.0, 1.0), 5);
+        self.broadcast_compressed(packet_id::BOSS_EVENT, &bytes);
+    }
+    fn boss_hide(&mut self) {
+        let bytes = crate::visuals::boss_hide(-1);
+        self.broadcast_compressed(packet_id::BOSS_EVENT, &bytes);
+    }
+    fn boss_set_title(&mut self, title: &str) {
+        let bytes = crate::visuals::boss_update_title(-1, title);
+        self.broadcast_compressed(packet_id::BOSS_EVENT, &bytes);
+    }
+    fn boss_set_health(&mut self, health_percent: f32) {
+        let bytes = crate::visuals::boss_update_health(-1, health_percent.clamp(0.0, 1.0));
+        self.broadcast_compressed(packet_id::BOSS_EVENT, &bytes);
+    }
+    fn scoreboard_set(&mut self, objective: &str, player: &str, score: i32) {
+        // Stockage in-memory via le ScoreboardManager partagé.
+        let mut mgr = self.server_state.scoreboards.lock().unwrap();
+        let obj = mgr
+            .objectives
+            .entry(objective.to_string())
+            .or_insert_with(|| crate::scoreboard::Objective::new(objective, objective));
+        obj.set_score(player, score);
+        // Sync vers les clients via SetScore + SetDisplayObjective : à faire
+        // dans une phase ultérieure (PMMP NetworkSession::syncWorld).
+    }
+
     fn apply_held_enchant(
         &mut self,
         addr: SocketAddr,
@@ -1224,6 +1260,9 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
             .map_err(|_| "Chunk cache is poisoned.".to_string())?
             .save_dirty();
         let _ = self.server_state.save();
+        // level.dat snapshot — sauve uniquement les champs accessibles ici.
+        // Le path complet n'est pas dispo dans ExecutionContext, donc autosave
+        // de level.dat se fait dans main.rs (qui a world_dir + config).
         Ok(())
     }
 
@@ -3217,6 +3256,94 @@ pub fn build_command_system() -> ServerCommandSystem {
         },
     );
 
+    // ── /boss <show|hide|title|health> [args] ──
+    let mut boss = CommandDefinition::new("boss", "Manage a boss bar (server-wide)");
+    boss.usage = "/boss <show|hide|title|health> [args]".into();
+    boss.permissions = vec!["server.command.boss".into()];
+    boss.overloads.push(CommandOverload {
+        parameters: vec![
+            hard_enum_param(
+                "action",
+                "boss_action",
+                &["show", "hide", "title", "health"],
+                false,
+            ),
+            param("value", ParamType::Message, true),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        boss,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            let Some(action) = invocation.arg(0) else {
+                return usage("Usage: /boss <show|hide|title|health> [args]");
+            };
+            match action {
+                "show" => {
+                    let title = invocation.arg(1).unwrap_or("Boss");
+                    runtime.boss_show(title, 1.0);
+                    runtime.send_feedback(&format!("Boss bar shown: {title}"));
+                }
+                "hide" => {
+                    runtime.boss_hide();
+                    runtime.send_feedback("Boss bar hidden");
+                }
+                "title" => {
+                    let t = invocation.arg(1).unwrap_or("");
+                    runtime.boss_set_title(t);
+                    runtime.send_feedback(&format!("Boss title: {t}"));
+                }
+                "health" => {
+                    let p: f32 = invocation
+                        .arg(1)
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(1.0);
+                    runtime.boss_set_health(p.clamp(0.0, 1.0));
+                    runtime.send_feedback(&format!("Boss health: {:.0}%", p * 100.0));
+                }
+                _ => return usage("Usage: /boss <show|hide|title|health> [args]"),
+            }
+            Ok(())
+        },
+    );
+
+    // ── /scoreboard <objective> <player> <score> ──
+    let mut sb = CommandDefinition::new(
+        "scoreboard",
+        "Set a player score on a sidebar objective",
+    );
+    sb.usage = "/scoreboard <objective> <player> <score>".into();
+    sb.permissions = vec!["server.command.scoreboard".into()];
+    sb.overloads.push(CommandOverload {
+        parameters: vec![
+            param("objective", ParamType::String, false),
+            param("player", ParamType::String, false),
+            param("score", ParamType::Int, false),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        sb,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            let Some(obj) = invocation.arg(0) else {
+                return usage("Usage: /scoreboard <objective> <player> <score>");
+            };
+            let Some(player) = invocation.arg(1) else {
+                return usage("Usage: /scoreboard <objective> <player> <score>");
+            };
+            let score: i32 = invocation.arg(2).and_then(|s| s.parse().ok()).ok_or_else(
+                || CommandDispatchError::Message("score must be an integer".into()),
+            )?;
+            runtime.scoreboard_set(obj, player, score);
+            runtime.send_feedback(&format!("Scoreboard {obj}: {player} = {score}"));
+            Ok(())
+        },
+    );
+
     // ── /particle <name> [x] [y] [z] ──
     let mut particle = CommandDefinition::new("particle", "Spawn a particle effect");
     particle.usage = "/particle <name> [x] [y] [z]".into();
@@ -3767,6 +3894,11 @@ mod tests {
             Ok(())
         }
         fn spawn_particle(&mut self, _position: [f32; 3], _particle_name: &str) {}
+        fn boss_show(&mut self, _title: &str, _health_percent: f32) {}
+        fn boss_hide(&mut self) {}
+        fn boss_set_title(&mut self, _title: &str) {}
+        fn boss_set_health(&mut self, _health_percent: f32) {}
+        fn scoreboard_set(&mut self, _objective: &str, _player: &str, _score: i32) {}
 
         fn set_difficulty(&mut self, difficulty: i32) {
             self.difficulty = difficulty;

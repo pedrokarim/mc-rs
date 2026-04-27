@@ -1487,6 +1487,20 @@ mod tests {
         ) -> Result<(), String> {
             Ok(())
         }
+        fn apply_held_enchant(
+            &mut self,
+            _addr: SocketAddr,
+            _enchant_id: u8,
+            _level: u8,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+        fn spawn_particle(&mut self, _position: [f32; 3], _particle_name: &str) {}
+        fn boss_show(&mut self, _title: &str, _health_percent: f32) {}
+        fn boss_hide(&mut self) {}
+        fn boss_set_title(&mut self, _title: &str) {}
+        fn boss_set_health(&mut self, _health_percent: f32) {}
+        fn scoreboard_set(&mut self, _objective: &str, _player: &str, _score: i32) {}
 
         fn set_difficulty(&mut self, _difficulty: i32) {}
 
