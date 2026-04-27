@@ -790,6 +790,7 @@ pub mod shulker_box;
 pub mod sidebar;
 #[allow(dead_code)]
 pub mod sign_editor;
+pub mod sign_storage;
 #[allow(dead_code)]
 pub mod sign_text;
 #[allow(dead_code)]
@@ -1158,6 +1159,7 @@ async fn main() {
     let mut mob_entities = MobEntityManager::new();
     let mut furnace_manager = crate::furnace::FurnaceManager::new();
     let mut chest_manager = crate::chest_storage::ChestManager::new();
+    let mut sign_manager = crate::sign_storage::SignManager::new();
     let mut crafting_manager = crate::crafting::CraftingManager::default();
     let (sh, sl, fu) = crate::recipes_vanilla::register_all(&mut crafting_manager);
     tracing::info!(
@@ -1579,6 +1581,44 @@ async fn main() {
                 // xp_to_give) sont loggés pour l'instant ; la vraie notif UI au
                 // joueur ayant la fenêtre ouverte sera branchée quand la UI
                 // furnace complète sera implémentée.
+                // Process pending BlockActorData updates (sign edit / etc.) :
+                //   - Décode NBT, persiste dans SignManager
+                //   - Broadcast aux autres joueurs en réémettant le packet.
+                let mut pending_block_actor: Vec<(std::net::SocketAddr, crate::connection::PendingBlockActorUpdate)> = Vec::new();
+                for (addr, conn) in connections.iter_mut() {
+                    let updates = std::mem::take(&mut conn.pending_block_actor_updates);
+                    for u in updates {
+                        pending_block_actor.push((*addr, u));
+                    }
+                }
+                for (sender_addr, upd) in pending_block_actor {
+                    // Persist sign data si le NBT est un sign valide.
+                    if let Some(sign_data) = crate::sign_storage::parse_sign_nbt(&upd.nbt) {
+                        info!(
+                            "[{}] Sign edit at {:?}: front={:?} back={:?}",
+                            sender_addr, upd.position, sign_data.front.text, sign_data.back.text
+                        );
+                        sign_manager.set(upd.position, sign_data);
+                    }
+                    // Broadcast à tous les joueurs (y compris l'éditeur pour
+                    // confirmation server-authoritative).
+                    let mut writer = mc_rs_proto::io::ProtoWriter::with_capacity(upd.nbt.len() + 12);
+                    writer.write_var_i32(upd.position.0);
+                    writer.write_var_i32(upd.position.1);
+                    writer.write_var_i32(upd.position.2);
+                    writer.write_byte_array(&upd.nbt);
+                    let payload = writer.into_bytes();
+                    for (addr, conn) in connections.iter_mut() {
+                        if !conn.is_in_game() {
+                            continue;
+                        }
+                        let bytes = conn
+                            .encode_compressed_packet(packet_id::BLOCK_ACTOR_DATA, &payload);
+                        let prepared = conn.prepare_for_send(bytes);
+                        raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, true);
+                    }
+                }
+
                 // Process pending chest opens (broadcast ContainerOpen +
                 // InventoryContent pour les 27 slots du chest cliqué).
                 for (addr, conn) in connections.iter_mut() {

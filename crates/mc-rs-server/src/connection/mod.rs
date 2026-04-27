@@ -66,6 +66,15 @@ pub enum PendingFurnaceEvent {
     },
 }
 
+/// BlockActorData reçu du client (sign edit, item_frame, etc.). main.rs
+/// décide quoi faire selon le type de bloc à `position` (sign → SignManager,
+/// item_frame → ItemFrameManager, etc.).
+#[derive(Debug, Clone)]
+pub struct PendingBlockActorUpdate {
+    pub position: (i32, i32, i32),
+    pub nbt: Vec<u8>,
+}
+
 /// Manages a single client connection's protocol state machine.
 pub struct Connection {
     pub addr: SocketAddr,
@@ -114,6 +123,9 @@ pub struct Connection {
     /// Right-click sur chest queue ici, processé par main.rs (qui a accès
     /// au ChestManager partagé).
     pub pending_chest_open: Option<(i32, i32, i32)>,
+    /// BlockActorData (sign edit, item_frame, etc.) reçu du client. main.rs
+    /// décode + persiste dans SignManager + broadcast.
+    pub pending_block_actor_updates: Vec<PendingBlockActorUpdate>,
 
     // Server-driven Bedrock forms
     pub(super) next_form_id: u32,
@@ -221,6 +233,7 @@ impl Connection {
             pending_entity_attacks: Vec::new(),
             pending_furnace_events: Vec::new(),
             pending_chest_open: None,
+            pending_block_actor_updates: Vec::new(),
             inventory,
             inventory_manager: InventoryManager::new(),
             player_inventory_window_id: PLAYER_INVENTORY_SCREEN_ID,
@@ -402,6 +415,9 @@ impl Connection {
             // sont jamais mis à jour server-side.
             (ConnectionState::InGame, packet_id::PLAYER_ACTION) => {
                 self.handle_player_action(reader)
+            }
+            (ConnectionState::InGame, packet_id::BLOCK_ACTOR_DATA) => {
+                self.handle_block_actor_data(reader)
             }
 
             // -- Silently ignored --

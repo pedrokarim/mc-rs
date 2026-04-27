@@ -29,6 +29,7 @@ pub mod packet_id {
     pub const UPDATE_BLOCK: u32 = 0x15;
     pub const UPDATE_ATTRIBUTES: u32 = 0x1D;
     pub const MOB_EFFECT: u32 = 0x1C;
+    pub const BLOCK_ACTOR_DATA: u32 = 0x38;
     pub const INVENTORY_TRANSACTION: u32 = 0x1E;
     pub const SET_ACTOR_DATA: u32 = 0x27;
     pub const SET_ACTOR_MOTION: u32 = 0x28;

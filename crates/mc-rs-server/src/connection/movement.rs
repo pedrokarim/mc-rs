@@ -676,13 +676,14 @@ impl Connection {
     pub(super) fn handle_player_action(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
         let _actor_runtime_id = reader.read_var_u64().unwrap_or(0);
         let action = reader.read_var_i32().unwrap_or(-1);
-        // blockPosition (3 VarInts)
+        // BlockPos = 3 var_i32 SIGNED (gophertunnel BlockPos / PMMP
+        // CommonTypes::getBlockPosition). Lire Y en unsigned décale
+        // toutes les coords (zig-zag misread, Y=68 → 136).
         let _bx = reader.read_var_i32().unwrap_or(0);
-        let _by = reader.read_var_u32().unwrap_or(0) as i32;
+        let _by = reader.read_var_i32().unwrap_or(0);
         let _bz = reader.read_var_i32().unwrap_or(0);
-        // resultPosition (3 VarInts)
         let _rx = reader.read_var_i32().unwrap_or(0);
-        let _ry = reader.read_var_u32().unwrap_or(0) as i32;
+        let _ry = reader.read_var_i32().unwrap_or(0);
         let _rz = reader.read_var_i32().unwrap_or(0);
         let _face = reader.read_var_i32().unwrap_or(0);
 
@@ -698,6 +699,32 @@ impl Connection {
             // côté mc-rs (nécessite SetActorData push aux autres viewers).
             _ => Vec::new(),
         }
+    }
+
+    /// BlockActorData (0x38) S→C ET C→S. Reçu quand un client édite un bloc
+    /// avec NBT (sign, item_frame, command_block). Format :
+    ///   BlockPos (3 var_i32) + raw network NBT (terminé par TAG_End).
+    /// On le stocke dans pending_block_actor_updates pour que main.rs broadcast
+    /// + persist dans SignManager.
+    pub(super) fn handle_block_actor_data(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
+        let bx = reader.read_var_i32().unwrap_or(0);
+        let by = reader.read_var_i32().unwrap_or(0);
+        let bz = reader.read_var_i32().unwrap_or(0);
+        // Le reste = NBT brut jusqu'à TAG_End (auto-terminated).
+        let nbt_bytes = reader.remaining_bytes().to_vec();
+        info!(
+            "[{}] BlockActorData at ({},{},{}) nbt_len={}",
+            self.addr,
+            bx,
+            by,
+            bz,
+            nbt_bytes.len()
+        );
+        self.pending_block_actor_updates.push(super::PendingBlockActorUpdate {
+            position: (bx, by, bz),
+            nbt: nbt_bytes,
+        });
+        Vec::new()
     }
 
     pub(super) fn handle_block_place(
