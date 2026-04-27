@@ -576,6 +576,7 @@ pub mod mob_equipment;
 #[allow(dead_code)]
 pub mod mob_hp;
 #[allow(dead_code)]
+pub mod mob_spawner;
 pub mod mob_variants;
 #[allow(dead_code)]
 pub mod mob_xp;
@@ -1547,6 +1548,21 @@ async fn main() {
                                 r.xp_to_give
                             );
                         }
+                    }
+
+                    // Spawner naturel mob — utilise spawn_rules_vanilla.
+                    // is_night : world_time entre 13000 et 23000 (PMMP convention).
+                    let world_time = world_state.time.rem_euclid(24000);
+                    let is_night = (13000..23000).contains(&world_time);
+                    if let Ok(mut cache) = chunk_cache.lock() {
+                        let mut rng = rand::thread_rng();
+                        crate::mob_spawner::tick(
+                            &mut rng,
+                            &registry,
+                            &mut cache,
+                            &mut mob_entities,
+                            is_night,
+                        );
                     }
                 }
 

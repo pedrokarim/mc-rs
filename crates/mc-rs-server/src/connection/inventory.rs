@@ -275,14 +275,20 @@ impl Connection {
                 hotbar_slot,
                 ..
             } => {
-                // PMMP `handleReleaseItemTransaction` : action_type 0 = RELEASE
-                // (shoot bow / throw trident), 1 = CONSUME (finish eating).
-                // Pas implémenté pour l'instant — le client gère visuellement
-                // mais server ne crée pas d'entité arrow/projectile.
-                info!(
-                    "[{}] ReleaseItem action_type={} hotbar={} (not implemented)",
-                    self.addr, action_type, hotbar_slot
-                );
+                // PMMP `handleReleaseItemTransaction` :
+                //   action_type 0 = RELEASE (shoot bow / throw trident)
+                //   action_type 1 = CONSUME (finish eating)
+                if (0..=8).contains(&hotbar_slot) {
+                    self.inventory.held_slot = hotbar_slot as u8;
+                }
+                if action_type == 1 {
+                    self.handle_consume_item(&mut responses);
+                } else {
+                    info!(
+                        "[{}] ReleaseItem action_type={} hotbar={} (not implemented)",
+                        self.addr, action_type, hotbar_slot
+                    );
+                }
             }
             InventoryTransactionData::Unknown { .. } => {}
             InventoryTransactionData::UseItemOnEntity {
@@ -568,6 +574,62 @@ impl Connection {
                 .must_get_mut(crate::attribute::ids::HEALTH)
                 .set_value(new_hp, true);
             info!("[{}] Lava damage: hp={:.1}", self.addr, new_hp);
+        }
+    }
+
+    /// Consomme l'item tenu (eat / drink). Restaure faim+saturation via
+    /// `items_vanilla::nutrition/saturation` (PMMP `Player::eatFoodInHand`).
+    /// Décrémente le stack de 1 (sauf en créatif).
+    pub fn handle_consume_item(&mut self, _responses: &mut Vec<Vec<u8>>) {
+        let slot = self.inventory.held_slot as usize;
+        let item = self.inventory.slots[slot].item.clone();
+        if item.is_air() {
+            return;
+        }
+        let item_name = match crate::item_registry::item_name_by_id(item.id) {
+            Some(n) => n,
+            None => return,
+        };
+        // Récupère nutrition + saturation depuis items_vanilla
+        let nutrition = crate::items_vanilla::nutrition(item_name).unwrap_or(0);
+        let saturation = crate::items_vanilla::saturation(item_name).unwrap_or(0.0);
+        if nutrition == 0 && !crate::items_vanilla::is_food(item_name) {
+            return; // pas de la nourriture
+        }
+
+        let cur_hunger = self.attributes.must_get(crate::attribute::ids::HUNGER).current_value;
+        let cur_sat = self.attributes.must_get(crate::attribute::ids::SATURATION).current_value;
+        let new_hunger = (cur_hunger + nutrition as f32).min(20.0);
+        let new_sat = (cur_sat + saturation * 2.0)
+            .min(new_hunger);
+        self.attributes
+            .must_get_mut(crate::attribute::ids::HUNGER)
+            .set_value(new_hunger, true);
+        self.attributes
+            .must_get_mut(crate::attribute::ids::SATURATION)
+            .set_value(new_sat, true);
+
+        info!(
+            "[{}] Consumed {} : hunger {:.0}→{:.0} sat {:.1}→{:.1}",
+            self.addr, item_name, cur_hunger, new_hunger, cur_sat, new_sat
+        );
+
+        // Décrémente le stack de 1 sauf en créatif.
+        if self.gamemode != 1 {
+            let new_count = item.count.saturating_sub(1);
+            let new_item = if new_count == 0 {
+                mc_rs_proto::packets::player::ItemStack::AIR
+            } else {
+                let mut n = item.clone();
+                n.count = new_count;
+                n
+            };
+            self.inventory_manager.set_slot(
+                &mut self.inventory,
+                crate::inventory_manager::InvKey::Main,
+                slot,
+                new_item,
+            );
         }
     }
 

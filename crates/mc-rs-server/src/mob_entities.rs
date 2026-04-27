@@ -212,12 +212,33 @@ impl MobEntityManager {
         }
 
         let runtime_entity_id = entity.base.entity_runtime_id;
+        let actor_type = entity.kind.actor_type();
         let (remove_packet, death_position, drops) = if new_health <= 0.0 {
             let entity = self.entities.remove(&runtime_entity_id)?;
+            // Loot tables vanilla via bedrock-samples (data-driven). Si la
+            // table existe → utilisée ; sinon fallback sur default_loot()
+            // hardcodé pour rester rétro-compatible.
+            let drops = if crate::loot_table::has_loot_table(actor_type) {
+                let ctx = crate::loot_table::LootContext {
+                    killed_by_player: true,
+                    looting_level: 0,
+                    ..Default::default()
+                };
+                let rolled = crate::loot_table::roll_entity_loot(actor_type, ctx);
+                rolled
+                    .into_iter()
+                    .filter_map(|(name, count)| {
+                        crate::item_registry::network_id(&name)
+                            .map(|id| ItemStack::new(id, count as u16, 0))
+                    })
+                    .collect()
+            } else {
+                entity.kind.default_loot()
+            };
             (
                 Some(entity.remove_packet()),
                 Some(entity.base.position),
-                entity.kind.default_loot(),
+                drops,
             )
         } else {
             (None, None, Vec::new())
