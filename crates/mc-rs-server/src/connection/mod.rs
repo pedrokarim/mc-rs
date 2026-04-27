@@ -435,6 +435,9 @@ impl Connection {
             (ConnectionState::InGame, packet_id::BLOCK_ACTOR_DATA) => {
                 self.handle_block_actor_data(reader)
             }
+            (ConnectionState::ResourcePacks, packet_id::RESOURCE_PACK_CHUNK_REQUEST) => {
+                self.handle_resource_pack_chunk_request(reader)
+            }
 
             // -- Silently ignored --
             (_, packet_id::EMOTE_LIST)

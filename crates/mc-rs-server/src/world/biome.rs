@@ -83,6 +83,94 @@ pub struct BiomeDef {
     pub ground_cover: Vec<u32>,
 }
 
+/// Map Bedrock numeric biome_id → minecraft:identifier (key dans
+/// `biomes_vanilla::for_biome`). Permet d'enrichir le générateur de terrain
+/// avec les vraies surface_materials/temperature/downfall des 87 biomes
+/// vanilla via les données chargées depuis bedrock-samples.
+pub fn biome_identifier(id: u32) -> Option<&'static str> {
+    Some(match id {
+        biome_id::OCEAN => "minecraft:ocean",
+        biome_id::PLAINS => "minecraft:plains",
+        biome_id::DESERT => "minecraft:desert",
+        biome_id::EXTREME_HILLS => "minecraft:extreme_hills",
+        biome_id::FOREST => "minecraft:forest",
+        biome_id::TAIGA => "minecraft:taiga",
+        biome_id::SWAMPLAND => "minecraft:swampland",
+        biome_id::RIVER => "minecraft:river",
+        biome_id::FROZEN_RIVER => "minecraft:frozen_river",
+        biome_id::ICE_PLAINS => "minecraft:ice_plains",
+        biome_id::ICE_MOUNTAINS => "minecraft:ice_mountains",
+        biome_id::MUSHROOM_ISLAND => "minecraft:mushroom_island",
+        biome_id::MUSHROOM_ISLAND_SHORE => "minecraft:mushroom_island_shore",
+        biome_id::BEACH => "minecraft:beach",
+        biome_id::DESERT_HILLS => "minecraft:desert_hills",
+        biome_id::FOREST_HILLS => "minecraft:forest_hills",
+        biome_id::TAIGA_HILLS => "minecraft:taiga_hills",
+        biome_id::EXTREME_HILLS_EDGE => "minecraft:extreme_hills_edge",
+        biome_id::JUNGLE => "minecraft:jungle",
+        biome_id::JUNGLE_HILLS => "minecraft:jungle_hills",
+        biome_id::JUNGLE_EDGE => "minecraft:jungle_edge",
+        biome_id::DEEP_OCEAN => "minecraft:deep_ocean",
+        biome_id::STONE_BEACH => "minecraft:stone_beach",
+        biome_id::COLD_BEACH => "minecraft:cold_beach",
+        biome_id::BIRCH_FOREST => "minecraft:birch_forest",
+        biome_id::BIRCH_FOREST_HILLS => "minecraft:birch_forest_hills",
+        biome_id::ROOFED_FOREST => "minecraft:roofed_forest",
+        biome_id::COLD_TAIGA => "minecraft:cold_taiga",
+        biome_id::COLD_TAIGA_HILLS => "minecraft:cold_taiga_hills",
+        biome_id::MEGA_TAIGA => "minecraft:mega_taiga",
+        biome_id::MEGA_TAIGA_HILLS => "minecraft:mega_taiga_hills",
+        biome_id::EXTREME_HILLS_PLUS_TREES => "minecraft:extreme_hills_plus_trees",
+        biome_id::SAVANNA => "minecraft:savanna",
+        biome_id::SAVANNA_PLATEAU => "minecraft:savanna_plateau",
+        biome_id::MESA => "minecraft:mesa",
+        biome_id::MESA_PLATEAU_STONE => "minecraft:mesa_plateau_stone",
+        biome_id::MESA_PLATEAU => "minecraft:mesa_plateau",
+        biome_id::WARM_OCEAN => "minecraft:warm_ocean",
+        biome_id::DEEP_WARM_OCEAN => "minecraft:deep_warm_ocean",
+        biome_id::LUKEWARM_OCEAN => "minecraft:lukewarm_ocean",
+        biome_id::DEEP_LUKEWARM_OCEAN => "minecraft:deep_lukewarm_ocean",
+        biome_id::COLD_OCEAN => "minecraft:cold_ocean",
+        biome_id::DEEP_COLD_OCEAN => "minecraft:deep_cold_ocean",
+        biome_id::FROZEN_OCEAN => "minecraft:frozen_ocean",
+        biome_id::DEEP_FROZEN_OCEAN => "minecraft:deep_frozen_ocean",
+        biome_id::BAMBOO_JUNGLE => "minecraft:bamboo_jungle",
+        biome_id::SUNFLOWER_PLAINS => "minecraft:sunflower_plains",
+        biome_id::ICE_PLAINS_SPIKES => "minecraft:ice_plains_spikes",
+        biome_id::DESERT_MUTATED => "minecraft:desert_mutated",
+        biome_id::EXTREME_HILLS_MUTATED => "minecraft:extreme_hills_mutated",
+        biome_id::FLOWER_FOREST => "minecraft:flower_forest",
+        biome_id::TAIGA_MUTATED => "minecraft:taiga_mutated",
+        biome_id::SWAMPLAND_MUTATED => "minecraft:swampland_mutated",
+        biome_id::JUNGLE_MUTATED => "minecraft:jungle_mutated",
+        biome_id::JUNGLE_EDGE_MUTATED => "minecraft:jungle_edge_mutated",
+        biome_id::BIRCH_FOREST_MUTATED => "minecraft:birch_forest_mutated",
+        biome_id::BIRCH_FOREST_HILLS_MUTATED => "minecraft:birch_forest_hills_mutated",
+        biome_id::ROOFED_FOREST_MUTATED => "minecraft:roofed_forest_mutated",
+        biome_id::COLD_TAIGA_MUTATED => "minecraft:cold_taiga_mutated",
+        biome_id::REDWOOD_TAIGA_MUTATED => "minecraft:redwood_taiga_mutated",
+        biome_id::REDWOOD_TAIGA_HILLS_MUTATED => "minecraft:redwood_taiga_hills_mutated",
+        biome_id::EXTREME_HILLS_PLUS_TREES_MUTATED => {
+            "minecraft:extreme_hills_plus_trees_mutated"
+        }
+        biome_id::SAVANNA_MUTATED => "minecraft:savanna_mutated",
+        biome_id::SAVANNA_PLATEAU_MUTATED => "minecraft:savanna_plateau_mutated",
+        biome_id::MESA_BRYCE => "minecraft:mesa_bryce",
+        biome_id::MESA_PLATEAU_STONE_MUTATED => "minecraft:mesa_plateau_stone_mutated",
+        biome_id::MESA_PLATEAU_MUTATED => "minecraft:mesa_plateau_mutated",
+        biome_id::BAMBOO_JUNGLE_HILLS => "minecraft:bamboo_jungle_hills",
+        _ => return None,
+    })
+}
+
+/// Récupère les vraies données vanilla (top_material/temperature/downfall)
+/// pour un biome via biomes_vanilla. Retourne None si l'identifier n'est
+/// pas connu.
+pub fn vanilla_data_for(id: u32) -> Option<&'static crate::biomes_vanilla::BiomeData> {
+    let identifier = biome_identifier(id)?;
+    crate::biomes_vanilla::for_biome(identifier)
+}
+
 pub fn biome_name(id: u32) -> &'static str {
     match id {
         biome_id::OCEAN => "Ocean",

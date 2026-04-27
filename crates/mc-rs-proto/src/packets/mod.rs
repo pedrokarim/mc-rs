@@ -14,6 +14,9 @@ pub mod packet_id {
     pub const RESOURCE_PACKS_INFO: u32 = 0x06;
     pub const RESOURCE_PACK_STACK: u32 = 0x07;
     pub const RESOURCE_PACK_CLIENT_RESPONSE: u32 = 0x08;
+    pub const RESOURCE_PACK_DATA_INFO: u32 = 0x52;
+    pub const RESOURCE_PACK_CHUNK_DATA: u32 = 0x53;
+    pub const RESOURCE_PACK_CHUNK_REQUEST: u32 = 0x54;
     pub const MODAL_FORM_REQUEST: u32 = 0x64;
     pub const MODAL_FORM_RESPONSE: u32 = 0x65;
     pub const TEXT: u32 = 0x09;

@@ -754,6 +754,68 @@ impl ItemRegistry {
     }
 }
 
+// ── ResourcePack delivery (0x52, 0x53, 0x54) ──
+
+/// ResourcePackDataInfo (S→C, 0x52). Annonce métadata d'un pack au client.
+pub struct ResourcePackDataInfo {
+    pub pack_id: String,        // UUID
+    pub max_chunk_size: u32,
+    pub chunk_count: u32,
+    pub compressed_pack_size: u64,
+    pub sha256: String,         // hex 64 chars
+    pub is_premium: bool,
+    pub pack_type: u8,          // 0=Resources, 4=Behavior
+}
+
+impl ResourcePackDataInfo {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(128);
+        w.write_string(&self.pack_id);
+        w.write_u32_le(self.max_chunk_size);
+        w.write_u32_le(self.chunk_count);
+        w.write_u64_le(self.compressed_pack_size);
+        w.write_string(&self.sha256);
+        w.write_bool(self.is_premium);
+        w.write_u8(self.pack_type);
+        w.into_bytes()
+    }
+}
+
+/// ResourcePackChunkData (S→C, 0x53). Envoie un chunk d'un pack au client.
+pub struct ResourcePackChunkData {
+    pub pack_id: String,
+    pub chunk_index: u32,
+    pub offset: u64,
+    pub data: Vec<u8>,
+}
+
+impl ResourcePackChunkData {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(self.data.len() + 32);
+        w.write_string(&self.pack_id);
+        w.write_u32_le(self.chunk_index);
+        w.write_u64_le(self.offset);
+        // PMMP utilise putString → le client attend une string PRECEDED par
+        // VarUInt32 length puis raw bytes.
+        w.write_byte_array(&self.data);
+        w.into_bytes()
+    }
+}
+
+/// ResourcePackChunkRequest (C→S, 0x54). Le client demande un chunk.
+pub struct ResourcePackChunkRequest {
+    pub pack_id: String,
+    pub chunk_index: u32,
+}
+
+impl ResourcePackChunkRequest {
+    pub fn decode(reader: &mut crate::io::ProtoReader) -> Result<Self, crate::io::reader::ProtoReadError> {
+        let pack_id = reader.read_string()?;
+        let chunk_index = reader.read_u32_le()?;
+        Ok(Self { pack_id, chunk_index })
+    }
+}
+
 // ── MobEffect (S→C, 0x1C) ──
 //
 // PMMP MobEffectPacket : actor_runtime_id + event(u8) + effect_id(var_i32)

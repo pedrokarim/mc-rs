@@ -205,13 +205,40 @@ impl Connection {
         let Ok(status) = reader.read_u8() else {
             return Vec::new();
         };
+        // Le client envoie aussi la liste des pack IDs qu'il veut DL
+        // (string array). Pour un serveur sans packs c'est vide.
+        let pack_count = reader.read_u16_le().unwrap_or(0);
+        let mut requested_packs: Vec<String> = Vec::with_capacity(pack_count as usize);
+        for _ in 0..pack_count {
+            if let Ok(id) = reader.read_string() {
+                requested_packs.push(id);
+            }
+        }
 
         debug!(
-            "[{}] ResourcePackClientResponse: status={}",
-            self.addr, status
+            "[{}] ResourcePackClientResponse: status={} requested={}",
+            self.addr,
+            status,
+            requested_packs.len()
         );
 
         match status {
+            // 1 = REFUSED → kick (le client ne veut pas du serveur).
+            1 => {
+                info!("[{}] Resource packs refused — disconnecting", self.addr);
+                Vec::new()
+            }
+            // 2 = SEND_PACKS — pour chaque pack demandé, envoyer
+            // ResourcePackDataInfo + attendre ResourcePackChunkRequest.
+            // On n'a pas de packs côté serveur → on log et passe à 3.
+            2 => {
+                info!(
+                    "[{}] Client requesting {} resource packs (server has none, will fall through)",
+                    self.addr,
+                    requested_packs.len()
+                );
+                Vec::new()
+            }
             3 => {
                 // HAVE_ALL_PACKS -> send ResourcePackStack
                 self.send_resource_pack_stack()
@@ -231,6 +258,29 @@ impl Connection {
                 Vec::new()
             }
         }
+    }
+
+    /// Handle ResourcePackChunkRequest (C→S, 0x54). Le client demande un
+    /// chunk spécifique d'un pack. On répond avec ResourcePackChunkData.
+    /// Si on n'a pas le pack, on log + ignore.
+    pub(super) fn handle_resource_pack_chunk_request(
+        &mut self,
+        reader: &mut ProtoReader,
+    ) -> Vec<Vec<u8>> {
+        let req = match mc_rs_proto::packets::world::ResourcePackChunkRequest::decode(reader) {
+            Ok(r) => r,
+            Err(e) => {
+                debug!("[{}] Failed to decode ResourcePackChunkRequest: {:?}", self.addr, e);
+                return Vec::new();
+            }
+        };
+        info!(
+            "[{}] ResourcePackChunkRequest pack_id={} chunk={}",
+            self.addr, req.pack_id, req.chunk_index
+        );
+        // Pas de pack côté serveur → on ne peut pas répondre. Le client
+        // probablement abandonnera ou enverra DOWNLOADING_FINISHED.
+        Vec::new()
     }
 
     // -- Resource pack helpers --
