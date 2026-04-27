@@ -212,6 +212,24 @@ impl Connection {
                     if self.last_block_attacked == Some(action.position) {
                         continue;
                     }
+                    // PMMP `SurvivalBlockBreakHandler::__destruct` : quand un
+                    // nouveau handler remplace l'ancien (changement de cible
+                    // sans STOP explicite), broadcast BLOCK_STOP_BREAK pour
+                    // l'ancien position. Sans ça l'ancien bloc garde son crack
+                    // overlay alors qu'on n'est plus en train de le casser.
+                    if let Some(prev_pos) = self.last_block_attacked.take() {
+                        let prev_event = LevelEvent {
+                            event_id: LevelEvent::BLOCK_STOP_BREAK,
+                            position: [prev_pos[0] as f32, prev_pos[1] as f32, prev_pos[2] as f32],
+                            event_data: 0,
+                        };
+                        let prev_bytes = self.encode_compressed_packet(
+                            packet_id::LEVEL_EVENT,
+                            &prev_event.encode(),
+                        );
+                        responses.push(prev_bytes.clone());
+                        self.broadcasts.push(prev_bytes);
+                    }
                     self.last_block_attacked = Some(action.position);
 
                     // Break speed basé sur la hardness du bloc (par nom).

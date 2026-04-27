@@ -50,6 +50,106 @@ pub enum EnchantmentKind {
 }
 
 impl EnchantmentKind {
+    /// Parse "minecraft:sharpness" / "sharpness" / id numérique.
+    pub fn from_name_or_id(token: &str) -> Option<Self> {
+        if let Ok(id) = token.parse::<u8>() {
+            return Self::from_id(id);
+        }
+        let short = token
+            .strip_prefix("minecraft:")
+            .unwrap_or(token)
+            .to_ascii_lowercase();
+        match short.as_str() {
+            "protection" => Some(Self::Protection),
+            "fire_protection" => Some(Self::FireProtection),
+            "feather_falling" => Some(Self::FeatherFalling),
+            "blast_protection" => Some(Self::BlastProtection),
+            "projectile_protection" => Some(Self::ProjectileProtection),
+            "thorns" => Some(Self::Thorns),
+            "respiration" => Some(Self::Respiration),
+            "depth_strider" => Some(Self::DepthStrider),
+            "aqua_affinity" => Some(Self::AquaAffinity),
+            "sharpness" => Some(Self::Sharpness),
+            "smite" => Some(Self::Smite),
+            "bane_of_arthropods" => Some(Self::BaneOfArthropods),
+            "knockback" => Some(Self::Knockback),
+            "fire_aspect" => Some(Self::FireAspect),
+            "looting" => Some(Self::Looting),
+            "efficiency" => Some(Self::Efficiency),
+            "silk_touch" => Some(Self::SilkTouch),
+            "unbreaking" => Some(Self::Unbreaking),
+            "fortune" => Some(Self::Fortune),
+            "power" | "bow_power" => Some(Self::Power),
+            "punch" | "bow_punch" => Some(Self::Punch),
+            "flame" | "bow_flame" => Some(Self::Flame),
+            "infinity" | "bow_infinity" => Some(Self::Infinity),
+            "luck_of_the_sea" => Some(Self::LuckOfTheSea),
+            "lure" => Some(Self::Lure),
+            "frost_walker" => Some(Self::FrostWalker),
+            "mending" => Some(Self::Mending),
+            "binding" | "binding_curse" | "curse_of_binding" => Some(Self::BindingCurse),
+            "vanishing" | "vanishing_curse" | "curse_of_vanishing" => Some(Self::VanishingCurse),
+            "impaling" => Some(Self::Impaling),
+            "riptide" => Some(Self::Riptide),
+            "loyalty" => Some(Self::Loyalty),
+            "channeling" => Some(Self::Channeling),
+            "multishot" => Some(Self::Multishot),
+            "piercing" => Some(Self::Piercing),
+            "quick_charge" => Some(Self::QuickCharge),
+            "soul_speed" => Some(Self::SoulSpeed),
+            "swift_sneak" => Some(Self::SwiftSneak),
+            _ => None,
+        }
+    }
+
+    pub fn from_id(id: u8) -> Option<Self> {
+        match id {
+            0 => Some(Self::Protection),
+            1 => Some(Self::FireProtection),
+            2 => Some(Self::FeatherFalling),
+            3 => Some(Self::BlastProtection),
+            4 => Some(Self::ProjectileProtection),
+            5 => Some(Self::Thorns),
+            6 => Some(Self::Respiration),
+            7 => Some(Self::DepthStrider),
+            8 => Some(Self::AquaAffinity),
+            9 => Some(Self::Sharpness),
+            10 => Some(Self::Smite),
+            11 => Some(Self::BaneOfArthropods),
+            12 => Some(Self::Knockback),
+            13 => Some(Self::FireAspect),
+            14 => Some(Self::Looting),
+            15 => Some(Self::Efficiency),
+            16 => Some(Self::SilkTouch),
+            17 => Some(Self::Unbreaking),
+            18 => Some(Self::Fortune),
+            19 => Some(Self::Power),
+            20 => Some(Self::Punch),
+            21 => Some(Self::Flame),
+            22 => Some(Self::Infinity),
+            23 => Some(Self::LuckOfTheSea),
+            24 => Some(Self::Lure),
+            25 => Some(Self::FrostWalker),
+            26 => Some(Self::Mending),
+            27 => Some(Self::BindingCurse),
+            28 => Some(Self::VanishingCurse),
+            29 => Some(Self::Impaling),
+            30 => Some(Self::Riptide),
+            31 => Some(Self::Loyalty),
+            32 => Some(Self::Channeling),
+            33 => Some(Self::Multishot),
+            34 => Some(Self::Piercing),
+            35 => Some(Self::QuickCharge),
+            36 => Some(Self::SoulSpeed),
+            37 => Some(Self::SwiftSneak),
+            _ => None,
+        }
+    }
+
+    pub fn id(&self) -> u8 {
+        *self as u8
+    }
+
     /// Niveau max (1..N) pour cet enchantement.
     pub fn max_level(&self) -> u8 {
         match self {
@@ -184,9 +284,44 @@ impl EnchantmentInstance {
     }
 }
 
+/// Construit un `extra_data` Bedrock contenant une liste d'enchants.
+/// Format PMMP `ItemStackExtraData::write` :
+///   i16 LE 0xFFFF (NBT marker) + u8 1 (version) + raw NBT LE bytes
+///   + u32 LE canPlaceOn=0 + u32 LE canDestroy=0
+pub fn build_extra_data_with_enchant(enchant_id: u8, level: u8) -> Vec<u8> {
+    use bytes::BytesMut;
+    use mc_rs_nbt::{tag::NbtCompound, NbtRoot, NbtTag};
+
+    // Compound { "ench": List< Compound { id, lvl } > }
+    let mut entry = NbtCompound::new();
+    entry.insert("id".to_string(), NbtTag::Short(enchant_id as i16));
+    entry.insert("lvl".to_string(), NbtTag::Short(level as i16));
+    let mut root_compound = NbtCompound::new();
+    root_compound.insert("ench".to_string(), NbtTag::List(vec![NbtTag::Compound(entry)]));
+    let root = NbtRoot::new("", root_compound);
+
+    let mut nbt_buf = BytesMut::new();
+    mc_rs_nbt::write_nbt_le(&mut nbt_buf, &root);
+
+    let mut out = Vec::with_capacity(11 + nbt_buf.len());
+    out.extend_from_slice(&(-1i16).to_le_bytes()); // marker 0xFFFF
+    out.push(1u8); // version
+    out.extend_from_slice(&nbt_buf);
+    out.extend_from_slice(&0u32.to_le_bytes()); // canPlaceOn
+    out.extend_from_slice(&0u32.to_le_bytes()); // canDestroy
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn build_extra_data_starts_with_nbt_marker() {
+        let bytes = build_extra_data_with_enchant(9, 5); // sharpness V
+        // Marker FF FF + version 01
+        assert_eq!(&bytes[0..3], &[0xFF, 0xFF, 0x01]);
+    }
 
     #[test]
     fn sharpness_smite_incompatible() {

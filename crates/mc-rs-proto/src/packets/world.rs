@@ -754,6 +754,41 @@ impl ItemRegistry {
     }
 }
 
+// ── MobEffect (S→C, 0x1C) ──
+//
+// PMMP MobEffectPacket : actor_runtime_id + event(u8) + effect_id(var_i32)
+// + amplifier(var_i32) + particles(bool) + duration_ticks(var_i32)
+// + tick(var_u64) + ambient(bool).
+pub struct MobEffect {
+    pub actor_runtime_id: u64,
+    pub event_id: u8, // 1 ADD, 2 MODIFY, 3 REMOVE
+    pub effect_id: i32,
+    pub amplifier: i32,
+    pub particles: bool,
+    pub duration_ticks: i32,
+    pub tick: u64,
+    pub ambient: bool,
+}
+
+impl MobEffect {
+    pub const EVENT_ADD: u8 = 1;
+    pub const EVENT_MODIFY: u8 = 2;
+    pub const EVENT_REMOVE: u8 = 3;
+
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(24);
+        w.write_var_u64(self.actor_runtime_id);
+        w.write_u8(self.event_id);
+        w.write_var_i32(self.effect_id);
+        w.write_var_i32(self.amplifier);
+        w.write_bool(self.particles);
+        w.write_var_i32(self.duration_ticks);
+        w.write_var_u64(self.tick);
+        w.write_bool(self.ambient);
+        w.into_bytes()
+    }
+}
+
 // ── SetTime (S→C, 0x0A) ──
 
 pub struct SetTime {

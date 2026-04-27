@@ -88,6 +88,15 @@ pub trait ServerCommandRuntime: CommandSender + SoftEnumSource {
         duration_ticks: i32,
         amplifier: u8,
     ) -> Result<(), String>;
+    /// Spawn une particule à la position donnée pour tous les joueurs.
+    fn spawn_particle(&mut self, position: [f32; 3], particle_name: &str);
+    /// Ajoute un enchantement au held item du joueur (NBT `ench` list).
+    fn apply_held_enchant(
+        &mut self,
+        addr: SocketAddr,
+        enchant_id: u8,
+        level: u8,
+    ) -> Result<(), String>;
     fn set_difficulty(&mut self, difficulty: i32);
     fn current_difficulty(&self) -> i32;
     fn set_default_gamemode(&mut self, gamemode: i32);
@@ -1101,6 +1110,45 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
         Ok(level)
     }
 
+    fn spawn_particle(&mut self, position: [f32; 3], particle_name: &str) {
+        let bytes = crate::visuals::SpawnParticleEffect::at(position, particle_name);
+        self.broadcast_compressed(packet_id::SPAWN_PARTICLE_EFFECT, &bytes);
+    }
+
+    fn apply_held_enchant(
+        &mut self,
+        addr: SocketAddr,
+        enchant_id: u8,
+        level: u8,
+    ) -> Result<(), String> {
+        let Some(connection) = self.connections.get_mut(&addr) else {
+            return Err("Player not connected".into());
+        };
+        let slot = connection.inventory.held_slot as usize;
+        let held = &mut connection.inventory.slots[slot];
+        if held.item.is_air() {
+            return Err("Held item is empty".into());
+        }
+        held.item.extra_data =
+            crate::enchantments::build_extra_data_with_enchant(enchant_id, level);
+        let cur = held.item.clone();
+        connection.inventory_manager.set_slot(
+            &mut connection.inventory,
+            crate::inventory_manager::InvKey::Main,
+            slot,
+            cur,
+        );
+        let sync_pkts: Vec<Vec<u8>> = connection
+            .tick_inventory_flush()
+            .into_iter()
+            .map(|p| connection.prepare_for_send(p))
+            .collect();
+        for packet in sync_pkts {
+            self.send_prepared(addr, packet);
+        }
+        Ok(())
+    }
+
     fn apply_player_effect(
         &mut self,
         addr: SocketAddr,
@@ -1108,16 +1156,33 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
         duration_ticks: i32,
         amplifier: u8,
     ) -> Result<(), String> {
-        let Some(_connection) = self.connections.get_mut(&addr) else {
+        let Some(connection) = self.connections.get_mut(&addr) else {
             return Err("Player not connected".into());
         };
-        // TODO : brancher sur le système effects::apply_effect qui existe mais
-        // n'est pas intégré au game tick des joueurs. Pour l'instant on log et
-        // on renvoie un message — la commande est visible mais no-op.
+        // Send Bedrock MobEffectPacket (event=ADD).
+        let event_id = if duration_ticks <= 0 {
+            mc_rs_proto::packets::world::MobEffect::EVENT_REMOVE
+        } else {
+            mc_rs_proto::packets::world::MobEffect::EVENT_ADD
+        };
+        let pkt = mc_rs_proto::packets::world::MobEffect {
+            actor_runtime_id: connection.entity_runtime_id,
+            event_id,
+            effect_id,
+            amplifier: amplifier as i32,
+            particles: true,
+            duration_ticks,
+            tick: 0,
+            ambient: false,
+        };
+        let bytes = connection
+            .encode_compressed_packet(packet_id::MOB_EFFECT, &pkt.encode());
+        let prepared = connection.prepare_for_send(bytes);
+        self.send_prepared(addr, prepared);
         tracing::info!(
-            "/effect request: addr={addr} effect_id={effect_id} duration={duration_ticks} amplifier={amplifier} (not implemented)"
+            "/effect applied: addr={addr} effect_id={effect_id} duration={duration_ticks} amplifier={amplifier}"
         );
-        Err("Effect system not wired to player tick yet".into())
+        Ok(())
     }
 
     fn set_difficulty(&mut self, difficulty: i32) {
@@ -3056,14 +3121,16 @@ pub fn build_command_system() -> ServerCommandSystem {
         PermissionDefault::Op,
         |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
             let Some(target_name) = invocation.arg(0) else {
-                return usage("Usage: /effect <target> <effect_id> [duration] [amplifier]");
+                return usage("Usage: /effect <target> <effect_name|id> [duration] [amplifier]");
             };
             let Some(effect_tok) = invocation.arg(1) else {
-                return usage("Usage: /effect <target> <effect_id> [duration] [amplifier]");
+                return usage("Usage: /effect <target> <effect_name|id> [duration] [amplifier]");
             };
-            let effect_id: i32 = effect_tok.parse().map_err(|_| {
-                CommandDispatchError::Message(format!("Invalid effect id: {effect_tok}"))
+            // Accepte "minecraft:speed", "speed" ou un id numérique.
+            let kind = crate::effects::EffectKind::from_name_or_id(effect_tok).ok_or_else(|| {
+                CommandDispatchError::Message(format!("Unknown effect: {effect_tok}"))
             })?;
+            let effect_id: i32 = kind.id() as i32;
             let duration: i32 = invocation.arg(2).and_then(|s| s.parse().ok()).unwrap_or(600);
             let amplifier: u8 = invocation.arg(3).and_then(|s| s.parse().ok()).unwrap_or(0);
 
@@ -3089,6 +3156,109 @@ pub fn build_command_system() -> ServerCommandSystem {
             runtime.send_feedback(&format!(
                 "Applied effect {effect_id} (duration={duration}, amplifier={amplifier})"
             ));
+            Ok(())
+        },
+    );
+
+    // ── /enchant <target> <enchant_name|id> [level] ──
+    let mut enchant = CommandDefinition::new("enchant", "Add enchantment to held item");
+    enchant.usage = "/enchant <target> <enchant_name|id> [level]".into();
+    enchant.permissions = vec!["server.command.enchant".into()];
+    enchant.overloads.push(CommandOverload {
+        parameters: vec![
+            param("target", ParamType::Target, false),
+            param("enchant", ParamType::String, false),
+            param("level", ParamType::Int, true),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        enchant,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            let Some(target_name) = invocation.arg(0) else {
+                return usage("Usage: /enchant <target> <enchant_name|id> [level]");
+            };
+            let Some(ench_tok) = invocation.arg(1) else {
+                return usage("Usage: /enchant <target> <enchant_name|id> [level]");
+            };
+            let kind =
+                crate::enchantments::EnchantmentKind::from_name_or_id(ench_tok).ok_or_else(|| {
+                    CommandDispatchError::Message(format!("Unknown enchantment: {ench_tok}"))
+                })?;
+            let level: u8 = invocation.arg(2).and_then(|s| s.parse().ok()).unwrap_or(1);
+            let max = kind.max_level();
+            let level = level.min(max).max(1);
+
+            let entity_id = runtime
+                .selector_entities()
+                .into_iter()
+                .find(|e| {
+                    e.name
+                        .as_deref()
+                        .map(|n| n.eq_ignore_ascii_case(target_name))
+                        .unwrap_or(false)
+                })
+                .map(|e| e.id);
+            let addr = entity_id
+                .and_then(|id| runtime.player_addr_by_entity(id))
+                .ok_or_else(|| {
+                    CommandDispatchError::Message(format!("Player not found: {target_name}"))
+                })?;
+
+            runtime
+                .apply_held_enchant(addr, kind.id(), level)
+                .map_err(CommandDispatchError::Message)?;
+            runtime.send_feedback(&format!(
+                "Enchanted held item with {ench_tok} {level} (max {max})"
+            ));
+            Ok(())
+        },
+    );
+
+    // ── /particle <name> [x] [y] [z] ──
+    let mut particle = CommandDefinition::new("particle", "Spawn a particle effect");
+    particle.usage = "/particle <name> [x] [y] [z]".into();
+    particle.permissions = vec!["server.command.particle".into()];
+    particle.overloads.push(CommandOverload {
+        parameters: vec![
+            param("name", ParamType::String, false),
+            param("x", ParamType::Float, true),
+            param("y", ParamType::Float, true),
+            param("z", ParamType::Float, true),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        particle,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            let Some(name_tok) = invocation.arg(0) else {
+                return usage("Usage: /particle <name> [x] [y] [z]");
+            };
+            // Si pas de coords explicites, prend la position du sender.
+            let sender_pos = runtime.sender_position();
+            let x: f32 = invocation
+                .arg(1)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(sender_pos[0]);
+            let y: f32 = invocation
+                .arg(2)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(sender_pos[1]);
+            let z: f32 = invocation
+                .arg(3)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(sender_pos[2]);
+            let pname = if name_tok.contains(':') {
+                name_tok.to_string()
+            } else {
+                format!("minecraft:{name_tok}")
+            };
+            runtime.spawn_particle([x, y, z], &pname);
+            runtime.send_feedback(&format!("Spawned particle {pname} at ({x:.1},{y:.1},{z:.1})"));
             Ok(())
         },
     );
@@ -3588,6 +3758,15 @@ mod tests {
         ) -> Result<(), String> {
             Ok(())
         }
+        fn apply_held_enchant(
+            &mut self,
+            _addr: SocketAddr,
+            _enchant_id: u8,
+            _level: u8,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+        fn spawn_particle(&mut self, _position: [f32; 3], _particle_name: &str) {}
 
         fn set_difficulty(&mut self, difficulty: i32) {
             self.difficulty = difficulty;

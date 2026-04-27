@@ -28,6 +28,7 @@ pub mod packet_id {
     pub const MOVE_PLAYER: u32 = 0x13;
     pub const UPDATE_BLOCK: u32 = 0x15;
     pub const UPDATE_ATTRIBUTES: u32 = 0x1D;
+    pub const MOB_EFFECT: u32 = 0x1C;
     pub const INVENTORY_TRANSACTION: u32 = 0x1E;
     pub const SET_ACTOR_DATA: u32 = 0x27;
     pub const SET_ACTOR_MOTION: u32 = 0x28;

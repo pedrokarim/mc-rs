@@ -45,6 +45,90 @@ pub enum EffectKind {
 }
 
 impl EffectKind {
+    /// Parse "minecraft:speed" / "speed" / un id numérique vers EffectKind.
+    pub fn from_name_or_id(token: &str) -> Option<Self> {
+        if let Ok(id) = token.parse::<u8>() {
+            return Self::from_id(id);
+        }
+        let short = token
+            .strip_prefix("minecraft:")
+            .unwrap_or(token)
+            .to_ascii_lowercase();
+        match short.as_str() {
+            "speed" => Some(Self::Speed),
+            "slowness" => Some(Self::Slowness),
+            "haste" => Some(Self::Haste),
+            "mining_fatigue" => Some(Self::MiningFatigue),
+            "strength" => Some(Self::Strength),
+            "instant_health" | "healing" => Some(Self::InstantHealth),
+            "instant_damage" | "harming" => Some(Self::InstantDamage),
+            "jump_boost" | "jump" => Some(Self::JumpBoost),
+            "nausea" | "confusion" => Some(Self::Nausea),
+            "regeneration" => Some(Self::Regeneration),
+            "resistance" | "damage_resistance" => Some(Self::Resistance),
+            "fire_resistance" => Some(Self::FireResistance),
+            "water_breathing" => Some(Self::WaterBreathing),
+            "invisibility" => Some(Self::Invisibility),
+            "blindness" => Some(Self::Blindness),
+            "night_vision" => Some(Self::NightVision),
+            "hunger" => Some(Self::Hunger),
+            "weakness" => Some(Self::Weakness),
+            "poison" => Some(Self::Poison),
+            "wither" => Some(Self::Wither),
+            "health_boost" => Some(Self::HealthBoost),
+            "absorption" => Some(Self::Absorption),
+            "saturation" => Some(Self::Saturation),
+            "levitation" => Some(Self::Levitation),
+            "fatal_poison" => Some(Self::FatalPoison),
+            "conduit_power" => Some(Self::ConduitPower),
+            "slow_falling" => Some(Self::SlowFalling),
+            "bad_omen" => Some(Self::BadOmen),
+            "hero_of_the_village" => Some(Self::HeroOfTheVillage),
+            "darkness" => Some(Self::Darkness),
+            _ => None,
+        }
+    }
+
+    pub fn from_id(id: u8) -> Option<Self> {
+        match id {
+            1 => Some(Self::Speed),
+            2 => Some(Self::Slowness),
+            3 => Some(Self::Haste),
+            4 => Some(Self::MiningFatigue),
+            5 => Some(Self::Strength),
+            6 => Some(Self::InstantHealth),
+            7 => Some(Self::InstantDamage),
+            8 => Some(Self::JumpBoost),
+            9 => Some(Self::Nausea),
+            10 => Some(Self::Regeneration),
+            11 => Some(Self::Resistance),
+            12 => Some(Self::FireResistance),
+            13 => Some(Self::WaterBreathing),
+            14 => Some(Self::Invisibility),
+            15 => Some(Self::Blindness),
+            16 => Some(Self::NightVision),
+            17 => Some(Self::Hunger),
+            18 => Some(Self::Weakness),
+            19 => Some(Self::Poison),
+            20 => Some(Self::Wither),
+            21 => Some(Self::HealthBoost),
+            22 => Some(Self::Absorption),
+            23 => Some(Self::Saturation),
+            24 => Some(Self::Levitation),
+            25 => Some(Self::FatalPoison),
+            26 => Some(Self::ConduitPower),
+            27 => Some(Self::SlowFalling),
+            28 => Some(Self::BadOmen),
+            29 => Some(Self::HeroOfTheVillage),
+            30 => Some(Self::Darkness),
+            _ => None,
+        }
+    }
+
+    pub fn id(&self) -> u8 {
+        *self as u8
+    }
+
     /// Effets "instantanés" qui ne s'appliquent qu'une fois au ajout.
     /// Port PMMP `InstantEffect::isInstantEffect()`.
     pub fn is_instant(&self) -> bool {
