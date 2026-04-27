@@ -188,6 +188,20 @@ struct RawPluginManifest {
 #[derive(Debug)]
 struct PluginRuntime {
     lua: Lua,
+    tick_counter: u64,
+    scheduled_tasks: Vec<ScheduledTask>,
+    event_handlers: HashMap<String, RegistryKey>,
+}
+
+impl PluginRuntime {
+    fn new(lua: Lua) -> Self {
+        Self {
+            lua,
+            tick_counter: 0,
+            scheduled_tasks: Vec::new(),
+            event_handlers: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -209,6 +223,16 @@ enum PluginAction {
     },
     Broadcast {
         message: String,
+    },
+    /// Schedule a Lua callback to fire after `delay_ticks` server ticks.
+    Schedule {
+        delay_ticks: u64,
+        callback_key: mlua::RegistryKey,
+    },
+    /// Register a Lua event handler. `event_name` ex: "PlayerJoin".
+    RegisterEvent {
+        event_name: String,
+        callback_key: mlua::RegistryKey,
     },
 }
 
@@ -567,9 +591,7 @@ impl PluginManager {
             )
         })?;
 
-        let runtime = PluginRuntime {
-            lua: build_lua_runtime(entry)?,
-        };
+        let runtime = PluginRuntime::new(build_lua_runtime(entry)?);
 
         runtime
             .lua
@@ -770,9 +792,65 @@ impl PluginManager {
                         );
                     }
                 }
+                PluginAction::Schedule {
+                    delay_ticks,
+                    callback_key,
+                } => {
+                    let fire_at = plugin_runtime
+                        .tick_counter
+                        .saturating_add(delay_ticks);
+                    plugin_runtime
+                        .scheduled_tasks
+                        .push(ScheduledTask {
+                            fire_at_tick: fire_at,
+                            callback_key,
+                        });
+                }
+                PluginAction::RegisterEvent {
+                    event_name,
+                    callback_key,
+                } => {
+                    if let Some(old) = plugin_runtime
+                        .event_handlers
+                        .insert(event_name, callback_key)
+                    {
+                        let _ = plugin_runtime.lua.remove_registry_value(old);
+                    }
+                }
             }
         }
     }
+
+    /// Tick scheduler — appelé chaque server tick. Fire les callbacks Lua dont
+    /// `fire_at_tick` est atteint.
+    pub fn tick_scheduler(&mut self) {
+        for entry in &mut self.plugins {
+            let Some(rt) = entry.runtime.as_mut() else {
+                continue;
+            };
+            rt.tick_counter = rt.tick_counter.saturating_add(1);
+            let now = rt.tick_counter;
+            let pending = std::mem::take(&mut rt.scheduled_tasks);
+            for task in pending {
+                if task.fire_at_tick <= now {
+                    if let Ok(handler) = rt.lua.registry_value::<Function>(&task.callback_key) {
+                        if let Err(e) = handler.call::<()>(()) {
+                            warn!("Lua scheduled task error: {e}");
+                        }
+                    }
+                    let _ = rt.lua.remove_registry_value(task.callback_key);
+                } else {
+                    rt.scheduled_tasks.push(task);
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ScheduledTask {
+    fire_at_tick: u64,
+    callback_key: mlua::RegistryKey,
 }
 
 fn manifest_path_for_dir(dir: &Path) -> Option<PathBuf> {
@@ -936,6 +1014,39 @@ fn install_lua_api(lua: &Lua) -> mlua::Result<()> {
         "broadcast",
         lua.create_function(|lua, message: String| {
             push_action(lua, PluginAction::Broadcast { message });
+            Ok(())
+        })?,
+    )?;
+
+    // schedule.after(delay_ticks, callback) — fire callback dans N server ticks.
+    globals.set(
+        "schedule_after",
+        lua.create_function(|lua, (delay_ticks, handler): (u64, Function)| {
+            let key = lua.create_registry_value(handler)?;
+            push_action(
+                lua,
+                PluginAction::Schedule {
+                    delay_ticks,
+                    callback_key: key,
+                },
+            );
+            Ok(())
+        })?,
+    )?;
+
+    // register_event(event_name, callback) — handler appelé quand le serveur fire
+    // un event de ce nom (ex: "PlayerJoin", "BlockBreak").
+    globals.set(
+        "register_event",
+        lua.create_function(|lua, (event_name, handler): (String, Function)| {
+            let key = lua.create_registry_value(handler)?;
+            push_action(
+                lua,
+                PluginAction::RegisterEvent {
+                    event_name,
+                    callback_key: key,
+                },
+            );
             Ok(())
         })?,
     )?;

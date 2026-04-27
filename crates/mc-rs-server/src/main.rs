@@ -738,6 +738,7 @@ pub mod redstone_wire;
 #[allow(dead_code)]
 pub mod repeater;
 #[allow(dead_code)]
+pub mod resource_pack;
 pub mod respawn_anchor;
 #[allow(dead_code)]
 pub mod respawn_system;
@@ -1631,6 +1632,11 @@ async fn main() {
                             .unwrap_or(0),
                         data.slots.len()
                     );
+                }
+
+                // Tick Lua plugin scheduler chaque server tick (100 TPS).
+                if let Ok(mut manager) = plugin_manager.lock() {
+                    manager.tick_scheduler();
                 }
 
                 if world_gametick_fired {

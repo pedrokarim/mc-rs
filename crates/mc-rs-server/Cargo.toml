@@ -26,3 +26,4 @@ rusty-leveldb = "3"
 mc-rs-nbt = { path = "../mc-rs-nbt" }
 mc-rs-webui = { path = "../mc-rs-webui", features = ["tls"] }
 flate2 = "1"
+sha2 = { workspace = true }

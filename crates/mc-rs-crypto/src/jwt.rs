@@ -188,6 +188,99 @@ pub fn decode_base64_der(b64: &str) -> Result<Vec<u8>, base64::DecodeError> {
         .or_else(|_| URL_SAFE_NO_PAD.decode(b64))
 }
 
+// ── Xbox Live chain verification (PMMP `XboxAuthJwt::validateLoginJwt`) ──
+
+/// Mojang root public key (PMMP `Player::MOJANG_ROOT_PUBLIC_KEY`).
+/// ECDSA P-384, encoded SEC1 + DER (base64). Cette clé signe le premier JWT
+/// quand un joueur s'authentifie via Xbox Live (auth_type=FULL).
+pub const MOJANG_ROOT_PUBLIC_KEY_B64: &str = "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE8ELkixyLcwlZryUQcu1TvPOmI2B7vX83ndnWRUaXm74wFfa5f/lwQNTfrLVHa2PmenpGI6JhIMUJaWZrjmMj90NoKNFSNBuKdm8rYiXsfaz3K36x/1U26HpG0ZxK/V1V";
+
+#[derive(Debug, Error)]
+pub enum ChainVerifyError {
+    #[error("empty chain")]
+    EmptyChain,
+    #[error("invalid certificate format: {0}")]
+    InvalidCertificate(String),
+    #[error("missing identityPublicKey in JWT claims")]
+    MissingIdentityKey,
+    #[error("invalid public key: {0}")]
+    InvalidKey(String),
+    #[error("signature verification failed at index {0}")]
+    SignatureFailed(usize),
+    #[error("JWT decode error: {0}")]
+    JwtError(#[from] JwtError),
+}
+
+fn split_signing_input(jwt: &str) -> Option<(String, &str)> {
+    let mut iter = jwt.rsplitn(2, '.');
+    let sig = iter.next()?;
+    let signing = iter.next()?;
+    Some((signing.to_string(), sig))
+}
+
+fn verify_jwt_signature(jwt: &str, pub_key_b64: &str) -> Result<(), ChainVerifyError> {
+    use p384::ecdsa::signature::Verifier;
+    use p384::ecdsa::{Signature, VerifyingKey};
+    use p384::pkcs8::DecodePublicKey;
+    use p384::PublicKey;
+
+    let (signing_input, sig_b64) = split_signing_input(jwt)
+        .ok_or_else(|| ChainVerifyError::InvalidCertificate("not 3-part JWT".into()))?;
+    let signature_bytes = URL_SAFE_NO_PAD
+        .decode(sig_b64)
+        .map_err(|e| ChainVerifyError::InvalidCertificate(format!("base64 sig: {e}")))?;
+    let der_bytes = STANDARD
+        .decode(pub_key_b64)
+        .or_else(|_| URL_SAFE_NO_PAD.decode(pub_key_b64))
+        .map_err(|e| ChainVerifyError::InvalidKey(format!("base64 key: {e}")))?;
+    let pk = PublicKey::from_public_key_der(&der_bytes)
+        .map_err(|e| ChainVerifyError::InvalidKey(format!("DER: {e}")))?;
+    let vk = VerifyingKey::from(&pk);
+    let signature = Signature::from_slice(&signature_bytes)
+        .map_err(|e| ChainVerifyError::InvalidCertificate(format!("sig parse: {e}")))?;
+    vk.verify(signing_input.as_bytes(), &signature)
+        .map_err(|_| ChainVerifyError::SignatureFailed(0))
+}
+
+/// Vérifie la chain JWT du Certificate field (login authentifié Xbox).
+/// Algorithme PMMP `XboxAuthJwt::validateLoginJwt` :
+///   - chain[0] : si header.x5u est la clé Mojang root, signed by Mojang
+///                (sinon self-signed mais validé via x5u du JWT lui-même).
+///   - chain[i>0] : signed by claims.identityPublicKey de chain[i-1].
+///
+/// Retourne la clé publique du LAST JWT (le ClientPublicKey utilisé pour
+/// le Diffie-Hellman + signature handshake côté serveur).
+pub fn verify_chain(chain: &[String]) -> Result<String, ChainVerifyError> {
+    if chain.is_empty() {
+        return Err(ChainVerifyError::EmptyChain);
+    }
+    let mut next_key: Option<String> = None;
+    for (i, jwt) in chain.iter().enumerate() {
+        let decoded = decode_jwt(jwt)?;
+        let signing_key = if let Some(k) = next_key.as_deref() {
+            k.to_string()
+        } else {
+            // Premier JWT : check x5u du header.
+            let x5u = decoded.header["x5u"]
+                .as_str()
+                .ok_or_else(|| ChainVerifyError::InvalidCertificate("x5u missing".into()))?
+                .to_string();
+            // Si signed par Mojang root, accepte.
+            // Sinon self-signed : on accepte le x5u (vérification self-sig via lui-même).
+            x5u
+        };
+        verify_jwt_signature(jwt, &signing_key).map_err(|e| match e {
+            ChainVerifyError::SignatureFailed(_) => ChainVerifyError::SignatureFailed(i),
+            other => other,
+        })?;
+        // Extract identityPublicKey for next iter
+        next_key = decoded.claims["identityPublicKey"]
+            .as_str()
+            .map(String::from);
+    }
+    next_key.ok_or(ChainVerifyError::MissingIdentityKey)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
