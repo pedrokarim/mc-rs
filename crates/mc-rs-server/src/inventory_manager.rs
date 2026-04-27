@@ -51,7 +51,16 @@ pub mod ui_slot {
     pub const CURSOR: u32 = 0;
     // CRAFTING2X2_INPUT = [28 => 0, 29 => 1, 30 => 2, 31 => 3]
     pub const CRAFTING2X2_INPUT_START: u32 = 28;
+    // CRAFTING3X3_INPUT = [32..40] → core 0..8 (PMMP UIInventorySlotOffset)
+    pub const CRAFTING3X3_INPUT_START: u32 = 32;
     pub const CRAFTING_RESULT: u32 = 50;
+    // ANVIL : input=1, material=2, result_preview=3
+    pub const ANVIL_INPUT: u32 = 1;
+    pub const ANVIL_MATERIAL: u32 = 2;
+    pub const ANVIL_RESULT_PREVIEW: u32 = 3;
+    // ENCHANTING : input=14, material=15
+    pub const ENCHANTING_INPUT: u32 = 14;
+    pub const ENCHANTING_MATERIAL: u32 = 15;
 }
 
 // `vendor/.../ContainerUIIds.php` — IDs envoyés par le client dans
@@ -77,7 +86,21 @@ pub enum InvKey {
     Armor,
     Cursor,
     Craft2x2,
+    /// Crafting table 3x3 (slots UI 32..40 → core 0..8). Registré dynamiquement
+    /// quand le joueur ouvre une crafting_table, désinscrit au close.
+    Craft3x3,
     CraftResult,
+    /// Anvil input slot.
+    AnvilInput,
+    /// Anvil material slot.
+    AnvilMaterial,
+    /// Enchanting table input.
+    EnchantInput,
+    /// Enchanting table lapis.
+    EnchantMaterial,
+    /// Block container généric (chest courant ouvert par le joueur).
+    /// La position du bloc est tracké séparément dans `Connection`.
+    BlockContainer,
 }
 
 /// Équivalent de `ItemStackInfo` PMMP — lie un slot à un stackId unique et au
@@ -122,6 +145,9 @@ pub struct InventoryManager {
     /// le container CREATED_OUTPUT (60) slot 50 le déplace dans un vrai slot.
     /// PMMP `ItemStackRequestExecutor::nextCreatedItem`.
     pub pending_creative_item: Option<ItemStack>,
+    /// Slots du chest courant modifiés depuis le dernier flush. main.rs les
+    /// applique au ChestManager partagé.
+    pub pending_block_container_writes: Vec<(usize, ItemStack)>,
 }
 
 impl InventoryManager {
@@ -139,6 +165,7 @@ impl InventoryManager {
             client_selected_hotbar_slot: -1,
             full_sync_requested: false,
             pending_creative_item: None,
+            pending_block_container_writes: Vec::new(),
         };
         // PMMP `__construct` :
         //   add(INVENTORY, main); add(OFFHAND, offhand); add(ARMOR, armor);
@@ -154,8 +181,22 @@ impl InventoryManager {
                 .collect(),
             InvKey::Craft2x2,
         );
+        // Crafting table 3x3 — toujours enregistré, le client active via
+        // ContainerOpen WORKBENCH (window_type=1).
+        mgr.add_complex(
+            (0..9)
+                .map(|i| (ui_slot::CRAFTING3X3_INPUT_START + i, i as usize))
+                .collect(),
+            InvKey::Craft3x3,
+        );
         // CraftResult : slot UI 50 (core slot 0).
         mgr.add_complex(vec![(ui_slot::CRAFTING_RESULT, 0)], InvKey::CraftResult);
+        // Anvil + Enchanting table : registered en permanence, activés via
+        // ContainerOpen ANVIL (5) / ENCHANTMENT (3).
+        mgr.add_complex(vec![(ui_slot::ANVIL_INPUT, 0)], InvKey::AnvilInput);
+        mgr.add_complex(vec![(ui_slot::ANVIL_MATERIAL, 0)], InvKey::AnvilMaterial);
+        mgr.add_complex(vec![(ui_slot::ENCHANTING_INPUT, 0)], InvKey::EnchantInput);
+        mgr.add_complex(vec![(ui_slot::ENCHANTING_MATERIAL, 0)], InvKey::EnchantMaterial);
         mgr
     }
 
@@ -172,6 +213,20 @@ impl InventoryManager {
     fn add(&mut self, id: u8, key: InvKey) {
         self.inventories.entry(key).or_default();
         self.associate_id_with_key(id, key);
+    }
+
+    /// Public API : associer un windowId à InvKey::BlockContainer (pour
+    /// chest, double-chest etc.). Crée l'entry vide si nécessaire. Le
+    /// container_id côté client sera ce `window_id`.
+    pub fn associate_block_container(&mut self, window_id: u8) {
+        self.inventories.entry(InvKey::BlockContainer).or_default();
+        self.associate_id_with_key(window_id, InvKey::BlockContainer);
+    }
+
+    /// Désassocie le BlockContainer (à appeler au close de la fenêtre).
+    pub fn deassociate_block_container(&mut self) {
+        self.network_id_to_key.retain(|_, k| *k != InvKey::BlockContainer);
+        self.inventories.remove(&InvKey::BlockContainer);
     }
 
     fn add_complex(&mut self, slot_map_pairs: Vec<(u32, usize)>, key: InvKey) {
@@ -575,7 +630,18 @@ impl InventoryManager {
             slot.item = new_item.clone();
             // Le stack_id réel sera réécrit par on_slot_change/track_item_stack.
         }
+        // Track block_container changes pour sync vers ChestManager (main.rs).
+        if key == InvKey::BlockContainer {
+            self.pending_block_container_writes
+                .push((core_slot, new_item.clone()));
+        }
         self.on_slot_change(inv, key, core_slot, new_item, new_air);
+    }
+
+    /// Drain les changements pendants de BlockContainer (chest opened).
+    /// main.rs appelle ça à chaque tick pour sync chest_manager.
+    pub fn drain_block_container_writes(&mut self) -> Vec<(usize, ItemStack)> {
+        std::mem::take(&mut self.pending_block_container_writes)
     }
 
     /// Prédit un changement client. Quand `set_slot` arrive ensuite avec le
@@ -827,6 +893,40 @@ pub struct ProcessOutcome {
 impl InventoryManager {
     /// Exposé publiquement pour permettre aux callers (block-break, pickup) de
     /// regénérer un stackId frais et garder le tracking cohérent.
+    /// Match la grille de crafting actuelle (Craft3x3 si window=workbench,
+    /// sinon Craft2x2) contre RECIPE_DB. Retourne le premier ItemStack
+    /// output qui match, ou None si pas de match.
+    fn try_match_recipe(&self, inv: &PlayerInventory) -> Option<ItemStack> {
+        let db = crate::crafting::RECIPE_DB.get()?;
+        // 3x3 d'abord (crafting table). Sinon 2x2 (player UI).
+        let grid_3x3: Vec<ItemStack> = inv
+            .craft_grid_3x3
+            .iter()
+            .map(|w| w.item.clone())
+            .collect();
+        if grid_3x3.iter().any(|s| !s.is_air()) {
+            if let Some(out) = db.match_crafting(&grid_3x3, 3) {
+                if let Some(item) = out.first() {
+                    return Some(item.clone());
+                }
+            }
+        }
+        // 2x2
+        let grid_2x2: Vec<ItemStack> = inv
+            .craft_grid
+            .iter()
+            .map(|w| w.item.clone())
+            .collect();
+        if grid_2x2.iter().any(|s| !s.is_air()) {
+            if let Some(out) = db.match_crafting(&grid_2x2, 2) {
+                if let Some(item) = out.first() {
+                    return Some(item.clone());
+                }
+            }
+        }
+        None
+    }
+
     pub fn new_item_stack_id_pub(&mut self) -> i32 {
         self.new_item_stack_id()
     }
@@ -1047,6 +1147,32 @@ impl InventoryManager {
                         tracing::debug!(
                             "CraftCreative: unknown creative_item_network_id={}",
                             creative_item_network_id
+                        );
+                        had_error = true;
+                    }
+                }
+                StackRequestAction::CraftRecipe { recipe_id, times }
+                | StackRequestAction::CraftRecipeAuto { recipe_id, times } => {
+                    // Match la grille 3x3 (Craft3x3) ou 2x2 (Craft2x2 si
+                    // crafting depuis inventaire) contre les recipes.
+                    let result = self.try_match_recipe(inv);
+                    if let Some(output) = result {
+                        // Stocke comme pending_creative_item (le client va
+                        // ensuite faire un Place depuis CREATED_OUTPUT).
+                        // Le times multiplie la quantité.
+                        let final_count = (output.count as u32 * (*times as u32).max(1))
+                            .min(64) as u16;
+                        let mut item = output.clone();
+                        item.count = final_count;
+                        self.pending_creative_item = Some(item);
+                        tracing::debug!(
+                            "CraftRecipe: matched recipe_id={} times={} → output_id={}",
+                            recipe_id, times, output.id
+                        );
+                    } else {
+                        tracing::debug!(
+                            "CraftRecipe: no matching recipe for grid (recipe_id={})",
+                            recipe_id
                         );
                         had_error = true;
                     }

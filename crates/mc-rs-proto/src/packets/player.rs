@@ -70,6 +70,20 @@ pub enum StackRequestAction {
     CraftCreative {
         creative_item_network_id: u32,
     },
+    /// PMMP `CraftRecipeStackRequestAction` (action_type=12).
+    /// Le client envoie le recipe_id (que le serveur a annoncé via
+    /// CraftingDataPacket) + `times` = nombre de fois qu'on souhaite craft.
+    CraftRecipe {
+        recipe_id: u32,
+        times: u8,
+    },
+    /// `CraftRecipeAuto` (action_type=13) : recipe + times + ingredients
+    /// list (ItemStack par ingredient). Utilisé par le recipe book quand
+    /// le joueur a coché "auto-craft from inventory".
+    CraftRecipeAuto {
+        recipe_id: u32,
+        times: u8,
+    },
     /// Other actions we don't handle yet.
     Unknown(u8),
 }
@@ -531,18 +545,18 @@ fn decode_item_stack_request(
                 }
             }
             12 => {
-                let _recipe_id = reader.read_var_u32()?;
-                let _times = reader.read_u8()?;
-                StackRequestAction::Unknown(12)
+                let recipe_id = reader.read_var_u32()?;
+                let times = reader.read_u8()?;
+                StackRequestAction::CraftRecipe { recipe_id, times }
             }
             13 => {
-                let _recipe_id = reader.read_var_u32()?;
-                let _times = reader.read_u8()?;
+                let recipe_id = reader.read_var_u32()?;
+                let times = reader.read_u8()?;
                 let ingredient_count = reader.read_u8()?;
                 for _ in 0..ingredient_count {
                     let _item = reader.read_u8()?;
                 }
-                StackRequestAction::Unknown(13)
+                StackRequestAction::CraftRecipeAuto { recipe_id, times }
             }
             14 => {
                 // PMMP CreativeCreateStackRequestAction::read :

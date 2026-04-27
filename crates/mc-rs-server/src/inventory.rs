@@ -149,7 +149,15 @@ pub struct PlayerInventory {
     pub offhand: ItemStackWrapper,
     pub cursor: ItemStackWrapper,          // 1 slot (UI slot 0)
     pub craft_grid: [ItemStackWrapper; 4], // 2x2 (UI slots 28..32)
+    pub craft_grid_3x3: [ItemStackWrapper; 9], // 3x3 (UI slots 32..40)
     pub craft_result: ItemStackWrapper,    // (UI slot 50)
+    pub anvil_input: ItemStackWrapper,     // UI slot 1
+    pub anvil_material: ItemStackWrapper,  // UI slot 2
+    pub enchant_input: ItemStackWrapper,   // UI slot 14
+    pub enchant_material: ItemStackWrapper, // UI slot 15
+    /// 27 slots du chest courant (si ouvert). Sync vers ChestManager
+    /// global dans main.rs via les listener events.
+    pub block_container: Vec<ItemStackWrapper>,
     pub held_slot: u8,                     // 0-8 hotbar index
     next_stack_id: i32,
 }
@@ -173,7 +181,13 @@ impl PlayerInventory {
                 ItemStackWrapper::air(),
                 ItemStackWrapper::air(),
             ],
+            craft_grid_3x3: std::array::from_fn(|_| ItemStackWrapper::air()),
             craft_result: ItemStackWrapper::air(),
+            anvil_input: ItemStackWrapper::air(),
+            anvil_material: ItemStackWrapper::air(),
+            enchant_input: ItemStackWrapper::air(),
+            enchant_material: ItemStackWrapper::air(),
+            block_container: vec![ItemStackWrapper::air(); 27],
             held_slot: 0,
             next_stack_id: 1,
         }
@@ -207,7 +221,13 @@ impl PlayerInventory {
                 ItemStackWrapper::air(),
                 ItemStackWrapper::air(),
             ],
+            craft_grid_3x3: std::array::from_fn(|_| ItemStackWrapper::air()),
             craft_result: ItemStackWrapper::air(),
+            anvil_input: ItemStackWrapper::air(),
+            anvil_material: ItemStackWrapper::air(),
+            enchant_input: ItemStackWrapper::air(),
+            enchant_material: ItemStackWrapper::air(),
+            block_container: vec![ItemStackWrapper::air(); 27],
             held_slot: held_slot.min(8),
             next_stack_id: max_stack_id.max(0) + 1,
         }
@@ -234,7 +254,13 @@ impl PlayerInventory {
             InvKey::Armor => self.armor.get_mut(core_slot),
             InvKey::Cursor => (core_slot == 0).then_some(&mut self.cursor),
             InvKey::Craft2x2 => self.craft_grid.get_mut(core_slot),
+            InvKey::Craft3x3 => self.craft_grid_3x3.get_mut(core_slot),
             InvKey::CraftResult => (core_slot == 0).then_some(&mut self.craft_result),
+            InvKey::AnvilInput => (core_slot == 0).then_some(&mut self.anvil_input),
+            InvKey::AnvilMaterial => (core_slot == 0).then_some(&mut self.anvil_material),
+            InvKey::EnchantInput => (core_slot == 0).then_some(&mut self.enchant_input),
+            InvKey::EnchantMaterial => (core_slot == 0).then_some(&mut self.enchant_material),
+            InvKey::BlockContainer => self.block_container.get_mut(core_slot),
         }
     }
 
@@ -250,7 +276,13 @@ impl PlayerInventory {
             InvKey::Armor => self.armor.get(core_slot),
             InvKey::Cursor => (core_slot == 0).then_some(&self.cursor),
             InvKey::Craft2x2 => self.craft_grid.get(core_slot),
+            InvKey::Craft3x3 => self.craft_grid_3x3.get(core_slot),
             InvKey::CraftResult => (core_slot == 0).then_some(&self.craft_result),
+            InvKey::AnvilInput => (core_slot == 0).then_some(&self.anvil_input),
+            InvKey::AnvilMaterial => (core_slot == 0).then_some(&self.anvil_material),
+            InvKey::EnchantInput => (core_slot == 0).then_some(&self.enchant_input),
+            InvKey::EnchantMaterial => (core_slot == 0).then_some(&self.enchant_material),
+            InvKey::BlockContainer => self.block_container.get(core_slot),
         }
     }
 
@@ -262,7 +294,11 @@ impl PlayerInventory {
             InvKey::Armor => 4,
             InvKey::Cursor => 1,
             InvKey::Craft2x2 => 4,
+            InvKey::Craft3x3 => 9,
             InvKey::CraftResult => 1,
+            InvKey::AnvilInput | InvKey::AnvilMaterial => 1,
+            InvKey::EnchantInput | InvKey::EnchantMaterial => 1,
+            InvKey::BlockContainer => 27,
         }
     }
 

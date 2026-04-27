@@ -75,6 +75,16 @@ pub struct PendingBlockActorUpdate {
     pub nbt: Vec<u8>,
 }
 
+/// Right-click sur un bloc qui ouvre une UI (crafting table, anvil, etc.).
+/// main.rs envoie ContainerOpen avec window_type approprié.
+#[derive(Debug, Clone)]
+pub enum PendingBlockUiOpen {
+    CraftingTable { pos: (i32, i32, i32) },
+    Anvil { pos: (i32, i32, i32) },
+    Enchanting { pos: (i32, i32, i32) },
+    Furnace { pos: (i32, i32, i32) },
+}
+
 /// Manages a single client connection's protocol state machine.
 pub struct Connection {
     pub addr: SocketAddr,
@@ -123,6 +133,10 @@ pub struct Connection {
     /// Right-click sur chest queue ici, processé par main.rs (qui a accès
     /// au ChestManager partagé).
     pub pending_chest_open: Option<(i32, i32, i32)>,
+    pub pending_block_ui_open: Option<PendingBlockUiOpen>,
+    /// Position du chest actuellement ouvert par ce joueur (pour synchroniser
+    /// les ItemStackRequest avec ChestManager au close).
+    pub open_chest_pos: Option<(i32, i32, i32)>,
     /// BlockActorData (sign edit, item_frame, etc.) reçu du client. main.rs
     /// décode + persiste dans SignManager + broadcast.
     pub pending_block_actor_updates: Vec<PendingBlockActorUpdate>,
@@ -233,6 +247,8 @@ impl Connection {
             pending_entity_attacks: Vec::new(),
             pending_furnace_events: Vec::new(),
             pending_chest_open: None,
+            pending_block_ui_open: None,
+            open_chest_pos: None,
             pending_block_actor_updates: Vec::new(),
             inventory,
             inventory_manager: InventoryManager::new(),

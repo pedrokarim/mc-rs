@@ -630,6 +630,12 @@ impl Connection {
                 };
                 let chest_id = BLOCKS.get("minecraft:chest");
                 let trapped_chest_id = BLOCKS.get("minecraft:trapped_chest");
+                let crafting_id = BLOCKS.get("minecraft:crafting_table");
+                let furnace_id = BLOCKS.get("minecraft:furnace");
+                let anvil_id = BLOCKS.get("minecraft:anvil");
+                let chipped_anvil_id = BLOCKS.get("minecraft:chipped_anvil");
+                let damaged_anvil_id = BLOCKS.get("minecraft:damaged_anvil");
+                let enchanting_id = BLOCKS.get("minecraft:enchanting_table");
                 if BLOCKS.is_bed(clicked_id) {
                     self.spawn_position =
                         [bx as f32 + 0.5, by as f32 + 1.0, bz as f32 + 0.5];
@@ -646,7 +652,38 @@ impl Connection {
                 } else if clicked_id == chest_id || clicked_id == trapped_chest_id {
                     self.pending_chest_open = Some((bx, by, bz));
                     info!(
-                        "[{}] Chest interact request at ({}, {}, {}) — queued for main loop",
+                        "[{}] Chest interact request at ({}, {}, {}) — queued",
+                        self.addr, bx, by, bz
+                    );
+                } else if clicked_id == crafting_id {
+                    self.pending_block_ui_open =
+                        Some(super::PendingBlockUiOpen::CraftingTable { pos: (bx, by, bz) });
+                    info!(
+                        "[{}] Crafting table interact at ({},{},{})",
+                        self.addr, bx, by, bz
+                    );
+                } else if clicked_id == anvil_id
+                    || clicked_id == chipped_anvil_id
+                    || clicked_id == damaged_anvil_id
+                {
+                    self.pending_block_ui_open =
+                        Some(super::PendingBlockUiOpen::Anvil { pos: (bx, by, bz) });
+                    info!(
+                        "[{}] Anvil interact at ({},{},{})",
+                        self.addr, bx, by, bz
+                    );
+                } else if clicked_id == enchanting_id {
+                    self.pending_block_ui_open =
+                        Some(super::PendingBlockUiOpen::Enchanting { pos: (bx, by, bz) });
+                    info!(
+                        "[{}] Enchanting table interact at ({},{},{})",
+                        self.addr, bx, by, bz
+                    );
+                } else if clicked_id == furnace_id {
+                    self.pending_block_ui_open =
+                        Some(super::PendingBlockUiOpen::Furnace { pos: (bx, by, bz) });
+                    info!(
+                        "[{}] Furnace interact at ({},{},{})",
                         self.addr, bx, by, bz
                     );
                 } else {

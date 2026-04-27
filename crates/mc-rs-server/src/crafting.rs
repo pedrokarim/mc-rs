@@ -1,10 +1,17 @@
 //! Crafting — port sélectif de `.reference/PocketMine-MP/src/crafting/*`.
 //!
 //! Couvre : recipes shaped (3x3 avec pattern), shapeless (liste d'ingrédients
-//! quelconque ordre), furnace (smelting 1→1). Pas de recipe JSON loader pour
-//! l'instant ; les recettes sont construites par le code serveur.
+//! quelconque ordre), furnace (smelting 1→1).
+//!
+//! `RECIPE_DB` static partagé : initialisé une fois au boot (main.rs) après
+//! `recipes_vanilla::register_all`. Permet à `InventoryManager` d'accéder
+//! aux 1601+ recipes sans avoir à passer la référence par paramètre.
+
+use std::sync::OnceLock;
 
 use mc_rs_proto::packets::player::ItemStack;
+
+pub static RECIPE_DB: OnceLock<CraftingManager> = OnceLock::new();
 
 /// Ingrédient de recette. Peut matcher exactement ou avec meta wildcard.
 #[derive(Debug, Clone)]
@@ -177,7 +184,7 @@ impl FurnaceRecipe {
 }
 
 /// Manager global qui garde toutes les recettes. Port PMMP `CraftingManager`.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CraftingManager {
     pub shaped: Vec<ShapedRecipe>,
     pub shapeless: Vec<ShapelessRecipe>,

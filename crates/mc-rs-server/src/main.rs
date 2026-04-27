@@ -1169,6 +1169,9 @@ async fn main() {
         fu
     );
     let crafting_manager = crafting_manager;
+    // Static recipe DB — utilisé par InventoryManager::try_match_recipe
+    // sans avoir besoin de passer la référence à chaque appel.
+    let _ = crate::crafting::RECIPE_DB.set(crafting_manager.clone());
     // Passive entities (TNT / FallingBlock / XPOrb) — spawned via commands or events.
     let _passive_entities = crate::passive_entities::PassiveEntityManager::new();
     // Event manager partagé (tous les Connection le clonent).
@@ -1619,6 +1622,40 @@ async fn main() {
                     }
                 }
 
+                // Process pending block UI opens (crafting table, anvil,
+                // enchanting table, furnace). Envoie ContainerOpen avec le
+                // window_type approprié.
+                for (addr, conn) in connections.iter_mut() {
+                    let Some(ui_open) = conn.pending_block_ui_open.take() else {
+                        continue;
+                    };
+                    let (window_type, pos) = match ui_open {
+                        crate::connection::PendingBlockUiOpen::CraftingTable { pos } => {
+                            (1i8, pos)
+                        }
+                        crate::connection::PendingBlockUiOpen::Anvil { pos } => (5i8, pos),
+                        crate::connection::PendingBlockUiOpen::Enchanting { pos } => (3i8, pos),
+                        crate::connection::PendingBlockUiOpen::Furnace { pos } => (2i8, pos),
+                    };
+                    let window_id: u8 = 60 + (window_type as u8 & 0x0F);
+                    let open_pkt = mc_rs_proto::packets::world::ContainerOpen {
+                        window_id,
+                        window_type: window_type as u8,
+                        position: [pos.0, pos.1, pos.2],
+                        actor_unique_id: -1,
+                    };
+                    let bytes = conn.encode_compressed_packet(
+                        packet_id::CONTAINER_OPEN,
+                        &open_pkt.encode(),
+                    );
+                    let prepared = conn.prepare_for_send(bytes);
+                    raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, true);
+                    tracing::info!(
+                        "[{}] Opened block UI type={} at {:?}",
+                        addr, window_type, pos
+                    );
+                }
+
                 // Process pending chest opens (broadcast ContainerOpen +
                 // InventoryContent pour les 27 slots du chest cliqué).
                 for (addr, conn) in connections.iter_mut() {
@@ -1630,6 +1667,20 @@ async fn main() {
                     let data = chest_manager.get_or_create(pos).clone();
                     // Window ID dynamique (1-100 plage block container).
                     let window_id: u8 = 50;
+                    // Register BlockContainer dans l'InventoryManager du joueur :
+                    // associe windowId=50 → InvKey::BlockContainer pour que
+                    // les ItemStackRequest soient routés correctement.
+                    conn.inventory_manager.associate_block_container(window_id);
+                    // Pré-remplit les 27 slots du joueur avec les items du
+                    // chest pour que les transactions liront les bons items.
+                    for (i, src) in data.slots.iter().enumerate() {
+                        if let Some(dest) = conn.inventory.block_container.get_mut(i) {
+                            *dest = mc_rs_proto::packets::player::ItemStackWrapper::legacy(
+                                src.clone(),
+                            );
+                        }
+                    }
+                    conn.open_chest_pos = Some(pos);
                     let open_pkt = mc_rs_proto::packets::world::ContainerOpen {
                         window_id,
                         window_type: 0, // CONTAINER (chest)
@@ -1672,6 +1723,23 @@ async fn main() {
                             .unwrap_or(0),
                         data.slots.len()
                     );
+                }
+
+                // Sync des modifications de chest entre InventoryManager
+                // et ChestManager partagé. Si le joueur déplace un item du
+                // chest vers son inventaire (et vice-versa), set_slot
+                // (InvKey::BlockContainer) push dans pending_block_container_writes.
+                for conn in connections.values_mut() {
+                    let writes = conn.inventory_manager.drain_block_container_writes();
+                    if writes.is_empty() {
+                        continue;
+                    }
+                    let Some(pos) = conn.open_chest_pos else {
+                        continue;
+                    };
+                    for (slot, item) in writes {
+                        chest_manager.set_slot(pos, slot, item);
+                    }
                 }
 
                 // Tick Lua plugin scheduler chaque server tick (100 TPS).
