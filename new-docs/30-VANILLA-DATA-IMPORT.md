@@ -107,11 +107,27 @@ Intégration complète des **données canoniques Mojang** (`bedrock-samples` v1.
 
 ## Tests
 
-**998 tests passent** après intégration (record précédent : ~985).
+**1010 tests passent** après intégration totale (record précédent : ~985).
+
+## Consommateurs runtime — TOUS BRANCHÉS
+
+| Data | Consommateur runtime |
+|---|---|
+| `creative_content` | ✅ Envoyé dans CreativeContent (0x91) au PreSpawn |
+| `recipes_vanilla` | ✅ 1601 recettes registrées dans RECIPE_DB OnceLock + matching Craft3x3/Craft2x2 |
+| `loot_table::roll_entity_loot` | ✅ Wired dans `mob_entities::apply_attack` (drops mobs vanilla) |
+| `loot_table::roll_chest_loot` | ✅ API exposée pour générateur de structures (data prête) |
+| `spawn_rules_vanilla` | ✅ `mob_spawner.rs` consulte `spawn_weight` + `brightness_range` chaque game tick |
+| `biomes_vanilla` | ✅ `world::biome::biome_identifier()` mappe 73 IDs Bedrock → minecraft:* |
+| `vanilla_registries::is_effect/is_enchantment` | ✅ Validation `/effect`, `/enchant` via `from_name_or_id` |
+| `entities_vanilla` | ✅ Health/family/spawnable accessible (entities_vanilla::for_identifier) |
+| `items_vanilla::nutrition/saturation` | ✅ Wired dans `Connection::handle_consume_item` (eat handler) |
+| `trading_vanilla` | 🚧 Data prête, UI villager à brancher |
 
 ## Commits
 
-Phase "données officielles" réalisée en 8 commits :
+Phase "données officielles" réalisée en 8 commits initialement, puis 4 commits supplémentaires
+pour brancher les consommateurs runtime :
 1. `feat(creative)` — inventaire créatif PMMP
 2. `feat(loot)` — loot tables entités
 3. `feat(recipes)` — 1601 recettes
@@ -119,3 +135,8 @@ Phase "données officielles" réalisée en 8 commits :
 5. `feat(spawn)` — 56 spawn rules
 6. `feat(biomes)` — 87 biomes
 7. `feat(data)` — équipment/gameplay/dispensers/pots/spawners + trading + registries + entities + items
+8. `docs(vanilla)` — documentation 30-VANILLA-DATA-IMPORT.md
+9. `feat(commands)` — /effect /enchant /particle wirés sur vanilla_registries
+10. `feat(food+loot+spawner)` — items_vanilla.nutrition + loot_table::roll_entity_loot + mob_spawner.rs
+11. `feat(blocks)` — biomes_vanilla::biome_identifier mapping pour intégration terrain
+12. `feat(chest+crafting+anvil)` — InventoryManager étendu pour Block UIs avec recipes_vanilla

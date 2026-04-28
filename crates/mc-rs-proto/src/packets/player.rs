@@ -550,11 +550,46 @@ fn decode_item_stack_request(
                 StackRequestAction::CraftRecipe { recipe_id, times }
             }
             13 => {
+                // PMMP CraftRecipeAutoStackRequestAction::read :
+                //   recipeId (VarU32) + repetitions (u8) + repetitions2 (u8 — Mojang dup)
+                //   ingredient_count (u8) + foreach: RecipeIngredient
+                // RecipeIngredient = descriptor_type (u8) + descriptor body + count (var_i32)
+                //   descriptor_type = 0=NONE, 1=INT_ID_META, 2=STRING_ID_META, 3=TAG, 4=MOLANG, 5=COMPLEX_ALIAS
                 let recipe_id = reader.read_var_u32()?;
                 let times = reader.read_u8()?;
+                let _times2 = reader.read_u8()?;
                 let ingredient_count = reader.read_u8()?;
                 for _ in 0..ingredient_count {
-                    let _item = reader.read_u8()?;
+                    let descriptor_type = reader.read_u8()?;
+                    match descriptor_type {
+                        1 => {
+                            // IntIdMeta : i16 LE id + (if id!=0) i16 LE meta
+                            let id = reader.read_i16_le()?;
+                            if id != 0 {
+                                let _meta = reader.read_i16_le()?;
+                            }
+                        }
+                        2 => {
+                            // StringIdMeta : string + u16 LE meta
+                            let _string_id = reader.read_string()?;
+                            let _meta = reader.read_u16_le()?;
+                        }
+                        3 => {
+                            // Tag : string
+                            let _tag = reader.read_string()?;
+                        }
+                        4 => {
+                            // Molang : string + u8 version
+                            let _expr = reader.read_string()?;
+                            let _version = reader.read_u8()?;
+                        }
+                        5 => {
+                            // ComplexAlias : string
+                            let _alias = reader.read_string()?;
+                        }
+                        _ => {}
+                    }
+                    let _count = reader.read_var_i32()?;
                 }
                 StackRequestAction::CraftRecipeAuto { recipe_id, times }
             }

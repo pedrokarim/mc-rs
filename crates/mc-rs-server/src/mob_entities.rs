@@ -440,25 +440,32 @@ mod tests {
 
     #[test]
     fn killing_a_mob_returns_position_and_loot() {
-        let mut mobs = MobEntityManager::new();
-        let cow = mobs.spawn(MobKind::Cow, [4.5, 70.0, -2.5]);
+        // La cow utilise maintenant la loot_table vanilla (bedrock-samples)
+        // avec set_count(0..2) pour leather + beef → drops aléatoires 0..4
+        // items. On retry jusqu'à obtenir un drop pour avoir un test stable
+        // qui valide le contrat API (kill → drops + position).
+        let beef_id = item_registry::required_item_id("minecraft:beef");
+        let leather_id = item_registry::required_item_id("minecraft:leather");
 
-        let mut last_result = None;
-        for _ in 0..3 {
-            last_result = mobs.apply_attack(cow.base.entity_runtime_id, 4.0);
+        for _ in 0..30 {
+            let mut mobs = MobEntityManager::new();
+            let cow = mobs.spawn(MobKind::Cow, [4.5, 70.0, -2.5]);
+            let mut last_result = None;
+            for _ in 0..3 {
+                last_result = mobs.apply_attack(cow.base.entity_runtime_id, 4.0);
+            }
+            let result = last_result.expect("expected kill result");
+            assert!(result.remove_packet.is_some());
+            assert_eq!(result.death_position, Some([4.5, 70.0, -2.5]));
+            // Si la roll donne au moins 1 drop d'un type vanilla cow → succès.
+            if result
+                .drops
+                .iter()
+                .any(|item| item.id == beef_id || item.id == leather_id)
+            {
+                return;
+            }
         }
-
-        let result = last_result.expect("expected kill result");
-        assert!(result.remove_packet.is_some());
-        assert_eq!(result.death_position, Some([4.5, 70.0, -2.5]));
-        assert_eq!(result.drops.len(), 2);
-        assert!(result
-            .drops
-            .iter()
-            .any(|item| item.id == item_registry::required_item_id("minecraft:beef")));
-        assert!(result
-            .drops
-            .iter()
-            .any(|item| item.id == item_registry::required_item_id("minecraft:leather")));
+        panic!("after 30 cow kills, never got beef or leather drop — loot table issue");
     }
 }
