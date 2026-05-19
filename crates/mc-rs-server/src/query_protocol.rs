@@ -76,7 +76,9 @@ where
                     if let Ok(mut t) = tokens.lock() {
                         // Nettoie les expirés.
                         let now = Instant::now();
-                        t.retain(|_, (_, exp)| now.duration_since(*exp) < Duration::from_secs(TOKEN_TTL));
+                        t.retain(|_, (_, exp)| {
+                            now.duration_since(*exp) < Duration::from_secs(TOKEN_TTL)
+                        });
                         t.insert(peer, (token, now));
                     }
                     let mut resp = Vec::with_capacity(16);

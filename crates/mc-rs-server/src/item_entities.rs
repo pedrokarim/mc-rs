@@ -33,7 +33,7 @@ const PICKUP_RADIUS_SQ: f32 = 1.5 * 1.5;
 // Scaled to the server's 100 TPS tick rate (5 server ticks = 1 game tick).
 const GRAVITY_PER_TICK: f32 = 0.04 * (BASELINE_TICKS_PER_SECOND / SERVER_TICKS_PER_SECOND_F);
 const AIR_DRAG: f32 = 0.996; // ~= 0.98^(1/5)
-// Friction au sol : 0.6/game tick → 0.6^(1/5) ≈ 0.902/server tick.
+                             // Friction au sol : 0.6/game tick → 0.6^(1/5) ≈ 0.902/server tick.
 const GROUND_FRICTION: f32 = 0.902;
 const MOVEMENT_EPSILON: f32 = 1.0 / 128.0;
 

@@ -223,10 +223,8 @@ impl Connection {
                             position: [prev_pos[0] as f32, prev_pos[1] as f32, prev_pos[2] as f32],
                             event_data: 0,
                         };
-                        let prev_bytes = self.encode_compressed_packet(
-                            packet_id::LEVEL_EVENT,
-                            &prev_event.encode(),
-                        );
+                        let prev_bytes = self
+                            .encode_compressed_packet(packet_id::LEVEL_EVENT, &prev_event.encode());
                         responses.push(prev_bytes.clone());
                         self.broadcasts.push(prev_bytes);
                     }
@@ -303,7 +301,9 @@ impl Connection {
                     let old_block_id = if let Ok(mut cache) = self.chunk_cache.lock() {
                         let old = cache.get_block(bx, by, bz);
                         cache.set_block(bx, by, bz, air_id);
-                        cache.save_chunk_now(bx.div_euclid(16), bz.div_euclid(16));
+                        // set_block marque déjà le chunk dirty → l'autosave le
+                        // persiste. PAS de save_chunk_now (flush LevelDB
+                        // synchrone sous guard = stall + hazard de gel).
                         old
                     } else {
                         air_id
@@ -313,9 +313,7 @@ impl Connection {
                     // retire l'entrée du FurnaceManager et drop les items in/fuel/output.
                     if crate::furnace::FurnaceKind::from_block_id(old_block_id).is_some() {
                         self.pending_furnace_events
-                            .push(super::PendingFurnaceEvent::Unregister {
-                                pos: (bx, by, bz),
-                            });
+                            .push(super::PendingFurnaceEvent::Unregister { pos: (bx, by, bz) });
                         info!(
                             "[{}] Queued furnace unregister at ({bx},{by},{bz})",
                             self.addr
@@ -373,19 +371,16 @@ impl Connection {
                         let block_name = crate::world::block_registry::BLOCKS
                             .name_for(old_block_id)
                             .unwrap_or("");
-                        let held_item_id =
-                            self.inventory.slots[self.inventory.held_slot as usize].item.id;
+                        let held_item_id = self.inventory.slots[self.inventory.held_slot as usize]
+                            .item
+                            .id;
                         let held_tool = crate::durability::durable_info(held_item_id);
-                        let needs_tool =
-                            crate::block_hardness::required_tool_type(block_name);
-                        let min_tier =
-                            crate::block_hardness::min_tool_tier_for_drop(block_name);
+                        let needs_tool = crate::block_hardness::required_tool_type(block_name);
+                        let min_tier = crate::block_hardness::min_tool_tier_for_drop(block_name);
 
                         // Seuls les blocs pickaxe-required sont gate-és côté outil.
-                        let needs_pickaxe = matches!(
-                            needs_tool,
-                            Some(crate::durability::ToolType::Pickaxe)
-                        );
+                        let needs_pickaxe =
+                            matches!(needs_tool, Some(crate::durability::ToolType::Pickaxe));
                         let tool_ok = if needs_pickaxe {
                             matches!(
                                 held_tool,
@@ -409,11 +404,12 @@ impl Connection {
                             if let Some(drop_item) = crate::inventory::block_drop(old_block_id) {
                                 let item_id = drop_item.id;
                                 let drop_summary = item_stack_debug_summary(&drop_item);
-                                self.pending_item_spawns
-                                    .push(PendingItemEntitySpawn::with_scatter(
+                                self.pending_item_spawns.push(
+                                    PendingItemEntitySpawn::with_scatter(
                                         drop_item,
                                         [bx as f32 + 0.5, by as f32 + 0.5, bz as f32 + 0.5],
-                                    ));
+                                    ),
+                                );
                                 info!(
                                     "[{}] Queued dropped item entity: item_id={} at ({}, {}, {}) :: {}",
                                     self.addr, item_id, bx, by, bz, drop_summary
@@ -606,8 +602,8 @@ impl Connection {
                 )],
                 tick: self.tick,
             };
-            let bytes = self
-                .encode_compressed_packet(packet_id::SET_ACTOR_DATA, &actor_data.encode());
+            let bytes =
+                self.encode_compressed_packet(packet_id::SET_ACTOR_DATA, &actor_data.encode());
             self.broadcasts.push(bytes);
         }
 
@@ -637,18 +633,13 @@ impl Connection {
                 let damaged_anvil_id = BLOCKS.get("minecraft:damaged_anvil");
                 let enchanting_id = BLOCKS.get("minecraft:enchanting_table");
                 if BLOCKS.is_bed(clicked_id) {
-                    self.spawn_position =
-                        [bx as f32 + 0.5, by as f32 + 1.0, bz as f32 + 0.5];
+                    self.spawn_position = [bx as f32 + 0.5, by as f32 + 1.0, bz as f32 + 0.5];
                     info!(
                         "[{}] Bed interact → spawn override ({}, {}, {})",
                         self.addr, bx, by, bz
                     );
-                    let msg = mc_rs_proto::packets::player::Text::system(
-                        "§eRespawn point set",
-                    );
-                    responses.push(
-                        self.encode_compressed_packet(packet_id::TEXT, &msg),
-                    );
+                    let msg = mc_rs_proto::packets::player::Text::system("§eRespawn point set");
+                    responses.push(self.encode_compressed_packet(packet_id::TEXT, &msg));
                 } else if clicked_id == chest_id || clicked_id == trapped_chest_id {
                     self.pending_chest_open = Some((bx, by, bz));
                     info!(
@@ -668,10 +659,7 @@ impl Connection {
                 {
                     self.pending_block_ui_open =
                         Some(super::PendingBlockUiOpen::Anvil { pos: (bx, by, bz) });
-                    info!(
-                        "[{}] Anvil interact at ({},{},{})",
-                        self.addr, bx, by, bz
-                    );
+                    info!("[{}] Anvil interact at ({},{},{})", self.addr, bx, by, bz);
                 } else if clicked_id == enchanting_id {
                     self.pending_block_ui_open =
                         Some(super::PendingBlockUiOpen::Enchanting { pos: (bx, by, bz) });
@@ -682,10 +670,7 @@ impl Connection {
                 } else if clicked_id == furnace_id {
                     self.pending_block_ui_open =
                         Some(super::PendingBlockUiOpen::Furnace { pos: (bx, by, bz) });
-                    info!(
-                        "[{}] Furnace interact at ({},{},{})",
-                        self.addr, bx, by, bz
-                    );
+                    info!("[{}] Furnace interact at ({},{},{})", self.addr, bx, by, bz);
                 } else {
                     self.handle_block_place(interaction, &mut responses);
                 }
@@ -757,10 +742,11 @@ impl Connection {
             bz,
             nbt_bytes.len()
         );
-        self.pending_block_actor_updates.push(super::PendingBlockActorUpdate {
-            position: (bx, by, bz),
-            nbt: nbt_bytes,
-        });
+        self.pending_block_actor_updates
+            .push(super::PendingBlockActorUpdate {
+                position: (bx, by, bz),
+                nbt: nbt_bytes,
+            });
         Vec::new()
     }
 
@@ -773,7 +759,12 @@ impl Connection {
         let held = &self.inventory.slots[held_slot_idx];
         info!(
             "[{}] block_place attempt: held_slot={} item_id={} count={} face={} gamemode={}",
-            self.addr, held_slot_idx, held.item.id, held.item.count, interaction.face, self.gamemode
+            self.addr,
+            held_slot_idx,
+            held.item.id,
+            held.item.count,
+            interaction.face,
+            self.gamemode
         );
         if held.item.is_air() {
             info!("[{}] block_place: held is AIR, abort", self.addr);
@@ -843,7 +834,8 @@ impl Connection {
                 return;
             }
             cache.set_block(tx, ty, tz, block_runtime_id);
-            cache.save_chunk_now(tx.div_euclid(16), tz.div_euclid(16));
+            // set_block marque déjà le chunk dirty → autosave. PAS de
+            // save_chunk_now (flush LevelDB synchrone sous guard = gel).
         }
 
         // Send UpdateBlock
@@ -919,7 +911,10 @@ impl Connection {
                     pos: (tx, ty, tz),
                     kind,
                 });
-            info!("[{}] Queued furnace register at ({tx},{ty},{tz})", self.addr);
+            info!(
+                "[{}] Queued furnace register at ({tx},{ty},{tz})",
+                self.addr
+            );
         }
 
         // PMMP `BlockPlaceEvent` (post-place).
@@ -952,7 +947,8 @@ impl Connection {
                 return;
             }
             cache.set_block(bx, by, bz, air_id);
-            cache.save_chunk_now(bx.div_euclid(16), bz.div_euclid(16));
+            // set_block marque déjà le chunk dirty → autosave. PAS de
+            // save_chunk_now (flush LevelDB synchrone sous guard = gel).
             old
         } else {
             return;
@@ -975,8 +971,7 @@ impl Connection {
             position: block_center,
             event_data: old_block_id as i32,
         };
-        let pbytes =
-            self.encode_compressed_packet(packet_id::LEVEL_EVENT, &particle.encode());
+        let pbytes = self.encode_compressed_packet(packet_id::LEVEL_EVENT, &particle.encode());
         responses.push(pbytes.clone());
         self.broadcasts.push(pbytes);
 
@@ -1014,8 +1009,7 @@ impl Connection {
                 let Some(rule) = crate::block_attachment::attachment_rule(nname) else {
                     continue;
                 };
-                let ok =
-                    crate::block_attachment::check_support(&mut cache, nx, ny, nz, rule);
+                let ok = crate::block_attachment::check_support(&mut cache, nx, ny, nz, rule);
                 if !ok {
                     cascade.push((nx, ny, nz));
                 }

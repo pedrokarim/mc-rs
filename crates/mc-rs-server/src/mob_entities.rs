@@ -64,6 +64,14 @@ impl MobKind {
         }
     }
 
+    /// Liste des noms d'entités supportées par `/summon` — alimente la
+    /// SoftEnum d'autocomplétion côté client.
+    pub fn all_names() -> &'static [&'static str] {
+        &[
+            "zombie", "skeleton", "creeper", "cow", "pig", "sheep", "chicken",
+        ]
+    }
+
     pub fn display_name(self) -> &'static str {
         match self {
             Self::Zombie => "Zombie",

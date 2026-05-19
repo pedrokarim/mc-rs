@@ -89,10 +89,7 @@ pub struct RconCommand {
     pub response_tx: mpsc::Sender<String>,
 }
 
-pub fn start(
-    bind_addr: &str,
-    password: String,
-) -> std::io::Result<mpsc::Receiver<RconCommand>> {
+pub fn start(bind_addr: &str, password: String) -> std::io::Result<mpsc::Receiver<RconCommand>> {
     let listener = TcpListener::bind(bind_addr)?;
     listener.set_nonblocking(false)?;
     let (tx, rx) = mpsc::channel();

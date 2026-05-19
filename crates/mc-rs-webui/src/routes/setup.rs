@@ -6,8 +6,8 @@
 use askama::Template;
 use axum::{
     extract::State,
-    response::{Html, IntoResponse, Redirect, Response},
     http::StatusCode,
+    response::{Html, IntoResponse, Redirect, Response},
     Form,
 };
 use serde::Deserialize;

@@ -64,8 +64,7 @@ impl SystemProbe {
     pub fn new() -> Self {
         let pid = Pid::from(std::process::id() as usize);
         let mut system = System::new_with_specifics(
-            RefreshKind::new()
-                .with_processes(ProcessRefreshKind::new().with_cpu().with_memory()),
+            RefreshKind::new().with_processes(ProcessRefreshKind::new().with_cpu().with_memory()),
         );
         system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
         let host_snapshot = System::new_all();
@@ -80,10 +79,8 @@ impl SystemProbe {
     }
 
     pub fn sample(&mut self) -> SystemStats {
-        self.system.refresh_processes(
-            sysinfo::ProcessesToUpdate::Some(&[self.pid]),
-            true,
-        );
+        self.system
+            .refresh_processes(sysinfo::ProcessesToUpdate::Some(&[self.pid]), true);
         let proc = match self.system.process(self.pid) {
             Some(p) => p,
             None => return SystemStats::default(),
@@ -156,6 +153,10 @@ mod tests {
     fn system_probe_returns_non_zero_memory() {
         let mut probe = SystemProbe::new();
         let stats = probe.sample();
-        assert!(stats.mem_mb > 0.0, "mem_mb should be > 0 (got {})", stats.mem_mb);
+        assert!(
+            stats.mem_mb > 0.0,
+            "mem_mb should be > 0 (got {})",
+            stats.mem_mb
+        );
     }
 }

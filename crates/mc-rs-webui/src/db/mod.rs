@@ -142,7 +142,8 @@ pub async fn open_db(url: &str) -> Result<Arc<dyn WebDb>> {
         #[cfg(not(feature = "postgres"))]
         {
             return Err(Error::BadConfig(
-                "compiled without `postgres` feature, but database_url uses postgres://".to_string(),
+                "compiled without `postgres` feature, but database_url uses postgres://"
+                    .to_string(),
             ));
         }
     }

@@ -193,8 +193,22 @@ impl BlockRegistry {
     /// Utilisé pour détecter les right-clicks sur lit (sleep / spawn override).
     pub fn is_bed(&self, block_id: u32) -> bool {
         const BED_COLORS: &[&str] = &[
-            "white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray",
-            "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black",
+            "white",
+            "orange",
+            "magenta",
+            "light_blue",
+            "yellow",
+            "lime",
+            "pink",
+            "gray",
+            "light_gray",
+            "cyan",
+            "purple",
+            "blue",
+            "brown",
+            "green",
+            "red",
+            "black",
         ];
         for color in BED_COLORS {
             let name = format!("minecraft:{}_bed", color);

@@ -31,8 +31,8 @@ impl ParamType {
             ParamType::Position => Some(65),
             ParamType::Message => Some(68),
             ParamType::RawText => Some(70),
-            ParamType::Json => Some(70),
-            ParamType::Command => Some(67),
+            ParamType::Json => Some(74),
+            ParamType::Command => Some(87),
             ParamType::HardEnum { .. } | ParamType::SoftEnum { .. } => None,
         }
     }
@@ -321,8 +321,8 @@ impl<R: CommandSender + SoftEnumSource + ?Sized> CommandMap<R> {
                                     ParamType::Position => VisibleParamType::Basic(65),
                                     ParamType::Message => VisibleParamType::Basic(68),
                                     ParamType::RawText => VisibleParamType::Basic(70),
-                                    ParamType::Json => VisibleParamType::Basic(70),
-                                    ParamType::Command => VisibleParamType::Basic(67),
+                                    ParamType::Json => VisibleParamType::Basic(74),
+                                    ParamType::Command => VisibleParamType::Basic(87),
                                     ParamType::HardEnum { name, values } => {
                                         VisibleParamType::HardEnum {
                                             name: name.clone(),

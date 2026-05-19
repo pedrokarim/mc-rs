@@ -317,7 +317,7 @@ impl StartGame {
             disable_persona: false,
             disable_custom_skins: false,
             mute_emote_announcements: false,
-            vanilla_version: "1.26.10".to_string(),
+            vanilla_version: "1.26.20".to_string(),
             limited_world_width: 0,
             limited_world_length: 0,
             is_new_nether: true,
@@ -338,7 +338,7 @@ impl StartGame {
             // We currently run Bedrock in the legacy/disabled ItemStackNetManager mode.
             // The client expects ContainerOpen + legacy InventoryContent/Slot semantics in this mode.
             enable_new_inventory_system: false,
-            server_software_version: "1.26.10".to_string(),
+            server_software_version: "1.26.20".to_string(),
             // Empty NBT compound tag (network LE format):
             // tag_type=10 (compound), name_length=0 (VarUInt=0x00), end_tag=0x00
             player_actor_properties_nbt: vec![0x0A, 0x00, 0x00],
@@ -729,7 +729,12 @@ impl CreativeContent {
 
 /// Encode un `ItemStackWithoutStackId` : id + count + meta + block_rid + extra_data.
 /// Pas de has_net_id/stack_id (contrairement à ItemStackWrapper).
-fn write_item_stack_without_id(w: &mut ProtoWriter, item_id: i32, count: u16, block_runtime_id: i32) {
+fn write_item_stack_without_id(
+    w: &mut ProtoWriter,
+    item_id: i32,
+    count: u16,
+    block_runtime_id: i32,
+) {
     w.write_var_i32(item_id);
     if item_id == 0 {
         return;
@@ -758,13 +763,13 @@ impl ItemRegistry {
 
 /// ResourcePackDataInfo (S→C, 0x52). Annonce métadata d'un pack au client.
 pub struct ResourcePackDataInfo {
-    pub pack_id: String,        // UUID
+    pub pack_id: String, // UUID
     pub max_chunk_size: u32,
     pub chunk_count: u32,
     pub compressed_pack_size: u64,
-    pub sha256: String,         // hex 64 chars
+    pub sha256: String, // hex 64 chars
     pub is_premium: bool,
-    pub pack_type: u8,          // 0=Resources, 4=Behavior
+    pub pack_type: u8, // 0=Resources, 4=Behavior
 }
 
 impl ResourcePackDataInfo {
@@ -809,10 +814,15 @@ pub struct ResourcePackChunkRequest {
 }
 
 impl ResourcePackChunkRequest {
-    pub fn decode(reader: &mut crate::io::ProtoReader) -> Result<Self, crate::io::reader::ProtoReadError> {
+    pub fn decode(
+        reader: &mut crate::io::ProtoReader,
+    ) -> Result<Self, crate::io::reader::ProtoReadError> {
         let pack_id = reader.read_string()?;
         let chunk_index = reader.read_u32_le()?;
-        Ok(Self { pack_id, chunk_index })
+        Ok(Self {
+            pack_id,
+            chunk_index,
+        })
     }
 }
 
@@ -1035,6 +1045,13 @@ impl LevelSoundEvent {
         w.write_bool(self.is_baby_mob);
         w.write_bool(self.disable_relative_volume);
         w.write_i64_le(self.actor_unique_id);
+        // Protocol 975 (PMMP `LevelSoundEventPacket`,
+        // tag 57.1.0+bedrock-1.26.20) : nouveau champ trailing
+        // `writeOptional(firePosition, putVector3)`. mc-rs n'émet jamais de
+        // fire position → Optional(false) = 1 octet. Sans ça le client
+        // décode 1 octet trop court → batch corrompu → crash au 1er son de
+        // bloc (break/place).
+        w.write_bool(false);
         w.into_bytes()
     }
 }

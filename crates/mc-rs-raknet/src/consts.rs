@@ -43,11 +43,26 @@ pub const RECV_WINDOW_SIZE: u32 = 2048;
 /// Send reliable window size
 pub const SEND_RELIABLE_WINDOW_SIZE: u32 = 512;
 
-/// Max split parts per packet
-pub const MAX_SPLIT_PART_COUNT: u32 = 128;
+/// Max split parts per packet.
+///
+/// 128 était BEAUCOUP trop bas : un batch de chunks Bedrock (déplacement /
+/// minage en descendant qui charge un anneau de chunks) dépasse 128 fragments
+/// à MTU ~1400o → le split était jeté silencieusement (`recv.rs handle_split`
+/// `return None`) → l'index ORDONNÉ reliable de ce paquet manquait à jamais →
+/// head-of-line blocking PERMANENT du canal ordonné de la session (plus aucun
+/// paquet de jeu livré ; déconnexion/reconnexion = nouvelle session = réparé).
+/// RakLib (`ReceiveReliabilityLayer`) utilise PHP_INT_MAX par défaut. On met
+/// un plafond généreux (anti-DoS mémoire) mais qui ne jette jamais de trafic
+/// légitime : 8192 parts × ~1400o ≈ 11 Mo / paquet max.
+pub const MAX_SPLIT_PART_COUNT: u32 = 8192;
 
-/// Max concurrent split packets being reassembled
-pub const MAX_CONCURRENT_SPLITS: usize = 4;
+/// Max concurrent split packets being reassembled.
+///
+/// 4 était la cause racine du gel intermittent : miner en descendant envoie
+/// plusieurs gros LevelChunk fragmentés EN MÊME TEMPS → >4 splits concurrents
+/// → le 5ᵉ jeté silencieusement → wedge ordonné permanent (cf. ci-dessus).
+/// RakLib défaut = PHP_INT_MAX. Plafond généreux mais borné.
+pub const MAX_CONCURRENT_SPLITS: usize = 512;
 
 /// Max order channels
 pub const MAX_ORDER_CHANNELS: usize = 32;

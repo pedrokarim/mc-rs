@@ -39,8 +39,8 @@ pub struct ResourcePack {
 pub fn load_pack(path: &Path) -> std::io::Result<ResourcePack> {
     let manifest_path = path.join("manifest.json");
     let manifest_text = std::fs::read_to_string(&manifest_path)?;
-    let manifest: ResourcePackManifest = serde_json::from_str(&manifest_text)
-        .map_err(std::io::Error::other)?;
+    let manifest: ResourcePackManifest =
+        serde_json::from_str(&manifest_text).map_err(std::io::Error::other)?;
 
     // Pour l'instant on lit juste le manifest.json comme contenu — un vrai
     // pack zippe le dossier entier. À étendre via `zip` crate.

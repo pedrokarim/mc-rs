@@ -712,18 +712,43 @@ impl CommandSender for ViewerContext<'_> {
 
 impl SoftEnumSource for ViewerContext<'_> {
     fn soft_enum_values(&self, name: &str) -> Vec<String> {
-        if name.eq_ignore_ascii_case("online_players") {
-            let mut values = self
-                .connections
-                .values()
-                .filter(|connection| connection.is_in_game())
-                .filter_map(|connection| connection.display_name.clone())
-                .collect::<Vec<_>>();
-            values.sort();
-            values.dedup();
-            values
-        } else {
-            Vec::new()
+        match name.to_ascii_lowercase().as_str() {
+            "online_players" => {
+                let mut values = self
+                    .connections
+                    .values()
+                    .filter(|connection| connection.is_in_game())
+                    .filter_map(|connection| connection.display_name.clone())
+                    .collect::<Vec<_>>();
+                values.sort();
+                values.dedup();
+                values
+            }
+            // Le client Bedrock vanilla affiche une icône à côté de chaque
+            // valeur si le nom court correspond à un item connu (acacia_boat,
+            // dirt, ...). On envoie sans le préfixe `minecraft:`.
+            "item" => crate::item_registry::all_entries()
+                .into_iter()
+                .map(|(full_name, _)| {
+                    full_name
+                        .strip_prefix("minecraft:")
+                        .unwrap_or(full_name)
+                        .to_string()
+                })
+                .collect(),
+            "effect" => crate::effects::EffectKind::all_names()
+                .iter()
+                .map(|name| (*name).to_string())
+                .collect(),
+            "enchantment" => crate::enchantments::EnchantmentKind::all_names()
+                .iter()
+                .map(|name| (*name).to_string())
+                .collect(),
+            "entitytype" => crate::mob_entities::MobKind::all_names()
+                .iter()
+                .map(|name| (*name).to_string())
+                .collect(),
+            _ => Vec::new(),
         }
     }
 }
@@ -1211,8 +1236,7 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
             tick: 0,
             ambient: false,
         };
-        let bytes = connection
-            .encode_compressed_packet(packet_id::MOB_EFFECT, &pkt.encode());
+        let bytes = connection.encode_compressed_packet(packet_id::MOB_EFFECT, &pkt.encode());
         let prepared = connection.prepare_for_send(bytes);
         self.send_prepared(addr, prepared);
         tracing::info!(
@@ -2102,7 +2126,7 @@ pub fn build_command_system() -> ServerCommandSystem {
     op.usage = "/op <player>".into();
     op.permissions = vec!["server.command.op".into()];
     op.overloads.push(CommandOverload {
-        parameters: vec![param("player", ParamType::String, false)],
+        parameters: vec![soft_player_param("player", false)],
     });
     register_command(
         &mut permissions,
@@ -2123,7 +2147,7 @@ pub fn build_command_system() -> ServerCommandSystem {
     deop.usage = "/deop <player>".into();
     deop.permissions = vec!["server.command.deop".into()];
     deop.overloads.push(CommandOverload {
-        parameters: vec![param("player", ParamType::String, false)],
+        parameters: vec![soft_player_param("player", false)],
     });
     register_command(
         &mut permissions,
@@ -2154,7 +2178,7 @@ pub fn build_command_system() -> ServerCommandSystem {
     whitelist.overloads.push(CommandOverload {
         parameters: vec![
             hard_enum_param("action", "whitelist_mutation", &["add", "remove"], false),
-            param("player", ParamType::String, false),
+            soft_player_param("player", false),
         ],
     });
     register_command(
@@ -2342,7 +2366,7 @@ pub fn build_command_system() -> ServerCommandSystem {
     pardon.usage = "/pardon <player>".into();
     pardon.permissions = vec!["server.command.pardon".into()];
     pardon.overloads.push(CommandOverload {
-        parameters: vec![param("player", ParamType::String, false)],
+        parameters: vec![soft_player_param("player", false)],
     });
     register_command(
         &mut permissions,
@@ -2623,7 +2647,13 @@ pub fn build_command_system() -> ServerCommandSystem {
     give.overloads.push(CommandOverload {
         parameters: vec![
             param("target", ParamType::Target, false),
-            param("item", ParamType::String, false),
+            CommandParameter {
+                name: "itemName".into(),
+                param_type: ParamType::SoftEnum {
+                    name: "Item".into(),
+                },
+                optional: false,
+            },
             param("count", ParamType::Int, true),
         ],
     });
@@ -2659,12 +2689,19 @@ pub fn build_command_system() -> ServerCommandSystem {
     let mut summon = CommandDefinition::new("summon", "Summon a basic mob entity");
     summon.usage = "/summon <entity> [x y z]".into();
     summon.permissions = vec!["server.command.summon".into()];
+    let entity_param = || CommandParameter {
+        name: "entityType".into(),
+        param_type: ParamType::SoftEnum {
+            name: "EntityType".into(),
+        },
+        optional: false,
+    };
     summon.overloads.push(CommandOverload {
-        parameters: vec![param("entity", ParamType::String, false)],
+        parameters: vec![entity_param()],
     });
     summon.overloads.push(CommandOverload {
         parameters: vec![
-            param("entity", ParamType::String, false),
+            entity_param(),
             param("x", ParamType::Position, false),
             param("y", ParamType::Position, false),
             param("z", ParamType::Position, false),
@@ -2864,10 +2901,25 @@ pub fn build_command_system() -> ServerCommandSystem {
     let mut time = CommandDefinition::new("time", "Control world time");
     time.usage = "/time <set|add|query> [value]".into();
     time.permissions = vec!["server.command.time".into()];
+    // Hard enum (restrictif) : set+keyword affiche un dropdown (day/noon/…).
+    time.overloads.push(CommandOverload {
+        parameters: vec![
+            hard_enum_param("action", "time_set_action", &["set"], false),
+            hard_enum_param(
+                "value",
+                "time_value",
+                &[
+                    "day", "noon", "midday", "sunset", "dusk", "night", "midnight", "sunrise",
+                ],
+                false,
+            ),
+        ],
+    });
+    // Overload générique : set/add/query avec une valeur numérique optionnelle.
     time.overloads.push(CommandOverload {
         parameters: vec![
             hard_enum_param("action", "time_action", &["set", "add", "query"], false),
-            param("value", ParamType::String, true),
+            param("ticks", ParamType::Int, true),
         ],
     });
     register_command(
@@ -3098,16 +3150,12 @@ pub fn build_command_system() -> ServerCommandSystem {
                         return usage("Usage: /xp add <amount> [target]");
                     };
                     let amount: i32 = amount_tok.parse().map_err(|_| {
-                        CommandDispatchError::Message(format!(
-                            "Invalid amount: {amount_tok}"
-                        ))
+                        CommandDispatchError::Message(format!("Invalid amount: {amount_tok}"))
                     })?;
                     let new_level = runtime
                         .add_player_xp(addr, amount)
                         .map_err(CommandDispatchError::Message)?;
-                    runtime.send_feedback(&format!(
-                        "Added {amount} XP (level now {new_level})"
-                    ));
+                    runtime.send_feedback(&format!("Added {amount} XP (level now {new_level})"));
                 }
                 "set" => {
                     // set = query current then add diff (pour récupérer diff
@@ -3117,9 +3165,7 @@ pub fn build_command_system() -> ServerCommandSystem {
                         return usage("Usage: /xp set <amount> [target]");
                     };
                     let amount: i32 = amount_tok.parse().map_err(|_| {
-                        CommandDispatchError::Message(format!(
-                            "Invalid amount: {amount_tok}"
-                        ))
+                        CommandDispatchError::Message(format!("Invalid amount: {amount_tok}"))
                     })?;
                     // Clear total puis ajouter — simple et correct pour une
                     // 1ère version.
@@ -3143,12 +3189,18 @@ pub fn build_command_system() -> ServerCommandSystem {
 
     // ── /effect <target> <effect_id> [duration] [amplifier] ──
     let mut effect = CommandDefinition::new("effect", "Apply a potion effect");
-    effect.usage = "/effect <target> <effect_id> [duration] [amplifier]".into();
+    effect.usage = "/effect <target> <effect> [duration] [amplifier]".into();
     effect.permissions = vec!["server.command.effect".into()];
     effect.overloads.push(CommandOverload {
         parameters: vec![
             param("target", ParamType::Target, false),
-            param("effect_id", ParamType::Int, false),
+            CommandParameter {
+                name: "effect".into(),
+                param_type: ParamType::SoftEnum {
+                    name: "Effect".into(),
+                },
+                optional: false,
+            },
             param("duration", ParamType::Int, true),
             param("amplifier", ParamType::Int, true),
         ],
@@ -3166,11 +3218,15 @@ pub fn build_command_system() -> ServerCommandSystem {
                 return usage("Usage: /effect <target> <effect_name|id> [duration] [amplifier]");
             };
             // Accepte "minecraft:speed", "speed" ou un id numérique.
-            let kind = crate::effects::EffectKind::from_name_or_id(effect_tok).ok_or_else(|| {
-                CommandDispatchError::Message(format!("Unknown effect: {effect_tok}"))
-            })?;
+            let kind =
+                crate::effects::EffectKind::from_name_or_id(effect_tok).ok_or_else(|| {
+                    CommandDispatchError::Message(format!("Unknown effect: {effect_tok}"))
+                })?;
             let effect_id: i32 = kind.id() as i32;
-            let duration: i32 = invocation.arg(2).and_then(|s| s.parse().ok()).unwrap_or(600);
+            let duration: i32 = invocation
+                .arg(2)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(600);
             let amplifier: u8 = invocation.arg(3).and_then(|s| s.parse().ok()).unwrap_or(0);
 
             let entity_id = runtime
@@ -3201,12 +3257,18 @@ pub fn build_command_system() -> ServerCommandSystem {
 
     // ── /enchant <target> <enchant_name|id> [level] ──
     let mut enchant = CommandDefinition::new("enchant", "Add enchantment to held item");
-    enchant.usage = "/enchant <target> <enchant_name|id> [level]".into();
+    enchant.usage = "/enchant <target> <enchantment> [level]".into();
     enchant.permissions = vec!["server.command.enchant".into()];
     enchant.overloads.push(CommandOverload {
         parameters: vec![
             param("target", ParamType::Target, false),
-            param("enchant", ParamType::String, false),
+            CommandParameter {
+                name: "enchantmentName".into(),
+                param_type: ParamType::SoftEnum {
+                    name: "Enchantment".into(),
+                },
+                optional: false,
+            },
             param("level", ParamType::Int, true),
         ],
     });
@@ -3222,10 +3284,9 @@ pub fn build_command_system() -> ServerCommandSystem {
             let Some(ench_tok) = invocation.arg(1) else {
                 return usage("Usage: /enchant <target> <enchant_name|id> [level]");
             };
-            let kind =
-                crate::enchantments::EnchantmentKind::from_name_or_id(ench_tok).ok_or_else(|| {
-                    CommandDispatchError::Message(format!("Unknown enchantment: {ench_tok}"))
-                })?;
+            let kind = crate::enchantments::EnchantmentKind::from_name_or_id(ench_tok).ok_or_else(
+                || CommandDispatchError::Message(format!("Unknown enchantment: {ench_tok}")),
+            )?;
             let level: u8 = invocation.arg(2).and_then(|s| s.parse().ok()).unwrap_or(1);
             let max = kind.max_level();
             let level = level.min(max).max(1);
@@ -3310,10 +3371,7 @@ pub fn build_command_system() -> ServerCommandSystem {
     );
 
     // ── /scoreboard <objective> <player> <score> ──
-    let mut sb = CommandDefinition::new(
-        "scoreboard",
-        "Set a player score on a sidebar objective",
-    );
+    let mut sb = CommandDefinition::new("scoreboard", "Set a player score on a sidebar objective");
     sb.usage = "/scoreboard <objective> <player> <score>".into();
     sb.permissions = vec!["server.command.scoreboard".into()];
     sb.overloads.push(CommandOverload {
@@ -3335,9 +3393,10 @@ pub fn build_command_system() -> ServerCommandSystem {
             let Some(player) = invocation.arg(1) else {
                 return usage("Usage: /scoreboard <objective> <player> <score>");
             };
-            let score: i32 = invocation.arg(2).and_then(|s| s.parse().ok()).ok_or_else(
-                || CommandDispatchError::Message("score must be an integer".into()),
-            )?;
+            let score: i32 = invocation
+                .arg(2)
+                .and_then(|s| s.parse().ok())
+                .ok_or_else(|| CommandDispatchError::Message("score must be an integer".into()))?;
             runtime.scoreboard_set(obj, player, score);
             runtime.send_feedback(&format!("Scoreboard {obj}: {player} = {score}"));
             Ok(())
@@ -3385,7 +3444,9 @@ pub fn build_command_system() -> ServerCommandSystem {
                 format!("minecraft:{name_tok}")
             };
             runtime.spawn_particle([x, y, z], &pname);
-            runtime.send_feedback(&format!("Spawned particle {pname} at ({x:.1},{y:.1},{z:.1})"));
+            runtime.send_feedback(&format!(
+                "Spawned particle {pname} at ({x:.1},{y:.1},{z:.1})"
+            ));
             Ok(())
         },
     );
@@ -3869,11 +3930,7 @@ mod tests {
         }
 
         fn set_weather(&mut self, _rain: bool, _thunder: bool) {}
-        fn add_player_xp(
-            &mut self,
-            _addr: SocketAddr,
-            _amount: i32,
-        ) -> Result<i32, String> {
+        fn add_player_xp(&mut self, _addr: SocketAddr, _amount: i32) -> Result<i32, String> {
             Ok(0)
         }
         fn apply_player_effect(

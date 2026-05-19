@@ -219,8 +219,16 @@ pub fn is_valid_sugar_cane_ground(block_name: &str) -> bool {
     let short = block_name.strip_prefix("minecraft:").unwrap_or(block_name);
     matches!(
         short,
-        "dirt" | "coarse_dirt" | "rooted_dirt" | "grass_block" | "podzol"
-        | "mud" | "sand" | "red_sand" | "reeds" | "sugar_cane"
+        "dirt"
+            | "coarse_dirt"
+            | "rooted_dirt"
+            | "grass_block"
+            | "podzol"
+            | "mud"
+            | "sand"
+            | "red_sand"
+            | "reeds"
+            | "sugar_cane"
     )
 }
 
@@ -231,9 +239,18 @@ pub fn is_valid_bamboo_ground(block_name: &str) -> bool {
     let short = block_name.strip_prefix("minecraft:").unwrap_or(block_name);
     matches!(
         short,
-        "bamboo" | "bamboo_sapling" | "dirt" | "coarse_dirt" | "rooted_dirt"
-        | "grass_block" | "podzol" | "mud" | "sand" | "red_sand"
-        | "moss_block" | "gravel"
+        "bamboo"
+            | "bamboo_sapling"
+            | "dirt"
+            | "coarse_dirt"
+            | "rooted_dirt"
+            | "grass_block"
+            | "podzol"
+            | "mud"
+            | "sand"
+            | "red_sand"
+            | "moss_block"
+            | "gravel"
     )
 }
 
@@ -254,10 +271,7 @@ pub fn is_jungle_log(block_name: &str) -> bool {
     let short = block_name.strip_prefix("minecraft:").unwrap_or(block_name);
     matches!(
         short,
-        "jungle_log"
-            | "stripped_jungle_log"
-            | "jungle_wood"
-            | "stripped_jungle_wood"
+        "jungle_log" | "stripped_jungle_log" | "jungle_wood" | "stripped_jungle_wood"
     )
 }
 
@@ -328,13 +342,14 @@ pub fn check_support(
     z: i32,
     rule: AttachmentRule,
 ) -> bool {
-    let name_at = |c: &mut crate::world::chunk_cache::ChunkCache, x: i32, y: i32, z: i32| -> String {
-        let id = c.get_block(x, y, z);
-        crate::world::block_registry::BLOCKS
-            .name_for(id)
-            .unwrap_or("")
-            .to_string()
-    };
+    let name_at =
+        |c: &mut crate::world::chunk_cache::ChunkCache, x: i32, y: i32, z: i32| -> String {
+            let id = c.get_block(x, y, z);
+            crate::world::block_registry::BLOCKS
+                .name_for(id)
+                .unwrap_or("")
+                .to_string()
+        };
 
     match rule {
         AttachmentRule::NeedsBlockBelow => {
@@ -372,54 +387,42 @@ pub fn check_support(
                 return false;
             }
             // Pas de bloc solide latéral (sinon cactus push out).
-            ![
-                (x + 1, y, z),
-                (x - 1, y, z),
-                (x, y, z + 1),
-                (x, y, z - 1),
-            ]
-            .iter()
-            .any(|(lx, ly, lz)| {
-                let name = name_at(cache, *lx, *ly, *lz);
-                is_solid_support(&name)
-            })
+            ![(x + 1, y, z), (x - 1, y, z), (x, y, z + 1), (x, y, z - 1)]
+                .iter()
+                .any(|(lx, ly, lz)| {
+                    let name = name_at(cache, *lx, *ly, *lz);
+                    is_solid_support(&name)
+                })
         }
         AttachmentRule::NeedsBlockAbove => {
             let above = name_at(cache, x, y + 1, z);
             is_solid_support(&above)
         }
-        AttachmentRule::NeedsAnyAdjacentSolid => {
-            [
-                (x, y + 1, z),
-                (x, y - 1, z),
-                (x + 1, y, z),
-                (x - 1, y, z),
-                (x, y, z + 1),
-                (x, y, z - 1),
-            ]
-            .iter()
-            .any(|(ax, ay, az)| {
-                let name = name_at(cache, *ax, *ay, *az);
-                is_solid_support(&name)
-            })
-        }
+        AttachmentRule::NeedsAnyAdjacentSolid => [
+            (x, y + 1, z),
+            (x, y - 1, z),
+            (x + 1, y, z),
+            (x - 1, y, z),
+            (x, y, z + 1),
+            (x, y, z - 1),
+        ]
+        .iter()
+        .any(|(ax, ay, az)| {
+            let name = name_at(cache, *ax, *ay, *az);
+            is_solid_support(&name)
+        }),
         AttachmentRule::OnWater => {
             let below = name_at(cache, x, y - 1, z);
             is_water(&below)
         }
         AttachmentRule::Cocoa => {
             // Jungle log horizontalement adjacent.
-            [
-                (x + 1, y, z),
-                (x - 1, y, z),
-                (x, y, z + 1),
-                (x, y, z - 1),
-            ]
-            .iter()
-            .any(|(jx, jy, jz)| {
-                let name = name_at(cache, *jx, *jy, *jz);
-                is_jungle_log(&name)
-            })
+            [(x + 1, y, z), (x - 1, y, z), (x, y, z + 1), (x, y, z - 1)]
+                .iter()
+                .any(|(jx, jy, jz)| {
+                    let name = name_at(cache, *jx, *jy, *jz);
+                    is_jungle_log(&name)
+                })
         }
         AttachmentRule::ChorusPlant => {
             // Support = end_stone dessous OU chorus adjacent (haut/bas/horiz).

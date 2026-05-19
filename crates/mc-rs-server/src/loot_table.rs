@@ -128,33 +128,27 @@ pub struct LootContext {
 /// Résultat d'un roll — liste d'(item_name, count).
 pub type LootDrops = Vec<(String, u32)>;
 
-static ENTITY_LOOT: LazyLock<HashMap<String, RawLootTable>> = LazyLock::new(|| {
-    serde_json::from_str(ENTITIES_JSON).expect("valid entities.json loot data")
-});
+static ENTITY_LOOT: LazyLock<HashMap<String, RawLootTable>> =
+    LazyLock::new(|| serde_json::from_str(ENTITIES_JSON).expect("valid entities.json loot data"));
 
-static CHEST_LOOT: LazyLock<HashMap<String, RawLootTable>> = LazyLock::new(|| {
-    serde_json::from_str(CHESTS_JSON).expect("valid chests.json loot data")
-});
+static CHEST_LOOT: LazyLock<HashMap<String, RawLootTable>> =
+    LazyLock::new(|| serde_json::from_str(CHESTS_JSON).expect("valid chests.json loot data"));
 
-static EQUIPMENT_LOOT: LazyLock<HashMap<String, RawLootTable>> = LazyLock::new(|| {
-    serde_json::from_str(EQUIPMENT_JSON).expect("valid equipment.json loot data")
-});
+static EQUIPMENT_LOOT: LazyLock<HashMap<String, RawLootTable>> =
+    LazyLock::new(|| serde_json::from_str(EQUIPMENT_JSON).expect("valid equipment.json loot data"));
 
-static GAMEPLAY_LOOT: LazyLock<HashMap<String, RawLootTable>> = LazyLock::new(|| {
-    serde_json::from_str(GAMEPLAY_JSON).expect("valid gameplay.json loot data")
-});
+static GAMEPLAY_LOOT: LazyLock<HashMap<String, RawLootTable>> =
+    LazyLock::new(|| serde_json::from_str(GAMEPLAY_JSON).expect("valid gameplay.json loot data"));
 
 static DISPENSERS_LOOT: LazyLock<HashMap<String, RawLootTable>> = LazyLock::new(|| {
     serde_json::from_str(DISPENSERS_JSON).expect("valid dispensers.json loot data")
 });
 
-static POTS_LOOT: LazyLock<HashMap<String, RawLootTable>> = LazyLock::new(|| {
-    serde_json::from_str(POTS_JSON).expect("valid pots.json loot data")
-});
+static POTS_LOOT: LazyLock<HashMap<String, RawLootTable>> =
+    LazyLock::new(|| serde_json::from_str(POTS_JSON).expect("valid pots.json loot data"));
 
-static SPAWNERS_LOOT: LazyLock<HashMap<String, RawLootTable>> = LazyLock::new(|| {
-    serde_json::from_str(SPAWNERS_JSON).expect("valid spawners.json loot data")
-});
+static SPAWNERS_LOOT: LazyLock<HashMap<String, RawLootTable>> =
+    LazyLock::new(|| serde_json::from_str(SPAWNERS_JSON).expect("valid spawners.json loot data"));
 
 fn check_condition<R: Rng>(cond: &RawCondition, ctx: &LootContext, rng: &mut R) -> bool {
     match cond.condition.as_str() {
@@ -364,10 +358,7 @@ pub fn roll_any(table_name: &str) -> LootDrops {
     Vec::new()
 }
 
-fn roll_table_generic(
-    dict: &HashMap<String, RawLootTable>,
-    table_name: &str,
-) -> LootDrops {
+fn roll_table_generic(dict: &HashMap<String, RawLootTable>, table_name: &str) -> LootDrops {
     let mut rng = rand::thread_rng();
     let Some(table) = dict.get(table_name) else {
         return Vec::new();

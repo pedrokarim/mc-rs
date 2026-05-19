@@ -21,7 +21,9 @@ fn main() {
     // ── VarInt encode ──
     println!("── VarUInt32 / VarInt32 encode (1000 valeurs par run) ──");
     let small_values: Vec<u32> = (0..1000).map(|i| i as u32).collect(); // 1-3 bytes
-    let large_values: Vec<u32> = (0..1000).map(|i| (i as u32).wrapping_mul(131_071)).collect(); // up to 5 bytes
+    let large_values: Vec<u32> = (0..1000)
+        .map(|i| (i as u32).wrapping_mul(131_071))
+        .collect(); // up to 5 bytes
 
     bench("VarUInt32 encode (small,1-2B)", WARMUP, RUNS, || {
         let mut w = ProtoWriter::with_capacity(2048);
@@ -85,13 +87,18 @@ fn main() {
 
     for (label, s) in [("16 B", &s_16), ("256 B", &s_256), ("4 KB", &s_4k)] {
         let total = s.len() * 100;
-        bench(&format!("write_string x100 [{label}]"), WARMUP, RUNS, || {
-            let mut w = ProtoWriter::with_capacity(total + 200);
-            for _ in 0..100 {
-                w.write_string(std::hint::black_box(s));
-            }
-            std::hint::black_box(w);
-        });
+        bench(
+            &format!("write_string x100 [{label}]"),
+            WARMUP,
+            RUNS,
+            || {
+                let mut w = ProtoWriter::with_capacity(total + 200);
+                for _ in 0..100 {
+                    w.write_string(std::hint::black_box(s));
+                }
+                std::hint::black_box(w);
+            },
+        );
         let buf = {
             let mut w = ProtoWriter::with_capacity(total + 200);
             for _ in 0..100 {
@@ -99,12 +106,17 @@ fn main() {
             }
             w.into_bytes()
         };
-        bench(&format!("read_string  x100 [{label}]"), WARMUP, RUNS, || {
-            let mut r = ProtoReader::new(std::hint::black_box(&buf));
-            for _ in 0..100 {
-                std::hint::black_box(r.read_string().unwrap());
-            }
-        });
+        bench(
+            &format!("read_string  x100 [{label}]"),
+            WARMUP,
+            RUNS,
+            || {
+                let mut r = ProtoReader::new(std::hint::black_box(&buf));
+                for _ in 0..100 {
+                    std::hint::black_box(r.read_string().unwrap());
+                }
+            },
+        );
     }
 
     println!();

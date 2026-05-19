@@ -36,8 +36,8 @@ impl Default for Motd {
     fn default() -> Self {
         Self {
             name: "MC-RS Server".to_string(),
-            protocol_version: 944,
-            version_string: "1.26.10".to_string(),
+            protocol_version: 975,
+            version_string: "1.26.20".to_string(),
             online_players: 0,
             max_players: 20,
             server_guid: 0,
@@ -55,8 +55,8 @@ mod tests {
     fn test_motd_format() {
         let motd = Motd {
             name: "Test Server".to_string(),
-            protocol_version: 944,
-            version_string: "1.26.10".to_string(),
+            protocol_version: 975,
+            version_string: "1.26.20".to_string(),
             online_players: 0,
             max_players: 20,
             server_guid: 12345,
@@ -64,7 +64,7 @@ mod tests {
             gamemode: "Survival".to_string(),
         };
         let s = motd.to_string_payload();
-        assert_eq!(s, "MCPE;Test Server;944;1.26.10;0;20;12345;world;Survival;");
+        assert_eq!(s, "MCPE;Test Server;975;1.26.20;0;20;12345;world;Survival;");
         // Count semicolons: should be 9 (8 separators + trailing)
         assert_eq!(s.chars().filter(|&c| c == ';').count(), 9);
     }

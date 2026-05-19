@@ -48,7 +48,6 @@ fn encode_update_attrs_inline(
     w.into_bytes()
 }
 
-
 pub(super) fn make_spawn_position(world_x: i32, world_y: i32, world_z: i32) -> [f32; 3] {
     let feet_y = (world_y + 1) as f32;
     [world_x as f32 + 0.5, feet_y + 1.621, world_z as f32 + 0.5]

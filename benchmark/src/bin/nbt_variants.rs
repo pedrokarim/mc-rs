@@ -8,7 +8,9 @@
 use benchmark::{bench, fmt_bytes, throughput_mb_per_sec};
 use bytes::{Bytes, BytesMut};
 use mc_rs_nbt::tag::{NbtCompound, NbtRoot, NbtTag};
-use mc_rs_nbt::{read_nbt_be, read_nbt_le, read_nbt_network, write_nbt_be, write_nbt_le, write_nbt_network};
+use mc_rs_nbt::{
+    read_nbt_be, read_nbt_le, read_nbt_network, write_nbt_be, write_nbt_le, write_nbt_network,
+};
 
 const WARMUP: u32 = 100;
 const RUNS: u32 = 2_000;
@@ -20,16 +22,16 @@ fn sample_compound() -> NbtRoot {
     root.insert("x".into(), NbtTag::Int(123));
     root.insert("y".into(), NbtTag::Int(72));
     root.insert("z".into(), NbtTag::Int(-456));
-    root.insert(
-        "CustomName".into(),
-        NbtTag::String("§bLoot Chest§r".into()),
-    );
+    root.insert("CustomName".into(), NbtTag::String("§bLoot Chest§r".into()));
 
     let items: Vec<NbtTag> = (0..27)
         .map(|slot| {
             let mut item = NbtCompound::new();
             item.insert("Slot".into(), NbtTag::Byte(slot));
-            item.insert("id".into(), NbtTag::String(format!("minecraft:item_{slot}")));
+            item.insert(
+                "id".into(),
+                NbtTag::String(format!("minecraft:item_{slot}")),
+            );
             item.insert("Count".into(), NbtTag::Byte(64));
             item.insert("Damage".into(), NbtTag::Short(0));
 
@@ -48,10 +50,7 @@ fn sample_compound() -> NbtRoot {
                 "display".into(),
                 NbtTag::Compound({
                     let mut d = NbtCompound::new();
-                    d.insert(
-                        "Name".into(),
-                        NbtTag::String(format!("§aItem {slot}")),
-                    );
+                    d.insert("Name".into(), NbtTag::String(format!("§aItem {slot}")));
                     d
                 }),
             );

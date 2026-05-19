@@ -168,9 +168,23 @@ impl<S: tracing::Subscriber> Layer<S> for WebUiBroadcastLayer {
     }
 }
 
-/// Installe un hook de panic qui log via `tracing::error!` + bannière stdout.
-pub fn install_panic_hook() {
-    std::panic::set_hook(Box::new(|info| {
+/// Installe un hook de panic qui **persiste le crash de façon synchrone sur
+/// disque** avant que le process ne meure.
+///
+/// Pourquoi pas `tracing::error!` seul : le writer fichier est
+/// `tracing-appender::non_blocking` (thread worker + buffer). Lors d'un panic,
+/// le process termine avant que le worker n'ait flushé son buffer → la ligne
+/// panic n'atteint jamais le disque. Et `/launch` lance le serveur en
+/// background sans redirection → stdout/stderr partent dans le vide.
+///
+/// Ce hook écrit donc **directement** (`std::fs`, append, flush explicite)
+/// dans `<log_dir>/CRASH-<timestamp>.log` avec la backtrace complète, sans
+/// dépendre d'aucun writer asynchrone. On garde aussi `tracing::error!` +
+/// stdout/stderr pour les cas où ils sont disponibles (console attachée,
+/// thread non fatal).
+pub fn install_panic_hook(log_dir: impl Into<std::path::PathBuf>) {
+    let log_dir = log_dir.into();
+    std::panic::set_hook(Box::new(move |info| {
         let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
             (*s).to_string()
         } else if let Some(s) = info.payload().downcast_ref::<String>() {
@@ -183,11 +197,42 @@ pub fn install_panic_hook() {
             .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
             .unwrap_or_else(|| "<unknown>".to_string());
 
-        tracing::error!(target: "panic", "thread panicked at {location}: {payload}");
+        let thread = std::thread::current();
+        let thread_name = thread.name().unwrap_or("<unnamed>").to_string();
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+        let ts_file = chrono::Local::now().format("%Y-%m-%dT%H-%M-%S");
 
-        let banner = format!("\n==== PANIC ====\nat {location}\n{payload}\n================\n");
-        let _ = std::io::Write::write_all(&mut std::io::stdout(), banner.as_bytes());
+        let dump = format!(
+            "==== PANIC ====\n\
+             time:     {ts}\n\
+             thread:   {thread_name}\n\
+             location: {location}\n\
+             payload:  {payload}\n\
+             --- backtrace ---\n{backtrace}\n\
+             ================\n"
+        );
+
+        // 1) Écriture SYNCHRONE et directe sur disque — le seul canal fiable
+        //    pendant un panic. On crée le dossier au cas où.
+        let _ = std::fs::create_dir_all(&log_dir);
+        let crash_path = log_dir.join(format!("CRASH-{ts_file}.log"));
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&crash_path)
+        {
+            use std::io::Write;
+            let _ = f.write_all(dump.as_bytes());
+            let _ = f.flush();
+            let _ = f.sync_all();
+        }
+
+        // 2) Best-effort : tracing (peut être perdu si writer async) + console.
+        tracing::error!(target: "panic", "thread '{thread_name}' panicked at {location}: {payload}");
+        let _ = std::io::Write::write_all(&mut std::io::stderr(), dump.as_bytes());
+        let _ = std::io::Write::flush(&mut std::io::stderr());
+        let _ = std::io::Write::write_all(&mut std::io::stdout(), dump.as_bytes());
         let _ = std::io::Write::flush(&mut std::io::stdout());
-        let _ = std::io::Write::write_all(&mut std::io::stderr(), banner.as_bytes());
     }));
 }

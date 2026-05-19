@@ -18,10 +18,7 @@ struct WorldTemplate {
     user_role: String,
 }
 
-pub async fn get_world(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-) -> Response {
+pub async fn get_world(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
     let user = match crate::auth::middleware::require_auth(&state, &headers).await {
         Ok(u) => u,
         Err(resp) => return resp,
@@ -69,8 +66,7 @@ async fn fire(
 }
 
 fn valid_time(v: &str) -> bool {
-    matches!(v, "day" | "noon" | "sunset" | "night" | "midnight")
-        || v.parse::<u32>().is_ok()
+    matches!(v, "day" | "noon" | "sunset" | "night" | "midnight") || v.parse::<u32>().is_ok()
 }
 
 fn valid_weather(v: &str) -> bool {
@@ -78,7 +74,10 @@ fn valid_weather(v: &str) -> bool {
 }
 
 fn valid_difficulty(v: &str) -> bool {
-    matches!(v, "peaceful" | "easy" | "normal" | "hard" | "0" | "1" | "2" | "3")
+    matches!(
+        v,
+        "peaceful" | "easy" | "normal" | "hard" | "0" | "1" | "2" | "3"
+    )
 }
 
 pub async fn post_time(

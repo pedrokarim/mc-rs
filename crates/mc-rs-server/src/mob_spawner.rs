@@ -80,8 +80,7 @@ pub fn tick<R: Rng>(
         }
     }
 
-    let player_positions: Vec<[f32; 3]> =
-        registry.players.values().map(|p| p.position).collect();
+    let player_positions: Vec<[f32; 3]> = registry.players.values().map(|p| p.position).collect();
 
     for _ in 0..SPAWN_TRIES_PER_TICK {
         // Pick joueur aléatoire.
@@ -92,8 +91,7 @@ pub fn tick<R: Rng>(
         let weights: Vec<(MobKind, u32)> = ALL_MOBS
             .iter()
             .filter_map(|&k| {
-                crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k))
-                    .map(|w| (k, w.max(1)))
+                crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k)).map(|w| (k, w.max(1)))
             })
             .collect();
         if weights.is_empty() {
@@ -165,7 +163,15 @@ pub fn tick<R: Rng>(
 
         tracing::debug!(
             "[spawner] Spawned {:?} at ({},{},{}) (cat={}, hostile={}/{}, passive={}/{})",
-            picked, sx, sy, sz, cat, hostile_count, hostile_cap, passive_count, passive_cap
+            picked,
+            sx,
+            sy,
+            sz,
+            cat,
+            hostile_count,
+            hostile_cap,
+            passive_count,
+            passive_cap
         );
     }
 }
@@ -179,10 +185,12 @@ mod tests {
         let weights: Vec<_> = ALL_MOBS
             .iter()
             .filter_map(|&k| {
-                crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k))
-                    .map(|w| (k, w))
+                crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k)).map(|w| (k, w))
             })
             .collect();
-        assert!(!weights.is_empty(), "should have weight for at least one mob");
+        assert!(
+            !weights.is_empty(),
+            "should have weight for at least one mob"
+        );
     }
 }

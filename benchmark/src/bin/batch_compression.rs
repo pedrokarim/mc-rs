@@ -21,7 +21,9 @@ fn fill_deterministic(len: usize, seed: u64) -> Vec<u8> {
     let mut s = seed;
     let mut out = Vec::with_capacity(len);
     for _ in 0..len {
-        s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        s = s
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         // Restreindre à un alphabet de ~32 valeurs pour que zlib puisse
         // effectivement compresser (sinon c'est du bruit pur).
         out.push(((s >> 56) as u8) & 0x1F);
@@ -116,14 +118,16 @@ fn profile(name: &str, packets: &[Vec<u8>]) {
 
     println!();
     println!("  throughput encode (MB/s, raw payload) :");
-    println!("    zlib(L6) = {:>8.1}  |  zlib(L1) = {:>8.1}  |  snappy = {:>8.1}  |  none = {:>8.1}",
+    println!(
+        "    zlib(L6) = {:>8.1}  |  zlib(L1) = {:>8.1}  |  snappy = {:>8.1}  |  none = {:>8.1}",
         throughput_mb_per_sec(raw_size, enc_zlib6),
         throughput_mb_per_sec(raw_size, enc_zlib1),
         throughput_mb_per_sec(raw_size, enc_snappy),
         throughput_mb_per_sec(raw_size, enc_none),
     );
     println!("  throughput decode (MB/s, raw payload) :");
-    println!("    zlib(L6) = {:>8.1}  |                     snappy = {:>8.1}  |  none = {:>8.1}",
+    println!(
+        "    zlib(L6) = {:>8.1}  |                     snappy = {:>8.1}  |  none = {:>8.1}",
         throughput_mb_per_sec(raw_size, dec_zlib6),
         throughput_mb_per_sec(raw_size, dec_snappy),
         throughput_mb_per_sec(raw_size, dec_none),

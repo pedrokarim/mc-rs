@@ -12,6 +12,67 @@ use crate::protocol::datagram::Reliability;
 use crate::protocol::{id, offline};
 use crate::session::{RakNetSession, SessionEvent};
 
+/// Désactive `SIO_UDP_CONNRESET` sur le socket UDP (Windows uniquement).
+///
+/// Sans ça, recevoir un ICMP "port unreachable" (client fermé/en pause)
+/// transforme tous les `recv_from` suivants en `Err(WSAECONNRESET)` →
+/// busy-spin du main-loop. Référence : MSDN `SIO_UDP_CONNRESET`, comportement
+/// connu de Winsock pour les sockets UDP. No-op sur les autres OS.
+#[cfg(windows)]
+fn disable_udp_conn_reset(socket: &UdpSocket) {
+    use std::os::windows::io::AsRawSocket;
+
+    // SIO_UDP_CONNRESET = _WSAIOW(IOC_VENDOR, 12) = 0x9800000C
+    const SIO_UDP_CONNRESET: u32 = 0x9800_000C;
+
+    #[allow(non_camel_case_types)]
+    type SOCKET = usize;
+
+    extern "system" {
+        fn WSAIoctl(
+            s: SOCKET,
+            dw_io_control_code: u32,
+            lpv_in_buffer: *const std::ffi::c_void,
+            cb_in_buffer: u32,
+            lpv_out_buffer: *mut std::ffi::c_void,
+            cb_out_buffer: u32,
+            lpcb_bytes_returned: *mut u32,
+            lp_overlapped: *mut std::ffi::c_void,
+            lp_completion_routine: *mut std::ffi::c_void,
+        ) -> i32;
+    }
+
+    let handle = socket.as_raw_socket() as SOCKET;
+    let mut enable: i32 = 0; // FALSE → désactive le comportement CONNRESET
+    let mut bytes_returned: u32 = 0;
+    // SAFETY : appel Winsock standard ; `enable` vit toute la durée de l'appel,
+    // les pointeurs out sont valides, le socket est ouvert (créé juste avant).
+    let ret = unsafe {
+        WSAIoctl(
+            handle,
+            SIO_UDP_CONNRESET,
+            &mut enable as *mut i32 as *const std::ffi::c_void,
+            std::mem::size_of::<i32>() as u32,
+            std::ptr::null_mut(),
+            0,
+            &mut bytes_returned as *mut u32,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    if ret != 0 {
+        tracing::warn!(
+            "SIO_UDP_CONNRESET désactivation échouée (WSAIoctl ret={ret}); \
+             le serveur reste vulnérable au spin si un client ferme brutalement"
+        );
+    } else {
+        tracing::info!("SIO_UDP_CONNRESET désactivé (anti-spin Windows UDP)");
+    }
+}
+
+#[cfg(not(windows))]
+fn disable_udp_conn_reset(_socket: &UdpSocket) {}
+
 /// A connected peer that the consumer can interact with.
 pub struct RakNetPeer {
     pub addr: SocketAddr,
@@ -38,6 +99,14 @@ impl RakNetServer {
     /// Bind the RakNet server to the given address.
     pub async fn bind(addr: SocketAddr, motd: Motd, server_guid: i64) -> std::io::Result<Self> {
         let socket = UdpSocket::bind(addr).await?;
+        // Fix Windows critique : sans ceci, quand un client se met en pause
+        // ou ferme brutalement, le `send_to` suivant vers son port mort
+        // déclenche un ICMP "port unreachable" qui fait échouer TOUS les
+        // `recv_from` suivants avec WSAECONNRESET (os error 10054), en
+        // boucle → `recv_and_process` spin → le `tick_timer` est affamé →
+        // serveur figé à 100 % CPU (process vivant, plus aucun tick). On
+        // désactive ce comportement via SIO_UDP_CONNRESET = false.
+        disable_udp_conn_reset(&socket);
         info!("RakNet server listening on {}", addr);
         Ok(Self {
             socket: Arc::new(socket),
@@ -65,7 +134,26 @@ impl RakNetServer {
                 true
             }
             Err(e) => {
-                trace!("recv_from error: {}", e);
+                // Visibilité : log rate-limité (1er + tous les 500) de
+                // l'erreur EXACTE (kind + code OS brut) pour diagnostiquer le
+                // spin recv. trace! était filtré par RUST_LOG=info → invisible.
+                use std::sync::atomic::{AtomicU64, Ordering};
+                static ERR_COUNT: AtomicU64 = AtomicU64::new(0);
+                let n = ERR_COUNT.fetch_add(1, Ordering::Relaxed);
+                if n == 0 || n % 500 == 0 {
+                    tracing::warn!(
+                        "recv_from error #{n}: kind={:?} raw_os={:?} msg={}",
+                        e.kind(),
+                        e.raw_os_error(),
+                        e
+                    );
+                }
+                // Garde-fou anti-spin : si une erreur recv_from persiste, ne
+                // PAS rendre la main instantanément (sinon l'arm `recv` du
+                // select! monopolise le runtime et affame `tick_timer`). Petit
+                // backoff au lieu d'un simple yield (yield seul ne suffit pas
+                // si l'erreur est instantanée et continue).
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
                 false
             }
         }

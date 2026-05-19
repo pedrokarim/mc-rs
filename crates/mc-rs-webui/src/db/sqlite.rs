@@ -38,7 +38,10 @@ fn uuid_bytes(id: &Uuid) -> Vec<u8> {
 
 fn uuid_from_bytes(bytes: &[u8]) -> Result<Uuid> {
     if bytes.len() != 16 {
-        return Err(Error::Db(format!("uuid blob len={}, expected 16", bytes.len())));
+        return Err(Error::Db(format!(
+            "uuid blob len={}, expected 16",
+            bytes.len()
+        )));
     }
     let mut arr = [0u8; 16];
     arr.copy_from_slice(bytes);
@@ -102,11 +105,12 @@ impl WebDb for SqliteDb {
             None => Ok(None),
             Some(row) => {
                 let id_bytes: Vec<u8> = row.try_get("id").map_err(|e| Error::Db(e.to_string()))?;
-                let role_str: String =
-                    row.try_get("role").map_err(|e| Error::Db(e.to_string()))?;
+                let role_str: String = row.try_get("role").map_err(|e| Error::Db(e.to_string()))?;
                 Ok(Some(User {
                     id: uuid_from_bytes(&id_bytes)?,
-                    username: row.try_get("username").map_err(|e| Error::Db(e.to_string()))?,
+                    username: row
+                        .try_get("username")
+                        .map_err(|e| Error::Db(e.to_string()))?,
                     password_hash: row
                         .try_get("password_hash")
                         .map_err(|e| Error::Db(e.to_string()))?,
@@ -136,7 +140,9 @@ impl WebDb for SqliteDb {
             let role_str: String = row.try_get("role").map_err(|e| Error::Db(e.to_string()))?;
             out.push(User {
                 id: uuid_from_bytes(&id_bytes)?,
-                username: row.try_get("username").map_err(|e| Error::Db(e.to_string()))?,
+                username: row
+                    .try_get("username")
+                    .map_err(|e| Error::Db(e.to_string()))?,
                 password_hash: row
                     .try_get("password_hash")
                     .map_err(|e| Error::Db(e.to_string()))?,
@@ -261,8 +267,9 @@ impl WebDb for SqliteDb {
 
         let mut out = Vec::with_capacity(rows.len());
         for row in rows {
-            let detail_str: String =
-                row.try_get("detail").map_err(|e| Error::Db(e.to_string()))?;
+            let detail_str: String = row
+                .try_get("detail")
+                .map_err(|e| Error::Db(e.to_string()))?;
             let detail: JsonValue = serde_json::from_str(&detail_str).unwrap_or(JsonValue::Null);
             let user_id_bytes: Option<Vec<u8>> = row.try_get("user_id").ok();
             let user_id = match user_id_bytes {
@@ -274,7 +281,9 @@ impl WebDb for SqliteDb {
                 ts: row.try_get("ts").map_err(|e| Error::Db(e.to_string()))?,
                 user_id,
                 username_snapshot: row.try_get("username_snapshot").ok(),
-                action: row.try_get("action").map_err(|e| Error::Db(e.to_string()))?,
+                action: row
+                    .try_get("action")
+                    .map_err(|e| Error::Db(e.to_string()))?,
                 detail,
             });
         }
@@ -328,12 +337,11 @@ impl WebDb for SqliteDb {
     }
 
     async fn is_blacklisted(&self, jti: &str) -> Result<bool> {
-        let row: Option<(i64,)> =
-            sqlx::query_as("SELECT exp FROM tokens_blacklist WHERE jti = ?")
-                .bind(jti)
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(|e| Error::Db(e.to_string()))?;
+        let row: Option<(i64,)> = sqlx::query_as("SELECT exp FROM tokens_blacklist WHERE jti = ?")
+            .bind(jti)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| Error::Db(e.to_string()))?;
         Ok(row.is_some())
     }
 

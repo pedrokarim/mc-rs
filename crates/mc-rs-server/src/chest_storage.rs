@@ -72,10 +72,7 @@ impl ChestManager {
         let Some(data) = self.chests.remove(&pos) else {
             return Vec::new();
         };
-        data.slots
-            .into_iter()
-            .filter(|s| !s.is_air())
-            .collect()
+        data.slots.into_iter().filter(|s| !s.is_air()).collect()
     }
 
     pub fn count(&self) -> usize {

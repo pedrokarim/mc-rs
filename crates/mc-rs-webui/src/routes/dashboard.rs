@@ -20,10 +20,7 @@ struct DashboardTemplate {
     max_players: u32,
 }
 
-pub async fn get_dashboard(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-) -> Response {
+pub async fn get_dashboard(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
     let user = match crate::auth::middleware::require_auth(&state, &headers).await {
         Ok(u) => u,
         Err(resp) => return resp,

@@ -31,8 +31,14 @@ fn extract_f32(v: &serde_json::Value) -> Option<f32> {
     match v {
         serde_json::Value::Number(n) => n.as_f64().map(|f| f as f32),
         serde_json::Value::Object(m) => {
-            let min = m.get("range_min").and_then(|v| v.as_f64()).map(|f| f as f32);
-            let max = m.get("range_max").and_then(|v| v.as_f64()).map(|f| f as f32);
+            let min = m
+                .get("range_min")
+                .and_then(|v| v.as_f64())
+                .map(|f| f as f32);
+            let max = m
+                .get("range_max")
+                .and_then(|v| v.as_f64())
+                .map(|f| f as f32);
             match (min, max) {
                 (Some(a), Some(b)) => Some((a + b) / 2.0),
                 (Some(a), None) | (None, Some(a)) => Some(a),
@@ -63,14 +69,14 @@ pub fn is_summonable(id: &str) -> bool {
 }
 
 pub fn health(id: &str) -> Option<f32> {
-    ENTITIES.get(id).and_then(|e| e.health.as_ref()).and_then(extract_f32)
+    ENTITIES
+        .get(id)
+        .and_then(|e| e.health.as_ref())
+        .and_then(extract_f32)
 }
 
 pub fn families(id: &str) -> &'static [String] {
-    ENTITIES
-        .get(id)
-        .map(|e| e.family.as_slice())
-        .unwrap_or(&[])
+    ENTITIES.get(id).map(|e| e.family.as_slice()).unwrap_or(&[])
 }
 
 pub fn has_family(id: &str, family: &str) -> bool {

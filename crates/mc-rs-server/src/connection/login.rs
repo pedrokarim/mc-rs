@@ -26,9 +26,9 @@ impl Connection {
             self.addr, pkt.protocol_version
         );
 
-        if pkt.protocol_version != 944 {
+        if pkt.protocol_version != 975 {
             warn!(
-                "[{}] Incompatible protocol: {} (expected 944)",
+                "[{}] Incompatible protocol: {} (expected 975)",
                 self.addr, pkt.protocol_version
             );
             let disconnect = Disconnect {
@@ -270,7 +270,10 @@ impl Connection {
         let req = match mc_rs_proto::packets::world::ResourcePackChunkRequest::decode(reader) {
             Ok(r) => r,
             Err(e) => {
-                debug!("[{}] Failed to decode ResourcePackChunkRequest: {:?}", self.addr, e);
+                debug!(
+                    "[{}] Failed to decode ResourcePackChunkRequest: {:?}",
+                    self.addr, e
+                );
                 return Vec::new();
             }
         };
@@ -304,7 +307,7 @@ impl Connection {
         let mut writer = mc_rs_proto::io::ProtoWriter::with_capacity(64);
         writer.write_bool(false); // must_accept
         writer.write_var_u32(0); // resource_pack_stack count
-        writer.write_string("1.26.10"); // base_game_version
+        writer.write_string("1.26.20"); // base_game_version
         writer.write_u32_le(0); // experiments count
         writer.write_bool(false); // experiments_previously_toggled
         writer.write_bool(false); // use_vanilla_editor_packs

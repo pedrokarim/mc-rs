@@ -182,9 +182,9 @@ pub mod chat_filter;
 pub mod chatchannels;
 #[allow(dead_code)]
 pub mod cherry_grove;
+pub mod chest_storage;
 #[allow(dead_code)]
 pub mod chest_system;
-pub mod chest_storage;
 #[allow(dead_code)]
 pub mod chicken;
 #[allow(dead_code)]
@@ -356,9 +356,9 @@ pub mod ender_pearl;
 pub mod enderman;
 #[allow(dead_code)]
 pub mod endermite;
+pub mod entities_vanilla;
 #[allow(dead_code)]
 mod entity;
-pub mod entities_vanilla;
 #[allow(dead_code)]
 pub mod entity_drops;
 #[allow(dead_code)]
@@ -489,11 +489,11 @@ pub mod item_frame;
 pub mod item_properties;
 #[allow(dead_code)]
 mod item_registry;
-pub mod items_vanilla;
 #[allow(dead_code)]
 pub mod item_stack_merge;
 #[allow(dead_code)]
 pub mod item_tags;
+pub mod items_vanilla;
 #[allow(dead_code)]
 pub mod jigsaw;
 #[allow(dead_code)]
@@ -518,9 +518,9 @@ pub mod leaves_decay;
 pub mod lectern;
 #[allow(dead_code)]
 pub mod lectern_book;
+pub mod level_dat;
 #[allow(dead_code)]
 pub mod level_db_keys;
-pub mod level_dat;
 #[allow(dead_code)]
 pub mod light_level;
 #[allow(dead_code)]
@@ -960,13 +960,13 @@ pub mod turtle_egg;
 #[allow(dead_code)]
 pub mod uuid_utils;
 #[allow(dead_code)]
+pub mod vanilla_registries;
+#[allow(dead_code)]
 pub mod vault;
 #[allow(dead_code)]
 pub mod vector_math;
 #[allow(dead_code)]
 pub mod vehicles;
-#[allow(dead_code)]
-pub mod vanilla_registries;
 #[allow(dead_code)]
 pub mod velocity_broadcast;
 #[allow(dead_code)]
@@ -990,6 +990,7 @@ pub mod wandering_trader;
 #[allow(dead_code)]
 pub mod warden;
 #[allow(dead_code)]
+pub mod watchdog;
 pub mod water_physics;
 #[allow(dead_code)]
 pub mod waterlogging;
@@ -1064,7 +1065,7 @@ use mc_rs_raknet::protocol::datagram::Reliability;
 use mc_rs_raknet::session::SessionEvent;
 use mc_rs_raknet::RakNetServer;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::time::{interval, Duration};
+use tokio::time::{interval, Duration, MissedTickBehavior};
 use tracing::{error, info, warn};
 
 use crate::commands::{
@@ -1096,7 +1097,8 @@ async fn main() {
 
     // Le guard doit rester vivant toute la durée du process (flush au Drop).
     let _log_guard = crate::logging::init(&config.logging, webui_log_tx_for_logging);
-    crate::logging::install_panic_hook();
+    crate::logging::install_panic_hook(config.logging.directory.clone());
+    crate::watchdog::start(config.logging.directory.clone());
 
     info!("MC-RS Server starting...");
     bootstrap_notes.flush();
@@ -1130,8 +1132,8 @@ async fn main() {
     // Build MOTD
     let motd = Motd {
         name: config.server.motd.clone(),
-        protocol_version: 944,
-        version_string: "1.26.10".to_string(),
+        protocol_version: 975,
+        version_string: "1.26.20".to_string(),
         online_players: 0,
         max_players: config.server.max_players,
         server_guid,
@@ -1193,34 +1195,50 @@ async fn main() {
         use crate::event::EventPriority;
         if let Ok(mut mgr) = event_manager.lock() {
             let tx = webui_event_tx.clone();
-            mgr.register(EventPriority::Monitor, true, move |ev: &mut PlayerJoinEvent| {
-                let _ = tx.send(mc_rs_webui::WebEvent::PlayerJoin {
-                    name: ev.display_name.clone(),
-                    addr: ev.player_addr.to_string(),
-                    xuid: ev.xuid.clone(),
-                });
-            });
+            mgr.register(
+                EventPriority::Monitor,
+                true,
+                move |ev: &mut PlayerJoinEvent| {
+                    let _ = tx.send(mc_rs_webui::WebEvent::PlayerJoin {
+                        name: ev.display_name.clone(),
+                        addr: ev.player_addr.to_string(),
+                        xuid: ev.xuid.clone(),
+                    });
+                },
+            );
             let tx = webui_event_tx.clone();
-            mgr.register(EventPriority::Monitor, true, move |ev: &mut PlayerQuitEvent| {
-                let _ = tx.send(mc_rs_webui::WebEvent::PlayerQuit {
-                    name: ev.display_name.clone(),
-                    addr: ev.player_addr.to_string(),
-                });
-            });
+            mgr.register(
+                EventPriority::Monitor,
+                true,
+                move |ev: &mut PlayerQuitEvent| {
+                    let _ = tx.send(mc_rs_webui::WebEvent::PlayerQuit {
+                        name: ev.display_name.clone(),
+                        addr: ev.player_addr.to_string(),
+                    });
+                },
+            );
             let tx = webui_event_tx.clone();
-            mgr.register(EventPriority::Monitor, true, move |ev: &mut PlayerChatEvent| {
-                let _ = tx.send(mc_rs_webui::WebEvent::PlayerChat {
-                    name: ev.sender_name.clone(),
-                    message: ev.message.clone(),
-                });
-            });
+            mgr.register(
+                EventPriority::Monitor,
+                true,
+                move |ev: &mut PlayerChatEvent| {
+                    let _ = tx.send(mc_rs_webui::WebEvent::PlayerChat {
+                        name: ev.sender_name.clone(),
+                        message: ev.message.clone(),
+                    });
+                },
+            );
             let tx = webui_event_tx.clone();
-            mgr.register(EventPriority::Monitor, true, move |ev: &mut PlayerDeathEvent| {
-                let _ = tx.send(mc_rs_webui::WebEvent::PlayerDeath {
-                    name: ev.death_message.clone(),
-                    cause: "unknown".to_string(),
-                });
-            });
+            mgr.register(
+                EventPriority::Monitor,
+                true,
+                move |ev: &mut PlayerDeathEvent| {
+                    let _ = tx.send(mc_rs_webui::WebEvent::PlayerDeath {
+                        name: ev.death_message.clone(),
+                        cause: "unknown".to_string(),
+                    });
+                },
+            );
             let tx = webui_event_tx.clone();
             mgr.register(
                 EventPriority::Monitor,
@@ -1296,6 +1314,15 @@ async fn main() {
 
     // Session tick interval (100 TPS = 10ms)
     let mut tick_timer = interval(Duration::from_millis(config.server.tick_rate));
+    // CRITIQUE : par défaut `interval` = MissedTickBehavior::Burst. Si un tick
+    // dépasse `tick_rate` (ex: casser un bloc = chunk + item entity + envoi),
+    // l'interval rattrape en RAFALE → dans le `tokio::select!`, l'arm
+    // `tick_timer.tick()` devient toujours-prêt → l'arm `recv` n'est PLUS
+    // jamais élu → input client gelé, ET les ticks rattrapés fast-forwardent
+    // le cycle jour/nuit. `Skip` : on ne rejoue jamais les ticks manqués,
+    // on reprend la cadence normale → pas de rafale, pas de famine recv,
+    // pas de fast-forward du temps.
+    tick_timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
     let mut should_stop = false;
     let mut console_input_open = true;
     let mut webui_tps_tracker = mc_rs_webui::metrics::TpsTracker::new();
@@ -1337,6 +1364,7 @@ async fn main() {
     drop(webui_task); // detach — la tâche vit tant que le process tourne
 
     loop {
+        crate::watchdog::checkpoint(0); // loop-top
         if should_stop {
             info!("Server stopping...");
             if let Ok(mut manager) = plugin_manager.lock() {
@@ -1345,6 +1373,7 @@ async fn main() {
                 warn!("Plugin manager lock is poisoned during shutdown.");
             }
             // Save all dirty chunks
+            crate::watchdog::checkpoint(13); // shutdown_save
             if let Ok(mut cache) = chunk_cache.lock() {
                 cache.save_dirty();
             }
@@ -1392,11 +1421,13 @@ async fn main() {
         tokio::select! {
             // Receive UDP packets (this awaits until data arrives)
             result = raknet.recv_and_process() => {
+                crate::watchdog::checkpoint(1); // recv_and_process
                 if !result {
                     continue;
                 }
 
                 // Accept new peers
+                crate::watchdog::checkpoint(2); // accept_peers
                 while let Some(peer) = raknet.accept() {
                     let addr = peer.addr;
                     info!("New peer: {}", addr);
@@ -1416,6 +1447,7 @@ async fn main() {
                 }
 
                 // Process events from all peers
+                crate::watchdog::checkpoint(3); // process_peer_events@recv
                 process_peer_events(
                     &mut peers,
                     &mut connections,
@@ -1436,6 +1468,12 @@ async fn main() {
 
             // Tick sessions periodically
             _ = tick_timer.tick() => {
+                // Heartbeat watchdog : bumpé ICI (et pas en haut de boucle) car
+                // c'est le VRAI progrès du jeu. Si l'arm `recv` spin et affame
+                // ce tick (bug Windows UDP CONNRESET), ou si une phase du tick
+                // se bloque, le heartbeat gèle → watchdog déclenche.
+                crate::watchdog::beat();
+                crate::watchdog::checkpoint(4); // webui_snapshot / tick start
                 let current_tps = webui_tps_tracker.on_tick();
                 webui_snapshot_counter = webui_snapshot_counter.wrapping_add(1);
 
@@ -1533,8 +1571,10 @@ async fn main() {
                     }
                 }
 
+                crate::watchdog::checkpoint(5); // raknet.tick_sessions
                 raknet.tick_sessions().await;
 
+                crate::watchdog::checkpoint(6); // world_tick
                 // World tick (day/night cycle, weather)
                 let world_packets = world_state.tick();
                 for wp in world_packets {
@@ -1555,6 +1595,7 @@ async fn main() {
                     }
                 }
 
+                crate::watchdog::checkpoint(7); // game_tick
                 // Game tick (20 TPS = 1 game tick / 5 server ticks).
                 // Met à jour : combat i-frames, hunger drain/regen, attribute desync sync.
                 let mut world_gametick_fired = false;
@@ -1785,6 +1826,7 @@ async fn main() {
                     }
                 }
 
+                crate::watchdog::checkpoint(10); // item_tick
                 let mut item_tick_result = if let Ok(mut cache) = chunk_cache.lock() {
                     item_entities.tick(&registry, &mut cache)
                 } else {
@@ -1934,8 +1976,18 @@ async fn main() {
                     }
                 }
 
-                if let Ok(mut cache) = chunk_cache.lock() {
-                    let tick_result = mob_entities.tick(&mut cache);
+                crate::watchdog::checkpoint(9); // mob_tick
+                // Fix deadlock : on NE tient PAS le guard `chunk_cache` pendant
+                // les envois réseau (raknet.send_to_session). On collecte le
+                // résultat du tick sous lock, on relâche le guard, PUIS on
+                // émet les paquets. Tenir un std::sync::Mutex pendant un appel
+                // réseau potentiellement bloquant est une cause de gel.
+                let mob_tick_result = if let Ok(mut cache) = chunk_cache.lock() {
+                    Some(mob_entities.tick(&mut cache))
+                } else {
+                    None
+                };
+                if let Some(tick_result) = mob_tick_result {
                     for update in tick_result.movement_updates {
                         for (addr, conn) in connections.iter_mut() {
                             if conn.is_in_game() {
@@ -1967,15 +2019,21 @@ async fn main() {
                     }
                 }
 
-                // Auto-save every 30000 ticks (~5 minutes at 100 TPS)
+                crate::watchdog::checkpoint(11); // autosave
+                // Auto-save every 1500 ticks (~15 s at 100 TPS). Raccourci de
+                // 30000→1500 car save_chunk_now par-édition a été retiré
+                // (flush LevelDB synchrone sous guard = hazard de gel) : on
+                // s'appuie maintenant uniquement sur le dirty-tracking +
+                // autosave batché pour la persistance.
                 auto_save_counter += 1;
-                if server_state.auto_save_enabled && auto_save_counter >= 30000 {
+                if server_state.auto_save_enabled && auto_save_counter >= 1500 {
                     auto_save_counter = 0;
                     if let Ok(mut cache) = chunk_cache.lock() {
                         cache.save_dirty();
                     }
                 }
 
+                crate::watchdog::checkpoint(12); // process_peer_events@tick
                 // Also check for events after session ticks
                 process_peer_events(
                     &mut peers,
@@ -2389,11 +2447,7 @@ fn process_peer_events(
                             }
                             crate::connection::PendingFurnaceEvent::Unregister { pos } => {
                                 if furnace_manager.unregister(pos).is_some() {
-                                    tracing::info!(
-                                        "[{}] Furnace unregistered at {:?}",
-                                        addr,
-                                        pos
-                                    );
+                                    tracing::info!("[{}] Furnace unregistered at {:?}", addr, pos);
                                 }
                             }
                         }

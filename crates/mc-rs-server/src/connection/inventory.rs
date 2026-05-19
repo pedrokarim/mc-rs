@@ -597,11 +597,16 @@ impl Connection {
             return; // pas de la nourriture
         }
 
-        let cur_hunger = self.attributes.must_get(crate::attribute::ids::HUNGER).current_value;
-        let cur_sat = self.attributes.must_get(crate::attribute::ids::SATURATION).current_value;
+        let cur_hunger = self
+            .attributes
+            .must_get(crate::attribute::ids::HUNGER)
+            .current_value;
+        let cur_sat = self
+            .attributes
+            .must_get(crate::attribute::ids::SATURATION)
+            .current_value;
         let new_hunger = (cur_hunger + nutrition as f32).min(20.0);
-        let new_sat = (cur_sat + saturation * 2.0)
-            .min(new_hunger);
+        let new_sat = (cur_sat + saturation * 2.0).min(new_hunger);
         self.attributes
             .must_get_mut(crate::attribute::ids::HUNGER)
             .set_value(new_hunger, true);
@@ -687,9 +692,7 @@ impl Connection {
             3 => UpdateAbilities::default_spectator(self.entity_runtime_id as i64, is_op),
             _ => UpdateAbilities::default_survival(self.entity_runtime_id as i64, is_op),
         };
-        out.push(
-            self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities.encode()),
-        );
+        out.push(self.encode_compressed_packet(packet_id::UPDATE_ABILITIES, &abilities.encode()));
 
         // PMMP onServerRespawn : invManager.syncAll() — resync tous les
         // inventaires (utile si mort a modifié ou vidé l'inventaire).
@@ -745,7 +748,10 @@ impl Connection {
             crate::combat_packets::respawn_state::READY_TO_SPAWN,
             self.entity_runtime_id,
         );
-        info!("[{}] CLIENT_READY_TO_SPAWN ACK → sending READY_TO_SPAWN", self.addr);
+        info!(
+            "[{}] CLIENT_READY_TO_SPAWN ACK → sending READY_TO_SPAWN",
+            self.addr
+        );
         vec![self.encode_compressed_packet(packet_id::RESPAWN, &respawn)]
     }
 }

@@ -63,7 +63,11 @@ pub fn block_drop(block_runtime_id: u32) -> Option<ItemStack> {
     }
     if block_runtime_id == b.lapis_ore {
         // 4..8 lapis en vanilla ; on met 4 constant (simplification).
-        return Some(ItemStack::new(required_item_id("minecraft:lapis_lazuli"), 4, 0));
+        return Some(ItemStack::new(
+            required_item_id("minecraft:lapis_lazuli"),
+            4,
+            0,
+        ));
     }
     if block_runtime_id == b.redstone_ore {
         return Some(ItemStack::new(required_item_id("minecraft:redstone"), 4, 0));
@@ -147,18 +151,18 @@ pub struct PlayerInventory {
     pub slots: Vec<ItemStackWrapper>, // 36 slots (hotbar 0-8, main 9-35)
     pub armor: Vec<ItemStackWrapper>, // 4 slots
     pub offhand: ItemStackWrapper,
-    pub cursor: ItemStackWrapper,          // 1 slot (UI slot 0)
-    pub craft_grid: [ItemStackWrapper; 4], // 2x2 (UI slots 28..32)
+    pub cursor: ItemStackWrapper,              // 1 slot (UI slot 0)
+    pub craft_grid: [ItemStackWrapper; 4],     // 2x2 (UI slots 28..32)
     pub craft_grid_3x3: [ItemStackWrapper; 9], // 3x3 (UI slots 32..40)
-    pub craft_result: ItemStackWrapper,    // (UI slot 50)
-    pub anvil_input: ItemStackWrapper,     // UI slot 1
-    pub anvil_material: ItemStackWrapper,  // UI slot 2
-    pub enchant_input: ItemStackWrapper,   // UI slot 14
-    pub enchant_material: ItemStackWrapper, // UI slot 15
+    pub craft_result: ItemStackWrapper,        // (UI slot 50)
+    pub anvil_input: ItemStackWrapper,         // UI slot 1
+    pub anvil_material: ItemStackWrapper,      // UI slot 2
+    pub enchant_input: ItemStackWrapper,       // UI slot 14
+    pub enchant_material: ItemStackWrapper,    // UI slot 15
     /// 27 slots du chest courant (si ouvert). Sync vers ChestManager
     /// global dans main.rs via les listener events.
     pub block_container: Vec<ItemStackWrapper>,
-    pub held_slot: u8,                     // 0-8 hotbar index
+    pub held_slot: u8, // 0-8 hotbar index
     next_stack_id: i32,
 }
 

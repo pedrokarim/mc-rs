@@ -42,7 +42,11 @@ pub async fn post_login(
     Form(form): Form<LoginForm>,
 ) -> Response {
     let (Some(db), Some(jwt)) = (state.db.clone(), state.jwt.clone()) else {
-        return (StatusCode::INTERNAL_SERVER_ERROR, "auth subsystem not initialized").into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "auth subsystem not initialized",
+        )
+            .into_response();
     };
 
     // Rate limit par IP.
@@ -157,10 +161,7 @@ pub async fn post_login(
     resp
 }
 
-pub async fn post_logout(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-) -> Response {
+pub async fn post_logout(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
     let user = match crate::auth::middleware::require_auth(&state, &headers).await {
         Ok(u) => u,
         Err(resp) => return resp,

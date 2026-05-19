@@ -43,9 +43,7 @@ fn run(size: usize, label: &str) {
     // counter manuellement via N encrypts warmup.
     let n_samples = (WARMUP + RUNS) as usize;
     let mut ctx_enc = EncryptionContext::new(key);
-    let encrypted: Vec<Vec<u8>> = (0..n_samples)
-        .map(|_| ctx_enc.encrypt(&payload))
-        .collect();
+    let encrypted: Vec<Vec<u8>> = (0..n_samples).map(|_| ctx_enc.encrypt(&payload)).collect();
     let mut ctx_dec = EncryptionContext::new(key);
     let mut idx = 0usize;
     let dec_d = bench("AES-256-CTR decrypt", WARMUP, RUNS, || {

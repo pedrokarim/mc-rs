@@ -86,10 +86,7 @@ async fn logs_task(socket: WebSocket, mut rx: tokio::sync::broadcast::Receiver<c
     }
 }
 
-async fn events_task(
-    socket: WebSocket,
-    mut rx: tokio::sync::broadcast::Receiver<crate::WebEvent>,
-) {
+async fn events_task(socket: WebSocket, mut rx: tokio::sync::broadcast::Receiver<crate::WebEvent>) {
     let (mut sender, mut receiver) = socket.split();
     loop {
         tokio::select! {

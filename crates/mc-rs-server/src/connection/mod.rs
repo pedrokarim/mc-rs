@@ -350,13 +350,8 @@ impl Connection {
         // tard en debug. Pour l'instant on cherche quel paquet le client
         // envoie pour un placement de bloc (bit 34 jamais set dans
         // PlayerAuthInput, block_action types tous break-related).
-        if self.state == ConnectionState::InGame
-            && pkt_id != packet_id::PLAYER_AUTH_INPUT
-        {
-            info!(
-                "[{}] recv pkt 0x{:03X} in InGame",
-                self.addr, pkt_id
-            );
+        if self.state == ConnectionState::InGame && pkt_id != packet_id::PLAYER_AUTH_INPUT {
+            info!("[{}] recv pkt 0x{:03X} in InGame", self.addr, pkt_id);
         }
 
         match (self.state, pkt_id) {

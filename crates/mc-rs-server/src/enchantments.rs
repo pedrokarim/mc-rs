@@ -150,6 +150,51 @@ impl EnchantmentKind {
         *self as u8
     }
 
+    /// Liste des noms vanilla d'enchantements — utilisée pour populer
+    /// la SoftEnum d'autocomplétion `/enchant`.
+    pub fn all_names() -> &'static [&'static str] {
+        &[
+            "protection",
+            "fire_protection",
+            "feather_falling",
+            "blast_protection",
+            "projectile_protection",
+            "thorns",
+            "respiration",
+            "depth_strider",
+            "aqua_affinity",
+            "sharpness",
+            "smite",
+            "bane_of_arthropods",
+            "knockback",
+            "fire_aspect",
+            "looting",
+            "efficiency",
+            "silk_touch",
+            "unbreaking",
+            "fortune",
+            "power",
+            "punch",
+            "flame",
+            "infinity",
+            "luck_of_the_sea",
+            "lure",
+            "frost_walker",
+            "mending",
+            "binding_curse",
+            "vanishing_curse",
+            "impaling",
+            "riptide",
+            "loyalty",
+            "channeling",
+            "multishot",
+            "piercing",
+            "quick_charge",
+            "soul_speed",
+            "swift_sneak",
+        ]
+    }
+
     /// Niveau max (1..N) pour cet enchantement.
     pub fn max_level(&self) -> u8 {
         match self {
@@ -297,7 +342,10 @@ pub fn build_extra_data_with_enchant(enchant_id: u8, level: u8) -> Vec<u8> {
     entry.insert("id".to_string(), NbtTag::Short(enchant_id as i16));
     entry.insert("lvl".to_string(), NbtTag::Short(level as i16));
     let mut root_compound = NbtCompound::new();
-    root_compound.insert("ench".to_string(), NbtTag::List(vec![NbtTag::Compound(entry)]));
+    root_compound.insert(
+        "ench".to_string(),
+        NbtTag::List(vec![NbtTag::Compound(entry)]),
+    );
     let root = NbtRoot::new("", root_compound);
 
     let mut nbt_buf = BytesMut::new();
@@ -319,7 +367,7 @@ mod tests {
     #[test]
     fn build_extra_data_starts_with_nbt_marker() {
         let bytes = build_extra_data_with_enchant(9, 5); // sharpness V
-        // Marker FF FF + version 01
+                                                         // Marker FF FF + version 01
         assert_eq!(&bytes[0..3], &[0xFF, 0xFF, 0x01]);
     }
 

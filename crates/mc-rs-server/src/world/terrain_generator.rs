@@ -650,7 +650,20 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
         }
     }
 
-    let max_block_y = global_max.max(WATER_HEIGHT as f64) as i32 + 1;
+    let mut max_block_y = global_max.max(WATER_HEIGHT as f64) as i32 + 1;
+    // Les arbres et structures sont posés AU-DESSUS de la surface du terrain.
+    // `sub_chunk_count` doit couvrir leur Y max, sinon tout bloc dont le Y
+    // dépasse le dernier sub-chunk sérialisé est ignoré (la boucle
+    // `for sub_idx in 0..sub_chunk_count` n'y passe jamais) → canopée
+    // tranchée net à la frontière de sub-chunk = arbres coupés à plat.
+    for (&(_, world_y, _), &veg_id) in &veg_map {
+        if veg_id != 0 {
+            max_block_y = max_block_y.max(world_y);
+        }
+    }
+    for (&(_, world_y, _), _) in &struct_map {
+        max_block_y = max_block_y.max(world_y);
+    }
     let sub_chunk_count = (((max_block_y + 64) / 16) + 1).clamp(1, 24) as usize;
     let min_noise_sub_chunk = ((noise_min + 64) as f64 / 16.0).floor() as i32;
 

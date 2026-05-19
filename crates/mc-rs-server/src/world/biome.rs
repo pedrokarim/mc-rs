@@ -150,9 +150,7 @@ pub fn biome_identifier(id: u32) -> Option<&'static str> {
         biome_id::COLD_TAIGA_MUTATED => "minecraft:cold_taiga_mutated",
         biome_id::REDWOOD_TAIGA_MUTATED => "minecraft:redwood_taiga_mutated",
         biome_id::REDWOOD_TAIGA_HILLS_MUTATED => "minecraft:redwood_taiga_hills_mutated",
-        biome_id::EXTREME_HILLS_PLUS_TREES_MUTATED => {
-            "minecraft:extreme_hills_plus_trees_mutated"
-        }
+        biome_id::EXTREME_HILLS_PLUS_TREES_MUTATED => "minecraft:extreme_hills_plus_trees_mutated",
         biome_id::SAVANNA_MUTATED => "minecraft:savanna_mutated",
         biome_id::SAVANNA_PLATEAU_MUTATED => "minecraft:savanna_plateau_mutated",
         biome_id::MESA_BRYCE => "minecraft:mesa_bryce",

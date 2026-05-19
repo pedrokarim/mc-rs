@@ -10,8 +10,11 @@ pub struct ReceiveLayer {
     /// Expected next datagram seq number
     window_start: u32,
     window_end: u32,
-    /// Received seq numbers (for gap detection)
+    /// Received seq numbers (for gap detection + duplicate rejection within window)
     received_seqs: HashSet<u32>,
+    /// Highest datagram seq number ever received (-1 = none). Mirrors RakLib
+    /// `highestSeqNumber`; drives the forced window advance in `update()`.
+    highest_seq_number: i64,
 
     // ── ACK/NACK queues ──
     pub ack_queue: Vec<u32>,
@@ -32,6 +35,35 @@ pub struct ReceiveLayer {
 
     // ── Split reassembly ──
     split_packets: HashMap<u16, SplitAssembly>,
+
+    // ── Freeze diagnostics (per-session) ──
+    /// Total datagrams accepted (passed the window check) since session start.
+    diag_datagrams_in: u64,
+    /// Total user-level packets actually emitted to the game layer.
+    diag_packets_out: u64,
+    /// Datagrams rejected by the window check (out of window / duplicate).
+    diag_dropped_window: u64,
+}
+
+/// Snapshot of the receive layer's internal state, for freeze diagnostics.
+/// Every field that could wedge the session is here so a single log line at
+/// the moment of freeze tells us EXACTLY which mechanism stalled.
+#[derive(Debug, Clone)]
+pub struct RecvDiag {
+    pub datagrams_in: u64,
+    pub packets_out: u64,
+    pub dropped_window: u64,
+    pub window_start: u32,
+    pub window_end: u32,
+    pub highest_seq: i64,
+    pub reliable_window_start: u32,
+    pub reliable_window_end: u32,
+    pub reliable_held: usize,
+    /// Per ordered-channel: (next expected index, queued-out-of-order count).
+    /// Only channels with a non-zero index or non-empty queue are listed.
+    pub ordered_channels: Vec<(usize, u32, usize)>,
+    pub split_in_progress: usize,
+    pub nack_pending: usize,
 }
 
 struct SplitAssembly {
@@ -55,6 +87,7 @@ impl ReceiveLayer {
             window_start: 0,
             window_end: RECV_WINDOW_SIZE,
             received_seqs: HashSet::new(),
+            highest_seq_number: -1,
             ack_queue: Vec::new(),
             nack_queue: Vec::new(),
             reliable_window_start: 0,
@@ -64,6 +97,34 @@ impl ReceiveLayer {
             recv_ordered_queue: std::array::from_fn(|_| BTreeMap::new()),
             recv_sequenced_highest: [0; MAX_ORDER_CHANNELS],
             split_packets: HashMap::new(),
+            diag_datagrams_in: 0,
+            diag_packets_out: 0,
+            diag_dropped_window: 0,
+        }
+    }
+
+    /// Snapshot the internal state for freeze diagnostics.
+    pub fn diag(&self) -> RecvDiag {
+        let ordered_channels = self
+            .recv_ordered_index
+            .iter()
+            .enumerate()
+            .filter(|(ch, &idx)| idx != 0 || !self.recv_ordered_queue[*ch].is_empty())
+            .map(|(ch, &idx)| (ch, idx, self.recv_ordered_queue[ch].len()))
+            .collect();
+        RecvDiag {
+            datagrams_in: self.diag_datagrams_in,
+            packets_out: self.diag_packets_out,
+            dropped_window: self.diag_dropped_window,
+            window_start: self.window_start,
+            window_end: self.window_end,
+            highest_seq: self.highest_seq_number,
+            reliable_window_start: self.reliable_window_start,
+            reliable_window_end: self.reliable_window_end,
+            reliable_held: self.reliable_received.len(),
+            ordered_channels,
+            split_in_progress: self.split_packets.len(),
+            nack_pending: self.nack_queue.len(),
         }
     }
 
@@ -73,28 +134,47 @@ impl ReceiveLayer {
         seq_number: u32,
         packets: Vec<EncapsulatedPacket>,
     ) -> Vec<Vec<u8>> {
-        // Sequence window check
-        if seq_number < self.window_start || seq_number >= self.window_end {
-            return Vec::new(); // out of window, drop
+        // Sequence window check (RakLib ReceiveReliabilityLayer::onDatagram).
+        // Upper bound is INCLUSIVE (`> window_end`) as in RakLib. A seq already
+        // in `received_seqs` is a duplicate (RakLib `isset(ACKQueue[seq])`):
+        // RakNet never reuses a datagram seq number, so this only fires on
+        // network-duplicated UDP delivery.
+        if seq_number < self.window_start
+            || seq_number > self.window_end
+            || self.received_seqs.contains(&seq_number)
+        {
+            self.diag_dropped_window += 1;
+            return Vec::new(); // out of window or duplicate, drop
         }
+        self.diag_datagrams_in += 1;
 
-        // Detect gaps for NACK
-        if seq_number > self.window_start {
-            for missing in self.window_start..seq_number {
-                if !self.received_seqs.contains(&missing) {
-                    self.nack_queue.push(missing);
-                }
-            }
+        // This datagram filled a gap we may have NACKed earlier — cancel that
+        // pending NACK (RakLib `unset($this->NACKQueue[$packet->seqNumber])`).
+        if let Some(pos) = self.nack_queue.iter().position(|&s| s == seq_number) {
+            self.nack_queue.swap_remove(pos);
         }
 
         self.received_seqs.insert(seq_number);
         self.ack_queue.push(seq_number);
+        if (seq_number as i64) > self.highest_seq_number {
+            self.highest_seq_number = seq_number as i64;
+        }
 
-        // Slide window
-        while self.received_seqs.contains(&self.window_start) {
-            self.received_seqs.remove(&self.window_start);
-            self.window_start += 1;
-            self.window_end += 1;
+        if seq_number == self.window_start {
+            // Contiguous — shift the window forward as far as the received set
+            // allows (fast path; the hard guarantee is `update()` below).
+            while self.received_seqs.contains(&self.window_start) {
+                self.window_start += 1;
+                self.window_end += 1;
+            }
+        } else {
+            // Gap: a later datagram arrived before earlier ones. NACK the
+            // missing seqs (deduplicated — RakLib keys NACKQueue by seq).
+            for missing in self.window_start..seq_number {
+                if !self.received_seqs.contains(&missing) && !self.nack_queue.contains(&missing) {
+                    self.nack_queue.push(missing);
+                }
+            }
         }
 
         // Process encapsulated packets
@@ -102,11 +182,42 @@ impl ReceiveLayer {
         for pkt in packets {
             self.handle_encapsulated(pkt, &mut output);
         }
+        self.diag_packets_out += output.len() as u64;
         output
     }
 
     fn handle_encapsulated(&mut self, pkt: EncapsulatedPacket, output: &mut Vec<Vec<u8>>) {
-        // Handle split packets
+        // Reliable window dedup + slide — done for EVERY incoming encapsulated
+        // packet that carries a message_index, INCLUDING each split part,
+        // BEFORE split reassembly. This is the exact order of RakLib
+        // `ReceiveReliabilityLayer::handleEncapsulatedPacket` (messageIndex
+        // block, then `handleSplit`).
+        //
+        // ⚠️ Doing split reassembly first (as before) silently dropped the
+        // message_index of every split part except the one that triggered
+        // completion → `reliable_window_start` wedged at the first skipped
+        // index (e.g. 4 = the split Login packet) → after 2048 message
+        // indices every reliable packet was rejected (`msg_idx >=
+        // reliable_window_end`) → ordered channel head-of-line blocked →
+        // per-session freeze. Reconnect = fresh window = temporary fix.
+        if let Some(msg_idx) = pkt.message_index {
+            // Upper bound INCLUSIVE (`>`) as in RakLib.
+            if msg_idx < self.reliable_window_start
+                || msg_idx > self.reliable_window_end
+                || self.reliable_received.contains(&msg_idx)
+            {
+                return; // duplicate or out of window
+            }
+            self.reliable_received.insert(msg_idx);
+            // Slide reliable window over the contiguous run.
+            while self.reliable_received.contains(&self.reliable_window_start) {
+                self.reliable_received.remove(&self.reliable_window_start);
+                self.reliable_window_start += 1;
+                self.reliable_window_end += 1;
+            }
+        }
+
+        // Split reassembly — AFTER the reliable window (RakLib `handleSplit`).
         let pkt = if pkt.split.is_some() {
             match self.handle_split(pkt) {
                 Some(reassembled) => reassembled,
@@ -115,25 +226,6 @@ impl ReceiveLayer {
         } else {
             pkt
         };
-
-        // Handle reliability
-        if pkt.reliability.is_reliable() {
-            if let Some(msg_idx) = pkt.message_index {
-                if msg_idx < self.reliable_window_start
-                    || msg_idx >= self.reliable_window_end
-                    || self.reliable_received.contains(&msg_idx)
-                {
-                    return; // duplicate or out of window
-                }
-                self.reliable_received.insert(msg_idx);
-                // Slide reliable window
-                while self.reliable_received.contains(&self.reliable_window_start) {
-                    self.reliable_received.remove(&self.reliable_window_start);
-                    self.reliable_window_start += 1;
-                    self.reliable_window_end += 1;
-                }
-            }
-        }
 
         // Handle ordering / sequencing
         if pkt.reliability.is_sequenced() {
@@ -182,11 +274,19 @@ impl ReceiveLayer {
     fn handle_split(&mut self, pkt: EncapsulatedPacket) -> Option<EncapsulatedPacket> {
         let split = pkt.split.as_ref()?;
         if split.count > MAX_SPLIT_PART_COUNT || split.index >= split.count {
+            tracing::warn!(
+                "split DROP (count={} idx={} max={}): provoque un wedge ordonné permanent si reliable-ordered",
+                split.count, split.index, MAX_SPLIT_PART_COUNT
+            );
             return None;
         }
         if self.split_packets.len() >= MAX_CONCURRENT_SPLITS
             && !self.split_packets.contains_key(&split.id)
         {
+            tracing::warn!(
+                "split DROP : {} splits concurrents >= MAX_CONCURRENT_SPLITS={} (wedge ordonné permanent probable)",
+                self.split_packets.len(), MAX_CONCURRENT_SPLITS
+            );
             return None; // too many concurrent splits
         }
 
@@ -229,6 +329,42 @@ impl ReceiveLayer {
             Some(reassembled)
         } else {
             None
+        }
+    }
+
+    /// Per-tick maintenance. **THIS IS THE FIX for the per-session freeze.**
+    ///
+    /// Faithful port of RakLib `ReceiveReliabilityLayer::update()`: the receive
+    /// window is FORCE-advanced past the highest seq number ever received,
+    /// regardless of gaps. Datagram seq numbers we NACKed but never recovered
+    /// are abandoned at the *datagram-window* level — RakNet never re-sends a
+    /// datagram with the same seq number, it resends the lost *message* in a
+    /// NEW datagram (higher seq, deduplicated by the reliable `messageIndex`
+    /// window). Without this, a single permanently-lost datagram wedges
+    /// `window_start` forever; once the client's seq numbers climb past
+    /// `window_start + RECV_WINDOW_SIZE`, every incoming datagram is dropped
+    /// (`seq > window_end`) → the session stops processing all client packets
+    /// while the server keeps ticking. Reconnect resets the layer = temp fix.
+    ///
+    /// Must be called every session tick (see `session.rs::tick`).
+    pub fn update(&mut self) {
+        let diff = self.highest_seq_number - self.window_start as i64 + 1;
+        if diff > 0 {
+            // Count seqs being abandoned (NACKed but never recovered) so a
+            // future regression is immediately visible per-session.
+            let abandoned = (self.window_start..self.window_start + diff as u32)
+                .filter(|s| !self.received_seqs.contains(s))
+                .count();
+            self.window_start += diff as u32;
+            self.window_end += diff as u32;
+            if abandoned > 0 {
+                tracing::debug!(
+                    "recv window force-advanced by {} ({} unrecovered datagram(s) abandoned, window now {}..{})",
+                    diff, abandoned, self.window_start, self.window_end
+                );
+            }
+            // Bound memory: drop received-seq entries now behind the window.
+            self.received_seqs.retain(|&s| s >= self.window_start);
         }
     }
 
@@ -309,6 +445,120 @@ mod tests {
         // Same message_index again — should be dropped
         let result2 = layer.on_datagram(1, vec![pkt]);
         assert_eq!(result2.len(), 0);
+    }
+
+    /// Regression test for the per-session freeze bug.
+    ///
+    /// A single datagram (seq 5) is lost forever. The client keeps sending
+    /// (RakNet never reuses a seq number, so seq 5 never reappears). Without
+    /// `update()` force-advancing the window, `window_start` would wedge at 5
+    /// and every datagram with seq >= 5 + RECV_WINDOW_SIZE would be dropped,
+    /// freezing the session. With the fix, the window advances each tick and
+    /// later datagrams keep being delivered.
+    #[test]
+    fn test_lost_datagram_does_not_wedge_window() {
+        let mut layer = ReceiveLayer::new();
+
+        // Deliver seq 0..5 normally (msg/order 0..5).
+        for i in 0..5u32 {
+            let pkt = make_reliable_ordered(vec![i as u8], i, i);
+            assert_eq!(layer.on_datagram(i, vec![pkt]).len(), 1);
+        }
+        // Window has slid to 5; seq 5 is now permanently lost (never arrives).
+        assert_eq!(layer.window_start, 5);
+
+        // Client keeps sending. RakNet assigns ever-increasing seq numbers and
+        // resends the lost reliable message in a NEW datagram (seq 6, but the
+        // same order_index 5 so ordering is preserved).
+        let resend = make_reliable_ordered(vec![5], 5, 5);
+        assert_eq!(layer.on_datagram(6, vec![resend]).len(), 1);
+
+        // Tick: window must force-advance past the lost seq 5.
+        layer.update();
+        assert!(
+            layer.window_start > 5,
+            "window wedged at {} — freeze bug present",
+            layer.window_start
+        );
+
+        // Simulate a long mining burst: far more than RECV_WINDOW_SIZE
+        // datagrams. Every one must still be delivered (no silent drop).
+        let mut next_seq = 7u32;
+        let mut next_ord = 6u32;
+        for _ in 0..(RECV_WINDOW_SIZE * 3) {
+            let pkt = make_reliable_ordered(vec![0xAB], next_ord, next_ord);
+            let out = layer.on_datagram(next_seq, vec![pkt]);
+            assert_eq!(
+                out.len(),
+                1,
+                "datagram seq {} dropped — receive window wedged",
+                next_seq
+            );
+            next_seq += 1;
+            next_ord += 1;
+            layer.update();
+        }
+    }
+
+    /// Regression test for the per-session freeze: a split reliable packet
+    /// must register the message_index of EVERY part in the reliable window,
+    /// not just the part that completes reassembly. Otherwise the reliable
+    /// window wedges on the skipped indices (the real freeze observed in
+    /// production: `reliable_win` stuck at 4 = the split Login packet).
+    #[test]
+    fn test_split_parts_register_all_reliable_indices() {
+        use crate::protocol::datagram::SplitInfo;
+
+        let mut layer = ReceiveLayer::new();
+
+        // Deliver 4 plain reliable-ordered messages (msg/order 0..3).
+        for i in 0..4u32 {
+            let pkt = make_reliable_ordered(vec![i as u8], i, i);
+            assert_eq!(layer.on_datagram(i, vec![pkt]).len(), 1);
+        }
+        assert_eq!(layer.reliable_window_start, 4);
+
+        // A 2-part split reliable-ordered packet. Each part has its own
+        // message_index (4 and 5); both share order_index 4.
+        let part0 = EncapsulatedPacket {
+            reliability: Reliability::ReliableOrdered,
+            message_index: Some(4),
+            sequence_index: None,
+            order_index: Some(4),
+            order_channel: Some(0),
+            split: Some(SplitInfo {
+                count: 2,
+                id: 1,
+                index: 0,
+            }),
+            body: vec![0xAA],
+        };
+        let part1 = EncapsulatedPacket {
+            reliability: Reliability::ReliableOrdered,
+            message_index: Some(5),
+            sequence_index: None,
+            order_index: Some(4),
+            order_channel: Some(0),
+            split: Some(SplitInfo {
+                count: 2,
+                id: 1,
+                index: 1,
+            }),
+            body: vec![0xBB],
+        };
+        assert_eq!(layer.on_datagram(4, vec![part0]).len(), 0); // incomplete
+        assert_eq!(layer.on_datagram(5, vec![part1]).len(), 1); // reassembled
+
+        // BOTH split parts' message indices (4 and 5) must have been
+        // registered → window slid past them.
+        assert_eq!(
+            layer.reliable_window_start, 6,
+            "split parts' message indices not all registered — reliable window wedged"
+        );
+
+        // A subsequent reliable-ordered message must still be delivered.
+        let next = make_reliable_ordered(vec![0xCC], 6, 5);
+        assert_eq!(layer.on_datagram(6, vec![next]).len(), 1);
     }
 
     #[test]

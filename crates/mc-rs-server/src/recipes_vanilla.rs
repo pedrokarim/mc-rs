@@ -16,7 +16,9 @@ use mc_rs_proto::packets::player::ItemStack;
 use serde::Deserialize;
 use tracing::warn;
 
-use crate::crafting::{CraftingManager, FurnaceRecipe, RecipeIngredient, ShapedRecipe, ShapelessRecipe};
+use crate::crafting::{
+    CraftingManager, FurnaceRecipe, RecipeIngredient, ShapedRecipe, ShapelessRecipe,
+};
 use crate::item_registry;
 
 const VANILLA_JSON: &str = include_str!("../data/recipes/vanilla.json");
@@ -166,10 +168,9 @@ fn resolve_tag(tag: &str) -> Vec<&'static str> {
             "minecraft:crimson_slab",
             "minecraft:warped_slab",
         ],
-        "minecraft:stone_crafting_materials" => vec![
-            "minecraft:cobblestone",
-            "minecraft:cobbled_deepslate",
-        ],
+        "minecraft:stone_crafting_materials" => {
+            vec!["minecraft:cobblestone", "minecraft:cobbled_deepslate"]
+        }
         "minecraft:stone_tool_materials" => vec![
             "minecraft:cobblestone",
             "minecraft:cobbled_deepslate",
@@ -218,9 +219,7 @@ fn build_result(raw: &RawResult) -> Option<Vec<ItemStack>> {
 fn furnace_item_name(v: &serde_json::Value) -> Option<&str> {
     match v {
         serde_json::Value::String(s) => Some(s.as_str()),
-        serde_json::Value::Object(map) => {
-            map.get("item").and_then(|v| v.as_str())
-        }
+        serde_json::Value::Object(map) => map.get("item").and_then(|v| v.as_str()),
         _ => None,
     }
 }
@@ -230,7 +229,12 @@ fn register_shaped(mgr: &mut CraftingManager, raw: &RawShaped) -> bool {
     if height == 0 || height > 3 {
         return false;
     }
-    let width = raw.pattern.iter().map(|row| row.chars().count()).max().unwrap_or(0);
+    let width = raw
+        .pattern
+        .iter()
+        .map(|row| row.chars().count())
+        .max()
+        .unwrap_or(0);
     if width == 0 || width > 3 {
         return false;
     }

@@ -1824,6 +1824,43 @@ impl ItemStackWrapper {
         };
         w.write_byte_array(&extra_data);
     }
+
+    /// Encode as `NetworkItemStackDescriptor` — the **new** format introduced
+    /// in protocol 975 (Bedrock 1.26.20), used ONLY by `InventorySlotPacket`
+    /// and `MobEquipmentPacket`. `InventoryContentPacket`, `AddPlayer`,
+    /// `AddItemActor` and inventory transactions still use the legacy
+    /// [`Self::encode`].
+    ///
+    /// Port fidèle de PMMP `CommonTypes::putNetworkItemStackDescriptor`
+    /// (`.reference/BedrockProtocol` tag `57.1.0+bedrock-1.26.20`) :
+    /// `LE i16 id` + `LE u16 count` + `VarU32 meta` + `bool hasNetId`
+    /// (+ `VarU32 variant` + `VarI32 stackId` si présent) + `VarU32
+    /// blockRuntimeId` + `string rawExtraData` — plus de court-circuit sur
+    /// id==0, blockRuntimeId et extraData TOUJOURS écrits.
+    pub fn encode_descriptor(&self, w: &mut ProtoWriter) {
+        w.write_i16_le(self.item.id as i16);
+        w.write_u16_le(self.item.count);
+        w.write_var_u32(self.item.meta);
+        let stack_id = if self.item.is_air() { 0 } else { self.stack_id };
+        let has_net_id = stack_id != 0;
+        w.write_bool(has_net_id);
+        if has_net_id {
+            w.write_var_u32(0); // stackId variant (PMMP getStackIdVariant, 0 = défaut)
+            w.write_var_i32(stack_id);
+        }
+        w.write_var_u32(self.item.block_runtime_id as u32);
+        if self.item.is_air() {
+            // PMMP ItemStack::null() → rawExtraData = "" (string vide).
+            w.write_byte_array(&[]);
+        } else {
+            let extra_data = if self.item.extra_data.is_empty() {
+                minimal_item_extra_data(self.item.id)
+            } else {
+                self.item.extra_data.clone()
+            };
+            w.write_byte_array(&extra_data);
+        }
+    }
 }
 
 fn minimal_item_extra_data(_item_id: i32) -> Vec<u8> {
@@ -1950,12 +1987,23 @@ impl InventorySlot {
         item: &ItemStackWrapper,
         full_container_name: &FullContainerName,
     ) -> Vec<u8> {
+        // Protocol 975 (PMMP `InventorySlotPacket::encodePayload`,
+        // tag 57.1.0+bedrock-1.26.20) :
+        //   VarU32 windowId + VarU32 inventorySlot
+        //   writeOptional(containerName)  → bool + FullContainerName::write
+        //   writeOptional(storage)        → bool (+ descriptor si présent)
+        //   NetworkItemStackDescriptor item
+        // Avant 975 : containerName et storage étaient écrits sans préfixe
+        // Optional, et les items utilisaient l'ancien ItemStackWrapper.
         let mut w = ProtoWriter::with_capacity(64);
         w.write_var_u32(window_id);
         w.write_var_u32(slot);
+        // containerName : toujours présent côté serveur → Optional(true).
+        w.write_bool(true);
         full_container_name.encode(&mut w);
-        ItemStackWrapper::air().encode(&mut w);
-        item.encode(&mut w);
+        // storage : non utilisé (slots non-bundle) → Optional(false).
+        w.write_bool(false);
+        item.encode_descriptor(&mut w);
         w.into_bytes()
     }
 }
@@ -1966,13 +2014,19 @@ pub struct MobEquipment;
 
 impl MobEquipment {
     /// Encode empty hand (air item).
+    ///
+    /// Protocol 975 (PMMP `MobEquipmentPacket::encodePayload`,
+    /// tag 57.1.0+bedrock-1.26.20) : `actorRuntimeId` + `NetworkItemStack
+    /// Descriptor item` + `Byte inventorySlot` + `Byte hotbarSlot` + `Byte
+    /// windowId`. L'item air n'est PLUS court-circuité (`VarI32 0`) : il
+    /// faut un descriptor complet.
     pub fn encode_empty(runtime_entity_id: u64) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(16);
         w.write_var_u64(runtime_entity_id);
-        w.write_var_i32(0); // air
-        w.write_u8(0);
-        w.write_u8(0);
-        w.write_u8(0);
+        ItemStackWrapper::air().encode_descriptor(&mut w);
+        w.write_u8(0); // inventory_slot
+        w.write_u8(0); // hotbar_slot
+        w.write_u8(0); // container_id (inventory)
         w.into_bytes()
     }
 
@@ -1984,7 +2038,7 @@ impl MobEquipment {
     ) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(64);
         w.write_var_u64(runtime_entity_id);
-        item.encode(&mut w);
+        item.encode_descriptor(&mut w);
         w.write_u8(hotbar_slot); // inventory_slot
         w.write_u8(hotbar_slot); // hotbar_slot
         w.write_u8(0); // container_id (inventory)

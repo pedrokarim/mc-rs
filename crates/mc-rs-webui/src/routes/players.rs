@@ -21,10 +21,7 @@ struct PlayersTemplate {
     user_role: String,
 }
 
-pub async fn get_players(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-) -> Response {
+pub async fn get_players(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
     let user = match crate::auth::middleware::require_auth(&state, &headers).await {
         Ok(u) => u,
         Err(resp) => return resp,
@@ -94,7 +91,14 @@ pub async fn post_kick(
     let Some(safe) = sanitize_name(&name) else {
         return (StatusCode::BAD_REQUEST, "invalid player name").into_response();
     };
-    fire_command(&state, user.id, &user.name, "player.kick", format!("/kick {safe}")).await
+    fire_command(
+        &state,
+        user.id,
+        &user.name,
+        "player.kick",
+        format!("/kick {safe}"),
+    )
+    .await
 }
 
 pub async fn post_op(
@@ -109,7 +113,14 @@ pub async fn post_op(
     let Some(safe) = sanitize_name(&name) else {
         return (StatusCode::BAD_REQUEST, "invalid player name").into_response();
     };
-    fire_command(&state, user.id, &user.name, "player.op", format!("/op {safe}")).await
+    fire_command(
+        &state,
+        user.id,
+        &user.name,
+        "player.op",
+        format!("/op {safe}"),
+    )
+    .await
 }
 
 pub async fn post_deop(
@@ -124,7 +135,14 @@ pub async fn post_deop(
     let Some(safe) = sanitize_name(&name) else {
         return (StatusCode::BAD_REQUEST, "invalid player name").into_response();
     };
-    fire_command(&state, user.id, &user.name, "player.deop", format!("/deop {safe}")).await
+    fire_command(
+        &state,
+        user.id,
+        &user.name,
+        "player.deop",
+        format!("/deop {safe}"),
+    )
+    .await
 }
 
 #[derive(Deserialize)]

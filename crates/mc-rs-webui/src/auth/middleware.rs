@@ -6,6 +6,7 @@
 //! évite ce piège sans sacrifier la sécurité (chaque handler protégé appelle
 //! `require_auth` en première ligne).
 
+use axum::http::HeaderMap;
 use axum::{
     http::{
         header::{ACCEPT, COOKIE},
@@ -13,7 +14,6 @@ use axum::{
     },
     response::{IntoResponse, Redirect, Response},
 };
-use axum::http::HeaderMap;
 use uuid::Uuid;
 
 use crate::db::Role;
@@ -30,10 +30,7 @@ pub struct CurrentUser {
 
 /// À appeler en entrée de handler protégé. Si OK, renvoie le `CurrentUser`.
 /// Si KO, renvoie une `Response` à propager directement (redirect HTML ou 401 JSON).
-pub async fn require_auth(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<CurrentUser, Response> {
+pub async fn require_auth(state: &AppState, headers: &HeaderMap) -> Result<CurrentUser, Response> {
     match authenticate(state, headers).await {
         Ok(u) => Ok(u),
         Err(AuthError::Missing) | Err(AuthError::Invalid) => {

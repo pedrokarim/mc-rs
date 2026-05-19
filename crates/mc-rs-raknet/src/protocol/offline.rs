@@ -124,7 +124,7 @@ mod tests {
         let pong = encode_unconnected_pong(
             12345,
             67890,
-            "MCPE;Test;944;1.26.10;0;20;67890;world;Survival;19132;19133;",
+            "MCPE;Test;975;1.26.20;0;20;67890;world;Survival;19132;19133;",
         );
         assert_eq!(pong[0], 0x1C);
         // send_time at offset 1

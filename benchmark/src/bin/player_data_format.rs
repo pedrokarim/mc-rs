@@ -237,10 +237,7 @@ fn sample_full_nbt() -> NbtRoot {
     root.insert("Inventory".into(), NbtTag::List(inventory));
 
     let mut skin = NbtCompound::new();
-    skin.insert(
-        "Name".into(),
-        NbtTag::String("Standard_Custom".into()),
-    );
+    skin.insert("Name".into(), NbtTag::String("Standard_Custom".into()));
     skin.insert("Data".into(), NbtTag::ByteArray(skin_bytes));
     skin.insert("CapeData".into(), NbtTag::ByteArray(cape_bytes));
     skin.insert(

@@ -196,7 +196,10 @@ impl InventoryManager {
         mgr.add_complex(vec![(ui_slot::ANVIL_INPUT, 0)], InvKey::AnvilInput);
         mgr.add_complex(vec![(ui_slot::ANVIL_MATERIAL, 0)], InvKey::AnvilMaterial);
         mgr.add_complex(vec![(ui_slot::ENCHANTING_INPUT, 0)], InvKey::EnchantInput);
-        mgr.add_complex(vec![(ui_slot::ENCHANTING_MATERIAL, 0)], InvKey::EnchantMaterial);
+        mgr.add_complex(
+            vec![(ui_slot::ENCHANTING_MATERIAL, 0)],
+            InvKey::EnchantMaterial,
+        );
         mgr
     }
 
@@ -225,7 +228,8 @@ impl InventoryManager {
 
     /// Désassocie le BlockContainer (à appeler au close de la fenêtre).
     pub fn deassociate_block_container(&mut self) {
-        self.network_id_to_key.retain(|_, k| *k != InvKey::BlockContainer);
+        self.network_id_to_key
+            .retain(|_, k| *k != InvKey::BlockContainer);
         self.inventories.remove(&InvKey::BlockContainer);
     }
 
@@ -899,11 +903,7 @@ impl InventoryManager {
     fn try_match_recipe(&self, inv: &PlayerInventory) -> Option<ItemStack> {
         let db = crate::crafting::RECIPE_DB.get()?;
         // 3x3 d'abord (crafting table). Sinon 2x2 (player UI).
-        let grid_3x3: Vec<ItemStack> = inv
-            .craft_grid_3x3
-            .iter()
-            .map(|w| w.item.clone())
-            .collect();
+        let grid_3x3: Vec<ItemStack> = inv.craft_grid_3x3.iter().map(|w| w.item.clone()).collect();
         if grid_3x3.iter().any(|s| !s.is_air()) {
             if let Some(out) = db.match_crafting(&grid_3x3, 3) {
                 if let Some(item) = out.first() {
@@ -912,11 +912,7 @@ impl InventoryManager {
             }
         }
         // 2x2
-        let grid_2x2: Vec<ItemStack> = inv
-            .craft_grid
-            .iter()
-            .map(|w| w.item.clone())
-            .collect();
+        let grid_2x2: Vec<ItemStack> = inv.craft_grid.iter().map(|w| w.item.clone()).collect();
         if grid_2x2.iter().any(|s| !s.is_air()) {
             if let Some(out) = db.match_crafting(&grid_2x2, 2) {
                 if let Some(item) = out.first() {
@@ -1134,14 +1130,17 @@ impl InventoryManager {
                         let brid = {
                             let b = &*crate::world::block_registry::BLOCKS;
                             let candidate = b.get(name);
-                            if candidate != b.air { candidate as i32 } else { 0 }
+                            if candidate != b.air {
+                                candidate as i32
+                            } else {
+                                0
+                            }
                         };
-                        self.pending_creative_item = Some(ItemStack::new(
-                            item_id, 64, brid,
-                        ));
+                        self.pending_creative_item = Some(ItemStack::new(item_id, 64, brid));
                         tracing::debug!(
                             "CraftCreative: pending item={} ({}) stack=64",
-                            item_id, name
+                            item_id,
+                            name
                         );
                     } else {
                         tracing::debug!(
@@ -1160,14 +1159,16 @@ impl InventoryManager {
                         // Stocke comme pending_creative_item (le client va
                         // ensuite faire un Place depuis CREATED_OUTPUT).
                         // Le times multiplie la quantité.
-                        let final_count = (output.count as u32 * (*times as u32).max(1))
-                            .min(64) as u16;
+                        let final_count =
+                            (output.count as u32 * (*times as u32).max(1)).min(64) as u16;
                         let mut item = output.clone();
                         item.count = final_count;
                         self.pending_creative_item = Some(item);
                         tracing::debug!(
                             "CraftRecipe: matched recipe_id={} times={} → output_id={}",
-                            recipe_id, times, output.id
+                            recipe_id,
+                            times,
+                            output.id
                         );
                     } else {
                         tracing::debug!(

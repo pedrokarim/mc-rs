@@ -796,15 +796,11 @@ impl PluginManager {
                     delay_ticks,
                     callback_key,
                 } => {
-                    let fire_at = plugin_runtime
-                        .tick_counter
-                        .saturating_add(delay_ticks);
-                    plugin_runtime
-                        .scheduled_tasks
-                        .push(ScheduledTask {
-                            fire_at_tick: fire_at,
-                            callback_key,
-                        });
+                    let fire_at = plugin_runtime.tick_counter.saturating_add(delay_ticks);
+                    plugin_runtime.scheduled_tasks.push(ScheduledTask {
+                        fire_at_tick: fire_at,
+                        callback_key,
+                    });
                 }
                 PluginAction::RegisterEvent {
                     event_name,
@@ -1581,11 +1577,7 @@ mod tests {
 
         fn set_weather(&mut self, _rain: bool, _thunder: bool) {}
 
-        fn add_player_xp(
-            &mut self,
-            _addr: SocketAddr,
-            _amount: i32,
-        ) -> Result<i32, String> {
+        fn add_player_xp(&mut self, _addr: SocketAddr, _amount: i32) -> Result<i32, String> {
             Ok(0)
         }
 

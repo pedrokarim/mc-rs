@@ -48,6 +48,15 @@ pub struct RakNetSession {
     last_recv_time: Instant,
     last_ping_time: Instant,
 
+    // ── Freeze diagnostics ──
+    diag_last_log: Instant,
+    diag_last_snapshot: Instant,
+    /// (datagrams_in + dropped_window, packets_out) at last diag checkpoint.
+    diag_last_in: u64,
+    diag_last_out: u64,
+    diag_last_progress: Instant,
+    diag_frozen_reported: bool,
+
     event_tx: mpsc::UnboundedSender<SessionEvent>,
 }
 
@@ -70,6 +79,12 @@ impl RakNetSession {
             start_time: Instant::now(),
             last_recv_time: Instant::now(),
             last_ping_time: Instant::now(),
+            diag_last_log: Instant::now(),
+            diag_last_snapshot: Instant::now(),
+            diag_last_in: 0,
+            diag_last_out: 0,
+            diag_last_progress: Instant::now(),
+            diag_frozen_reported: false,
             event_tx,
         }
     }
@@ -254,6 +269,71 @@ impl RakNetSession {
             return;
         }
 
+        // ── Freeze diagnostics (per-session) ──
+        // Checked once/sec. The freeze fingerprint: the client is still
+        // sending datagrams (in_total climbs) but NOTHING is delivered to the
+        // game layer (out_total frozen) for several seconds. When that
+        // happens we dump the FULL receive-layer state so the next repro tells
+        // us EXACTLY which mechanism wedged — no more guessing.
+        if self.state == SessionState::Connected && self.diag_last_log.elapsed().as_secs_f64() >= 1.0
+        {
+            self.diag_last_log = Instant::now();
+            let d = self.recv_layer.diag();
+            let in_total = d.datagrams_in + d.dropped_window;
+            let out_total = d.packets_out;
+
+            if out_total > self.diag_last_out {
+                // Game packets are flowing — session healthy, re-arm detector.
+                self.diag_last_progress = Instant::now();
+                self.diag_frozen_reported = false;
+            }
+
+            let stalled_secs = self.diag_last_progress.elapsed().as_secs_f64();
+            let client_still_sending = in_total > self.diag_last_in;
+
+            if client_still_sending && out_total == self.diag_last_out && stalled_secs > 4.0 {
+                if !self.diag_frozen_reported {
+                    self.diag_frozen_reported = true;
+                    warn!(
+                        "FREEZE DETECTED {} stalled {:.0}s: in={} (drop_win={}) out={} | \
+                         dgram_win={}..{} hi_seq={} | reliable_win={}..{} held={} | \
+                         ordered={:?} | splits={} nack_pending={}",
+                        self.addr,
+                        stalled_secs,
+                        d.datagrams_in,
+                        d.dropped_window,
+                        d.packets_out,
+                        d.window_start,
+                        d.window_end,
+                        d.highest_seq,
+                        d.reliable_window_start,
+                        d.reliable_window_end,
+                        d.reliable_held,
+                        d.ordered_channels,
+                        d.split_in_progress,
+                        d.nack_pending,
+                    );
+                }
+            } else if self.diag_last_snapshot.elapsed().as_secs_f64() >= 30.0 {
+                self.diag_last_snapshot = Instant::now();
+                tracing::info!(
+                    "recv {} ok: in={} out={} dgram_win={}..{} rel_win={}..{} ord={:?} splits={}",
+                    self.addr,
+                    d.datagrams_in,
+                    d.packets_out,
+                    d.window_start,
+                    d.window_end,
+                    d.reliable_window_start,
+                    d.reliable_window_end,
+                    d.ordered_channels,
+                    d.split_in_progress,
+                );
+            }
+
+            self.diag_last_in = in_total;
+            self.diag_last_out = out_total;
+        }
+
         // Send ping periodically
         if self.state == SessionState::Connected
             && self.last_ping_time.elapsed().as_secs_f64() > PING_INTERVAL_SECS
@@ -272,6 +352,13 @@ impl RakNetSession {
             let encoded = dg.encode();
             let _ = self.socket.send_to(&encoded, self.addr).await;
         }
+
+        // Force-advance the receive window past any NACKed-but-unrecovered
+        // datagrams (RakLib ReceiveReliabilityLayer::update). MUST run before
+        // the ACK/NACK flush. Without this the receive window wedges on a
+        // single lost datagram and the session silently stops processing all
+        // client packets (per-session freeze bug).
+        self.recv_layer.update();
 
         // Send ACKs
         if !self.recv_layer.ack_queue.is_empty() {

@@ -10,10 +10,7 @@ use std::sync::Arc;
 
 use crate::state::AppState;
 
-pub async fn api_snapshot(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-) -> Response {
+pub async fn api_snapshot(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
     if let Err(resp) = crate::auth::middleware::require_auth(&state, &headers).await {
         return resp;
     }

@@ -129,6 +129,43 @@ impl EffectKind {
         *self as u8
     }
 
+    /// Liste de tous les noms vanilla d'effets — utilisée pour populer
+    /// la SoftEnum d'autocomplétion `/effect`.
+    pub fn all_names() -> &'static [&'static str] {
+        &[
+            "speed",
+            "slowness",
+            "haste",
+            "mining_fatigue",
+            "strength",
+            "instant_health",
+            "instant_damage",
+            "jump_boost",
+            "nausea",
+            "regeneration",
+            "resistance",
+            "fire_resistance",
+            "water_breathing",
+            "invisibility",
+            "blindness",
+            "night_vision",
+            "hunger",
+            "weakness",
+            "poison",
+            "wither",
+            "health_boost",
+            "absorption",
+            "saturation",
+            "levitation",
+            "fatal_poison",
+            "conduit_power",
+            "slow_falling",
+            "bad_omen",
+            "hero_of_the_village",
+            "darkness",
+        ]
+    }
+
     /// Effets "instantanés" qui ne s'appliquent qu'une fois au ajout.
     /// Port PMMP `InstantEffect::isInstantEffect()`.
     pub fn is_instant(&self) -> bool {

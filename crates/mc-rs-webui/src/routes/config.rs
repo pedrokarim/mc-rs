@@ -31,18 +31,15 @@ struct ConfigTemplate {
     path: String,
 }
 
-pub async fn get_config(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-) -> Response {
+pub async fn get_config(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
     let user = match crate::auth::middleware::require_auth(&state, &headers).await {
         Ok(u) => u,
         Err(resp) => return resp,
     };
 
     let path = PathBuf::from(CONFIG_PATH);
-    let content = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| format!("(lecture impossible : {e})"));
+    let content =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| format!("(lecture impossible : {e})"));
 
     let tpl = ConfigTemplate {
         current_page: "config",
@@ -132,10 +129,17 @@ pub async fn post_config(
     let _ = state.handle.event_tx.send(crate::WebEvent::AdminAction {
         actor: user.name.clone(),
         action: "config.edit".to_string(),
-        detail: format!("{} bytes written — restart required for some fields", text.len()),
+        detail: format!(
+            "{} bytes written — restart required for some fields",
+            text.len()
+        ),
     });
 
-    tracing::info!("[webui] config updated by {} ({} bytes)", user.name, text.len());
+    tracing::info!(
+        "[webui] config updated by {} ({} bytes)",
+        user.name,
+        text.len()
+    );
     (
         StatusCode::OK,
         "Sauvegardé. Redémarrez le serveur pour appliquer les changements non-hot.",

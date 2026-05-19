@@ -3,7 +3,7 @@
 ## Projet
 
 Réécriture complète de PocketMine-MP (serveur Minecraft Bedrock PHP) en Rust.
-Protocol version 944 (Minecraft Bedrock 1.26.10).
+Protocol version 975 (Minecraft Bedrock 1.26.20).
 
 ## Référence
 
@@ -54,10 +54,16 @@ crates/
 cargo fmt && cargo clippy -- -D warnings && cargo build --release && cargo test
 ```
 
-Pour lancer le serveur :
+Pour lancer le serveur (le serveur écrit lui-même son log, PAS de redirection
+shell) :
 ```bash
-RUST_LOG=info ./target/release/mc-rs-server.exe > .reference/server.log 2>&1
+RUST_BACKTRACE=full RUST_LOG=info ./target/release/mc-rs-server.exe
 ```
+- Logs runtime : `logs/server.<YYYY-MM-DD>.log` (rotation quotidienne).
+- En cas de panic : `logs/CRASH-<timestamp>.log` (location + backtrace,
+  écrit synchrone, survit au crash). `RUST_BACKTRACE=full` est requis pour
+  que la backtrace ait les symboles.
+- `.reference/server.log` est OBSOLÈTE — ne plus l'utiliser ni s'y fier.
 
 Pour kill le serveur :
 ```bash

@@ -115,7 +115,10 @@ pub struct CreateUserForm {
     role: String,
 }
 
-async fn ensure_admin(state: &AppState, headers: &HeaderMap) -> Result<crate::auth::CurrentUser, Response> {
+async fn ensure_admin(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<crate::auth::CurrentUser, Response> {
     let user = crate::auth::middleware::require_auth(state, headers).await?;
     if user.role != Role::Admin {
         return Err((StatusCode::FORBIDDEN, "admin only").into_response());
@@ -124,11 +127,7 @@ async fn ensure_admin(state: &AppState, headers: &HeaderMap) -> Result<crate::au
 }
 
 fn redirect_with(param: &str, value: &str) -> Response {
-    let url = format!(
-        "/users?{}={}",
-        param,
-        urlencoded(value)
-    );
+    let url = format!("/users?{}={}", param, urlencoded(value));
     Redirect::to(&url).into_response()
 }
 
@@ -170,7 +169,13 @@ pub async fn post_create(
         return redirect_with("error", "Rôle invalide");
     };
 
-    if db.find_user_by_name(username).await.ok().flatten().is_some() {
+    if db
+        .find_user_by_name(username)
+        .await
+        .ok()
+        .flatten()
+        .is_some()
+    {
         return redirect_with("error", "Ce nom est déjà pris");
     }
 
@@ -198,7 +203,10 @@ pub async fn post_create(
         user.name,
         role.as_str()
     );
-    redirect_with("success", &format!("Utilisateur '{}' créé", created.username))
+    redirect_with(
+        "success",
+        &format!("Utilisateur '{}' créé", created.username),
+    )
 }
 
 #[derive(Deserialize)]

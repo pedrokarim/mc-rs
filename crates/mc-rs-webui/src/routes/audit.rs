@@ -73,7 +73,9 @@ pub async fn get_audit(
             )
             .format("%Y-%m-%d %H:%M:%S")
             .to_string(),
-            username: e.username_snapshot.unwrap_or_else(|| "(système)".to_string()),
+            username: e
+                .username_snapshot
+                .unwrap_or_else(|| "(système)".to_string()),
             action: e.action,
             detail_str: e.detail.to_string(),
         })

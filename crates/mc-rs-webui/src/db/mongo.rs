@@ -37,8 +37,8 @@ impl MongoDb {
             .clone()
             .unwrap_or_else(|| "mc_rs_webui".to_string());
 
-        let client = Client::with_options(opts)
-            .map_err(|e| Error::Db(format!("mongodb client: {e}")))?;
+        let client =
+            Client::with_options(opts).map_err(|e| Error::Db(format!("mongodb client: {e}")))?;
         let database = client.database(&db_name);
         Ok(Self {
             users: database.collection("users"),
@@ -79,8 +79,8 @@ fn doc_to_user(d: &Document) -> Result<User> {
         .map_err(|e| Error::Db(e.to_string()))?
         .to_string();
     let role_str = d.get_str("role").map_err(|e| Error::Db(e.to_string()))?;
-    let role = Role::from_str(role_str)
-        .ok_or_else(|| Error::Db(format!("unknown role '{role_str}'")))?;
+    let role =
+        Role::from_str(role_str).ok_or_else(|| Error::Db(format!("unknown role '{role_str}'")))?;
     let created_at = d
         .get_i64("created_at")
         .map_err(|e| Error::Db(e.to_string()))?;
@@ -113,7 +113,11 @@ impl WebDb for MongoDb {
             .await
             .map_err(|e| Error::Db(format!("index audit.ts: {e}")))?;
         self.audit
-            .create_index(IndexModel::builder().keys(doc! { "user_id": 1, "ts": -1 }).build())
+            .create_index(
+                IndexModel::builder()
+                    .keys(doc! { "user_id": 1, "ts": -1 })
+                    .build(),
+            )
             .await
             .map_err(|e| Error::Db(format!("index audit.user_id: {e}")))?;
         self.tokens
@@ -301,9 +305,7 @@ impl WebDb for MongoDb {
                 .get_str("action")
                 .map_err(|e| Error::Db(e.to_string()))?
                 .to_string();
-            let detail_str = d
-                .get_str("detail")
-                .map_err(|e| Error::Db(e.to_string()))?;
+            let detail_str = d.get_str("detail").map_err(|e| Error::Db(e.to_string()))?;
             let detail: JsonValue = serde_json::from_str(detail_str).unwrap_or(JsonValue::Null);
             let user_id = match d.get("user_id") {
                 Some(Bson::Binary(b)) => Some(binary_to_uuid(b)?),
@@ -311,7 +313,10 @@ impl WebDb for MongoDb {
             };
             let username_snapshot = d.get_str("username_snapshot").ok().map(String::from);
             // Pour l'id numérique : on utilise timestamp du ObjectId ou 0 (Mongo n'a pas de id auto-incrémenté).
-            let id = d.get_object_id("_id").map(|o| o.timestamp().timestamp_millis()).unwrap_or(ts);
+            let id = d
+                .get_object_id("_id")
+                .map(|o| o.timestamp().timestamp_millis())
+                .unwrap_or(ts);
             out.push(AuditEntry {
                 id,
                 ts,
@@ -353,10 +358,7 @@ impl WebDb for MongoDb {
 
     async fn blacklist_token(&self, jti: &str, exp_unix: i64) -> Result<()> {
         self.tokens
-            .update_one(
-                doc! { "_id": jti },
-                doc! { "$set": { "exp": exp_unix } },
-            )
+            .update_one(doc! { "_id": jti }, doc! { "$set": { "exp": exp_unix } })
             .upsert(true)
             .await
             .map_err(|e| Error::Db(e.to_string()))?;
@@ -395,10 +397,7 @@ impl WebDb for MongoDb {
 
     async fn set_meta(&self, key: &str, value: &str) -> Result<()> {
         self.meta
-            .update_one(
-                doc! { "_id": key },
-                doc! { "$set": { "value": value } },
-            )
+            .update_one(doc! { "_id": key }, doc! { "$set": { "value": value } })
             .upsert(true)
             .await
             .map_err(|e| Error::Db(e.to_string()))?;

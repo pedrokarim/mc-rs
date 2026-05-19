@@ -20,7 +20,8 @@ pub async fn get_asset(Path(path): Path<String>) -> Response {
             let mut resp = file.data.into_response();
             resp.headers_mut().insert(
                 header::CONTENT_TYPE,
-                mime.parse().unwrap_or(header::HeaderValue::from_static("application/octet-stream")),
+                mime.parse()
+                    .unwrap_or(header::HeaderValue::from_static("application/octet-stream")),
             );
             // Cache 1h — si on modifie app.css il faut hard-reload mais c'est admin-only.
             resp.headers_mut().insert(

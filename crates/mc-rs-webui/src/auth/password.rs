@@ -3,14 +3,15 @@
 //! `hash_password` renvoie un PHC string (format standard `$argon2id$...$hash`)
 //! stocké tel quel en base. `verify_password` parse le PHC et vérifie.
 
-use argon2::password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::password_hash::{
+    rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
+};
 use argon2::{Algorithm, Argon2, Params, Version};
 
 use crate::error::{Error, Result};
 
 fn argon2() -> Argon2<'static> {
-    let params = Params::new(19_456, 2, 1, None)
-        .expect("argon2 params hardcoded and valid");
+    let params = Params::new(19_456, 2, 1, None).expect("argon2 params hardcoded and valid");
     Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
 }
 
