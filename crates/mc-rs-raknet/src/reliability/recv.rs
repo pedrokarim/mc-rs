@@ -43,6 +43,13 @@ pub struct ReceiveLayer {
     diag_packets_out: u64,
     /// Datagrams rejected by the window check (out of window / duplicate).
     diag_dropped_window: u64,
+
+    /// Set when an unrecoverable split-packet error occurs. RakLib throws
+    /// `PacketHandlingException` here and its doc mandates the owning session
+    /// MUST disconnect the peer (a dropped reliable-ordered split otherwise
+    /// wedges the ordered channel forever = freeze). The session checks this
+    /// and disconnects, so the client reconnects with a fresh layer.
+    fatal: Option<&'static str>,
 }
 
 /// Snapshot of the receive layer's internal state, for freeze diagnostics.
@@ -100,7 +107,14 @@ impl ReceiveLayer {
             diag_datagrams_in: 0,
             diag_packets_out: 0,
             diag_dropped_window: 0,
+            fatal: None,
         }
+    }
+
+    /// Unrecoverable split error, if any. The session must disconnect the peer
+    /// when this is `Some` (faithful to RakLib's throw → Session disconnect).
+    pub fn fatal_error(&self) -> Option<&'static str> {
+        self.fatal
     }
 
     /// Snapshot the internal state for freeze diagnostics.
@@ -261,7 +275,13 @@ impl ReceiveLayer {
                     output.push(entry.body);
                 }
             } else if ord_idx > self.recv_ordered_index[ch] {
-                // Future packet — queue it
+                // Future packet — queue it, but bound the queue (RakLib
+                // handleEncapsulatedPacket: `if(count(...) >= WINDOW_SIZE)
+                // return;`). Without this, a never-filled ordered gap grows
+                // the queue unbounded.
+                if self.recv_ordered_queue[ch].len() >= RECV_WINDOW_SIZE as usize {
+                    return; // ordered queue overflow for this channel
+                }
                 self.recv_ordered_queue[ch].insert(ord_idx, pkt);
             }
             // else: old packet, discard
@@ -273,21 +293,47 @@ impl ReceiveLayer {
 
     fn handle_split(&mut self, pkt: EncapsulatedPacket) -> Option<EncapsulatedPacket> {
         let split = pkt.split.as_ref()?;
-        if split.count > MAX_SPLIT_PART_COUNT || split.index >= split.count {
+        // RakLib handleSplit throws PacketHandlingException on each of these;
+        // its doc mandates the session MUST disconnect the peer (an
+        // unrecoverable reliable-ordered split otherwise wedges the ordered
+        // channel forever = freeze). We flag `fatal`; the session disconnects.
+        if split.count > MAX_SPLIT_PART_COUNT || split.count == 0 {
             tracing::warn!(
-                "split DROP (count={} idx={} max={}): provoque un wedge ordonné permanent si reliable-ordered",
-                split.count, split.index, MAX_SPLIT_PART_COUNT
+                "split FATAL: invalid part count {} (max {}) — disconnecting peer",
+                split.count, MAX_SPLIT_PART_COUNT
             );
+            self.fatal = Some("invalid split packet part count");
+            return None;
+        }
+        if split.index >= split.count {
+            tracing::warn!(
+                "split FATAL: invalid part index {} (count {}) — disconnecting peer",
+                split.index, split.count
+            );
+            self.fatal = Some("invalid split packet part index");
             return None;
         }
         if self.split_packets.len() >= MAX_CONCURRENT_SPLITS
             && !self.split_packets.contains_key(&split.id)
         {
             tracing::warn!(
-                "split DROP : {} splits concurrents >= MAX_CONCURRENT_SPLITS={} (wedge ordonné permanent probable)",
+                "split FATAL: {} concurrent splits >= MAX_CONCURRENT_SPLITS={} — disconnecting peer",
                 self.split_packets.len(), MAX_CONCURRENT_SPLITS
             );
-            return None; // too many concurrent splits
+            self.fatal = Some("exceeded concurrent split packet limit");
+            return None;
+        }
+        // Inconsistent header: a later part claims a different total count
+        // (RakLib SPLIT_PACKET_INCONSISTENT_HEADER).
+        if let Some(existing) = self.split_packets.get(&split.id) {
+            if existing.count != split.count {
+                tracing::warn!(
+                    "split FATAL: inconsistent count for split id {} ({} vs {}) — disconnecting peer",
+                    split.id, split.count, existing.count
+                );
+                self.fatal = Some("inconsistent split packet header");
+                return None;
+            }
         }
 
         let assembly = self
@@ -559,6 +605,53 @@ mod tests {
         // A subsequent reliable-ordered message must still be delivered.
         let next = make_reliable_ordered(vec![0xCC], 6, 5);
         assert_eq!(layer.on_datagram(6, vec![next]).len(), 1);
+    }
+
+    /// An unrecoverable split error must flag `fatal` so the session
+    /// disconnects the peer (RakLib throws PacketHandlingException here).
+    /// Silently dropping would wedge the ordered channel forever = freeze.
+    #[test]
+    fn test_bad_split_flags_fatal() {
+        use crate::protocol::datagram::SplitInfo;
+
+        let mut layer = ReceiveLayer::new();
+        assert!(layer.fatal_error().is_none());
+
+        let bad = EncapsulatedPacket {
+            reliability: Reliability::ReliableOrdered,
+            message_index: Some(0),
+            sequence_index: None,
+            order_index: Some(0),
+            order_channel: Some(0),
+            split: Some(SplitInfo {
+                count: MAX_SPLIT_PART_COUNT + 1, // invalid
+                id: 1,
+                index: 0,
+            }),
+            body: vec![1],
+        };
+        layer.on_datagram(0, vec![bad]);
+        assert!(
+            layer.fatal_error().is_some(),
+            "bad split must flag fatal so the session disconnects the peer"
+        );
+    }
+
+    /// The ordered queue must not grow unbounded on a never-filled gap
+    /// (RakLib caps at WINDOW_SIZE).
+    #[test]
+    fn test_ordered_queue_is_bounded() {
+        let mut layer = ReceiveLayer::new();
+        // order_index 0 never arrives; flood future ordered packets.
+        for i in 1..(RECV_WINDOW_SIZE + 500) {
+            let pkt = make_reliable_ordered(vec![0], i, i);
+            layer.on_datagram(i, vec![pkt]);
+        }
+        assert!(
+            layer.recv_ordered_queue[0].len() <= RECV_WINDOW_SIZE as usize,
+            "ordered queue grew past RECV_WINDOW_SIZE ({} entries)",
+            layer.recv_ordered_queue[0].len()
+        );
     }
 
     #[test]

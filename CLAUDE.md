@@ -85,8 +85,13 @@ powershell -Command "Get-Process mc-rs-server -ErrorAction SilentlyContinue | St
 - Block breaking (UpdateBlock broadcast)
 - SetActorData avec flags (BREATHING, HAS_GRAVITY, HAS_COLLISION)
 
-### Bug connu critique
-**Le joueur fly en mode survival** (BUG_FLY_MODE.md). Malgré gamemode=0, UpdateAbilities avec FLYING=false, le client reste en mode créatif/fly. Toutes les tentatives ont échoué. Needs packet-level debugging.
+### Bugs connus
+- **Gel per-connexion** : RÉSOLU (2026-05-19). Cause = fenêtre reliable RakNet
+  wedgée par le paquet Login splitté (`recv.rs::handle_encapsulated` faisait
+  `handle_split` avant l'enregistrement reliable). Détails et instrumentation
+  conservée : `HANDOFF-FREEZE-BUG.md`.
+- **Fly en survival** : probablement résolu par le fix `UPDATE_ABILITIES =
+  0xBB` (l'ancien 0x12B était un ID fantôme). À reconfirmer si réapparition.
 
 ## Notes techniques importantes
 

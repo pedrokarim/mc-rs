@@ -269,6 +269,17 @@ impl RakNetSession {
             return;
         }
 
+        // Unrecoverable RakNet error (e.g. bad split packet): RakLib's design
+        // mandates disconnecting the peer rather than silently dropping, which
+        // would wedge the ordered channel forever. The client then reconnects
+        // with a fresh reliability layer.
+        if let Some(reason) = self.recv_layer.fatal_error() {
+            warn!("Disconnecting {} — fatal RakNet error: {}", self.addr, reason);
+            self.state = SessionState::Disconnected;
+            let _ = self.event_tx.send(SessionEvent::Disconnected);
+            return;
+        }
+
         // ── Freeze diagnostics (per-session) ──
         // Checked once/sec. The freeze fingerprint: the client is still
         // sending datagrams (in_total climbs) but NOTHING is delivered to the

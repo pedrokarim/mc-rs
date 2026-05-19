@@ -220,9 +220,24 @@ impl SendLayer {
 
     /// Get the next datagram to send (from resend queue first, then send queue).
     pub fn next_datagram(&mut self, current_time: f64) -> Option<Datagram> {
-        // Process resend queue first
+        // Process resend queue first. Pack into an MTU-bounded datagram (one
+        // per call; the session loops next_datagram so the rest follow in
+        // subsequent datagrams). Draining the whole queue into a single
+        // datagram (as before) built oversized packets that the OS/network
+        // dropped under heavy loss — a self-amplifying loss spiral. RakLib's
+        // SendReliabilityLayer respects the MTU on resend. message_index /
+        // order_index are NOT reassigned (reliability/ordering must hold).
         if !self.resend_queue.is_empty() {
-            let packets: Vec<EncapsulatedPacket> = self.resend_queue.drain(..).collect();
+            let mut packets: Vec<EncapsulatedPacket> = Vec::new();
+            let mut size = 0usize;
+            while let Some(front) = self.resend_queue.front() {
+                let psize = front.total_size();
+                if !packets.is_empty() && size + psize > self.max_encapsulated_size {
+                    break; // would overflow MTU — leave the rest for next call
+                }
+                size += psize;
+                packets.push(self.resend_queue.pop_front().unwrap());
+            }
             let seq = self.send_seq_number;
             self.send_seq_number += 1;
 
