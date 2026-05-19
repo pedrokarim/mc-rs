@@ -5,7 +5,7 @@
   {% include "_sidebar.html" %}
   <div>
     {% include "_topbar.html" %}
-    <main class="main" x-data="dashboard()" x-init="init()">
+    <main class="main" x-data="dashboard()">
       <h1>Dashboard</h1>
 
       <!-- ═══ Cards instantanées ═══ -->
@@ -148,10 +148,14 @@ function dashboard() {
     },
 
     createCharts() {
-      const dark = {
-        stroke: '#4f8cff',
-        fill: 'rgba(79,140,255,0.15)',
-      };
+      // Idempotent : si déjà créés (double init, hot-swap htmx…), on ne
+      // ré-instancie pas — sinon uPlot empile une 2e <canvas> dans la même div.
+      if (this._chartsBuilt) return;
+      this._chartsBuilt = true;
+      // Au cas où une instance traînerait, on vide les conteneurs cibles.
+      ['chartTps','chartSystem','chartLoad'].forEach(r => {
+        if (this.$refs[r]) this.$refs[r].innerHTML = '';
+      });
       const commonOpts = (title, series) => ({
         width: this.$refs.chartTps.offsetWidth || 400,
         height: 220,
