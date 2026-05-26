@@ -125,6 +125,10 @@ pub struct Connection {
     /// Voir `entity_culling.rs`. Sert à émettre Add/Remove sur traversée de
     /// frontière de vue, et à filtrer les broadcasts Move/Motion.
     pub visible_entities: HashSet<i64>,
+    /// Tags attachés à ce joueur via /tag (vanilla `Tags` NBT). Persistés
+    /// tant que la connexion reste ouverte — pas encore sauvegardés en
+    /// player_data.json.
+    pub tags: HashSet<String>,
     /// Queue of chunks to send, ordered by distance (nearest first).
     pub chunk_load_queue: VecDeque<(i32, i32)>,
     /// Countdown ticks until chunk reorder. 0 = reorder now. u32::MAX = idle.
@@ -251,6 +255,7 @@ impl Connection {
             last_chunk_x: 0,
             last_chunk_z: 0,
             visible_entities: HashSet::new(),
+            tags: HashSet::new(),
             chunk_load_queue: VecDeque::new(),
             chunk_order_countdown: 5, // reorder shortly after spawn (like PMMP)
             broadcasts: Vec::new(),

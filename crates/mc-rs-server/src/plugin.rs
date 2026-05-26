@@ -1705,6 +1705,70 @@ mod tests {
             0
         }
 
+        fn resolve_block_name(&self, _name: &str) -> Option<u32> {
+            None
+        }
+
+        fn set_world_block(&mut self, _x: i32, _y: i32, _z: i32, _block_id: u32) -> bool {
+            false
+        }
+
+        fn world_block_at(&self, _x: i32, _y: i32, _z: i32) -> u32 {
+            0
+        }
+
+        fn gamerule_list(&self) -> Vec<(String, crate::game_rules::GameRuleValue)> {
+            Vec::new()
+        }
+
+        fn gamerule_get(&self, _name: &str) -> Option<crate::game_rules::GameRuleValue> {
+            None
+        }
+
+        fn gamerule_set(
+            &mut self,
+            _name: &str,
+            _value: crate::game_rules::GameRuleValue,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn tellraw_send(&mut self, _addr: SocketAddr, _payload: &[u8]) {}
+
+        fn play_sound(
+            &mut self,
+            _targets: &[SocketAddr],
+            _sound: &str,
+            _position: [f32; 3],
+            _volume: f32,
+            _pitch: f32,
+        ) {
+        }
+
+        fn stop_sound(&mut self, _targets: &[SocketAddr], _sound: Option<&str>) {}
+
+        fn replace_player_slot(
+            &mut self,
+            _addr: SocketAddr,
+            _inv_key: crate::inventory_manager::InvKey,
+            _slot_index: usize,
+            _item: mc_rs_proto::packets::player::ItemStack,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn player_tag_add(&mut self, _addr: SocketAddr, _tag: &str) -> bool {
+            false
+        }
+
+        fn player_tag_remove(&mut self, _addr: SocketAddr, _tag: &str) -> bool {
+            false
+        }
+
+        fn player_tag_list(&self, _addr: SocketAddr) -> Vec<String> {
+            Vec::new()
+        }
+
         fn online_players(&self) -> usize {
             0
         }

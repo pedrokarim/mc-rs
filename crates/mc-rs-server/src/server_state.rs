@@ -34,6 +34,9 @@ pub struct ServerState {
     pub max_players: u32,
     /// Scoreboard manager partagé (pour /scoreboard).
     pub scoreboards: Arc<Mutex<crate::scoreboard::ScoreboardManager>>,
+    /// Game rules — défauts vanilla (PMMP `GameRule.php`). Mutables via
+    /// /gamerule + broadcast `GameRulesChanged` aux clients.
+    pub game_rules: crate::game_rules::GameRules,
 }
 
 impl ServerState {
@@ -68,6 +71,7 @@ impl ServerState {
             world_seed,
             max_players,
             scoreboards: Arc::new(Mutex::new(crate::scoreboard::ScoreboardManager::default())),
+            game_rules: crate::game_rules::GameRules::vanilla_defaults(),
         }
     }
 

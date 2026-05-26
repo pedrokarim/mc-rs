@@ -871,6 +871,21 @@ impl Text {
         w.write_bool(false); // filteredMessage = None
         w.into_bytes()
     }
+
+    /// Encode a JSON_WHISPER message (type 10) carrying a Bedrock rawtext JSON
+    /// string — utilisé par /tellraw. Le client parse le JSON et rend le rawtext
+    /// array (text/translate/with/score/selector).
+    pub fn json(json: &str) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(json.len() + 32);
+        w.write_bool(false); // needsTranslation
+        w.write_u8(0); // category = MESSAGE_ONLY
+        w.write_u8(10); // type = JSON_WHISPER (PMMP TextPacket::TYPE_JSON_WHISPER)
+        w.write_string(json);
+        w.write_string(""); // xboxUserId
+        w.write_string(""); // platformChatId
+        w.write_bool(false); // filteredMessage = None
+        w.into_bytes()
+    }
 }
 
 // ── Transfer (S→C, 0x55) ──

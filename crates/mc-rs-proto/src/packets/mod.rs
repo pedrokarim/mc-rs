@@ -79,4 +79,7 @@ pub mod packet_id {
     // Entity events (hurt, death, etc.)
     pub const ACTOR_EVENT: u32 = 0x1B;
     pub const RESPAWN: u32 = 0x2D;
+    pub const GAME_RULES_CHANGED: u32 = 0x48;
+    pub const PLAY_SOUND: u32 = 0x56;
+    pub const STOP_SOUND: u32 = 0x57;
 }

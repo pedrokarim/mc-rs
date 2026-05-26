@@ -364,6 +364,7 @@ pub enum GameRule {
 }
 
 impl GameRule {
+    /// Encodage StartGame : IntGameRule utilise VarInt (PMMP encode($out, true)).
     pub fn encode(&self, w: &mut ProtoWriter) {
         match self {
             Self::Bool(name, editable, value) => {
@@ -385,6 +386,96 @@ impl GameRule {
                 w.write_f32_le(*value);
             }
         }
+    }
+
+    /// Encodage hors-StartGame (utilisé par `GameRulesChangedPacket`) :
+    /// IntGameRule passe en LE u32 au lieu de VarInt — voir PMMP
+    /// `IntGameRule::encode` qui swap selon `$isStartGame`.
+    pub fn encode_non_start_game(&self, w: &mut ProtoWriter) {
+        match self {
+            Self::Bool(name, editable, value) => {
+                w.write_string(name);
+                w.write_bool(*editable);
+                w.write_var_u32(1);
+                w.write_bool(*value);
+            }
+            Self::Int(name, editable, value) => {
+                w.write_string(name);
+                w.write_bool(*editable);
+                w.write_var_u32(2);
+                w.write_u32_le(*value as u32);
+            }
+            Self::Float(name, editable, value) => {
+                w.write_string(name);
+                w.write_bool(*editable);
+                w.write_var_u32(3);
+                w.write_f32_le(*value);
+            }
+        }
+    }
+}
+
+// ── GameRulesChanged (S→C, 0x48) ──
+
+pub struct GameRulesChanged {
+    pub rules: Vec<GameRule>,
+}
+
+impl GameRulesChanged {
+    pub fn encode(&self) -> Vec<u8> {
+        use crate::io::ProtoWriter;
+        let mut w = ProtoWriter::with_capacity(64);
+        w.write_var_u32(self.rules.len() as u32);
+        for rule in &self.rules {
+            rule.encode_non_start_game(&mut w);
+        }
+        w.into_bytes()
+    }
+}
+
+// ── PlaySound (S→C, 0x56) ──
+//
+// PMMP `PlaySoundPacket.php` : position est encodée en BlockPosition (3 VarInt
+// signés), où chaque coord = (coord_block * 8) pour donner une précision 1/8
+// de bloc. Le serveur multiplie *8 au write, le client divise /8 au read.
+
+pub struct PlaySound {
+    pub sound_name: String,
+    pub position: [f32; 3],
+    pub volume: f32,
+    pub pitch: f32,
+}
+
+impl PlaySound {
+    pub fn encode(&self) -> Vec<u8> {
+        use crate::io::ProtoWriter;
+        let mut w = ProtoWriter::with_capacity(64);
+        w.write_string(&self.sound_name);
+        w.write_var_i32((self.position[0] * 8.0) as i32);
+        w.write_var_i32((self.position[1] * 8.0) as i32);
+        w.write_var_i32((self.position[2] * 8.0) as i32);
+        w.write_f32_le(self.volume);
+        w.write_f32_le(self.pitch);
+        w.into_bytes()
+    }
+}
+
+// ── StopSound (S→C, 0x57) ──
+
+pub struct StopSound {
+    pub sound_name: String,
+    pub stop_all: bool,
+    pub stop_legacy_music: bool,
+}
+
+impl StopSound {
+    pub fn encode(&self) -> Vec<u8> {
+        use crate::io::ProtoWriter;
+        let mut w = ProtoWriter::with_capacity(32);
+        w.write_string(&self.sound_name);
+        w.write_bool(self.stop_all);
+        w.write_bool(self.stop_legacy_music);
+        w.into_bytes()
     }
 }
 

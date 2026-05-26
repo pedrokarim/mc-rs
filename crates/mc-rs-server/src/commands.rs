@@ -138,6 +138,53 @@ pub trait ServerCommandRuntime: CommandSender + SoftEnumSource {
     fn server_motd(&self) -> &str;
     fn world_name(&self) -> &str;
     fn world_seed(&self) -> u64;
+    /// Résout un nom de bloc (`minecraft:stone`, `stone`, …) vers son network_id
+    /// canonique. Retourne `None` si inconnu.
+    fn resolve_block_name(&self, name: &str) -> Option<u32>;
+    /// Pose un bloc et broadcast `UpdateBlock` à tous les joueurs in_game.
+    /// Retourne `true` si la valeur du bloc a changé.
+    fn set_world_block(&mut self, x: i32, y: i32, z: i32, block_id: u32) -> bool;
+    fn world_block_at(&self, x: i32, y: i32, z: i32) -> u32;
+    /// Renvoie tous les game rules courants (name, value).
+    fn gamerule_list(&self) -> Vec<(String, crate::game_rules::GameRuleValue)>;
+    /// Renvoie la valeur d'un game rule par nom (case-insensitive).
+    fn gamerule_get(&self, name: &str) -> Option<crate::game_rules::GameRuleValue>;
+    /// Set un game rule. Le type doit matcher (Bool→Bool etc.). Broadcast
+    /// `GameRulesChanged` aux joueurs in_game. Retourne `Err` si rule
+    /// inconnue ou type incompatible.
+    fn gamerule_set(
+        &mut self,
+        name: &str,
+        value: crate::game_rules::GameRuleValue,
+    ) -> Result<(), String>;
+    /// Envoie un Text packet brut (déjà encodé) à un joueur — pour /tellraw.
+    fn tellraw_send(&mut self, addr: SocketAddr, encoded_text_payload: &[u8]);
+    /// Joue un son côté client. Si `targets` est vide, broadcast à tous.
+    fn play_sound(
+        &mut self,
+        targets: &[SocketAddr],
+        sound: &str,
+        position: [f32; 3],
+        volume: f32,
+        pitch: f32,
+    );
+    /// Arrête un son (ou tous si `sound == None`).
+    fn stop_sound(&mut self, targets: &[SocketAddr], sound: Option<&str>);
+    /// Remplace un slot précis dans l'inventaire d'un joueur. Sync via
+    /// InventoryManager pour broadcast correct au client.
+    fn replace_player_slot(
+        &mut self,
+        addr: SocketAddr,
+        inv_key: crate::inventory_manager::InvKey,
+        slot_index: usize,
+        item: ItemStack,
+    ) -> Result<(), String>;
+    /// Ajoute un tag à un joueur. Retourne `true` si nouveau.
+    fn player_tag_add(&mut self, addr: SocketAddr, tag: &str) -> bool;
+    /// Retire un tag d'un joueur. Retourne `true` si retiré.
+    fn player_tag_remove(&mut self, addr: SocketAddr, tag: &str) -> bool;
+    /// Liste les tags d'un joueur (alphabétique pour /tag list).
+    fn player_tag_list(&self, addr: SocketAddr) -> Vec<String>;
     fn online_players(&self) -> usize;
     fn max_players(&self) -> u32;
     fn execute_plugin_command(
@@ -1596,6 +1643,256 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
 
     fn world_seed(&self) -> u64 {
         self.server_state.world_seed
+    }
+
+    fn resolve_block_name(&self, name: &str) -> Option<u32> {
+        let normalized = if name.contains(':') {
+            name.to_string()
+        } else {
+            format!("minecraft:{}", name)
+        };
+        let id = crate::world::block_registry::BLOCKS.get(&normalized);
+        // BLOCKS.get retourne air pour les inconnus. On vérifie le round-trip
+        // via name_for pour distinguer un "air" légitime d'un "introuvable".
+        if id == crate::world::block_registry::BLOCKS.air && normalized != "minecraft:air" {
+            None
+        } else {
+            Some(id)
+        }
+    }
+
+    fn set_world_block(&mut self, x: i32, y: i32, z: i32, block_id: u32) -> bool {
+        // Mutation chunk_cache sous lock séparé pour ne pas tenir le guard
+        // pendant les envois réseau (cf comment dans main.rs ligne ~1980).
+        let changed = if let Ok(mut cache) = self.chunk_cache.lock() {
+            let prev = cache.get_block(x, y, z);
+            if prev == block_id {
+                false
+            } else {
+                cache.set_block(x, y, z, block_id);
+                true
+            }
+        } else {
+            return false;
+        };
+        if !changed {
+            return false;
+        }
+        // Broadcast UpdateBlock à tous les joueurs in_game. flags = NETWORK |
+        // NEIGHBORS = 3 (déclenche aussi physics check côté client).
+        let update = mc_rs_proto::packets::world::UpdateBlock {
+            position: [x, y, z],
+            runtime_id: block_id,
+            flags: 3,
+            layer: 0,
+        }
+        .encode();
+        let addrs: Vec<SocketAddr> = self
+            .connections
+            .iter()
+            .filter_map(|(addr, conn)| conn.is_in_game().then_some(*addr))
+            .collect();
+        for addr in addrs {
+            self.send_compressed(addr, packet_id::UPDATE_BLOCK, &update);
+        }
+        true
+    }
+
+    fn world_block_at(&self, x: i32, y: i32, z: i32) -> u32 {
+        if let Ok(mut cache) = self.chunk_cache.lock() {
+            cache.get_block(x, y, z)
+        } else {
+            crate::world::block_registry::BLOCKS.air
+        }
+    }
+
+    fn gamerule_list(&self) -> Vec<(String, crate::game_rules::GameRuleValue)> {
+        let mut entries: Vec<_> = self
+            .server_state
+            .game_rules
+            .rules
+            .iter()
+            .map(|(name, value)| (name.clone(), value.clone()))
+            .collect();
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        entries
+    }
+
+    fn gamerule_get(&self, name: &str) -> Option<crate::game_rules::GameRuleValue> {
+        self.server_state.game_rules.get(name).cloned()
+    }
+
+    fn tellraw_send(&mut self, addr: SocketAddr, encoded_text_payload: &[u8]) {
+        self.send_compressed(addr, packet_id::TEXT, encoded_text_payload);
+    }
+
+    fn play_sound(
+        &mut self,
+        targets: &[SocketAddr],
+        sound: &str,
+        position: [f32; 3],
+        volume: f32,
+        pitch: f32,
+    ) {
+        let payload = mc_rs_proto::packets::world::PlaySound {
+            sound_name: sound.to_string(),
+            position,
+            volume,
+            pitch,
+        }
+        .encode();
+        let recipients: Vec<SocketAddr> = if targets.is_empty() {
+            self.connections
+                .iter()
+                .filter_map(|(addr, conn)| conn.is_in_game().then_some(*addr))
+                .collect()
+        } else {
+            targets.to_vec()
+        };
+        for addr in recipients {
+            self.send_compressed(addr, packet_id::PLAY_SOUND, &payload);
+        }
+    }
+
+    fn player_tag_add(&mut self, addr: SocketAddr, tag: &str) -> bool {
+        let Some(conn) = self.connections.get_mut(&addr) else {
+            return false;
+        };
+        conn.tags.insert(tag.to_string())
+    }
+
+    fn player_tag_remove(&mut self, addr: SocketAddr, tag: &str) -> bool {
+        let Some(conn) = self.connections.get_mut(&addr) else {
+            return false;
+        };
+        conn.tags.remove(tag)
+    }
+
+    fn player_tag_list(&self, addr: SocketAddr) -> Vec<String> {
+        let Some(conn) = self.connections.get(&addr) else {
+            return Vec::new();
+        };
+        let mut tags: Vec<String> = conn.tags.iter().cloned().collect();
+        tags.sort();
+        tags
+    }
+
+    fn replace_player_slot(
+        &mut self,
+        addr: SocketAddr,
+        inv_key: crate::inventory_manager::InvKey,
+        slot_index: usize,
+        item: ItemStack,
+    ) -> Result<(), String> {
+        let Some(connection) = self.connections.get_mut(&addr) else {
+            return Err("Player not connected.".into());
+        };
+        // Vérifie que le slot existe — bornes selon InvKey :
+        let bounds_ok = match inv_key {
+            crate::inventory_manager::InvKey::Main => slot_index < 36,
+            crate::inventory_manager::InvKey::Armor => slot_index < 4,
+            crate::inventory_manager::InvKey::Offhand => slot_index < 1,
+            _ => false,
+        };
+        if !bounds_ok {
+            return Err(format!(
+                "Slot {slot_index} out of range for {inv_key:?}"
+            ));
+        }
+        connection
+            .inventory_manager
+            .set_slot(&mut connection.inventory, inv_key, slot_index, item);
+        // Flush sync wire au joueur — même pattern que /enchant l.1325.
+        let sync_pkts: Vec<Vec<u8>> = connection
+            .tick_inventory_flush()
+            .into_iter()
+            .map(|p| connection.prepare_for_send(p))
+            .collect();
+        for packet in sync_pkts {
+            self.send_prepared(addr, packet);
+        }
+        Ok(())
+    }
+
+    fn stop_sound(&mut self, targets: &[SocketAddr], sound: Option<&str>) {
+        let stop_all = sound.is_none();
+        let payload = mc_rs_proto::packets::world::StopSound {
+            sound_name: sound.unwrap_or("").to_string(),
+            stop_all,
+            stop_legacy_music: false,
+        }
+        .encode();
+        let recipients: Vec<SocketAddr> = if targets.is_empty() {
+            self.connections
+                .iter()
+                .filter_map(|(addr, conn)| conn.is_in_game().then_some(*addr))
+                .collect()
+        } else {
+            targets.to_vec()
+        };
+        for addr in recipients {
+            self.send_compressed(addr, packet_id::STOP_SOUND, &payload);
+        }
+    }
+
+    fn gamerule_set(
+        &mut self,
+        name: &str,
+        value: crate::game_rules::GameRuleValue,
+    ) -> Result<(), String> {
+        let key = name.to_ascii_lowercase();
+        // On exige que le rule existe déjà (refuse les rules inconnues : pas
+        // de typos silencieuses) ET que le type matche.
+        let existing = self
+            .server_state
+            .game_rules
+            .get(&key)
+            .ok_or_else(|| format!("Unknown game rule: {name}"))?;
+        let type_ok = matches!(
+            (existing, &value),
+            (
+                crate::game_rules::GameRuleValue::Bool(_),
+                crate::game_rules::GameRuleValue::Bool(_)
+            ) | (
+                crate::game_rules::GameRuleValue::Int(_),
+                crate::game_rules::GameRuleValue::Int(_)
+            ) | (
+                crate::game_rules::GameRuleValue::Float(_),
+                crate::game_rules::GameRuleValue::Float(_)
+            )
+        );
+        if !type_ok {
+            return Err(format!("Value type doesn't match rule '{name}'"));
+        }
+        self.server_state.game_rules.set(key.clone(), value.clone());
+
+        // Broadcast GameRulesChanged contenant uniquement le rule mis à jour
+        // (PMMP fait pareil — Network.php envoie un diff, pas le set complet).
+        // `isPlayerModifiable: true` côté wire = le client peut le toggle UI.
+        let wire_rule = match value {
+            crate::game_rules::GameRuleValue::Bool(b) => {
+                mc_rs_proto::packets::world::GameRule::Bool(key, true, b)
+            }
+            crate::game_rules::GameRuleValue::Int(i) => {
+                mc_rs_proto::packets::world::GameRule::Int(key, true, i)
+            }
+            crate::game_rules::GameRuleValue::Float(f) => {
+                mc_rs_proto::packets::world::GameRule::Float(key, true, f)
+            }
+        };
+        let payload = mc_rs_proto::packets::world::GameRulesChanged {
+            rules: vec![wire_rule],
+        }
+        .encode();
+        let addrs: Vec<SocketAddr> = self
+            .connections
+            .iter()
+            .filter_map(|(addr, conn)| conn.is_in_game().then_some(*addr))
+            .collect();
+        for addr in addrs {
+            self.send_compressed(addr, packet_id::GAME_RULES_CHANGED, &payload);
+        }
+        Ok(())
     }
 
     fn online_players(&self) -> usize {
@@ -3542,6 +3839,820 @@ pub fn build_command_system() -> ServerCommandSystem {
         },
     );
 
+    // ── /setblock <x> <y> <z> <block> [destroy|keep|replace] ──
+    let mut setblock = CommandDefinition::new("setblock", "Set a block at a position");
+    setblock.usage = "/setblock <x> <y> <z> <block> [destroy|keep|replace]".into();
+    setblock.permissions = vec!["server.command.setblock".into()];
+    setblock.overloads.push(CommandOverload {
+        parameters: vec![
+            param("x", ParamType::Position, false),
+            param("y", ParamType::Position, false),
+            param("z", ParamType::Position, false),
+            param("block", ParamType::String, false),
+            hard_enum_param(
+                "mode",
+                "setblock_mode",
+                &["destroy", "keep", "replace"],
+                true,
+            ),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        setblock,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            if invocation.args.len() < 4 {
+                return usage("Usage: /setblock <x> <y> <z> <block> [destroy|keep|replace]");
+            }
+            let x_tok = invocation.arg(0).unwrap();
+            let y_tok = invocation.arg(1).unwrap();
+            let z_tok = invocation.arg(2).unwrap();
+            let block_name = invocation.arg(3).unwrap();
+            let mode = invocation
+                .arg(4)
+                .map(|s| s.to_ascii_lowercase())
+                .unwrap_or_else(|| "replace".to_string());
+
+            let origin = if runtime.sender_is_player() {
+                Some(runtime.sender_position())
+            } else {
+                None
+            };
+            let pos = parse_position_triplet_for_source(runtime, origin, x_tok, y_tok, z_tok)?;
+            let (ix, iy, iz) = (
+                pos[0].floor() as i32,
+                pos[1].floor() as i32,
+                pos[2].floor() as i32,
+            );
+
+            let Some(block_id) = runtime.resolve_block_name(block_name) else {
+                return Err(CommandDispatchError::Message(format!(
+                    "Unknown block: {block_name}"
+                )));
+            };
+
+            // Modes — voir Minecraft Wiki /setblock :
+            // - replace : remplace tout (default)
+            // - keep : ne fait rien si le bloc existant est ≠ air
+            // - destroy : remplace ET supprime l'ancien (sans drop pour l'instant)
+            let air = crate::world::block_registry::BLOCKS.air;
+            match mode.as_str() {
+                "keep" => {
+                    let current = runtime.world_block_at(ix, iy, iz);
+                    if current != air {
+                        runtime.send_feedback(&format!(
+                            "Kept existing block at ({ix},{iy},{iz})."
+                        ));
+                        return Ok(());
+                    }
+                }
+                "destroy" | "replace" => {}
+                _ => return usage("Mode must be destroy, keep, or replace."),
+            }
+
+            if runtime.set_world_block(ix, iy, iz, block_id) {
+                runtime.send_feedback(&format!("Block set at ({ix},{iy},{iz})."));
+            } else {
+                runtime.send_feedback(&format!("Block at ({ix},{iy},{iz}) unchanged."));
+            }
+            Ok(())
+        },
+    );
+
+    // ── /fill <x1> <y1> <z1> <x2> <y2> <z2> <block> [destroy|hollow|keep|outline|replace] ──
+    let mut fill = CommandDefinition::new("fill", "Fill a region with a block");
+    fill.usage =
+        "/fill <x1> <y1> <z1> <x2> <y2> <z2> <block> [destroy|hollow|keep|outline|replace]".into();
+    fill.permissions = vec!["server.command.fill".into()];
+    fill.overloads.push(CommandOverload {
+        parameters: vec![
+            param("x1", ParamType::Position, false),
+            param("y1", ParamType::Position, false),
+            param("z1", ParamType::Position, false),
+            param("x2", ParamType::Position, false),
+            param("y2", ParamType::Position, false),
+            param("z2", ParamType::Position, false),
+            param("block", ParamType::String, false),
+            hard_enum_param(
+                "mode",
+                "fill_mode",
+                &["destroy", "hollow", "keep", "outline", "replace"],
+                true,
+            ),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        fill,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            if invocation.args.len() < 7 {
+                return usage(
+                    "Usage: /fill <x1> <y1> <z1> <x2> <y2> <z2> <block> [destroy|hollow|keep|outline|replace]",
+                );
+            }
+            let origin = if runtime.sender_is_player() {
+                Some(runtime.sender_position())
+            } else {
+                None
+            };
+            let from = parse_position_triplet_for_source(
+                runtime,
+                origin,
+                invocation.arg(0).unwrap(),
+                invocation.arg(1).unwrap(),
+                invocation.arg(2).unwrap(),
+            )?;
+            let to = parse_position_triplet_for_source(
+                runtime,
+                origin,
+                invocation.arg(3).unwrap(),
+                invocation.arg(4).unwrap(),
+                invocation.arg(5).unwrap(),
+            )?;
+            let block_name = invocation.arg(6).unwrap();
+            let mode = invocation
+                .arg(7)
+                .map(|s| s.to_ascii_lowercase())
+                .unwrap_or_else(|| "replace".to_string());
+
+            let Some(block_id) = runtime.resolve_block_name(block_name) else {
+                return Err(CommandDispatchError::Message(format!(
+                    "Unknown block: {block_name}"
+                )));
+            };
+
+            // Normalise les coins en (min, max). Vanilla : floor pour la position.
+            let x1 = (from[0].floor() as i32).min(to[0].floor() as i32);
+            let x2 = (from[0].floor() as i32).max(to[0].floor() as i32);
+            let y1 = (from[1].floor() as i32).min(to[1].floor() as i32);
+            let y2 = (from[1].floor() as i32).max(to[1].floor() as i32);
+            let z1 = (from[2].floor() as i32).min(to[2].floor() as i32);
+            let z2 = (from[2].floor() as i32).max(to[2].floor() as i32);
+
+            // Vanilla limit : 32 768 blocs par /fill.
+            let volume = ((x2 - x1 + 1) as i64)
+                * ((y2 - y1 + 1) as i64)
+                * ((z2 - z1 + 1) as i64);
+            if volume > 32_768 {
+                return Err(CommandDispatchError::Message(format!(
+                    "Region too large ({volume} blocks). Maximum is 32768."
+                )));
+            }
+
+            let air = crate::world::block_registry::BLOCKS.air;
+            let mut changed: i64 = 0;
+            for y in y1..=y2 {
+                for z in z1..=z2 {
+                    for x in x1..=x2 {
+                        let is_border = x == x1
+                            || x == x2
+                            || y == y1
+                            || y == y2
+                            || z == z1
+                            || z == z2;
+                        let new_id = match mode.as_str() {
+                            "keep" => {
+                                if runtime.world_block_at(x, y, z) != air {
+                                    continue;
+                                }
+                                block_id
+                            }
+                            "hollow" => {
+                                if is_border {
+                                    block_id
+                                } else {
+                                    air
+                                }
+                            }
+                            "outline" => {
+                                if is_border {
+                                    block_id
+                                } else {
+                                    continue;
+                                }
+                            }
+                            "destroy" | "replace" => block_id,
+                            _ => {
+                                return usage(
+                                    "Mode must be destroy, hollow, keep, outline, or replace.",
+                                )
+                            }
+                        };
+                        if runtime.set_world_block(x, y, z, new_id) {
+                            changed += 1;
+                        }
+                    }
+                }
+            }
+            runtime.send_feedback(&format!("Filled {changed} blocks."));
+            Ok(())
+        },
+    );
+
+    // ── /clone <x1> <y1> <z1> <x2> <y2> <z2> <dx> <dy> <dz> [masked|replace] [force|move|normal] ──
+    let mut clone = CommandDefinition::new("clone", "Clone a region of blocks");
+    clone.usage =
+        "/clone <x1> <y1> <z1> <x2> <y2> <z2> <dx> <dy> <dz> [masked|replace] [force|move|normal]".into();
+    clone.permissions = vec!["server.command.clone".into()];
+    clone.overloads.push(CommandOverload {
+        parameters: vec![
+            param("x1", ParamType::Position, false),
+            param("y1", ParamType::Position, false),
+            param("z1", ParamType::Position, false),
+            param("x2", ParamType::Position, false),
+            param("y2", ParamType::Position, false),
+            param("z2", ParamType::Position, false),
+            param("dx", ParamType::Position, false),
+            param("dy", ParamType::Position, false),
+            param("dz", ParamType::Position, false),
+            hard_enum_param("mask_mode", "clone_mask", &["masked", "replace"], true),
+            hard_enum_param(
+                "clone_mode",
+                "clone_collision",
+                &["force", "move", "normal"],
+                true,
+            ),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        clone,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            if invocation.args.len() < 9 {
+                return usage(
+                    "Usage: /clone <x1> <y1> <z1> <x2> <y2> <z2> <dx> <dy> <dz> [masked|replace] [force|move|normal]",
+                );
+            }
+            let origin = if runtime.sender_is_player() {
+                Some(runtime.sender_position())
+            } else {
+                None
+            };
+            let from = parse_position_triplet_for_source(
+                runtime,
+                origin,
+                invocation.arg(0).unwrap(),
+                invocation.arg(1).unwrap(),
+                invocation.arg(2).unwrap(),
+            )?;
+            let to = parse_position_triplet_for_source(
+                runtime,
+                origin,
+                invocation.arg(3).unwrap(),
+                invocation.arg(4).unwrap(),
+                invocation.arg(5).unwrap(),
+            )?;
+            let dest = parse_position_triplet_for_source(
+                runtime,
+                origin,
+                invocation.arg(6).unwrap(),
+                invocation.arg(7).unwrap(),
+                invocation.arg(8).unwrap(),
+            )?;
+            let mask_mode = invocation
+                .arg(9)
+                .map(|s| s.to_ascii_lowercase())
+                .unwrap_or_else(|| "replace".to_string());
+            let clone_mode = invocation
+                .arg(10)
+                .map(|s| s.to_ascii_lowercase())
+                .unwrap_or_else(|| "normal".to_string());
+
+            let x1 = (from[0].floor() as i32).min(to[0].floor() as i32);
+            let x2 = (from[0].floor() as i32).max(to[0].floor() as i32);
+            let y1 = (from[1].floor() as i32).min(to[1].floor() as i32);
+            let y2 = (from[1].floor() as i32).max(to[1].floor() as i32);
+            let z1 = (from[2].floor() as i32).min(to[2].floor() as i32);
+            let z2 = (from[2].floor() as i32).max(to[2].floor() as i32);
+            let dx = dest[0].floor() as i32;
+            let dy = dest[1].floor() as i32;
+            let dz = dest[2].floor() as i32;
+
+            let sx = x2 - x1 + 1;
+            let sy = y2 - y1 + 1;
+            let sz = z2 - z1 + 1;
+            let volume = (sx as i64) * (sy as i64) * (sz as i64);
+            if volume > 32_768 {
+                return Err(CommandDispatchError::Message(format!(
+                    "Region too large ({volume} blocks). Maximum is 32768."
+                )));
+            }
+
+            // Lecture source first (au cas où source et dest se chevauchent).
+            let mut buf: Vec<u32> = Vec::with_capacity(volume as usize);
+            for y in 0..sy {
+                for z in 0..sz {
+                    for x in 0..sx {
+                        buf.push(runtime.world_block_at(x1 + x, y1 + y, z1 + z));
+                    }
+                }
+            }
+
+            // En mode `move`, on doit aussi mémoriser les positions source pour
+            // les remettre à air après écriture du dest.
+            let air = crate::world::block_registry::BLOCKS.air;
+            let mut changed: i64 = 0;
+            let mut index = 0usize;
+            for y in 0..sy {
+                for z in 0..sz {
+                    for x in 0..sx {
+                        let block_id = buf[index];
+                        index += 1;
+                        if mask_mode == "masked" && block_id == air {
+                            continue;
+                        }
+                        let tx = dx + x;
+                        let ty = dy + y;
+                        let tz = dz + z;
+                        if runtime.set_world_block(tx, ty, tz, block_id) {
+                            changed += 1;
+                        }
+                    }
+                }
+            }
+            // Mode `move` : vider la source (sauf si overlap avec dest, géré
+            // par le set séquentiel — le dest a déjà été écrit).
+            if clone_mode == "move" {
+                for y in 0..sy {
+                    for z in 0..sz {
+                        for x in 0..sx {
+                            let sx_pos = x1 + x;
+                            let sy_pos = y1 + y;
+                            let sz_pos = z1 + z;
+                            // Skip si la position source est dans le dest
+                            // (sinon on effacerait ce qu'on vient de copier).
+                            let in_dest = sx_pos >= dx
+                                && sx_pos < dx + sx
+                                && sy_pos >= dy
+                                && sy_pos < dy + sy
+                                && sz_pos >= dz
+                                && sz_pos < dz + sz;
+                            if !in_dest {
+                                runtime.set_world_block(sx_pos, sy_pos, sz_pos, air);
+                            }
+                        }
+                    }
+                }
+            }
+            runtime.send_feedback(&format!("Cloned {changed} blocks."));
+            Ok(())
+        },
+    );
+
+    // ── /gamerule [<name> [<value>]] ──
+    let mut gamerule = CommandDefinition::new("gamerule", "Show or change game rules");
+    gamerule.usage = "/gamerule [<rule> [<value>]]".into();
+    gamerule.permissions = vec!["server.command.gamerule".into()];
+    gamerule.overloads.push(CommandOverload {
+        parameters: vec![
+            param("rule", ParamType::String, true),
+            param("value", ParamType::String, true),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        gamerule,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            // /gamerule (sans args) → liste toutes les rules
+            if invocation.args.is_empty() {
+                let rules = runtime.gamerule_list();
+                if rules.is_empty() {
+                    runtime.send_feedback("No game rules registered.");
+                    return Ok(());
+                }
+                let names = rules
+                    .iter()
+                    .map(|(n, _)| n.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                runtime.send_feedback(&format!("Game rules: {names}"));
+                return Ok(());
+            }
+
+            let rule_name = invocation.arg(0).unwrap();
+
+            // /gamerule <name> → affiche la valeur
+            if invocation.args.len() == 1 {
+                let Some(value) = runtime.gamerule_get(rule_name) else {
+                    return Err(CommandDispatchError::Message(format!(
+                        "Unknown game rule: {rule_name}"
+                    )));
+                };
+                let display = match value {
+                    crate::game_rules::GameRuleValue::Bool(b) => b.to_string(),
+                    crate::game_rules::GameRuleValue::Int(i) => i.to_string(),
+                    crate::game_rules::GameRuleValue::Float(f) => f.to_string(),
+                };
+                runtime.send_feedback(&format!("{rule_name} = {display}"));
+                return Ok(());
+            }
+
+            // /gamerule <name> <value> → set
+            let raw_value = invocation.arg(1).unwrap();
+            let Some(existing) = runtime.gamerule_get(rule_name) else {
+                return Err(CommandDispatchError::Message(format!(
+                    "Unknown game rule: {rule_name}"
+                )));
+            };
+            let parsed = match existing {
+                crate::game_rules::GameRuleValue::Bool(_) => match raw_value.to_ascii_lowercase().as_str() {
+                    "true" | "1" | "on" | "yes" => crate::game_rules::GameRuleValue::Bool(true),
+                    "false" | "0" | "off" | "no" => crate::game_rules::GameRuleValue::Bool(false),
+                    _ => {
+                        return Err(CommandDispatchError::Message(format!(
+                            "Invalid bool value '{raw_value}', expected true/false."
+                        )))
+                    }
+                },
+                crate::game_rules::GameRuleValue::Int(_) => raw_value
+                    .parse::<i32>()
+                    .map(crate::game_rules::GameRuleValue::Int)
+                    .map_err(|_| {
+                        CommandDispatchError::Message(format!(
+                            "Invalid int value '{raw_value}'."
+                        ))
+                    })?,
+                crate::game_rules::GameRuleValue::Float(_) => raw_value
+                    .parse::<f32>()
+                    .map(crate::game_rules::GameRuleValue::Float)
+                    .map_err(|_| {
+                        CommandDispatchError::Message(format!(
+                            "Invalid float value '{raw_value}'."
+                        ))
+                    })?,
+            };
+            runtime
+                .gamerule_set(rule_name, parsed.clone())
+                .map_err(CommandDispatchError::Message)?;
+            let display = match parsed {
+                crate::game_rules::GameRuleValue::Bool(b) => b.to_string(),
+                crate::game_rules::GameRuleValue::Int(i) => i.to_string(),
+                crate::game_rules::GameRuleValue::Float(f) => f.to_string(),
+            };
+            runtime.send_feedback(&format!("Game rule {rule_name} set to {display}"));
+            Ok(())
+        },
+    );
+
+    // ── /tellraw <target> <json> ──
+    // Le client Bedrock attend du rawtext JSON : `{"rawtext":[{"text":"hi"}]}`.
+    // On fait pas de validation JSON ici : on transmet brut et le client gère
+    // les erreurs de parsing (équivalent vanilla).
+    let mut tellraw = CommandDefinition::new("tellraw", "Send a JSON rawtext message");
+    tellraw.usage = "/tellraw <target> <json>".into();
+    tellraw.permissions = vec!["server.command.tellraw".into()];
+    tellraw.overloads.push(CommandOverload {
+        parameters: vec![
+            param("target", ParamType::Target, false),
+            param("json", ParamType::Json, false),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        tellraw,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            if invocation.args.len() < 2 {
+                return usage("Usage: /tellraw <target> <json>");
+            }
+            let targets = resolve_player_targets(runtime, invocation.arg(0), true)?;
+            // Le JSON peut contenir des espaces, on reconstruit avec `tail(1)`
+            // qui rassemble tout après le target.
+            let json = invocation.tail(1);
+            if json.is_empty() {
+                return usage("Usage: /tellraw <target> <json>");
+            }
+            let payload = mc_rs_proto::packets::player::Text::json(&json);
+            for addr in targets {
+                runtime.tellraw_send(addr, &payload);
+            }
+            runtime.send_feedback("Tellraw sent.");
+            Ok(())
+        },
+    );
+
+    // ── /playsound <sound> [target] [x y z] [volume] [pitch] ──
+    let mut playsound = CommandDefinition::new("playsound", "Play a sound for players");
+    playsound.usage = "/playsound <sound> [target] [x] [y] [z] [volume] [pitch]".into();
+    playsound.permissions = vec!["server.command.playsound".into()];
+    playsound.overloads.push(CommandOverload {
+        parameters: vec![
+            param("sound", ParamType::String, false),
+            param("target", ParamType::Target, true),
+            param("x", ParamType::Position, true),
+            param("y", ParamType::Position, true),
+            param("z", ParamType::Position, true),
+            param("volume", ParamType::Float, true),
+            param("pitch", ParamType::Float, true),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        playsound,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            let Some(sound) = invocation.arg(0) else {
+                return usage("Usage: /playsound <sound> [target] [x y z] [volume] [pitch]");
+            };
+            let targets = if let Some(target_token) = invocation.arg(1) {
+                resolve_player_targets(runtime, Some(target_token), true)?
+            } else if let Some(addr) = runtime.sender_addr() {
+                vec![addr]
+            } else {
+                return Err(CommandDispatchError::Message(
+                    "Console must specify a target.".into(),
+                ));
+            };
+
+            // Position : si non fournie, on prend la position du premier target
+            // (ou celle du sender si plus simple). Fallback à origin (0,0,0)
+            // si vraiment rien.
+            let pos = if let (Some(x), Some(y), Some(z)) =
+                (invocation.arg(2), invocation.arg(3), invocation.arg(4))
+            {
+                let origin = if runtime.sender_is_player() {
+                    Some(runtime.sender_position())
+                } else {
+                    None
+                };
+                parse_position_triplet_for_source(runtime, origin, x, y, z)?
+            } else if let Some(first) = targets.first() {
+                runtime.player_position(*first).unwrap_or([0.0, 64.0, 0.0])
+            } else {
+                [0.0, 64.0, 0.0]
+            };
+            let volume = invocation
+                .arg(5)
+                .and_then(|s| s.parse::<f32>().ok())
+                .unwrap_or(1.0);
+            let pitch = invocation
+                .arg(6)
+                .and_then(|s| s.parse::<f32>().ok())
+                .unwrap_or(1.0);
+
+            // Bedrock attend les noms avec préfixe (`random.click`, `mob.cow.say`,
+            // etc.) — on transmet brut.
+            runtime.play_sound(&targets, sound, pos, volume, pitch);
+            runtime.send_feedback(&format!(
+                "Played {sound} for {} player(s).",
+                targets.len()
+            ));
+            Ok(())
+        },
+    );
+
+    // ── /stopsound <target> [sound] ──
+    let mut stopsound = CommandDefinition::new("stopsound", "Stop a sound for players");
+    stopsound.usage = "/stopsound <target> [sound]".into();
+    stopsound.permissions = vec!["server.command.stopsound".into()];
+    stopsound.overloads.push(CommandOverload {
+        parameters: vec![
+            param("target", ParamType::Target, false),
+            param("sound", ParamType::String, true),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        stopsound,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            let Some(target_token) = invocation.arg(0) else {
+                return usage("Usage: /stopsound <target> [sound]");
+            };
+            let targets = resolve_player_targets(runtime, Some(target_token), true)?;
+            let sound = invocation.arg(1);
+            runtime.stop_sound(&targets, sound);
+            runtime.send_feedback(&format!(
+                "Stopped sound{} for {} player(s).",
+                if sound.is_some() { "" } else { "s" },
+                targets.len()
+            ));
+            Ok(())
+        },
+    );
+
+    // ── /replaceitem entity <target> <slot_type> [slot] <item> [count] ──
+    //
+    // slot_type :
+    //   slot.weapon.mainhand → InvKey::Main, slot=held
+    //   slot.weapon.offhand  → InvKey::Offhand, slot=0
+    //   slot.armor.head/.chest/.legs/.feet → InvKey::Armor, slot=0/1/2/3
+    //   slot.hotbar <n>      → InvKey::Main, slot=n (0..8)
+    //   slot.inventory <n>   → InvKey::Main, slot=9+n (9..35)
+    let mut replaceitem =
+        CommandDefinition::new("replaceitem", "Replace an item slot of an entity");
+    replaceitem.usage =
+        "/replaceitem entity <target> <slot_type> [slot] <item> [count]".into();
+    replaceitem.permissions = vec!["server.command.replaceitem".into()];
+    replaceitem.overloads.push(CommandOverload {
+        parameters: vec![
+            hard_enum_param("kind", "replaceitem_kind", &["entity"], false),
+            param("target", ParamType::Target, false),
+            param("slot_type", ParamType::String, false),
+            param("slot_or_item", ParamType::String, false),
+            param("item_or_count", ParamType::String, true),
+            param("count", ParamType::Int, true),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        replaceitem,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            // Forme attendue : /replaceitem entity <target> <slot_type> [slot] <item> [count]
+            if invocation.args.len() < 4 {
+                return usage(
+                    "Usage: /replaceitem entity <target> <slot_type> [slot] <item> [count]",
+                );
+            }
+            let kind = invocation.arg(0).unwrap();
+            if !kind.eq_ignore_ascii_case("entity") {
+                return usage("Only 'entity' kind is supported for /replaceitem.");
+            }
+            let target_token = invocation.arg(1).unwrap();
+            let slot_type = invocation.arg(2).unwrap().to_ascii_lowercase();
+
+            // Détermine si le slot_type prend un index numérique (hotbar/inventory)
+            // ou non (armor.head/chest/legs/feet, weapon.mainhand/offhand).
+            let needs_index =
+                slot_type == "slot.hotbar" || slot_type == "slot.inventory";
+
+            // Récupère index slot + item + count selon présence de l'index.
+            let (slot_index_token, item_token, count_token): (Option<&str>, &str, Option<&str>) =
+                if needs_index {
+                    if invocation.args.len() < 5 {
+                        return usage(
+                            "slot.hotbar/slot.inventory require <slot> <item> [count]",
+                        );
+                    }
+                    (
+                        Some(invocation.arg(3).unwrap()),
+                        invocation.arg(4).unwrap(),
+                        invocation.arg(5),
+                    )
+                } else {
+                    (
+                        None,
+                        invocation.arg(3).unwrap(),
+                        invocation.arg(4),
+                    )
+                };
+
+            // Résout slot_type + index → (InvKey, slot_index)
+            let (inv_key, slot_index) = match slot_type.as_str() {
+                "slot.weapon.mainhand" => (crate::inventory_manager::InvKey::Main, 0usize),
+                "slot.weapon.offhand" => (crate::inventory_manager::InvKey::Offhand, 0),
+                "slot.armor.head" => (crate::inventory_manager::InvKey::Armor, 0),
+                "slot.armor.chest" => (crate::inventory_manager::InvKey::Armor, 1),
+                "slot.armor.legs" => (crate::inventory_manager::InvKey::Armor, 2),
+                "slot.armor.feet" => (crate::inventory_manager::InvKey::Armor, 3),
+                "slot.hotbar" => {
+                    let n: usize = slot_index_token.unwrap().parse().map_err(|_| {
+                        CommandDispatchError::Message("Hotbar slot must be 0..8".into())
+                    })?;
+                    if n > 8 {
+                        return Err(CommandDispatchError::Message(
+                            "Hotbar slot must be 0..8".into(),
+                        ));
+                    }
+                    (crate::inventory_manager::InvKey::Main, n)
+                }
+                "slot.inventory" => {
+                    let n: usize = slot_index_token.unwrap().parse().map_err(|_| {
+                        CommandDispatchError::Message("Inventory slot must be 0..26".into())
+                    })?;
+                    if n > 26 {
+                        return Err(CommandDispatchError::Message(
+                            "Inventory slot must be 0..26".into(),
+                        ));
+                    }
+                    (crate::inventory_manager::InvKey::Main, 9 + n)
+                }
+                _ => {
+                    return Err(CommandDispatchError::Message(format!(
+                        "Unsupported slot_type '{slot_type}'"
+                    )))
+                }
+            };
+
+            let count: u16 = count_token
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(1);
+            let stack = parse_item_stack(item_token, count)?;
+
+            // /replaceitem doit cibler des joueurs en jeu — pas les mob entities
+            // (qui n'ont pas d'InventoryManager).
+            let targets = resolve_player_targets(runtime, Some(target_token), true)?;
+            if targets.is_empty() {
+                return Err(CommandDispatchError::Message("No matching player.".into()));
+            }
+            let count = targets.len();
+            for addr in targets {
+                runtime
+                    .replace_player_slot(addr, inv_key, slot_index, stack.clone())
+                    .map_err(CommandDispatchError::Message)?;
+            }
+            runtime.send_feedback(&format!("Replaced slot for {count} player(s)."));
+            Ok(())
+        },
+    );
+
+    // ── /tag <target> add|remove|list [<tag>] ──
+    // Tags persistés sur Connection (volatil — pas encore en player_data.json).
+    // Pour l'instant ne s'applique qu'aux joueurs ; les mobs/items ne sont pas
+    // taggables (déférer si besoin).
+    let mut tag = CommandDefinition::new("tag", "Manage entity tags");
+    tag.usage = "/tag <target> <add|remove|list> [<tag>]".into();
+    tag.permissions = vec!["server.command.tag".into()];
+    tag.overloads.push(CommandOverload {
+        parameters: vec![
+            param("target", ParamType::Target, false),
+            hard_enum_param("action", "tag_action", &["add", "remove", "list"], false),
+            param("tag", ParamType::String, true),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        tag,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            if invocation.args.len() < 2 {
+                return usage("Usage: /tag <target> <add|remove|list> [<tag>]");
+            }
+            let targets = resolve_player_targets(runtime, invocation.arg(0), true)?;
+            if targets.is_empty() {
+                return Err(CommandDispatchError::Message("No matching player.".into()));
+            }
+            let action = invocation.arg(1).unwrap().to_ascii_lowercase();
+            match action.as_str() {
+                "list" => {
+                    // PMMP/vanilla : `list` n'accepte qu'un target unique.
+                    if targets.len() != 1 {
+                        return Err(CommandDispatchError::Message(
+                            "Tag list requires exactly one target.".into(),
+                        ));
+                    }
+                    let tags = runtime.player_tag_list(targets[0]);
+                    let name = runtime
+                        .player_name(targets[0])
+                        .unwrap_or_else(|| "(player)".into());
+                    if tags.is_empty() {
+                        runtime.send_feedback(&format!("{name} has no tags."));
+                    } else {
+                        runtime.send_feedback(&format!(
+                            "{name} has {} tag(s): {}",
+                            tags.len(),
+                            tags.join(", ")
+                        ));
+                    }
+                }
+                "add" | "remove" => {
+                    let Some(tag_value) = invocation.arg(2) else {
+                        return usage("Usage: /tag <target> <add|remove> <tag>");
+                    };
+                    // Validation vanilla : tag doit être [a-zA-Z0-9_.+-] non vide
+                    // et ≤ 25 char. On garde proche de la limite vanilla.
+                    if tag_value.is_empty() || tag_value.len() > 25 {
+                        return Err(CommandDispatchError::Message(
+                            "Tag must be 1-25 chars.".into(),
+                        ));
+                    }
+                    let mut changed = 0usize;
+                    for addr in &targets {
+                        let ok = if action == "add" {
+                            runtime.player_tag_add(*addr, tag_value)
+                        } else {
+                            runtime.player_tag_remove(*addr, tag_value)
+                        };
+                        if ok {
+                            changed += 1;
+                        }
+                    }
+                    let verb = if action == "add" { "Added" } else { "Removed" };
+                    runtime.send_feedback(&format!(
+                        "{verb} tag '{tag_value}' for {changed}/{} player(s).",
+                        targets.len()
+                    ));
+                }
+                _ => return usage("Action must be add, remove, or list."),
+            }
+            Ok(())
+        },
+    );
+
     let mut title = CommandDefinition::new("title", "Send Bedrock title packets");
     title.usage = "/title <target> <clear|reset|title|subtitle|actionbar|times> [...]".into();
     title.permissions = vec!["server.command.title".into()];
@@ -4183,6 +5294,78 @@ mod tests {
 
         fn world_seed(&self) -> u64 {
             42
+        }
+
+        fn resolve_block_name(&self, name: &str) -> Option<u32> {
+            // Test stub : on accepte "stone" / "dirt" / "air" / "minecraft:xxx"
+            // sans toucher au registre global qui dépend de l'init du serveur.
+            let n = name.strip_prefix("minecraft:").unwrap_or(name);
+            match n {
+                "air" => Some(0),
+                "stone" => Some(1),
+                "dirt" => Some(2),
+                _ => None,
+            }
+        }
+
+        fn set_world_block(&mut self, _x: i32, _y: i32, _z: i32, _block_id: u32) -> bool {
+            false
+        }
+
+        fn world_block_at(&self, _x: i32, _y: i32, _z: i32) -> u32 {
+            0
+        }
+
+        fn gamerule_list(&self) -> Vec<(String, crate::game_rules::GameRuleValue)> {
+            Vec::new()
+        }
+
+        fn gamerule_get(&self, _name: &str) -> Option<crate::game_rules::GameRuleValue> {
+            None
+        }
+
+        fn gamerule_set(
+            &mut self,
+            _name: &str,
+            _value: crate::game_rules::GameRuleValue,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn tellraw_send(&mut self, _addr: SocketAddr, _payload: &[u8]) {}
+
+        fn play_sound(
+            &mut self,
+            _targets: &[SocketAddr],
+            _sound: &str,
+            _position: [f32; 3],
+            _volume: f32,
+            _pitch: f32,
+        ) {
+        }
+
+        fn stop_sound(&mut self, _targets: &[SocketAddr], _sound: Option<&str>) {}
+
+        fn replace_player_slot(
+            &mut self,
+            _addr: SocketAddr,
+            _inv_key: crate::inventory_manager::InvKey,
+            _slot: usize,
+            _item: ItemStack,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn player_tag_add(&mut self, _addr: SocketAddr, _tag: &str) -> bool {
+            false
+        }
+
+        fn player_tag_remove(&mut self, _addr: SocketAddr, _tag: &str) -> bool {
+            false
+        }
+
+        fn player_tag_list(&self, _addr: SocketAddr) -> Vec<String> {
+            Vec::new()
         }
 
         fn online_players(&self) -> usize {
