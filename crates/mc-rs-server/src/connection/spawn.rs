@@ -322,15 +322,14 @@ impl Connection {
             self.chunk_load_queue.len()
         );
 
-        // PMMP `notifyTerrainReady()` envoie PlayStatus(PlayerSpawn)
-        // SEULEMENT après que les chunks essentiels soient streamés. Envoyer
-        // PlayerSpawn ici (avec ~4 chunks envoyés sur 400+) fait croire au
-        // client que le terrain est prêt → bloqué en "chargement du serveur".
-        // Diffère via le flag : `send_queued_chunks` enverra PlayerSpawn
-        // quand la queue sera vidée.
+        // PLAYER_SPAWN
+        let spawn_status = PlayStatus {
+            status: PlayStatusType::PlayerSpawn,
+        };
+        responses
+            .push(self.encode_compressed_packet(packet_id::PLAY_STATUS, &spawn_status.encode()));
         self.state = ConnectionState::SpawnResponse;
-        self.player_spawn_pending = true;
-        debug!("[{}] -> SpawnResponse state (PlayerSpawn différé)", self.addr);
+        debug!("[{}] -> SpawnResponse state", self.addr);
 
         responses
     }

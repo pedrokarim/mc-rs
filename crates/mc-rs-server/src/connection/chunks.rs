@@ -98,30 +98,7 @@ impl Connection {
         }
 
         // Still send queued chunks even if no reorder happened
-        let mut out = self.send_chunk_batch();
-
-        // PMMP notifyTerrainReady : envoie PlayStatus(PlayerSpawn) quand
-        // la queue initiale est vidée. Bloque le bug "chargement du serveur"
-        // infini (client recevait PlayerSpawn trop tôt avant que les chunks
-        // arrivent).
-        if self.player_spawn_pending && self.chunk_load_queue.is_empty() {
-            use mc_rs_proto::packets::login::{PlayStatus, PlayStatusType};
-            use mc_rs_proto::packets::packet_id;
-            let spawn_status = PlayStatus {
-                status: PlayStatusType::PlayerSpawn,
-            };
-            out.push(
-                self.encode_compressed_packet(packet_id::PLAY_STATUS, &spawn_status.encode()),
-            );
-            self.player_spawn_pending = false;
-            debug!(
-                "[{}] Terrain ready ({} chunks) — envoi PlayStatus(PlayerSpawn)",
-                self.addr,
-                self.sent_chunks.len()
-            );
-        }
-
-        out
+        self.send_chunk_batch()
     }
 
     /// Send a small batch of chunks from the load queue.
@@ -172,8 +149,13 @@ impl Connection {
             };
 
             if let Some(raw_batch) = raw_batch_opt {
-                let prepared = self.prepare_for_send(raw_batch);
-                responses.push(prepared);
+                // BUG phase7 corrigé : NE PAS appeler prepare_for_send ici.
+                // Le main loop fait `conn.prepare_for_send(resp)` sur CHAQUE
+                // élément retourné par `send_queued_chunks`. Encrypter ici
+                // = double encryption → client rejette les chunks → bloqué
+                // en "chargement du serveur". Bisect 9ff9455 vs c9d8bae a
+                // localisé la régression sur 0023946 (phase7).
+                responses.push(raw_batch);
             } else {
                 let (sub_count, payload) = {
                     let mut cache = self.chunk_cache.lock().unwrap();
@@ -212,14 +194,9 @@ impl Connection {
     }
 
     pub fn should_stream_chunks(&self) -> bool {
-        // PMMP : le streaming démarre après que le client envoie
-        // `RequestChunkRadius` (handle_request_chunk_radius bascule en
-        // SpawnResponse). Streamer en PreSpawn = chunks envoyés avant que
-        // le client connaisse son radius / soit prêt → ils sont ignorés
-        // ou bloquent le spawn.
         matches!(
             self.state,
-            ConnectionState::SpawnResponse | ConnectionState::InGame
+            ConnectionState::PreSpawn | ConnectionState::SpawnResponse | ConnectionState::InGame
         )
     }
 }

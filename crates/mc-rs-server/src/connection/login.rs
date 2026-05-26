@@ -277,6 +277,11 @@ impl Connection {
             }
             3 => {
                 // HAVE_ALL_PACKS -> send ResourcePackStack
+                info!(
+                    "[{}] HAVE_ALL_PACKS — sending ResourcePackStack ({} packs)",
+                    self.addr,
+                    self.resource_packs.len()
+                );
                 self.send_resource_pack_stack()
             }
             4 => {

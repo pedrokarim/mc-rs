@@ -155,10 +155,6 @@ pub struct Connection {
     /// décode + persiste dans SignManager + broadcast.
     pub pending_block_actor_updates: Vec<PendingBlockActorUpdate>,
 
-    /// PlayStatus(PlayerSpawn) en attente — envoyé dès que la queue de
-    /// chunks initiale est vidée. PMMP `notifyTerrainReady()`.
-    pub(super) player_spawn_pending: bool,
-
     // Server-driven Bedrock forms
     pub(super) next_form_id: u32,
     /// Form actuellement en attente d'une `ModalFormResponse` du client.
@@ -266,12 +262,8 @@ impl Connection {
             is_op,
             sent_chunks: HashSet::new(),
             view_distance: config.max_view_distance,
-            // Init en chunk-coord de la position spawn — sinon le 1er
-            // `order_chunks` queue 797 chunks autour de (0,0) au lieu
-            // d'autour du joueur. Bug observé 2026-05-26 : client bloqué
-            // en "chargement du serveur" indéfiniment.
-            last_chunk_x: (spawn_position[0] as i32) >> 4,
-            last_chunk_z: (spawn_position[2] as i32) >> 4,
+            last_chunk_x: 0,
+            last_chunk_z: 0,
             visible_entities: HashSet::new(),
             tags: HashSet::new(),
             chunk_load_queue: VecDeque::new(),
@@ -302,7 +294,6 @@ impl Connection {
             is_sneaking: false,
             is_swimming: false,
             events,
-            player_spawn_pending: false,
             next_form_id: 1,
             pending_form: None,
             server_keypair,
