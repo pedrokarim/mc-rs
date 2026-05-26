@@ -219,10 +219,18 @@ pub struct PickupCandidate {
     pub entity_runtime_id: u64,
 }
 
+pub struct ItemMovementUpdate {
+    pub entity_unique_id: i64,
+    pub entity_position: [f32; 3],
+    pub add_packet: Vec<u8>,
+    pub move_packet: Vec<u8>,
+    pub motion_packet: Vec<u8>,
+}
+
 pub struct TickResult {
     pub despawned: Vec<ItemEntity>,
     pub pickup_candidates: Vec<PickupCandidate>,
-    pub movement_updates: Vec<(Vec<u8>, Vec<u8>)>,
+    pub movement_updates: Vec<ItemMovementUpdate>,
 }
 
 pub struct ItemEntityManager {
@@ -269,7 +277,7 @@ impl ItemEntityManager {
     pub fn tick(&mut self, registry: &PlayerRegistry, chunk_cache: &mut ChunkCache) -> TickResult {
         let mut despawned = Vec::new();
         let mut pickup_candidates = Vec::new();
-        let mut movement_updates: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+        let mut movement_updates: Vec<ItemMovementUpdate> = Vec::new();
         let mut to_despawn = Vec::new();
 
         let ids: Vec<u64> = self.entities.keys().copied().collect();
@@ -387,10 +395,14 @@ impl ItemEntityManager {
                 || (entity.velocity[2] - old_velocity[2]).abs() > MOVEMENT_EPSILON;
 
             if position_changed || velocity_changed {
-                movement_updates.push((
-                    entity.move_absolute_packet(on_ground && entity.velocity[1] == 0.0),
-                    entity.motion_packet(),
-                ));
+                movement_updates.push(ItemMovementUpdate {
+                    entity_unique_id: entity.entity_unique_id,
+                    entity_position: entity.position,
+                    add_packet: entity.add_actor_packet(),
+                    move_packet: entity
+                        .move_absolute_packet(on_ground && entity.velocity[1] == 0.0),
+                    motion_packet: entity.motion_packet(),
+                });
             }
 
             // Pickup detection — only once the pickup delay has elapsed.

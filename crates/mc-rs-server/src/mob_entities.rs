@@ -151,6 +151,9 @@ impl MobEntity {
 }
 
 pub struct MovementUpdate {
+    pub entity_unique_id: i64,
+    pub entity_position: [f32; 3],
+    pub add_packet: Vec<u8>,
     pub move_packet: Vec<u8>,
     pub motion_packet: Vec<u8>,
 }
@@ -317,6 +320,9 @@ impl MobEntityManager {
 
             if position_changed || velocity_changed {
                 movement_updates.push(MovementUpdate {
+                    entity_unique_id: entity.base.entity_unique_id,
+                    entity_position: entity.base.position,
+                    add_packet: entity.base.add_actor_packet(),
                     move_packet: entity
                         .base
                         .move_absolute_packet(on_ground && entity.base.velocity[1] == 0.0, false),
