@@ -356,16 +356,84 @@ Quand une fonctionnalité doit être implémentée :
 - [x] tick_scheduler() appelé chaque server tick (100 TPS)
 - [x] Exemples de plugins
 
-### 6.4 - Commandes — ✅ TERMINÉE pour le scope ciblé
+### 6.4 - Commandes — ✅ TERMINÉE (62 commandes, parité PMMP + extension vanilla)
+
+**Infrastructure**
 - [x] Moteur de commandes serveur partagé (registre unique, dispatch joueur + console)
 - [x] Command autocomplete (AvailableCommandsPacket filtré par permissions + soft enums dynamiques)
 - [x] Target selectors (@a, @p, @r, @s, @e)
-- [x] Commandes admin / communication / world / player principales
 - [x] Plugin commands
-- [x] /xp, /effect, /enchant, /particle (avec parsing par nom + validation vanilla_registries)
-- [x] /boss <show|hide|title|health> (boss bar high-level API)
-- [x] /scoreboard <obj> <player> <score>
-- [ ] Toutes les commandes vanilla restantes (gamerule, fill, clone, etc.)
+- [x] Permissions via PermissionRegistry + PermissionDefault::True|Op
+
+**Commandes implémentées (62) — vanilla Bedrock + extras**
+
+*Parité PMMP (40)* : help, version, plugins, status, stop, save/save-on/save-off,
+gc, dumpmemory, timings, list, say, me, tell, kick, op, deop, whitelist, ban,
+ban-ip, banlist, pardon, pardon-ip, gamemode, tp, kill, clear, give, summon,
+spawnpoint, setworldspawn, time, difficulty, defaultgamemode, seed, weather,
+xp, title, transferserver.
+
+*Extension Bedrock (4)* : /effect, /enchant, /particle, /boss, /scoreboard.
+
+*Build/admin (18) ajoutées dans le sprint Phase 7+* :
+- [x] /gamerule [<rule> [<value>]] — 33 game rules vanilla, broadcast GameRulesChangedPacket
+- [x] /setblock <x y z> <block> [destroy|keep|replace]
+- [x] /fill <x1 y1 z1> <x2 y2 z2> <block> [destroy|hollow|keep|outline|replace] — limite 32768
+- [x] /clone <x1 y1 z1> <x2 y2 z2> <dx dy dz> [masked|replace] [force|move|normal]
+- [x] /tellraw <target> <json> — TextPacket type=10 JSON_WHISPER
+- [x] /playsound <sound> [target] [x y z] [volume] [pitch] — PlaySoundPacket 0x56
+- [x] /stopsound <target> [sound] — StopSoundPacket 0x57
+- [x] /replaceitem entity <target> <slot_type> [slot] <item> [count]
+- [x] /tag <target> <add|remove|list> [<tag>] — volatile (HashSet sur Connection)
+- [x] /loot spawn|give — wire vers loot_table::roll_chest_loot
+- [x] /damage <target> <amount> — via combat::attack_entity DamageCause::Custom
+- [x] /event entity <target> <event|id> — ActorEventPacket (hurt/death/eating…)
+- [x] /testfor <target> — compte les entités matchant le selector
+- [x] /testforblock <x y z> <block> — match exact par network_id
+- [x] /spreadplayers <cx cz> <spreadDist> <maxRange> <target> — random dans le carré
+- [x] /locate <structure> — approximation grid-based via average_separation_chunks
+- [x] /reload — recharge ops/whitelist/bans + resync permissions
+- [x] /ability <target> <mayfly|mute|worldbuilder|...> <true|false>
+- [x] /music play|stop|volume <track> [volume] — wrapper PlaySound
+
+### 6.5 - Commandes vanilla Bedrock non implémentées (faible valeur / gros effort)
+
+Ces commandes nécessitent chacune un système non-trivial à implémenter. Faible
+priorité car peu utilisées en pratique.
+
+- [ ] **/execute** — parser de sub-commands (as/at/positioned/if/unless/store/run)
+      Très complexe : modifie la chaîne de contexte du sender pour chaque sous-clause.
+- [ ] **/function** — exécute un fichier `.mcfunction` (séquence de commandes)
+      Nécessite un système de chargement de packs comportements + parser.
+- [ ] **/schedule** — différer l'exécution d'une /function de N ticks
+      Repose sur /function.
+- [ ] **/scriptevent** — déclenche un event scripting JS/TS
+      Nécessite l'API Bedrock scripting (V8/QuickJS embedding).
+- [ ] **/camera** — presets de caméra cinématique (Bedrock 1.20+)
+      Nécessite CameraPresetsPacket + CameraInstructionPacket.
+- [ ] **/dialogue** — UI NPC dialogue
+      Nécessite NpcDialoguePacket + dialogue scene JSON.
+- [ ] **/playanimation** — joue une animation custom sur une entité
+      Nécessite AnimateEntityPacket + animation registry.
+- [ ] **/structure save|load|delete** — manipule des structures NBT
+      Nécessite StructureBlockUpdatePacket + format .mcstructure.
+- [ ] **/tickingarea add|remove|list** — zones de chunks toujours simulés
+      Nécessite système TickingArea persisté.
+
+**Limitations connues sur les commandes implémentées :**
+- `/setblock destroy` ne fait pas drop d'item (TODO : appeler spawn_world_item_entity)
+- `/fill` et `/clone` font N broadcasts UpdateBlock (peut spammer pour grosses régions)
+- `/clone` : modes `filtered`/`force` non implémentés
+- `/tag` : volatile (perdu à la déco), pas branché aux selectors `@e[tag=foo]`, joueurs seulement
+- `/spreadplayers` : pas de respect strict du `spreadDist` minimum entre joueurs
+- `/locate` : approximation grid-based, pas un scan réel des chunks générés
+- `/reload` : ne recharge ni server.toml ni les plugins déjà chargés
+- `/ability` : non persistant — reset au prochain changement de gamemode
+- `/music` : pas de queue/fade comme vanilla, juste play/stop
+- `/damage` : ignore le paramètre `cause` (toujours `DamageCause::Custom`)
+
+**Tests** : 17 tests dans `commands::tests`, dont 11 fonctionnels end-to-end
+(world blocks + gamerules + tags simulés dans TestRuntime).
 
 **Résultat Phase 6 :** Serveur extensible via plugins Lua avec scheduler + events.
 
@@ -375,19 +443,31 @@ Quand une fonctionnalité doit être implémentée :
 
 **Objectif :** Prêt pour la production.
 
-### 7.1 - Performance
-- [ ] Chunk caching réseau
-- [ ] Packet batching optimisé
-- [ ] Compression async
-- [ ] Entity culling (distance)
-- [ ] View distance dynamique
+### 7.1 - Performance — ✅ TERMINÉE (parité PMMP)
+- [x] **Chunk caching serveur** (parité PMMP `ChunkCache.php`) — `cached_zlib_batch`
+      par `ChunkColumn`, invalidé sur `set_block`. N joueurs sur même chunk = 1
+      compression Zlib au lieu de N. PMMP ne fait pas le ClientCacheStatus
+      protocol non plus (cacheEnabled=false partout dans ChunkRequestTask.php),
+      donc on est en parité complète.
+- [x] **Packet batching multi-pkt** — Connection.broadcasts: Vec<(u32, Vec<u8>)>
+      coalescé en UN seul batch shared par algo dans la main loop.
+- [x] **Compression / shared batch** — `encode_shared_batch()` Zlib une fois +
+      `prepare_for_send` per-conn (encryption). Dump pkt_sent.log gated par
+      env `MCRS_DUMP_PACKETS=1` (était I/O sync à chaque paquet).
+- [x] **Entity culling par distance** — `entity_culling.rs` + `visible_entities`
+      HashSet par Connection, scan périodique 5 Hz pour transitions stationnaires.
+      Add/Remove envoyés uniquement sur passage de frontière de vue.
+- [x] **View distance dynamique** — `handle_request_chunk_radius_ingame` route
+      RequestChunkRadius en InGame state, re-queue chunks via `order_chunks`.
 
 ### 7.2 - Fonctionnalités avancées
 - [x] Resource packs delivery state machine (RESOURCE_PACK_DATA_INFO 0x52 + CHUNK_DATA 0x53
       + CHUNK_REQUEST 0x54 packets, handle_resource_pack_chunk_request hooked, ClientResponse
       avec parse UUID list. resource_pack.rs : load_pack/discover_packs/chunk_pack +
       SHA256). Pas de packs côté serveur en config par défaut → fall-through HAVE_ALL_PACKS.
-- [ ] Skins custom (extraction depuis JWT chain en place, pas encore broadcast)
+- [x] **Skins custom** — `Skin::from_client_data` parse 17 champs JWT (PMMP
+      LoginPacketHandler), SerializedSkin wire-format dans mc-rs-proto, champ
+      `skin: Option<Skin>` dans Connection, broadcast au PreSpawn + join.
 - [x] Scoreboard high-level API (`/scoreboard` + `ScoreboardManager` partagé via
       ServerState.scoreboards Arc<Mutex>)
 - [x] Boss bar high-level API (`/boss` + visuals::boss_show/hide/update)
@@ -442,8 +522,13 @@ listés en "à brancher" sont maintenant **branchés** :
 | 4 | Entities & Combat (mobs, AI base, spawn naturel, loot) | ✅ Terminée |
 | 5 | Game systems (crafting, enchant, worldgen, block entities) | ✅ Terminée |
 | 6 | Plugin system (Lua events + scheduler) | ✅ Terminée |
-| 7 | Polish & Performance | 🚧 ~75 % (perf + skins manquent) |
+| 7 | Polish & Performance | ✅ Terminée (entity culling + shared batch + chunk cache PMMP) |
 | DATA | Import bedrock-samples Mojang 1.26.10.4 | ✅ Terminée |
 | INV | Port intégral InventoryManager PMMP | ✅ Terminée + chest/crafting/anvil routing |
 
-**Tests** : 1010 passent. **Build** : `cargo build --release -p mc-rs-server` clean.
+**Tests** : 1024 passent. **Build** : `cargo build --release -p mc-rs-server` clean.
+
+**62 commandes** registered (parité PMMP + extras Bedrock). 9 commandes
+vanilla restantes non implémentées (execute/function/schedule/scriptevent/
+camera/dialogue/playanimation/structure/tickingarea) — chacune nécessite un
+système majeur, voir §6.5 pour le détail.
