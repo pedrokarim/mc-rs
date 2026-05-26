@@ -157,6 +157,10 @@ pub struct Connection {
 
     // Server-driven Bedrock forms
     pub(super) next_form_id: u32,
+    /// Form actuellement en attente d'une `ModalFormResponse` du client.
+    /// `None` quand aucun form n'a été envoyé ou que la réponse a déjà été
+    /// consommée. Le form_id est tracké pour ignorer les réponses obsolètes.
+    pub(super) pending_form: Option<forms::PendingForm>,
 
     // Server keypair (shared across connections)
     pub(super) server_keypair: std::sync::Arc<ServerKeyPair>,
@@ -285,6 +289,7 @@ impl Connection {
             is_swimming: false,
             events,
             next_form_id: 1,
+            pending_form: None,
             server_keypair,
             chunk_cache,
             config,

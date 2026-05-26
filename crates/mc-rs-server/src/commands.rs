@@ -1038,8 +1038,17 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
     }
 
     fn open_sender_menu(&mut self) {
-        // Hub menu système (compass) retiré. Stub silencieux.
-        self.send_feedback("Hub menu désactivé.");
+        let Some(addr) = self.source_addr() else {
+            self.send_feedback("Console cannot open the in-game menu.");
+            return;
+        };
+        let Some(connection) = self.connections.get_mut(&addr) else {
+            return;
+        };
+        let batch = connection.build_hub_form_batch();
+        let prepared = connection.prepare_for_send(batch);
+        self.raknet
+            .send_to_session(&addr, prepared, Reliability::ReliableOrdered, true);
     }
 
     fn show_sender_biome(&mut self) {
@@ -2546,6 +2555,20 @@ pub fn build_command_system() -> ServerCommandSystem {
                 players.len(),
                 players.join(", ")
             ));
+            Ok(())
+        },
+    );
+
+    let mut menu = CommandDefinition::new("menu", "Open the hub menu");
+    menu.usage = "/menu".into();
+    menu.permissions = vec!["server.command.menu".into()];
+    register_command(
+        &mut permissions,
+        &mut map,
+        menu,
+        PermissionDefault::True,
+        |runtime: &mut dyn ServerCommandRuntime, _| {
+            runtime.open_sender_menu();
             Ok(())
         },
     );
