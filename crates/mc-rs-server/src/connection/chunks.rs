@@ -98,7 +98,30 @@ impl Connection {
         }
 
         // Still send queued chunks even if no reorder happened
-        self.send_chunk_batch()
+        let mut out = self.send_chunk_batch();
+
+        // PMMP notifyTerrainReady : envoie PlayStatus(PlayerSpawn) quand
+        // la queue initiale est vidée. Bloque le bug "chargement du serveur"
+        // infini (client recevait PlayerSpawn trop tôt avant que les chunks
+        // arrivent).
+        if self.player_spawn_pending && self.chunk_load_queue.is_empty() {
+            use mc_rs_proto::packets::login::{PlayStatus, PlayStatusType};
+            use mc_rs_proto::packets::packet_id;
+            let spawn_status = PlayStatus {
+                status: PlayStatusType::PlayerSpawn,
+            };
+            out.push(
+                self.encode_compressed_packet(packet_id::PLAY_STATUS, &spawn_status.encode()),
+            );
+            self.player_spawn_pending = false;
+            debug!(
+                "[{}] Terrain ready ({} chunks) — envoi PlayStatus(PlayerSpawn)",
+                self.addr,
+                self.sent_chunks.len()
+            );
+        }
+
+        out
     }
 
     /// Send a small batch of chunks from the load queue.
@@ -189,9 +212,14 @@ impl Connection {
     }
 
     pub fn should_stream_chunks(&self) -> bool {
+        // PMMP : le streaming démarre après que le client envoie
+        // `RequestChunkRadius` (handle_request_chunk_radius bascule en
+        // SpawnResponse). Streamer en PreSpawn = chunks envoyés avant que
+        // le client connaisse son radius / soit prêt → ils sont ignorés
+        // ou bloquent le spawn.
         matches!(
             self.state,
-            ConnectionState::PreSpawn | ConnectionState::SpawnResponse | ConnectionState::InGame
+            ConnectionState::SpawnResponse | ConnectionState::InGame
         )
     }
 }

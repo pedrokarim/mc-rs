@@ -224,7 +224,7 @@ impl Connection {
             return Vec::new();
         };
         // Le client envoie aussi la liste des pack IDs qu'il veut DL
-        // (string array). Pour un serveur sans packs c'est vide.
+        // (string array). Chaque ID a la forme "<uuid>_<version>".
         let pack_count = reader.read_u16_le().unwrap_or(0);
         let mut requested_packs: Vec<String> = Vec::with_capacity(pack_count as usize);
         for _ in 0..pack_count {
@@ -241,21 +241,39 @@ impl Connection {
         );
 
         match status {
-            // 1 = REFUSED → kick (le client ne veut pas du serveur).
+            // 1 = REFUSED → le client ne veut pas du serveur, il se déco.
             1 => {
                 info!("[{}] Resource packs refused — disconnecting", self.addr);
                 Vec::new()
             }
             // 2 = SEND_PACKS — pour chaque pack demandé, envoyer
-            // ResourcePackDataInfo + attendre ResourcePackChunkRequest.
-            // On n'a pas de packs côté serveur → on log et passe à 3.
+            // ResourcePackDataInfo. Le client suivra avec
+            // ResourcePackChunkRequest pour chaque chunk.
             2 => {
                 info!(
-                    "[{}] Client requesting {} resource packs (server has none, will fall through)",
+                    "[{}] Client requesting {} resource packs",
                     self.addr,
                     requested_packs.len()
                 );
-                Vec::new()
+                let mut out = Vec::with_capacity(requested_packs.len());
+                for id in requested_packs {
+                    // Le client envoie "<uuid>_<version>" — on ne matche que
+                    // sur l'UUID (préfixe).
+                    let uuid_part = id.split('_').next().unwrap_or(&id);
+                    if let Some(pack) = self
+                        .resource_packs
+                        .iter()
+                        .find(|p| p.uuid().eq_ignore_ascii_case(uuid_part))
+                    {
+                        out.push(self.encode_resource_pack_data_info(pack));
+                    } else {
+                        warn!(
+                            "[{}] Client requested unknown resource pack id={}",
+                            self.addr, id
+                        );
+                    }
+                }
+                out
             }
             3 => {
                 // HAVE_ALL_PACKS -> send ResourcePackStack
@@ -280,7 +298,6 @@ impl Connection {
 
     /// Handle ResourcePackChunkRequest (C→S, 0x54). Le client demande un
     /// chunk spécifique d'un pack. On répond avec ResourcePackChunkData.
-    /// Si on n'a pas le pack, on log + ignore.
     pub(super) fn handle_resource_pack_chunk_request(
         &mut self,
         reader: &mut ProtoReader,
@@ -295,41 +312,122 @@ impl Connection {
                 return Vec::new();
             }
         };
-        info!(
+        debug!(
             "[{}] ResourcePackChunkRequest pack_id={} chunk={}",
             self.addr, req.pack_id, req.chunk_index
         );
-        // Pas de pack côté serveur → on ne peut pas répondre. Le client
-        // probablement abandonnera ou enverra DOWNLOADING_FINISHED.
-        Vec::new()
+
+        let uuid_part = req.pack_id.split('_').next().unwrap_or(&req.pack_id);
+        let Some(pack) = self
+            .resource_packs
+            .iter()
+            .find(|p| p.uuid().eq_ignore_ascii_case(uuid_part))
+        else {
+            warn!(
+                "[{}] Chunk requested for unknown pack id={}",
+                self.addr, req.pack_id
+            );
+            return Vec::new();
+        };
+
+        let chunk_size = crate::pack_encoder::CHUNK_SIZE as usize;
+        let offset = (req.chunk_index as u64) * (chunk_size as u64);
+        let slice = pack.chunk(req.chunk_index, chunk_size);
+        let response = mc_rs_proto::packets::world::ResourcePackChunkData {
+            pack_id: pack.uuid().to_string(),
+            chunk_index: req.chunk_index,
+            offset,
+            data: slice.to_vec(),
+        };
+        vec![self.encode_compressed_packet(packet_id::RESOURCE_PACK_CHUNK_DATA, &response.encode())]
     }
 
     // -- Resource pack helpers --
 
     fn send_resource_packs_info(&self) -> Vec<Vec<u8>> {
-        let mut writer = mc_rs_proto::io::ProtoWriter::with_capacity(64);
+        let packs = self.resource_packs.as_ref();
+        let mut writer = mc_rs_proto::io::ProtoWriter::with_capacity(128 + 96 * packs.len());
         writer.write_bool(false); // must_accept
         writer.write_bool(false); // has_addons
         writer.write_bool(false); // has_scripts
         writer.write_bool(false); // force_disable_vibrant_visuals
-                                  // World template UUID (nil = 16 zero bytes, written as 2 x i64_le)
+                                  // worldTemplateId (nil UUID = 2 x i64_le zero)
         writer.write_i64_le(0);
         writer.write_i64_le(0);
-        writer.write_string(""); // world_template_version
-        writer.write_u16_le(0); // resource_packs count
+        writer.write_string(""); // worldTemplateVersion
+        writer.write_u16_le(packs.len() as u16); // count
+
+        for pack in packs {
+            // PMMP putUUID = 2 x i64_le reversed des bytes UUID. On encode
+            // via le format canonique 8 bytes / 8 bytes reverse.
+            write_uuid_pmmp(&mut writer, pack.uuid());
+            writer.write_string(&pack.version_string());
+            writer.write_u64_le(pack.size());
+            writer.write_string(""); // encryptionKey
+            writer.write_string(""); // subPackName
+            writer.write_string(""); // contentId
+            writer.write_bool(false); // hasScripts
+            writer.write_bool(false); // isAddonPack
+            writer.write_bool(false); // isRtxCapable
+            writer.write_string(""); // cdnUrl
+        }
 
         vec![self.encode_compressed_packet(packet_id::RESOURCE_PACKS_INFO, writer.as_bytes())]
     }
 
     fn send_resource_pack_stack(&self) -> Vec<Vec<u8>> {
-        let mut writer = mc_rs_proto::io::ProtoWriter::with_capacity(64);
+        let packs = self.resource_packs.as_ref();
+        let mut writer = mc_rs_proto::io::ProtoWriter::with_capacity(64 + 48 * packs.len());
         writer.write_bool(false); // must_accept
-        writer.write_var_u32(0); // resource_pack_stack count
-        writer.write_string("1.26.20"); // base_game_version
+        writer.write_var_u32(packs.len() as u32);
+        for pack in packs {
+            // PMMP ResourcePackStackEntry : pack_id en STRING ici (pas UUID
+            // binaire), version en STRING, subPackName en STRING.
+            writer.write_string(pack.uuid());
+            writer.write_string(&pack.version_string());
+            writer.write_string(""); // subPackName
+        }
+        writer.write_string("1.26.20"); // baseGameVersion
         writer.write_u32_le(0); // experiments count
-        writer.write_bool(false); // experiments_previously_toggled
-        writer.write_bool(false); // use_vanilla_editor_packs
+        writer.write_bool(false); // hasPreviouslyUsedExperiments
+        writer.write_bool(false); // useVanillaEditorPacks
 
         vec![self.encode_compressed_packet(packet_id::RESOURCE_PACK_STACK, writer.as_bytes())]
     }
+
+    fn encode_resource_pack_data_info(
+        &self,
+        pack: &crate::resource_pack::ResourcePack,
+    ) -> Vec<u8> {
+        let chunk_size = crate::pack_encoder::CHUNK_SIZE as u32;
+        let total = pack.size();
+        let chunk_count = crate::pack_encoder::num_chunks(total) as u32;
+        let info = mc_rs_proto::packets::world::ResourcePackDataInfo {
+            pack_id: pack.uuid().to_string(),
+            max_chunk_size: chunk_size,
+            chunk_count,
+            compressed_pack_size: total,
+            sha256: pack.sha256, // RAW 32 bytes (cf. PMMP hash_file ..., true).
+            is_premium: false,
+            pack_type: 0, // Resources
+        };
+        self.encode_compressed_packet(packet_id::RESOURCE_PACK_DATA_INFO, &info.encode())
+    }
+}
+
+/// PMMP `CommonTypes::putUUID` : 2 longs little-endian, bytes 7..0 puis 15..8.
+/// Pour un UUID canonique "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", on extrait
+/// les 16 bytes raw puis on les reverse par moitié.
+fn write_uuid_pmmp(writer: &mut mc_rs_proto::io::ProtoWriter, uuid_str: &str) {
+    let bytes = uuid::Uuid::parse_str(uuid_str)
+        .map(|u| *u.as_bytes())
+        .unwrap_or([0u8; 16]);
+    let mut p1 = [0u8; 8];
+    let mut p2 = [0u8; 8];
+    p1.copy_from_slice(&bytes[0..8]);
+    p2.copy_from_slice(&bytes[8..16]);
+    p1.reverse();
+    p2.reverse();
+    writer.write_raw(&p1);
+    writer.write_raw(&p2);
 }

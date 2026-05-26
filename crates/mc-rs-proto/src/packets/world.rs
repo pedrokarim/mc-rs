@@ -853,12 +853,16 @@ impl ItemRegistry {
 // ── ResourcePack delivery (0x52, 0x53, 0x54) ──
 
 /// ResourcePackDataInfo (S→C, 0x52). Annonce métadata d'un pack au client.
+///
+/// PMMP envoie `$sha256` via `hash_file("sha256", path, true)` → RAW bytes
+/// (32 bytes), pas hex. Le `CommonTypes::putString` côté PMMP est juste un
+/// `var_u32 length + raw bytes` (string Bedrock, pas UTF-8 contraint).
 pub struct ResourcePackDataInfo {
     pub pack_id: String, // UUID
     pub max_chunk_size: u32,
     pub chunk_count: u32,
     pub compressed_pack_size: u64,
-    pub sha256: String, // hex 64 chars
+    pub sha256: [u8; 32], // RAW SHA-256 bytes
     pub is_premium: bool,
     pub pack_type: u8, // 0=Resources, 4=Behavior
 }
@@ -870,7 +874,8 @@ impl ResourcePackDataInfo {
         w.write_u32_le(self.max_chunk_size);
         w.write_u32_le(self.chunk_count);
         w.write_u64_le(self.compressed_pack_size);
-        w.write_string(&self.sha256);
+        // var_u32 length + 32 raw bytes (PMMP CommonTypes::putString sur raw sha).
+        w.write_byte_array(&self.sha256);
         w.write_bool(self.is_premium);
         w.write_u8(self.pack_type);
         w.into_bytes()

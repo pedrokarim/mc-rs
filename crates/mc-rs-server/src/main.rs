@@ -1127,6 +1127,13 @@ async fn main() {
     let server_keypair = Arc::new(ServerKeyPair::generate());
     info!("Server EC keypair generated");
 
+    // Charge les resource packs depuis ./resource_packs/ (dossiers + .mcpack).
+    // Arc partagé entre toutes les connexions : on ne clone pas les bytes.
+    let resource_packs = Arc::new(crate::resource_pack::discover_packs(
+        &crate::resource_pack::pack_path(),
+    ));
+    info!("Loaded {} resource pack(s)", resource_packs.len());
+
     // Generate server GUID
     let server_guid: i64 = rand::random();
 
@@ -1517,6 +1524,7 @@ async fn main() {
                         server_state.effective_difficulty(conn_config.difficulty),
                         false,
                         Arc::clone(&event_manager),
+                        Arc::clone(&resource_packs),
                     );
                     connections.insert(addr, conn);
                     peers.insert(addr, peer);
