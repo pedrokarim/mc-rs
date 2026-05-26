@@ -1,8 +1,13 @@
+mod helpers;
 mod map;
 mod parser;
 mod permission;
 mod selector;
 
+pub use helpers::{
+    hard_enum_param, message, param, parse_coord, parse_position_triplet,
+    parse_position_triplet_for_source, soft_enum_param, usage,
+};
 pub use map::{
     CommandDefinition, CommandDispatchError, CommandInvocation, CommandMap, CommandOverload,
     CommandParameter, ParamType, RegistrationError, VisibleCommand, VisibleCommandOverload,

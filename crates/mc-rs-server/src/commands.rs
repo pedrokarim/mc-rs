@@ -3,11 +3,12 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use mc_rs_command::{
-    resolve_target_token_with_index, CommandDefinition, CommandDispatchError, CommandInvocation,
-    CommandOverload, CommandParameter, CommandSender, ParamType, PermissionDefault,
-    PermissionDefinition, PermissionRegistry, PermissionState, RegistrationError, SelectorEntity,
-    SelectorError, SoftEnumSource, VisibleCommand, VisibleCommandOverload, VisibleCommandParameter,
-    VisibleParamType,
+    hard_enum_param, message, param, parse_coord, parse_position_triplet_for_source,
+    resolve_target_token_with_index, usage, CommandDefinition, CommandDispatchError,
+    CommandInvocation, CommandOverload, CommandParameter, CommandSender, ParamType,
+    PermissionDefault, PermissionDefinition, PermissionRegistry, PermissionState,
+    RegistrationError, SelectorEntity, SelectorError, SoftEnumSource, VisibleCommand,
+    VisibleCommandOverload, VisibleCommandParameter, VisibleParamType,
 };
 use mc_rs_proto::packets::login::{Disconnect, DisconnectReason};
 use mc_rs_proto::packets::packet_id;
@@ -2121,14 +2122,6 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
     }
 }
 
-fn usage<T>(message: &str) -> Result<T, CommandDispatchError> {
-    Err(CommandDispatchError::Usage(message.to_string()))
-}
-
-fn message<T>(message: impl Into<String>) -> Result<T, CommandDispatchError> {
-    Err(CommandDispatchError::Message(message.into()))
-}
-
 fn parse_gamemode(token: &str) -> Option<i32> {
     match token.to_ascii_lowercase().as_str() {
         "0" | "survival" | "s" => Some(0),
@@ -2156,20 +2149,6 @@ fn parse_time_value(token: &str) -> Option<i32> {
         "sunset" | "dusk" => Some(12000),
         "night" | "midnight" => Some(18000),
         _ => token.parse::<i32>().ok(),
-    }
-}
-
-fn parse_coord(token: &str, current: f32) -> Option<f32> {
-    if token == "~" {
-        Some(current)
-    } else if let Some(offset) = token.strip_prefix('~') {
-        if offset.is_empty() {
-            Some(current)
-        } else {
-            offset.parse::<f32>().ok().map(|value| current + value)
-        }
-    } else {
-        token.parse::<f32>().ok()
     }
 }
 
@@ -2268,76 +2247,10 @@ fn send_title_to_targets(
     }
 }
 
-fn param(name: &str, param_type: ParamType, optional: bool) -> CommandParameter {
-    CommandParameter {
-        name: name.into(),
-        param_type,
-        optional,
-    }
-}
-
+/// Shortcut spécifique mc-rs : SoftEnum sur `online_players` qui est résolu
+/// dynamiquement via `SoftEnumSource::soft_enum_values`.
 fn soft_player_param(name: &str, optional: bool) -> CommandParameter {
-    param(
-        name,
-        ParamType::SoftEnum {
-            name: "online_players".into(),
-        },
-        optional,
-    )
-}
-
-fn hard_enum_param(
-    name: &str,
-    enum_name: &str,
-    values: &[&str],
-    optional: bool,
-) -> CommandParameter {
-    param(
-        name,
-        ParamType::HardEnum {
-            name: enum_name.into(),
-            values: values.iter().map(|value| (*value).to_string()).collect(),
-        },
-        optional,
-    )
-}
-
-fn parse_position_triplet(
-    origin: [f32; 3],
-    x: &str,
-    y: &str,
-    z: &str,
-) -> Result<[f32; 3], CommandDispatchError> {
-    Ok([
-        parse_coord(x, origin[0])
-            .ok_or_else(|| CommandDispatchError::Message(format!("Invalid X coordinate: {x}")))?,
-        parse_coord(y, origin[1])
-            .ok_or_else(|| CommandDispatchError::Message(format!("Invalid Y coordinate: {y}")))?,
-        parse_coord(z, origin[2])
-            .ok_or_else(|| CommandDispatchError::Message(format!("Invalid Z coordinate: {z}")))?,
-    ])
-}
-
-fn parse_position_triplet_for_source(
-    runtime: &dyn ServerCommandRuntime,
-    player_origin: Option<[f32; 3]>,
-    x: &str,
-    y: &str,
-    z: &str,
-) -> Result<[f32; 3], CommandDispatchError> {
-    if runtime.sender_is_player() {
-        let origin = player_origin.ok_or_else(|| {
-            CommandDispatchError::Message("Sender position is unavailable.".to_string())
-        })?;
-        parse_position_triplet(origin, x, y, z)
-    } else {
-        if [x, y, z].iter().any(|token| token.starts_with('~')) {
-            return Err(CommandDispatchError::Message(
-                "Console must use absolute coordinates.".to_string(),
-            ));
-        }
-        parse_position_triplet([0.0, 0.0, 0.0], x, y, z)
-    }
+    mc_rs_command::soft_enum_param(name, "online_players", optional)
 }
 
 pub fn build_command_system() -> ServerCommandSystem {
