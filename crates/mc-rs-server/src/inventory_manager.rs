@@ -1098,25 +1098,50 @@ impl InventoryManager {
                 }
                 StackRequestAction::MineBlock {
                     hotbar_slot,
-                    predicted_durability: _,
+                    predicted_durability,
                     network_stack_id: _,
                 } => {
-                    // PMMP : MineBlockStackRequestAction met à jour la
-                    // durabilité de l'outil. Sans système Durable, on se
-                    // contente d'ack le slot pour éviter un re-sync.
+                    // Port direct de PMMP `ItemStackRequestExecutor.php:370-379`
+                    // (MineBlockStackRequestAction) : on lit la durabilité que
+                    // le client a PRÉDITE après usage, on la valide dans la
+                    // plage [0, maxDurability], et on l'applique au held item
+                    // côté serveur. Sans ça, l'item serveur reste à neuf →
+                    // l'ItemStackResponse renvoie un état non-muté → le client
+                    // revert sa prédiction (« snap-back » : durabilité qui ne
+                    // descend pas, items qui « pompent »). On utilise le même
+                    // mécanisme add_predicted_slot_change → set_slot qu'à
+                    // ailleurs (l.654 / l.625) pour que la prédiction matche
+                    // sans déclencher de full resync.
                     let info = SlotInfo {
                         container_id: ui_id::HOTBAR,
                         slot_id: *hotbar_slot as u8,
                         stack_id: 0,
                     };
                     if let Some(target) = self.resolve_slot_info(&info) {
-                        record(
-                            &mut touched,
-                            &mut touched_logical,
-                            &info,
-                            target.0,
-                            target.1,
-                        );
+                        let (key, core_slot) = target;
+                        let current = inv.slot_ref(key, core_slot).map(|w| w.item.clone());
+                        if let Some(item) = current {
+                            if let Some(dinfo) = crate::durability::durable_info(item.id) {
+                                let max = dinfo.tier.max_durability() as i32;
+                                let pred = *predicted_durability;
+                                if pred >= 0 && pred <= max {
+                                    let mut new_item = item.clone();
+                                    new_item.meta = pred as u32;
+                                    // PMMP `addPredictedSlotChange` AVANT
+                                    // l'écriture pour que `on_slot_change`
+                                    // détecte la prédiction et n'émette pas
+                                    // de pending_sync (équivalent du flux
+                                    // PMMP qui suit la prédiction client).
+                                    self.add_predicted_slot_change(
+                                        key,
+                                        core_slot,
+                                        new_item.clone(),
+                                    );
+                                    self.set_slot(inv, key, core_slot, new_item);
+                                }
+                            }
+                        }
+                        record(&mut touched, &mut touched_logical, &info, key, core_slot);
                     }
                 }
                 StackRequestAction::CraftCreative {
