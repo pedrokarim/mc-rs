@@ -5620,6 +5620,12 @@ mod tests {
         banned_names: BTreeSet<String>,
         banned_ips: BTreeSet<String>,
         world_spawn: [f32; 3],
+        /// Blocs simulés pour /setblock, /fill, /clone, /testforblock.
+        world_blocks: HashMap<(i32, i32, i32), u32>,
+        /// Game rules pour /gamerule (init avec vanilla_defaults).
+        gamerules: crate::game_rules::GameRules,
+        /// Tags par joueur pour /tag.
+        player_tags: HashMap<SocketAddr, std::collections::HashSet<String>>,
     }
 
     impl TestRuntime {
@@ -5679,6 +5685,9 @@ mod tests {
                 banned_names: BTreeSet::new(),
                 banned_ips: BTreeSet::new(),
                 world_spawn: [0.5, 64.0, 0.5],
+                world_blocks: HashMap::new(),
+                gamerules: crate::game_rules::GameRules::vanilla_defaults(),
+                player_tags: HashMap::new(),
             }
         }
 
@@ -6042,31 +6051,46 @@ mod tests {
                 "air" => Some(0),
                 "stone" => Some(1),
                 "dirt" => Some(2),
+                "grass" | "grass_block" => Some(3),
+                "wood" | "planks" => Some(5),
                 _ => None,
             }
         }
 
-        fn set_world_block(&mut self, _x: i32, _y: i32, _z: i32, _block_id: u32) -> bool {
-            false
+        fn set_world_block(&mut self, x: i32, y: i32, z: i32, block_id: u32) -> bool {
+            let prev = self.world_blocks.get(&(x, y, z)).copied().unwrap_or(0);
+            if prev == block_id {
+                return false;
+            }
+            self.world_blocks.insert((x, y, z), block_id);
+            true
         }
 
-        fn world_block_at(&self, _x: i32, _y: i32, _z: i32) -> u32 {
-            0
+        fn world_block_at(&self, x: i32, y: i32, z: i32) -> u32 {
+            self.world_blocks.get(&(x, y, z)).copied().unwrap_or(0)
         }
 
         fn gamerule_list(&self) -> Vec<(String, crate::game_rules::GameRuleValue)> {
-            Vec::new()
+            let mut entries: Vec<_> = self
+                .gamerules
+                .rules
+                .iter()
+                .map(|(name, value)| (name.clone(), value.clone()))
+                .collect();
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            entries
         }
 
-        fn gamerule_get(&self, _name: &str) -> Option<crate::game_rules::GameRuleValue> {
-            None
+        fn gamerule_get(&self, name: &str) -> Option<crate::game_rules::GameRuleValue> {
+            self.gamerules.get(name).cloned()
         }
 
         fn gamerule_set(
             &mut self,
-            _name: &str,
-            _value: crate::game_rules::GameRuleValue,
+            name: &str,
+            value: crate::game_rules::GameRuleValue,
         ) -> Result<(), String> {
+            self.gamerules.set(name.to_string(), value);
             Ok(())
         }
 
@@ -6094,16 +6118,28 @@ mod tests {
             Ok(())
         }
 
-        fn player_tag_add(&mut self, _addr: SocketAddr, _tag: &str) -> bool {
-            false
+        fn player_tag_add(&mut self, addr: SocketAddr, tag: &str) -> bool {
+            self.player_tags
+                .entry(addr)
+                .or_default()
+                .insert(tag.to_string())
         }
 
-        fn player_tag_remove(&mut self, _addr: SocketAddr, _tag: &str) -> bool {
-            false
+        fn player_tag_remove(&mut self, addr: SocketAddr, tag: &str) -> bool {
+            self.player_tags
+                .get_mut(&addr)
+                .is_some_and(|s| s.remove(tag))
         }
 
-        fn player_tag_list(&self, _addr: SocketAddr) -> Vec<String> {
-            Vec::new()
+        fn player_tag_list(&self, addr: SocketAddr) -> Vec<String> {
+            let mut tags: Vec<String> = self
+                .player_tags
+                .get(&addr)
+                .into_iter()
+                .flat_map(|s| s.iter().cloned())
+                .collect();
+            tags.sort();
+            tags
         }
 
         fn spawn_item_world(&mut self, _position: [f32; 3], _item: ItemStack) {}
@@ -6301,5 +6337,180 @@ mod tests {
             "expected summoned mob to be removed"
         );
         assert_eq!(runtime.removed_entities.len(), 1);
+    }
+
+    // ──────── Tests pour les commandes ajoutées Phase 7+ ────────
+
+    #[test]
+    fn setblock_places_block_in_world() {
+        let system = build_command_system();
+        let mut runtime = TestRuntime::new(&system);
+
+        dispatch_ok(&system, &mut runtime, "setblock 5 64 5 stone");
+        assert_eq!(runtime.world_block_at(5, 64, 5), 1);
+
+        // Mode keep : ne remplace pas si non-air.
+        dispatch_ok(&system, &mut runtime, "setblock 5 64 5 dirt keep");
+        assert_eq!(
+            runtime.world_block_at(5, 64, 5),
+            1,
+            "keep mode should NOT overwrite existing block"
+        );
+
+        // Mode replace : remplace.
+        dispatch_ok(&system, &mut runtime, "setblock 5 64 5 dirt replace");
+        assert_eq!(runtime.world_block_at(5, 64, 5), 2);
+    }
+
+    #[test]
+    fn setblock_rejects_unknown_block() {
+        let system = build_command_system();
+        let mut runtime = TestRuntime::new(&system);
+
+        let err = dispatch_err(&system, &mut runtime, "setblock 0 64 0 not_a_block");
+        assert!(err.contains("Unknown block"), "got: {err}");
+    }
+
+    #[test]
+    fn fill_fills_region_correctly() {
+        let system = build_command_system();
+        let mut runtime = TestRuntime::new(&system);
+
+        // Région 2×2×2 = 8 blocs.
+        dispatch_ok(&system, &mut runtime, "fill 0 64 0 1 65 1 stone");
+        for x in 0..=1 {
+            for y in 64..=65 {
+                for z in 0..=1 {
+                    assert_eq!(runtime.world_block_at(x, y, z), 1, "at ({x},{y},{z})");
+                }
+            }
+        }
+        assert!(
+            runtime.feedback.iter().any(|m| m.contains("Filled 8 blocks")),
+            "expected 'Filled 8 blocks' feedback, got: {:?}",
+            runtime.feedback
+        );
+    }
+
+    #[test]
+    fn fill_outline_only_borders() {
+        let system = build_command_system();
+        let mut runtime = TestRuntime::new(&system);
+
+        // 3×3×3 → border = 26 blocs, intérieur = 1 bloc (intact).
+        dispatch_ok(&system, &mut runtime, "fill 0 64 0 2 66 2 stone outline");
+        // Centre devrait être non rempli (toujours 0).
+        assert_eq!(runtime.world_block_at(1, 65, 1), 0);
+        // Coin devrait être rempli.
+        assert_eq!(runtime.world_block_at(0, 64, 0), 1);
+        assert_eq!(runtime.world_block_at(2, 66, 2), 1);
+    }
+
+    #[test]
+    fn fill_rejects_too_large_region() {
+        let system = build_command_system();
+        let mut runtime = TestRuntime::new(&system);
+
+        // 33×33×32 = 34848 > 32768 → rejet.
+        let err = dispatch_err(&system, &mut runtime, "fill 0 0 0 32 32 31 stone");
+        assert!(err.contains("Region too large"), "got: {err}");
+    }
+
+    #[test]
+    fn clone_copies_region() {
+        let system = build_command_system();
+        let mut runtime = TestRuntime::new(&system);
+
+        // Pose un stone à (0,64,0), clone vers (10, 64, 0).
+        dispatch_ok(&system, &mut runtime, "setblock 0 64 0 stone");
+        dispatch_ok(&system, &mut runtime, "clone 0 64 0 0 64 0 10 64 0");
+        assert_eq!(runtime.world_block_at(10, 64, 0), 1);
+    }
+
+    #[test]
+    fn gamerule_set_and_query() {
+        let system = build_command_system();
+        let mut runtime = TestRuntime::new(&system);
+
+        // Set boolean
+        dispatch_ok(&system, &mut runtime, "gamerule keepinventory true");
+        let v = runtime.gamerule_get("keepinventory").unwrap();
+        match v {
+            crate::game_rules::GameRuleValue::Bool(b) => assert!(b),
+            _ => panic!("keepinventory should be Bool"),
+        }
+
+        // Set int
+        dispatch_ok(&system, &mut runtime, "gamerule randomtickspeed 10");
+        let v = runtime.gamerule_get("randomtickspeed").unwrap();
+        match v {
+            crate::game_rules::GameRuleValue::Int(i) => assert_eq!(i, 10),
+            _ => panic!("randomtickspeed should be Int"),
+        }
+
+        // Query without value
+        dispatch_ok(&system, &mut runtime, "gamerule keepinventory");
+        assert!(runtime
+            .feedback
+            .iter()
+            .any(|m| m.contains("keepinventory") && m.contains("true")));
+    }
+
+    #[test]
+    fn gamerule_rejects_unknown_rule() {
+        let system = build_command_system();
+        let mut runtime = TestRuntime::new(&system);
+
+        let err = dispatch_err(&system, &mut runtime, "gamerule notarealrule true");
+        assert!(err.contains("Unknown game rule"), "got: {err}");
+    }
+
+    #[test]
+    fn tag_add_list_remove_cycle() {
+        let system = build_command_system();
+        let mut runtime = TestRuntime::new(&system);
+
+        dispatch_ok(&system, &mut runtime, "tag Steve add hero");
+        dispatch_ok(&system, &mut runtime, "tag Steve add archer");
+        let tags = runtime.player_tag_list(runtime.player("Steve").addr);
+        assert_eq!(tags, vec!["archer", "hero"]);
+
+        dispatch_ok(&system, &mut runtime, "tag Steve remove hero");
+        let tags = runtime.player_tag_list(runtime.player("Steve").addr);
+        assert_eq!(tags, vec!["archer"]);
+
+        dispatch_ok(&system, &mut runtime, "tag Steve list");
+        assert!(runtime
+            .feedback
+            .iter()
+            .any(|m| m.contains("archer") && m.contains("1 tag")));
+    }
+
+    #[test]
+    fn testforblock_matches_set_block() {
+        let system = build_command_system();
+        let mut runtime = TestRuntime::new(&system);
+
+        dispatch_ok(&system, &mut runtime, "setblock 0 64 0 stone");
+        dispatch_ok(&system, &mut runtime, "testforblock 0 64 0 stone");
+        assert!(runtime
+            .feedback
+            .iter()
+            .any(|m| m.contains("matches")));
+
+        dispatch_ok(&system, &mut runtime, "testforblock 0 64 0 dirt");
+        assert!(runtime
+            .feedback
+            .iter()
+            .any(|m| m.contains("does NOT match")));
+    }
+
+    #[test]
+    fn locate_returns_estimated_position() {
+        let system = build_command_system();
+        let mut runtime = TestRuntime::new(&system);
+        // /locate exige un sender player, on peut juste vérifier l'erreur console.
+        let err = dispatch_err(&system, &mut runtime, "locate village");
+        assert!(err.contains("Console must be in a player context"), "got: {err}");
     }
 }
