@@ -124,6 +124,24 @@ impl Connection {
             }
         }
 
+        // Parse skin depuis client_data_jwt (claims = SkinData PMMP). Pas critique
+        // si ça échoue — broadcast tombera sur SerializedSkin::default.
+        if !pkt.client_data_jwt.is_empty() {
+            if let Ok(decoded) = jwt::decode_jwt(&pkt.client_data_jwt) {
+                if let Some(skin) = crate::skins::Skin::from_client_data(&decoded.claims) {
+                    debug!(
+                        "[{}] Skin parsed: id={} {}x{} ({} bytes)",
+                        self.addr,
+                        skin.skin_id,
+                        skin.skin_width,
+                        skin.skin_height,
+                        skin.skin_data.len()
+                    );
+                    self.skin = Some(skin);
+                }
+            }
+        }
+
         // Set up encryption
         let Some(ref client_pub_b64) = self.client_pub_key_b64 else {
             warn!("[{}] No client public key found", self.addr);

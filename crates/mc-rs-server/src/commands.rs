@@ -343,6 +343,9 @@ pub struct ServerCommandSystem {
 pub enum CommandSource {
     Player(SocketAddr),
     Console,
+    /// Commande venue d'un client RCON distant. Le feedback est capturé dans
+    /// `ExecutionContext::rcon_output` au lieu d'être envoyé sur le réseau.
+    Rcon,
 }
 
 pub struct ExecutionContext<'a> {
@@ -359,6 +362,10 @@ pub struct ExecutionContext<'a> {
     pub plugin_manager: &'a Arc<Mutex<PluginManager>>,
     pub chunk_cache: &'a Arc<Mutex<ChunkCache>>,
     pub should_stop: &'a mut bool,
+    /// Buffer de capture pour RCON : `send_feedback`/`broadcast_chat`/`broadcast_action`
+    /// y poussent leur message au lieu d'utiliser le réseau quand
+    /// `source == CommandSource::Rcon`. Vide pour les autres sources.
+    pub rcon_output: Vec<String>,
 }
 
 fn register_command<H>(
@@ -404,10 +411,10 @@ pub fn dispatch_command_line(
     plugin_manager: &Arc<Mutex<PluginManager>>,
     chunk_cache: &Arc<Mutex<ChunkCache>>,
     should_stop: &mut bool,
-) {
+) -> Vec<String> {
     let trimmed = line.trim();
     if trimmed.is_empty() {
-        return;
+        return Vec::new();
     }
 
     let mut runtime = ExecutionContext::new(
@@ -428,6 +435,7 @@ pub fn dispatch_command_line(
     if let Err(error) = command_system.map.dispatch(&mut runtime, trimmed) {
         runtime.send_feedback(&error.to_string());
     }
+    runtime.rcon_output
 }
 
 impl ExecutionContext<'_> {
@@ -460,13 +468,14 @@ impl ExecutionContext<'_> {
             plugin_manager,
             chunk_cache,
             should_stop,
+            rcon_output: Vec::new(),
         }
     }
 
     fn source_addr(&self) -> Option<SocketAddr> {
         match self.source {
             CommandSource::Player(addr) => Some(addr),
-            CommandSource::Console => None,
+            CommandSource::Console | CommandSource::Rcon => None,
         }
     }
 
@@ -489,7 +498,7 @@ impl ExecutionContext<'_> {
                 .get(&addr)
                 .map(|connection| connection.is_op)
                 .unwrap_or(false),
-            CommandSource::Console => true,
+            CommandSource::Console | CommandSource::Rcon => true,
         };
         PermissionState {
             explicit: HashMap::new(),
@@ -528,7 +537,29 @@ impl ExecutionContext<'_> {
 
     fn spawn_world_item_entity(&mut self, spawn: PendingItemEntitySpawn) {
         let entity = self.item_entities.spawn(spawn);
-        self.broadcast_compressed(packet_id::ADD_ITEM_ACTOR, &entity.add_actor_packet());
+        let add_bytes = entity.add_actor_packet();
+        // Culling : seuls les joueurs proches reçoivent l'Add ; les autres
+        // entreront dans la vue via le scan périodique si le joueur s'en
+        // approche.
+        let entity_uid = entity.entity_unique_id;
+        let entity_pos = entity.position;
+        let targets: Vec<std::net::SocketAddr> = self
+            .connections
+            .iter_mut()
+            .filter_map(|(addr, conn)| {
+                if !conn.is_in_game() {
+                    return None;
+                }
+                if !crate::entity_culling::is_within_view_for(conn, entity_pos) {
+                    return None;
+                }
+                conn.visible_entities.insert(entity_uid);
+                Some(*addr)
+            })
+            .collect();
+        for addr in targets {
+            self.send_compressed(addr, packet_id::ADD_ITEM_ACTOR, &add_bytes);
+        }
     }
 
     fn update_connection_permissions(&mut self, name: &str) {
@@ -762,6 +793,7 @@ impl CommandSender for ExecutionContext<'_> {
                 .and_then(|connection| connection.display_name.as_deref())
                 .unwrap_or("Player"),
             CommandSource::Console => "Console",
+            CommandSource::Rcon => "Rcon",
         }
     }
 
@@ -794,12 +826,12 @@ impl CommandSender for ExecutionContext<'_> {
                 .get(&addr)
                 .map(|connection| connection.is_op)
                 .unwrap_or(false),
-            CommandSource::Console => true,
+            CommandSource::Console | CommandSource::Rcon => true,
         }
     }
 
     fn sender_has_permission(&self, permission: &str) -> bool {
-        if matches!(self.source, CommandSource::Console) {
+        if matches!(self.source, CommandSource::Console | CommandSource::Rcon) {
             return true;
         }
         self.command_system
@@ -869,6 +901,7 @@ impl ExecutionContext<'_> {
                     xuid: String::new(),
                     platform_chat_id: String::new(),
                     build_platform: 0,
+                    skin: Default::default(),
                     is_teacher: false,
                     is_host: false,
                     is_subclient: false,
@@ -900,10 +933,10 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
     }
 
     fn send_feedback(&mut self, message: &str) {
-        if let Some(addr) = self.source_addr() {
-            self.send_message(addr, message);
-        } else {
-            info!("[CONSOLE] {message}");
+        match self.source {
+            CommandSource::Player(addr) => self.send_message(addr, message),
+            CommandSource::Console => info!("[CONSOLE] {message}"),
+            CommandSource::Rcon => self.rcon_output.push(message.to_string()),
         }
     }
 
@@ -917,11 +950,17 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
     }
 
     fn broadcast_chat(&mut self, source: &str, message: &str) {
+        if matches!(self.source, CommandSource::Rcon) {
+            self.rcon_output.push(format!("<{source}> {message}"));
+        }
         let packet = Text::chat(source, message, "");
         self.broadcast_compressed(packet_id::TEXT, &packet);
     }
 
     fn broadcast_action(&mut self, source: &str, message: &str) {
+        if matches!(self.source, CommandSource::Rcon) {
+            self.rcon_output.push(format!("* {source} {message}"));
+        }
         let formatted = format!("* {} {}", source, message);
         let packet = Text::system(&formatted);
         self.broadcast_compressed(packet_id::TEXT, &packet);
@@ -1082,8 +1121,28 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
         let kind =
             MobKind::parse(mob_name).ok_or_else(|| format!("Unknown mob type: {mob_name}"))?;
         let entity = self.mob_entities.spawn(kind, position);
-        self.broadcast_compressed(packet_id::ADD_ACTOR, &entity.add_actor_packet());
-        Ok(entity.base.entity_runtime_id)
+        let add_bytes = entity.add_actor_packet();
+        let entity_uid = entity.base.entity_unique_id;
+        let entity_pos = entity.base.position;
+        let runtime_id = entity.base.entity_runtime_id;
+        let targets: Vec<std::net::SocketAddr> = self
+            .connections
+            .iter_mut()
+            .filter_map(|(addr, conn)| {
+                if !conn.is_in_game() {
+                    return None;
+                }
+                if !crate::entity_culling::is_within_view_for(conn, entity_pos) {
+                    return None;
+                }
+                conn.visible_entities.insert(entity_uid);
+                Some(*addr)
+            })
+            .collect();
+        for addr in targets {
+            self.send_compressed(addr, packet_id::ADD_ACTOR, &add_bytes);
+        }
+        Ok(runtime_id)
     }
 
     fn kill_player(&mut self, addr: SocketAddr) {
@@ -1100,14 +1159,46 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
     fn remove_entity(&mut self, entity_id: u64) -> Result<(), String> {
         if let Some(entity) = self.item_entities.remove(entity_id) {
             let remove_packet = entity.remove_packet();
-            self.broadcast_compressed(packet_id::REMOVE_ACTOR, &remove_packet);
+            let uid = entity.entity_unique_id;
+            let targets: Vec<std::net::SocketAddr> = self
+                .connections
+                .iter_mut()
+                .filter_map(|(addr, conn)| {
+                    if !conn.is_in_game() {
+                        return None;
+                    }
+                    if !conn.visible_entities.remove(&uid) {
+                        return None;
+                    }
+                    Some(*addr)
+                })
+                .collect();
+            for addr in targets {
+                self.send_compressed(addr, packet_id::REMOVE_ACTOR, &remove_packet);
+            }
             return Ok(());
         }
         if let Some(entity) = self.mob_entities.remove(entity_id) {
             let position = entity.base.position;
             let drops = entity.kind.default_loot();
             let remove_packet = entity.remove_packet();
-            self.broadcast_compressed(packet_id::REMOVE_ACTOR, &remove_packet);
+            let uid = entity.base.entity_unique_id;
+            let targets: Vec<std::net::SocketAddr> = self
+                .connections
+                .iter_mut()
+                .filter_map(|(addr, conn)| {
+                    if !conn.is_in_game() {
+                        return None;
+                    }
+                    if !conn.visible_entities.remove(&uid) {
+                        return None;
+                    }
+                    Some(*addr)
+                })
+                .collect();
+            for addr in targets {
+                self.send_compressed(addr, packet_id::REMOVE_ACTOR, &remove_packet);
+            }
             for drop in drops {
                 self.spawn_world_item_entity(PendingItemEntitySpawn::stationary(drop, position));
             }

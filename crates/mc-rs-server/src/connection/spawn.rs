@@ -247,13 +247,20 @@ impl Connection {
             .as_ref()
             .map(|u| *u.as_bytes())
             .unwrap_or([0u8; 16]);
+        let self_xuid = self.xuid.clone().unwrap_or_default();
+        let self_skin = self
+            .skin
+            .as_ref()
+            .map(|s| s.to_serialized(&self_xuid))
+            .unwrap_or_default();
         let self_entry = PlayerListAdd {
             uuid: uuid_bytes,
             entity_id: self.entity_runtime_id as i64,
             username: self.display_name.clone().unwrap_or_default(),
-            xuid: self.xuid.clone().unwrap_or_default(),
+            xuid: self_xuid,
             platform_chat_id: String::new(),
             build_platform: 0,
+            skin: self_skin,
             is_teacher: false,
             is_host: false,
             is_subclient: false,
@@ -323,6 +330,59 @@ impl Connection {
             .push(self.encode_compressed_packet(packet_id::PLAY_STATUS, &spawn_status.encode()));
         self.state = ConnectionState::SpawnResponse;
         debug!("[{}] -> SpawnResponse state", self.addr);
+
+        responses
+    }
+
+    /// Re-handle RequestChunkRadius en cours de jeu : le client peut renvoyer
+    /// le paquet quand l'utilisateur change la "Render Distance" dans les
+    /// settings vidéo. Contrairement à la version PreSpawn, on ne renvoie pas
+    /// PLAY_STATUS et on ne change pas l'état — on se contente de mettre à
+    /// jour le radius, re-queuer les chunks dans la nouvelle frontière, et
+    /// notifier le client via ChunkRadiusUpdated + NetworkChunkPublisherUpdate.
+    /// `order_chunks` retire les chunks devenus hors-vue de `sent_chunks` et
+    /// queue les nouveaux qui entrent en vue.
+    pub(super) fn handle_request_chunk_radius_ingame(
+        &mut self,
+        reader: &mut ProtoReader,
+    ) -> Vec<Vec<u8>> {
+        let radius = reader.read_var_i32().unwrap_or(self.view_distance);
+        let clamped = radius.clamp(2, self.config.max_view_distance);
+        if clamped == self.view_distance {
+            return Vec::new();
+        }
+        let previous = self.view_distance;
+        self.view_distance = clamped;
+        info!(
+            "[{}] RequestChunkRadius (in-game): {} → {} (was {})",
+            self.addr, radius, clamped, previous
+        );
+
+        let mut responses = Vec::new();
+
+        let radius_pkt = ChunkRadiusUpdated { radius: clamped };
+        responses.push(
+            self.encode_compressed_packet(packet_id::CHUNK_RADIUS_UPDATED, &radius_pkt.encode()),
+        );
+
+        let px = self.position[0] as i32;
+        let py = self.position[1] as i32;
+        let pz = self.position[2] as i32;
+        let publisher = NetworkChunkPublisherUpdate {
+            position: [px, py, pz],
+            radius: (clamped * 16) as u32,
+        };
+        responses.push(self.encode_compressed_packet(
+            packet_id::NETWORK_CHUNK_PUBLISHER_UPDATE,
+            &publisher.encode(),
+        ));
+
+        // Recalcule la liste des chunks à streamer. Si on a réduit, les chunks
+        // hors-vue sont retirés de `sent_chunks` ; si on a élargi, les nouveaux
+        // sont push en queue. Le streaming est piloté par `send_queued_chunks`
+        // au tick suivant.
+        self.order_chunks();
+        self.chunk_order_countdown = 0;
 
         responses
     }

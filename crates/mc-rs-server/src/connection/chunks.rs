@@ -1,9 +1,10 @@
 use tracing::debug;
 
+use mc_rs_proto::batch::CompressionAlgorithm;
 use mc_rs_proto::packets::chunks::*;
 use mc_rs_proto::packets::packet_id;
 
-use super::{Connection, ConnectionState, CHUNKS_PER_TICK};
+use super::{encode_shared_batch, Connection, ConnectionState, CHUNKS_PER_TICK};
 
 impl Connection {
     /// Reorder the chunk load queue: spiral from player position, unload distant chunks.
@@ -114,22 +115,60 @@ impl Connection {
                 continue;
             }
 
-            let (sub_count, payload) = {
+            // Fast path : si le client utilise Zlib (le défaut wire), on partage
+            // un batch pré-compressé par chunk via cached_zlib_batch. Tous les
+            // joueurs qui chargent le même chunk évitent N compressions Zlib —
+            // seul `prepare_for_send` (encryption per-player) s'applique.
+            // Fallback : autres algos (Snappy/None, rares) → compression per-player.
+            let conn_zlib = matches!(self.compression_algo, CompressionAlgorithm::Zlib);
+
+            let raw_batch_opt: Option<Vec<u8>> = if conn_zlib {
                 let mut cache = self.chunk_cache.lock().unwrap();
                 let col = cache.get_chunk_mut(cx, cz);
-                (col.sub_chunk_count, col.get_network_payload().to_vec())
+                if col.cached_zlib_batch.is_none() {
+                    let sub_count = col.sub_chunk_count;
+                    let payload = col.get_network_payload().to_vec();
+                    let chunk_pkt = LevelChunk {
+                        chunk_x: cx,
+                        chunk_z: cz,
+                        dimension_id: 0,
+                        sub_chunk_count: sub_count,
+                        cache_enabled: false,
+                        payload,
+                    };
+                    let shared = encode_shared_batch(
+                        packet_id::LEVEL_CHUNK,
+                        &chunk_pkt.encode(),
+                        CompressionAlgorithm::Zlib,
+                    );
+                    col.cached_zlib_batch = Some(shared);
+                }
+                Some(col.cached_zlib_batch.as_ref().unwrap().clone())
+            } else {
+                None
             };
 
-            let chunk_pkt = LevelChunk {
-                chunk_x: cx,
-                chunk_z: cz,
-                dimension_id: 0,
-                sub_chunk_count: sub_count,
-                cache_enabled: false,
-                payload,
-            };
-            responses
-                .push(self.encode_compressed_packet(packet_id::LEVEL_CHUNK, &chunk_pkt.encode()));
+            if let Some(raw_batch) = raw_batch_opt {
+                let prepared = self.prepare_for_send(raw_batch);
+                responses.push(prepared);
+            } else {
+                let (sub_count, payload) = {
+                    let mut cache = self.chunk_cache.lock().unwrap();
+                    let col = cache.get_chunk_mut(cx, cz);
+                    (col.sub_chunk_count, col.get_network_payload().to_vec())
+                };
+                let chunk_pkt = LevelChunk {
+                    chunk_x: cx,
+                    chunk_z: cz,
+                    dimension_id: 0,
+                    sub_chunk_count: sub_count,
+                    cache_enabled: false,
+                    payload,
+                };
+                responses.push(
+                    self.encode_compressed_packet(packet_id::LEVEL_CHUNK, &chunk_pkt.encode()),
+                );
+            }
             self.sent_chunks.insert((cx, cz));
             sent += 1;
         }

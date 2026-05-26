@@ -99,6 +99,9 @@ pub struct Connection {
     pub uuid: Option<uuid::Uuid>,
     pub xuid: Option<String>,
     pub(super) client_pub_key_b64: Option<String>,
+    /// Skin parsée depuis le `client_data_jwt` au login. `None` si offline ou
+    /// parse échoué — le broadcast tombe alors sur `SerializedSkin::default`.
+    pub skin: Option<crate::skins::Skin>,
 
     // Player state
     pub spawn_position: [f32; 3],
@@ -118,13 +121,20 @@ pub struct Connection {
     pub view_distance: i32,
     pub last_chunk_x: i32,
     pub last_chunk_z: i32,
+    /// Entity culling — entity_unique_ids actuellement visibles par ce joueur.
+    /// Voir `entity_culling.rs`. Sert à émettre Add/Remove sur traversée de
+    /// frontière de vue, et à filtrer les broadcasts Move/Motion.
+    pub visible_entities: HashSet<i64>,
     /// Queue of chunks to send, ordered by distance (nearest first).
     pub chunk_load_queue: VecDeque<(i32, i32)>,
     /// Countdown ticks until chunk reorder. 0 = reorder now. u32::MAX = idle.
     pub chunk_order_countdown: u32,
 
-    // Packets to broadcast to ALL other players
-    pub broadcasts: Vec<Vec<u8>>,
+    // Packets to broadcast to ALL other players (PMMP-style outgoing buffer).
+    // Stocké en `(packet_id, raw_payload)` non-compressé pour permettre à la
+    // main loop de coalescer tous les paquets du tick en UN seul batch
+    // compressé par destinataire (1 zlib au lieu de N).
+    pub broadcasts: Vec<(u32, Vec<u8>)>,
 
     pub pending_commands: Vec<String>,
     pub pending_item_spawns: Vec<PendingItemEntitySpawn>,
@@ -224,6 +234,7 @@ impl Connection {
             uuid: None,
             xuid: None,
             client_pub_key_b64: None,
+            skin: None,
             spawn_position,
             position: spawn_position,
             pitch: 0.0,
@@ -239,6 +250,7 @@ impl Connection {
             view_distance: config.max_view_distance,
             last_chunk_x: 0,
             last_chunk_z: 0,
+            visible_entities: HashSet::new(),
             chunk_load_queue: VecDeque::new(),
             chunk_order_countdown: 5, // reorder shortly after spawn (like PMMP)
             broadcasts: Vec::new(),
@@ -430,6 +442,12 @@ impl Connection {
             (ConnectionState::InGame, packet_id::BLOCK_ACTOR_DATA) => {
                 self.handle_block_actor_data(reader)
             }
+            // Le client peut renvoyer RequestChunkRadius en cours de partie
+            // quand l'utilisateur change la "Render Distance" dans les settings
+            // vidéo. PMMP `InGamePacketHandler::handleRequestChunkRadius`.
+            (ConnectionState::InGame, packet_id::REQUEST_CHUNK_RADIUS) => {
+                self.handle_request_chunk_radius_ingame(reader)
+            }
             (ConnectionState::ResourcePacks, packet_id::RESOURCE_PACK_CHUNK_REQUEST) => {
                 self.handle_resource_pack_chunk_request(reader)
             }
@@ -453,7 +471,7 @@ impl Connection {
     }
 
     /// Take broadcast packets (to be sent to ALL other players).
-    pub fn take_broadcasts(&mut self) -> Vec<Vec<u8>> {
+    pub fn take_broadcasts(&mut self) -> Vec<(u32, Vec<u8>)> {
         std::mem::take(&mut self.broadcasts)
     }
 
@@ -491,30 +509,43 @@ impl Connection {
         result
     }
 
+    /// Compression algo négocié pour cette connexion (typiquement Zlib).
+    /// Exposé pour permettre aux broadcasts de réutiliser un batch déjà encodé
+    /// quand toutes les connexions partagent le même algo — cf
+    /// [`encode_shared_batch`].
+    pub fn compression_algo(&self) -> CompressionAlgorithm {
+        self.compression_algo
+    }
+
     /// Encode a compressed (and optionally encrypted) packet.
     pub fn encode_compressed_packet(&self, pkt_id: u32, payload: &[u8]) -> Vec<u8> {
-        // DEBUG DUMP — même format que PMMP NetworkSession.php.
-        // Dumpe le (pktId, payload) de chaque paquet envoyé, pour diff contre PMMP.
-        let hex: String = payload
-            .iter()
-            .take(256)
-            .map(|b| format!("{:02X}", b))
-            .collect();
-        let line = format!(
-            "[{}] 0x{:03X} len={} hex={}\n",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis(),
-            pkt_id,
-            payload.len(),
-            hex
-        );
-        let _ = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("pkt_sent.log")
-            .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
+        // DEBUG DUMP — gated par env MCRS_DUMP_PACKETS=1. Le dump est utile pour
+        // diff contre PMMP NetworkSession.php mais c'est de l'I/O synchrone à
+        // chaque paquet envoyé : sans gate, sur 100 TPS avec broadcasts, ça
+        // sature le disque et bloque le tick loop. Coût mesuré : ~150 µs par
+        // packet pour open+append+close, soit ~15ms/tick avec 100 packets/s.
+        if std::env::var("MCRS_DUMP_PACKETS").as_deref() == Ok("1") {
+            let hex: String = payload
+                .iter()
+                .take(256)
+                .map(|b| format!("{:02X}", b))
+                .collect();
+            let line = format!(
+                "[{}] 0x{:03X} len={} hex={}\n",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis(),
+                pkt_id,
+                payload.len(),
+                hex
+            );
+            let _ = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("pkt_sent.log")
+                .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
+        }
 
         let pkt_bytes = codec::encode_packet(pkt_id, payload);
         // Level 1 (fastest) : bench `batch_compression` montre ratio quasi
@@ -554,4 +585,20 @@ impl Connection {
 
         result
     }
+}
+
+/// Encode un batch compressé indépendamment de toute connexion. Le résultat
+/// peut être cloné et passé à `prepare_for_send` de plusieurs connexions
+/// partageant le même `CompressionAlgorithm`, économisant le coût zlib N fois
+/// pour les broadcasts.
+///
+/// PMMP fait la même chose via `NetworkSession::sendDataPacket` avec sharedBatch
+/// (cf `PacketBatch::fromPackets` réutilisé par tous les viewers d'un mob).
+pub fn encode_shared_batch(pkt_id: u32, payload: &[u8], algo: CompressionAlgorithm) -> Vec<u8> {
+    let pkt_bytes = codec::encode_packet(pkt_id, payload);
+    let batch_payload = batch::encode_batch(&[pkt_bytes], algo, 1);
+    let mut result = Vec::with_capacity(1 + batch_payload.len());
+    result.push(0xFE);
+    result.extend_from_slice(&batch_payload);
+    result
 }

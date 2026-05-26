@@ -21,6 +21,11 @@ pub struct ChunkColumn {
     pub payload_dirty: bool,
     /// Number of sub-chunks to send to the client.
     pub sub_chunk_count: u32,
+    /// Cache du LevelChunk packet déjà compressé en Zlib (shared batch),
+    /// prêt à être passé à `prepare_for_send` (encryption per-player).
+    /// Évite N compressions Zlib quand N joueurs chargent le même chunk.
+    /// Invalidé à chaque set_block en même temps que `payload_dirty`.
+    pub cached_zlib_batch: Option<Vec<u8>>,
 }
 
 impl ChunkColumn {
@@ -30,6 +35,8 @@ impl ChunkColumn {
             self.network_payload =
                 chunk_serializer::rebuild_network_payload(&self.sub_chunks, &self.biome_data);
             self.payload_dirty = false;
+            // Le payload a changé → invalider la batch Zlib cachée.
+            self.cached_zlib_batch = None;
         }
         &self.network_payload
     }
@@ -144,6 +151,7 @@ impl ChunkCache {
                         network_payload: payload,
                         payload_dirty: false,
                         sub_chunk_count: sub_count,
+                        cached_zlib_batch: None,
                     })
                 } else {
                     None
@@ -175,6 +183,7 @@ impl ChunkCache {
                 network_payload: payload,
                 payload_dirty: false,
                 sub_chunk_count: sub_count,
+                cached_zlib_batch: None,
             }
         });
 
@@ -239,6 +248,7 @@ impl ChunkCache {
 
         chunk.sub_chunks[sub_idx].set_block(local_x, local_y, local_z, runtime_id);
         chunk.payload_dirty = true;
+        chunk.cached_zlib_batch = None;
         self.dirty.insert((cx, cz));
     }
 

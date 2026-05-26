@@ -359,6 +359,7 @@ pub mod endermite;
 pub mod entities_vanilla;
 #[allow(dead_code)]
 mod entity;
+pub mod entity_culling;
 #[allow(dead_code)]
 pub mod entity_drops;
 #[allow(dead_code)]
@@ -1282,6 +1283,11 @@ async fn main() {
         warn!("Plugin manager lock is poisoned before POSTWORLD enable; plugins are disabled.");
     }
     let mut auto_save_counter: u32 = 0;
+    // Compteur pour le scan périodique de visibilité d'entités. Tourne à 5 Hz
+    // (toutes les 20 server ticks à 100 TPS) pour capter les transitions
+    // entrée/sortie de vue des entités stationnaires quand un joueur se
+    // déplace. Les entités mobiles sont déjà gérées par leur MovementUpdate.
+    let mut entity_visibility_scan_counter: u32 = 0;
     let (console_tx, mut console_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let console_tx_stdin = console_tx.clone();
     tokio::spawn(async move {
@@ -1362,6 +1368,76 @@ async fn main() {
         None
     };
     drop(webui_task); // detach — la tâche vit tant que le process tourne
+
+    // ── Query Gamespy v4 (UDP) ──
+    // query_protocol::start lance un thread bloquant qui lit `query_snapshot`
+    // (std::sync, accessible depuis un thread non-tokio). La main loop met à
+    // jour ce snapshot quand le ServerSnapshot webui change.
+    let query_snapshot =
+        std::sync::Arc::new(std::sync::RwLock::new(crate::query_protocol::QueryStatus {
+            motd: config.server.motd.clone(),
+            gametype: "SMP".to_string(),
+            map: config.world.name.clone(),
+            num_players: 0,
+            max_players: config.server.max_players,
+            host_port: config.server.port,
+            host_ip: "0.0.0.0".to_string(),
+            player_names: Vec::new(),
+            plugins: String::new(),
+            version: "1.26.20".to_string(),
+        }));
+
+    if config.query.enabled {
+        let bind = format!("{}:{}", config.query.address, config.query.port);
+        let snap_clone = query_snapshot.clone();
+        let status_fn = move || {
+            snap_clone.read().map(|s| s.clone()).unwrap_or_else(|_| {
+                crate::query_protocol::QueryStatus {
+                    motd: String::new(),
+                    gametype: "SMP".into(),
+                    map: String::new(),
+                    num_players: 0,
+                    max_players: 0,
+                    host_port: 0,
+                    host_ip: String::new(),
+                    player_names: Vec::new(),
+                    plugins: String::new(),
+                    version: String::new(),
+                }
+            })
+        };
+        match crate::query_protocol::start(&bind, status_fn) {
+            Ok(()) => info!("[query] listening on {}", bind),
+            Err(e) => warn!("[query] failed to bind {}: {e}", bind),
+        }
+    }
+
+    // ── RCON Source-format (TCP) ──
+    // rcon::start tourne dans des threads std (TcpListener bloquant) ; on bridge
+    // le std::mpsc::Receiver vers un tokio::sync::mpsc pour pouvoir l'attendre
+    // dans le tokio::select! de la main loop.
+    let mut rcon_rx: Option<tokio::sync::mpsc::UnboundedReceiver<crate::rcon::RconCommand>> = None;
+    if config.rcon.enabled {
+        if config.rcon.password.is_empty() {
+            warn!("[rcon] enabled=true mais password vide — RCON désactivé pour sécurité");
+        } else {
+            let bind = format!("{}:{}", config.rcon.address, config.rcon.port);
+            match crate::rcon::start(&bind, config.rcon.password.clone()) {
+                Ok(std_rx) => {
+                    let (tokio_tx, tokio_rx) = tokio::sync::mpsc::unbounded_channel();
+                    std::thread::spawn(move || {
+                        while let Ok(cmd) = std_rx.recv() {
+                            if tokio_tx.send(cmd).is_err() {
+                                break;
+                            }
+                        }
+                    });
+                    rcon_rx = Some(tokio_rx);
+                }
+                Err(e) => warn!("[rcon] failed to bind {}: {e}", bind),
+            }
+        }
+    }
 
     loop {
         crate::watchdog::checkpoint(0); // loop-top
@@ -1521,6 +1597,11 @@ async fn main() {
                         .persistent
                         .default_gamemode
                         .unwrap_or_else(|| config.gameplay.gamemode_id());
+                    // Snapshot Query : reflète num_players + player_names temps réel.
+                    if let Ok(mut qs) = query_snapshot.write() {
+                        qs.num_players = players_snap.len() as u32;
+                        qs.player_names = players_snap.iter().map(|p| p.name.clone()).collect();
+                    }
                     if let Ok(mut snap) = webui_snapshot.try_write() {
                         snap.tps = current_tps;
                         snap.total_ticks = webui_tps_tracker.total_ticks();
@@ -1836,53 +1917,27 @@ async fn main() {
                         movement_updates: Vec::new(),
                     }
                 };
-                for (move_bytes, motion_bytes) in item_tick_result.movement_updates.drain(..) {
-                    for (addr, conn) in connections.iter_mut() {
-                        if conn.is_in_game() {
-                            let move_pkt = conn.encode_compressed_packet(
-                                packet_id::MOVE_ACTOR_ABSOLUTE,
-                                &move_bytes,
-                            );
-                            let move_prepared = conn.prepare_for_send(move_pkt);
-                            raknet.send_to_session(
-                                addr,
-                                move_prepared,
-                                Reliability::ReliableOrdered,
-                                false,
-                            );
-
-                            let motion_pkt = conn.encode_compressed_packet(
-                                packet_id::SET_ACTOR_MOTION,
-                                &motion_bytes,
-                            );
-                            let motion_prepared = conn.prepare_for_send(motion_pkt);
-                            raknet.send_to_session(
-                                addr,
-                                motion_prepared,
-                                Reliability::ReliableOrdered,
-                                false,
-                            );
-                        }
-                    }
+                for update in item_tick_result.movement_updates.drain(..) {
+                    broadcast_entity_movement_culled(
+                        &mut connections,
+                        &mut raknet,
+                        &update.add_packet,
+                        packet_id::ADD_ITEM_ACTOR,
+                        &update.move_packet,
+                        &update.motion_packet,
+                        update.entity_unique_id,
+                        update.entity_position,
+                    );
                 }
 
                 for entity in item_tick_result.despawned {
                     let remove_bytes = entity.remove_packet();
-                    for (addr, conn) in connections.iter_mut() {
-                        if conn.is_in_game() {
-                            let pkt = conn.encode_compressed_packet(
-                                packet_id::REMOVE_ACTOR,
-                                &remove_bytes,
-                            );
-                            let prepared = conn.prepare_for_send(pkt);
-                            raknet.send_to_session(
-                                addr,
-                                prepared,
-                                Reliability::ReliableOrdered,
-                                true,
-                            );
-                        }
-                    }
+                    broadcast_entity_remove_culled(
+                        &mut connections,
+                        &mut raknet,
+                        entity.entity_unique_id,
+                        &remove_bytes,
+                    );
                 }
 
                 for pickup in item_tick_result.pickup_candidates {
@@ -1947,32 +2002,40 @@ async fn main() {
                     .encode();
                     let remove_bytes = removed_entity.remove_packet();
 
+                    // Culling : seuls les joueurs qui voyaient l'item entity
+                    // doivent recevoir TakeItemActor + Remove. Pour les autres,
+                    // l'entity_id leur est inconnu, donc le client ignorerait
+                    // ces paquets (ou pire, génèrerait un warning).
                     for (addr, conn) in connections.iter_mut() {
-                        if conn.is_in_game() {
-                            let take_pkt = conn.encode_compressed_packet(
-                                packet_id::TAKE_ITEM_ACTOR,
-                                &take_bytes,
-                            );
-                            let take_prepared = conn.prepare_for_send(take_pkt);
-                            raknet.send_to_session(
-                                addr,
-                                take_prepared,
-                                Reliability::ReliableOrdered,
-                                true,
-                            );
-
-                            let remove_pkt = conn.encode_compressed_packet(
-                                packet_id::REMOVE_ACTOR,
-                                &remove_bytes,
-                            );
-                            let remove_prepared = conn.prepare_for_send(remove_pkt);
-                            raknet.send_to_session(
-                                addr,
-                                remove_prepared,
-                                Reliability::ReliableOrdered,
-                                true,
-                            );
+                        if !conn.is_in_game() {
+                            continue;
                         }
+                        if !conn.visible_entities.remove(&removed_entity.entity_unique_id) {
+                            continue;
+                        }
+                        let take_pkt = conn.encode_compressed_packet(
+                            packet_id::TAKE_ITEM_ACTOR,
+                            &take_bytes,
+                        );
+                        let take_prepared = conn.prepare_for_send(take_pkt);
+                        raknet.send_to_session(
+                            addr,
+                            take_prepared,
+                            Reliability::ReliableOrdered,
+                            true,
+                        );
+
+                        let remove_pkt = conn.encode_compressed_packet(
+                            packet_id::REMOVE_ACTOR,
+                            &remove_bytes,
+                        );
+                        let remove_prepared = conn.prepare_for_send(remove_pkt);
+                        raknet.send_to_session(
+                            addr,
+                            remove_prepared,
+                            Reliability::ReliableOrdered,
+                            true,
+                        );
                     }
                 }
 
@@ -1989,34 +2052,28 @@ async fn main() {
                 };
                 if let Some(tick_result) = mob_tick_result {
                     for update in tick_result.movement_updates {
-                        for (addr, conn) in connections.iter_mut() {
-                            if conn.is_in_game() {
-                                let move_pkt = conn.encode_compressed_packet(
-                                    packet_id::MOVE_ACTOR_ABSOLUTE,
-                                    &update.move_packet,
-                                );
-                                let move_prepared = conn.prepare_for_send(move_pkt);
-                                raknet.send_to_session(
-                                    addr,
-                                    move_prepared,
-                                    Reliability::ReliableOrdered,
-                                    false,
-                                );
-
-                                let motion_pkt = conn.encode_compressed_packet(
-                                    packet_id::SET_ACTOR_MOTION,
-                                    &update.motion_packet,
-                                );
-                                let motion_prepared = conn.prepare_for_send(motion_pkt);
-                                raknet.send_to_session(
-                                    addr,
-                                    motion_prepared,
-                                    Reliability::ReliableOrdered,
-                                    false,
-                                );
-                            }
-                        }
+                        broadcast_entity_movement_culled(
+                            &mut connections,
+                            &mut raknet,
+                            &update.add_packet,
+                            packet_id::ADD_ACTOR,
+                            &update.move_packet,
+                            &update.motion_packet,
+                            update.entity_unique_id,
+                            update.entity_position,
+                        );
                     }
+                }
+
+                entity_visibility_scan_counter += 1;
+                if entity_visibility_scan_counter >= 20 {
+                    entity_visibility_scan_counter = 0;
+                    entity_visibility_scan(
+                        &mut connections,
+                        &mut raknet,
+                        &item_entities,
+                        &mob_entities,
+                    );
                 }
 
                 crate::watchdog::checkpoint(11); // autosave
@@ -2078,6 +2135,35 @@ async fn main() {
                     }
                 }
             }
+
+            rcon_cmd = async {
+                match rcon_rx.as_mut() {
+                    Some(rx) => rx.recv().await,
+                    None => std::future::pending().await,
+                }
+            }, if rcon_rx.is_some() => {
+                if let Some(cmd) = rcon_cmd {
+                    info!("[rcon] {} -> {}", cmd.addr, cmd.command);
+                    let output = dispatch_command_line(
+                        CommandSource::Rcon,
+                        &cmd.command,
+                        &command_system,
+                        &mut connections,
+                        &mut peers,
+                        &mut raknet,
+                        &mut registry,
+                        &mut item_entities,
+                        &mut mob_entities,
+                        &mut world_state,
+                        &mut server_state,
+                        &plugin_manager,
+                        &chunk_cache,
+                        &mut should_stop,
+                    );
+                    let response = output.join("\n");
+                    let _ = cmd.response_tx.send(response);
+                }
+            }
         }
     }
 }
@@ -2103,19 +2189,222 @@ fn spawn_and_broadcast_item_entity(
         hex_preview(&add_item_bytes, 96)
     );
 
+    let entity_unique_id = entity.entity_unique_id;
+    let entity_position = entity.position;
     for (other_addr, other_conn) in connections.iter_mut() {
-        if other_conn.is_in_game() {
-            let pkt =
-                other_conn.encode_compressed_packet(packet_id::ADD_ITEM_ACTOR, &add_item_bytes);
-            info!(
-                "[{}] Sending ADD_ITEM_ACTOR to {}: compressed_len={} body_len={}",
-                log_context,
-                other_addr,
-                pkt.len(),
-                add_item_bytes.len()
+        if !other_conn.is_in_game() {
+            continue;
+        }
+        // Culling : on n'envoie l'AddItemActor qu'aux joueurs qui ont l'entité
+        // dans leur rayon de vue. Si hors vue, on ne marque rien — un scan
+        // périodique fera entrer l'entité dans la vue plus tard si le joueur
+        // s'en approche.
+        if !entity_culling::is_within_view_for(other_conn, entity_position) {
+            continue;
+        }
+        other_conn.visible_entities.insert(entity_unique_id);
+        let pkt = other_conn.encode_compressed_packet(packet_id::ADD_ITEM_ACTOR, &add_item_bytes);
+        info!(
+            "[{}] Sending ADD_ITEM_ACTOR to {}: compressed_len={} body_len={}",
+            log_context,
+            other_addr,
+            pkt.len(),
+            add_item_bytes.len()
+        );
+        let prepared = other_conn.prepare_for_send(pkt);
+        raknet.send_to_session(other_addr, prepared, Reliability::ReliableOrdered, true);
+    }
+}
+
+/// Broadcast Move+Motion d'une entité aux joueurs in_game, avec culling :
+///
+/// - StillHidden : skip
+/// - JustEntered : envoie Add (avec `add_packet_id`) puis Move+Motion
+/// - StillVisible : envoie Move+Motion
+/// - JustLeft : envoie RemoveActor (entity sortie du rayon de vue)
+///
+/// Shared batch encoding : les 3 paquets potentiels (Add/Move/Motion) sont
+/// encodés UNE SEULE FOIS via `encode_shared_batch` avec Zlib, puis clonés
+/// par recipient avant `prepare_for_send` (qui applique l'encryption par-conn).
+/// Économise N appels à zlib pour un broadcast à N joueurs.
+#[allow(clippy::too_many_arguments)]
+fn broadcast_entity_movement_culled(
+    connections: &mut HashMap<SocketAddr, Connection>,
+    raknet: &mut RakNetServer,
+    add_packet: &[u8],
+    add_packet_id: u32,
+    move_packet: &[u8],
+    motion_packet: &[u8],
+    entity_unique_id: i64,
+    entity_position: [f32; 3],
+) {
+    let shared_add = crate::connection::encode_shared_batch(
+        add_packet_id,
+        add_packet,
+        mc_rs_proto::batch::CompressionAlgorithm::Zlib,
+    );
+    let shared_move = crate::connection::encode_shared_batch(
+        packet_id::MOVE_ACTOR_ABSOLUTE,
+        move_packet,
+        mc_rs_proto::batch::CompressionAlgorithm::Zlib,
+    );
+    let shared_motion = crate::connection::encode_shared_batch(
+        packet_id::SET_ACTOR_MOTION,
+        motion_packet,
+        mc_rs_proto::batch::CompressionAlgorithm::Zlib,
+    );
+    // Remove batch encodé en lazy : cas JustLeft est rare.
+    let mut shared_remove: Option<Vec<u8>> = None;
+
+    for (addr, conn) in connections.iter_mut() {
+        if !conn.is_in_game() {
+            continue;
+        }
+        let trans = entity_culling::classify_transition(
+            &mut conn.visible_entities,
+            entity_unique_id,
+            entity_position,
+            conn.position,
+            conn.view_distance,
+        );
+        match trans {
+            entity_culling::VisibilityTransition::StillHidden => continue,
+            entity_culling::VisibilityTransition::JustLeft => {
+                let remove_batch = shared_remove.get_or_insert_with(|| {
+                    let remove_bytes =
+                        mc_rs_proto::packets::player::RemoveEntity { entity_unique_id }.encode();
+                    crate::connection::encode_shared_batch(
+                        packet_id::REMOVE_ACTOR,
+                        &remove_bytes,
+                        mc_rs_proto::batch::CompressionAlgorithm::Zlib,
+                    )
+                });
+                let prepared = conn.prepare_for_send(remove_batch.clone());
+                raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, true);
+                continue;
+            }
+            entity_culling::VisibilityTransition::JustEntered => {
+                let prepared = conn.prepare_for_send(shared_add.clone());
+                raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, true);
+            }
+            entity_culling::VisibilityTransition::StillVisible => {}
+        }
+        let move_prepared = conn.prepare_for_send(shared_move.clone());
+        raknet.send_to_session(addr, move_prepared, Reliability::ReliableOrdered, false);
+        let motion_prepared = conn.prepare_for_send(shared_motion.clone());
+        raknet.send_to_session(addr, motion_prepared, Reliability::ReliableOrdered, false);
+    }
+}
+
+/// Broadcast RemoveActor à tous les joueurs qui voyaient l'entité. Les autres
+/// n'ont jamais reçu d'Add, donc le Remove serait un no-op côté client.
+///
+/// Shared batch encoding : encode une seule fois avec Zlib, clone par recipient.
+fn broadcast_entity_remove_culled(
+    connections: &mut HashMap<SocketAddr, Connection>,
+    raknet: &mut RakNetServer,
+    entity_unique_id: i64,
+    remove_bytes: &[u8],
+) {
+    let shared = crate::connection::encode_shared_batch(
+        packet_id::REMOVE_ACTOR,
+        remove_bytes,
+        mc_rs_proto::batch::CompressionAlgorithm::Zlib,
+    );
+    for (addr, conn) in connections.iter_mut() {
+        if !conn.is_in_game() {
+            continue;
+        }
+        if !conn.visible_entities.remove(&entity_unique_id) {
+            continue;
+        }
+        let prepared = conn.prepare_for_send(shared.clone());
+        raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, true);
+    }
+}
+
+/// Scan périodique de visibilité d'entités. Capture les transitions
+/// entrée/sortie de vue pour les entités stationnaires quand un joueur se
+/// déplace — les entités qui bougent sont déjà gérées par leur MovementUpdate.
+///
+/// Pour chaque (joueur, entité), `classify_transition` met à jour
+/// `visible_entities` et indique si on doit envoyer Add (JustEntered) ou
+/// Remove (JustLeft). Les autres cas (StillHidden, StillVisible) ne génèrent
+/// aucun trafic — c'est tout l'intérêt du culling.
+fn entity_visibility_scan(
+    connections: &mut HashMap<SocketAddr, Connection>,
+    raknet: &mut RakNetServer,
+    item_entities: &crate::item_entities::ItemEntityManager,
+    mob_entities: &crate::mob_entities::MobEntityManager,
+) {
+    // Snapshot des (id, position, shared_add_batch). Le shared_add_batch est
+    // le résultat de `encode_shared_batch` — pré-compressé une seule fois pour
+    // tous les joueurs qui le recevront via prepare_for_send (qui n'applique
+    // que l'encryption par-conn).
+    let item_snapshot: Vec<(i64, [f32; 3], Vec<u8>)> = item_entities
+        .all()
+        .map(|e| {
+            let add = e.add_actor_packet();
+            let shared = crate::connection::encode_shared_batch(
+                packet_id::ADD_ITEM_ACTOR,
+                &add,
+                mc_rs_proto::batch::CompressionAlgorithm::Zlib,
             );
-            let prepared = other_conn.prepare_for_send(pkt);
-            raknet.send_to_session(other_addr, prepared, Reliability::ReliableOrdered, true);
+            (e.entity_unique_id, e.position, shared)
+        })
+        .collect();
+    let mob_snapshot: Vec<(i64, [f32; 3], Vec<u8>)> = mob_entities
+        .all()
+        .map(|e| {
+            let add = e.add_actor_packet();
+            let shared = crate::connection::encode_shared_batch(
+                packet_id::ADD_ACTOR,
+                &add,
+                mc_rs_proto::batch::CompressionAlgorithm::Zlib,
+            );
+            (e.base.entity_unique_id, e.base.position, shared)
+        })
+        .collect();
+
+    for (addr, conn) in connections.iter_mut() {
+        if !conn.is_in_game() {
+            continue;
+        }
+        scan_for_player(raknet, addr, conn, &item_snapshot);
+        scan_for_player(raknet, addr, conn, &mob_snapshot);
+    }
+}
+
+fn scan_for_player(
+    raknet: &mut RakNetServer,
+    addr: &SocketAddr,
+    conn: &mut Connection,
+    entities: &[(i64, [f32; 3], Vec<u8>)],
+) {
+    for (entity_id, entity_pos, shared_add) in entities {
+        let trans = entity_culling::classify_transition(
+            &mut conn.visible_entities,
+            *entity_id,
+            *entity_pos,
+            conn.position,
+            conn.view_distance,
+        );
+        match trans {
+            entity_culling::VisibilityTransition::StillHidden
+            | entity_culling::VisibilityTransition::StillVisible => continue,
+            entity_culling::VisibilityTransition::JustEntered => {
+                let prepared = conn.prepare_for_send(shared_add.clone());
+                raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, true);
+            }
+            entity_culling::VisibilityTransition::JustLeft => {
+                let remove_bytes = mc_rs_proto::packets::player::RemoveEntity {
+                    entity_unique_id: *entity_id,
+                }
+                .encode();
+                let pkt = conn.encode_compressed_packet(packet_id::REMOVE_ACTOR, &remove_bytes);
+                let prepared = conn.prepare_for_send(pkt);
+                raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, true);
+            }
         }
     }
 }
@@ -2267,6 +2556,10 @@ fn process_peer_events(
                         }
                         .encode();
 
+                        let player_skin = connections
+                            .get(&addr)
+                            .and_then(|c| c.skin.as_ref().map(|s| s.to_serialized(&xuid)))
+                            .unwrap_or_default();
                         let player_list_add = PlayerList {
                             action: 0,
                             entries: vec![PlayerListAdd {
@@ -2276,6 +2569,7 @@ fn process_peer_events(
                                 xuid: xuid.clone(),
                                 platform_chat_id: String::new(),
                                 build_platform: 0,
+                                skin: player_skin,
                                 is_teacher: false,
                                 is_host: false,
                                 is_subclient: false,
@@ -2335,8 +2629,17 @@ fn process_peer_events(
                             ev_mgr.call(&mut ev);
                         }
 
+                        // Au join : envoyer Add seulement pour les entités
+                        // dans le rayon de vue du nouveau joueur. Le scan
+                        // périodique gérera l'entrée des autres entités si le
+                        // joueur se déplace.
                         if let Some(joined_conn) = connections.get_mut(&addr) {
                             for entity in item_entities.all() {
+                                if !entity_culling::is_within_view_for(joined_conn, entity.position)
+                                {
+                                    continue;
+                                }
+                                joined_conn.visible_entities.insert(entity.entity_unique_id);
                                 let pkt = joined_conn.encode_compressed_packet(
                                     packet_id::ADD_ITEM_ACTOR,
                                     &entity.add_actor_packet(),
@@ -2350,6 +2653,15 @@ fn process_peer_events(
                                 );
                             }
                             for entity in mob_entities.all() {
+                                if !entity_culling::is_within_view_for(
+                                    joined_conn,
+                                    entity.base.position,
+                                ) {
+                                    continue;
+                                }
+                                joined_conn
+                                    .visible_entities
+                                    .insert(entity.base.entity_unique_id);
                                 let pkt = joined_conn.encode_compressed_packet(
                                     packet_id::ADD_ACTOR,
                                     &entity.add_actor_packet(),
@@ -2382,20 +2694,72 @@ fn process_peer_events(
                         command_runtime.sync_available_commands_for_all();
                     }
 
-                    // Broadcast packets to all OTHER connections
+                    // Broadcast packets to all OTHER connections.
+                    // Multi-packet batching : tous les broadcasts du tick d'un même
+                    // joueur source sont coalescés en UN seul batch par algo, puis
+                    // prepare_for_send (encryption per-player) à chaque destinataire.
+                    // Pré-calcule les batches Zlib/Snappy/None à la demande.
+                    // Culling par distance : si le joueur source est hors du rayon de
+                    // vue d'un destinataire, on saute tous les broadcasts de ce tick
+                    // (move/set_actor_data/block break sont liés à sa position).
+                    let source_pos = connections.get(&addr).map(|c| c.position);
                     if !broadcasts.is_empty() {
-                        for broadcast in &broadcasts {
-                            for (other_addr, other_conn) in connections.iter_mut() {
-                                if *other_addr != addr {
-                                    let prepared = other_conn.prepare_for_send(broadcast.clone());
-                                    raknet.send_to_session(
-                                        other_addr,
-                                        prepared,
-                                        Reliability::ReliableOrdered,
-                                        true,
-                                    );
+                        let mut batch_zlib: Option<Vec<u8>> = None;
+                        let mut batch_snappy: Option<Vec<u8>> = None;
+                        let mut batch_none: Option<Vec<u8>> = None;
+                        let build_batch = |algo: mc_rs_proto::batch::CompressionAlgorithm| {
+                            let pkts: Vec<Vec<u8>> = broadcasts
+                                .iter()
+                                .map(|(id, payload)| {
+                                    mc_rs_proto::codec::encode_packet(*id, payload)
+                                })
+                                .collect();
+                            let batch_payload = mc_rs_proto::batch::encode_batch(&pkts, algo, 1);
+                            let mut result = Vec::with_capacity(1 + batch_payload.len());
+                            result.push(0xFE);
+                            result.extend_from_slice(&batch_payload);
+                            result
+                        };
+                        for (other_addr, other_conn) in connections.iter_mut() {
+                            if *other_addr == addr {
+                                continue;
+                            }
+                            if let Some(spos) = source_pos {
+                                let radius = entity_culling::entity_view_radius_blocks(
+                                    other_conn.view_distance,
+                                );
+                                if entity_culling::dist_sq_xz(spos, other_conn.position)
+                                    > radius * radius
+                                {
+                                    continue;
                                 }
                             }
+                            let shared = match other_conn.compression_algo {
+                                mc_rs_proto::batch::CompressionAlgorithm::Zlib => batch_zlib
+                                    .get_or_insert_with(|| {
+                                        build_batch(mc_rs_proto::batch::CompressionAlgorithm::Zlib)
+                                    })
+                                    .clone(),
+                                mc_rs_proto::batch::CompressionAlgorithm::Snappy => batch_snappy
+                                    .get_or_insert_with(|| {
+                                        build_batch(
+                                            mc_rs_proto::batch::CompressionAlgorithm::Snappy,
+                                        )
+                                    })
+                                    .clone(),
+                                mc_rs_proto::batch::CompressionAlgorithm::None => batch_none
+                                    .get_or_insert_with(|| {
+                                        build_batch(mc_rs_proto::batch::CompressionAlgorithm::None)
+                                    })
+                                    .clone(),
+                            };
+                            let prepared = other_conn.prepare_for_send(shared);
+                            raknet.send_to_session(
+                                other_addr,
+                                prepared,
+                                Reliability::ReliableOrdered,
+                                true,
+                            );
                         }
                     }
 
@@ -2629,40 +2993,38 @@ fn process_peer_events(
                         if let Some(result) =
                             mob_entities.apply_attack(attack.target_runtime_id, 4.0)
                         {
+                            let target_unique_id = attack.target_runtime_id as i64;
                             if let Some(update_bytes) = result.update_attributes_packet {
+                                // Culling : un joueur qui ne voit pas le mob
+                                // n'a pas besoin de ses UpdateAttributes.
                                 for (other_addr, other_conn) in connections.iter_mut() {
-                                    if other_conn.is_in_game() {
-                                        let pkt = other_conn.encode_compressed_packet(
-                                            packet_id::UPDATE_ATTRIBUTES,
-                                            &update_bytes,
-                                        );
-                                        let prepared = other_conn.prepare_for_send(pkt);
-                                        raknet.send_to_session(
-                                            other_addr,
-                                            prepared,
-                                            Reliability::ReliableOrdered,
-                                            true,
-                                        );
+                                    if !other_conn.is_in_game() {
+                                        continue;
                                     }
+                                    if !other_conn.visible_entities.contains(&target_unique_id) {
+                                        continue;
+                                    }
+                                    let pkt = other_conn.encode_compressed_packet(
+                                        packet_id::UPDATE_ATTRIBUTES,
+                                        &update_bytes,
+                                    );
+                                    let prepared = other_conn.prepare_for_send(pkt);
+                                    raknet.send_to_session(
+                                        other_addr,
+                                        prepared,
+                                        Reliability::ReliableOrdered,
+                                        true,
+                                    );
                                 }
                             }
 
                             if let Some(remove_bytes) = result.remove_packet {
-                                for (other_addr, other_conn) in connections.iter_mut() {
-                                    if other_conn.is_in_game() {
-                                        let pkt = other_conn.encode_compressed_packet(
-                                            packet_id::REMOVE_ACTOR,
-                                            &remove_bytes,
-                                        );
-                                        let prepared = other_conn.prepare_for_send(pkt);
-                                        raknet.send_to_session(
-                                            other_addr,
-                                            prepared,
-                                            Reliability::ReliableOrdered,
-                                            true,
-                                        );
-                                    }
-                                }
+                                broadcast_entity_remove_culled(
+                                    connections,
+                                    raknet,
+                                    target_unique_id,
+                                    &remove_bytes,
+                                );
                             }
 
                             if let Some(death_position) = result.death_position {
@@ -2730,6 +3092,7 @@ fn process_peer_events(
                                 xuid: String::new(),
                                 platform_chat_id: String::new(),
                                 build_platform: 0,
+                                skin: Default::default(),
                                 is_teacher: false,
                                 is_host: false,
                                 is_subclient: false,

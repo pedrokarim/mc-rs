@@ -437,11 +437,8 @@ impl Connection {
                 };
                 let bcast =
                     MobEquipment::encode_item(self.entity_runtime_id, &wrapper, hotbar_slot);
-                let bcast_pkt = self.encode_compressed_packet(
-                    mc_rs_proto::packets::packet_id::MOB_EQUIPMENT,
-                    &bcast,
-                );
-                self.broadcasts.push(bcast_pkt);
+                self.broadcasts
+                    .push((mc_rs_proto::packets::packet_id::MOB_EQUIPMENT, bcast));
             }
         }
 

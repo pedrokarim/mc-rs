@@ -954,6 +954,61 @@ impl SetTitle {
 
 // ── PlayerList (S→C, 0x3F) ──
 
+/// Skin sérialisé wire-format Bedrock (protocol 944+). Port partiel de PMMP
+/// `SerializedSkin.php` — couvre les champs minimum nécessaires pour qu'un
+/// client affiche correctement le joueur. Si `Default` est utilisé, le client
+/// voit un Steve transparent (texture 64x64 RGBA tout-à-zéro).
+#[derive(Debug, Clone)]
+pub struct SerializedSkin {
+    pub skin_id: String,
+    pub play_fab_id: String,
+    pub skin_resource_patch: String,
+    pub skin_width: u32,
+    pub skin_height: u32,
+    pub skin_data: Vec<u8>,
+    pub cape_width: u32,
+    pub cape_height: u32,
+    pub cape_data: Vec<u8>,
+    pub geometry_data: String,
+    pub geometry_data_engine_version: String,
+    pub animation_data: String,
+    pub cape_id: String,
+    pub full_skin_id: String,
+    pub arm_size: String,
+    pub skin_color: String,
+    pub premium: bool,
+    pub persona: bool,
+    pub persona_cape_on_classic: bool,
+    pub primary_user: bool,
+}
+
+impl Default for SerializedSkin {
+    fn default() -> Self {
+        Self {
+            skin_id: "Custom".to_string(),
+            play_fab_id: String::new(),
+            skin_resource_patch: "geometry.humanoid.custom".to_string(),
+            skin_width: 64,
+            skin_height: 64,
+            skin_data: vec![0u8; 64 * 64 * 4],
+            cape_width: 0,
+            cape_height: 0,
+            cape_data: Vec::new(),
+            geometry_data: String::new(),
+            geometry_data_engine_version: String::new(),
+            animation_data: String::new(),
+            cape_id: String::new(),
+            full_skin_id: String::new(),
+            arm_size: String::new(),
+            skin_color: String::new(),
+            premium: false,
+            persona: false,
+            persona_cape_on_classic: false,
+            primary_user: false,
+        }
+    }
+}
+
 pub struct PlayerListAdd {
     pub uuid: [u8; 16],
     pub entity_id: i64, // varint64 (actor unique ID)
@@ -961,6 +1016,7 @@ pub struct PlayerListAdd {
     pub xuid: String,
     pub platform_chat_id: String,
     pub build_platform: i32, // i32_le
+    pub skin: SerializedSkin,
     pub is_teacher: bool,
     pub is_host: bool,
     pub is_subclient: bool,
@@ -986,8 +1042,7 @@ impl PlayerList {
                 w.write_string(&entry.xuid);
                 w.write_string(&entry.platform_chat_id);
                 w.write_i32_le(entry.build_platform);
-                // Skin data — minimal empty skin
-                write_empty_skin(&mut w);
+                write_serialized_skin(&mut w, &entry.skin);
                 w.write_bool(entry.is_teacher);
                 w.write_bool(entry.is_host);
                 w.write_bool(entry.is_subclient);
@@ -1010,44 +1065,43 @@ impl PlayerList {
     }
 }
 
-fn write_empty_skin(w: &mut ProtoWriter) {
-    w.write_string("Custom"); // skin_id
-    w.write_string(""); // play_fab_id
-    w.write_string("geometry.humanoid.custom"); // skin_resource_patch
-                                                // Skin image data
-    w.write_u32_le(64); // width
-    w.write_u32_le(64); // height
-    let skin_data = vec![0u8; 64 * 64 * 4]; // RGBA
-    w.write_byte_array(&skin_data);
+fn write_serialized_skin(w: &mut ProtoWriter, skin: &SerializedSkin) {
+    w.write_string(&skin.skin_id);
+    w.write_string(&skin.play_fab_id);
+    w.write_string(&skin.skin_resource_patch);
+    // Skin image data
+    w.write_u32_le(skin.skin_width);
+    w.write_u32_le(skin.skin_height);
+    w.write_byte_array(&skin.skin_data);
 
-    // Animations — empty
+    // Animations — empty (extension future : itérer skin.animations)
     w.write_u32_le(0);
 
-    // Cape image — empty
-    w.write_u32_le(0); // width
-    w.write_u32_le(0); // height
-    w.write_byte_array(&[]); // data
+    // Cape image
+    w.write_u32_le(skin.cape_width);
+    w.write_u32_le(skin.cape_height);
+    w.write_byte_array(&skin.cape_data);
 
-    w.write_string(""); // geometry_data
-    w.write_string(""); // geometry_data_engine_version
-    w.write_string(""); // animation_data
+    w.write_string(&skin.geometry_data);
+    w.write_string(&skin.geometry_data_engine_version);
+    w.write_string(&skin.animation_data);
 
-    w.write_string(""); // cape_id
-    w.write_string(""); // full_skin_id
-    w.write_string(""); // arm_size
-    w.write_string(""); // skin_color
+    w.write_string(&skin.cape_id);
+    w.write_string(&skin.full_skin_id);
+    w.write_string(&skin.arm_size);
+    w.write_string(&skin.skin_color);
 
-    // Persona pieces — empty
+    // Persona pieces — empty (extension future)
     w.write_u32_le(0);
     // Persona tint colors — empty
     w.write_u32_le(0);
 
-    w.write_bool(false); // premium_skin
-    w.write_bool(false); // persona_skin
-    w.write_bool(false); // persona_cape_on_classic
-    w.write_bool(false); // primary_user
+    w.write_bool(skin.premium);
+    w.write_bool(skin.persona);
+    w.write_bool(skin.persona_cape_on_classic);
+    w.write_bool(skin.primary_user);
 
-    w.write_bool(false); // override_appearance (new)
+    w.write_bool(false); // override_appearance (new in 1.26.x — false par défaut)
 }
 
 // ── AddPlayer (S→C, 0x0C) ──

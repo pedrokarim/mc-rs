@@ -46,8 +46,7 @@ impl Connection {
 
         // Broadcast chat to all players (including self)
         let chat = Text::chat(&player_name, &chat_message, &xuid);
-        self.broadcasts
-            .push(self.encode_compressed_packet(packet_id::TEXT, &chat));
+        self.broadcasts.push((packet_id::TEXT, chat));
 
         Vec::new()
     }
@@ -146,8 +145,7 @@ impl Connection {
                 entity_unique_id: self.entity_runtime_id as i64,
             }
             .encode();
-            self.broadcasts
-                .push(self.encode_compressed_packet(packet_id::REMOVE_ACTOR, &remove));
+            self.broadcasts.push((packet_id::REMOVE_ACTOR, remove));
         } else if mode != 3 && old_mode == 3 {
             // Leaving spectator -> respawn to others
             let uuid = self.uuid.map(|u| *u.as_bytes()).unwrap_or([0u8; 16]);
@@ -167,8 +165,7 @@ impl Connection {
                 command_permission: 0,
             }
             .encode();
-            self.broadcasts
-                .push(self.encode_compressed_packet(packet_id::ADD_PLAYER, &add));
+            self.broadcasts.push((packet_id::ADD_PLAYER, add));
         }
 
         info!(

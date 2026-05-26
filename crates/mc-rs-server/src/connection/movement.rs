@@ -141,7 +141,7 @@ impl Connection {
             tick: self.tick,
         };
         self.broadcasts
-            .push(self.encode_compressed_packet(packet_id::MOVE_PLAYER, &move_pkt.encode()));
+            .push((packet_id::MOVE_PLAYER, move_pkt.encode()));
 
         // Check if player moved to a new chunk -- queue chunks for tick-based sending
         let mut responses = Vec::new();
@@ -223,10 +223,11 @@ impl Connection {
                             position: [prev_pos[0] as f32, prev_pos[1] as f32, prev_pos[2] as f32],
                             event_data: 0,
                         };
-                        let prev_bytes = self
-                            .encode_compressed_packet(packet_id::LEVEL_EVENT, &prev_event.encode());
-                        responses.push(prev_bytes.clone());
-                        self.broadcasts.push(prev_bytes);
+                        let prev_payload = prev_event.encode();
+                        responses.push(
+                            self.encode_compressed_packet(packet_id::LEVEL_EVENT, &prev_payload),
+                        );
+                        self.broadcasts.push((packet_id::LEVEL_EVENT, prev_payload));
                     }
                     self.last_block_attacked = Some(action.position);
 
@@ -260,10 +261,12 @@ impl Connection {
                         position: block_pos,
                         event_data: (65535.0 * break_speed) as i32,
                     };
-                    let event_bytes =
-                        self.encode_compressed_packet(packet_id::LEVEL_EVENT, &event.encode());
-                    responses.push(event_bytes.clone());
-                    self.broadcasts.push(event_bytes);
+                    let event_payload = event.encode();
+                    responses.push(
+                        self.encode_compressed_packet(packet_id::LEVEL_EVENT, &event_payload),
+                    );
+                    self.broadcasts
+                        .push((packet_id::LEVEL_EVENT, event_payload));
                 }
 
                 // ABORT_BREAK (1) or STOP_BREAK (2)
@@ -274,10 +277,12 @@ impl Connection {
                         position: block_pos,
                         event_data: 0,
                     };
-                    let event_bytes =
-                        self.encode_compressed_packet(packet_id::LEVEL_EVENT, &event.encode());
-                    responses.push(event_bytes.clone());
-                    self.broadcasts.push(event_bytes);
+                    let event_payload = event.encode();
+                    responses.push(
+                        self.encode_compressed_packet(packet_id::LEVEL_EVENT, &event_payload),
+                    );
+                    self.broadcasts
+                        .push((packet_id::LEVEL_EVENT, event_payload));
                 }
 
                 // PREDICT_DESTROY_BLOCK (26)
@@ -292,10 +297,10 @@ impl Connection {
                         position: block_pos,
                         event_data: 0,
                     };
-                    let stop_bytes =
-                        self.encode_compressed_packet(packet_id::LEVEL_EVENT, &stop_event.encode());
-                    responses.push(stop_bytes.clone());
-                    self.broadcasts.push(stop_bytes);
+                    let stop_payload = stop_event.encode();
+                    responses
+                        .push(self.encode_compressed_packet(packet_id::LEVEL_EVENT, &stop_payload));
+                    self.broadcasts.push((packet_id::LEVEL_EVENT, stop_payload));
 
                     // Get the old block ID and set to air
                     let old_block_id = if let Ok(mut cache) = self.chunk_cache.lock() {
@@ -327,10 +332,12 @@ impl Connection {
                         flags: 3, // FLAG_NEIGHBORS | FLAG_NETWORK
                         layer: 0,
                     };
-                    let update_bytes =
-                        self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &update.encode());
-                    responses.push(update_bytes.clone());
-                    self.broadcasts.push(update_bytes);
+                    let update_payload = update.encode();
+                    responses.push(
+                        self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &update_payload),
+                    );
+                    self.broadcasts
+                        .push((packet_id::UPDATE_BLOCK, update_payload));
 
                     // Send block destroy particles + sound
                     if old_block_id != air_id {
@@ -339,24 +346,25 @@ impl Connection {
                             position: block_center,
                             event_data: old_block_id as i32,
                         };
-                        let event_bytes = self.encode_compressed_packet(
-                            packet_id::LEVEL_EVENT,
-                            &level_event.encode(),
+                        let event_payload = level_event.encode();
+                        responses.push(
+                            self.encode_compressed_packet(packet_id::LEVEL_EVENT, &event_payload),
                         );
-                        responses.push(event_bytes.clone());
-                        self.broadcasts.push(event_bytes);
+                        self.broadcasts
+                            .push((packet_id::LEVEL_EVENT, event_payload));
 
                         let sound = LevelSoundEvent::block_sound(
                             LevelSoundEvent::BREAK,
                             block_center,
                             old_block_id as i32,
                         );
-                        let sound_bytes = self.encode_compressed_packet(
+                        let sound_payload = sound.encode();
+                        responses.push(self.encode_compressed_packet(
                             packet_id::LEVEL_SOUND_EVENT,
-                            &sound.encode(),
-                        );
-                        responses.push(sound_bytes.clone());
-                        self.broadcasts.push(sound_bytes);
+                            &sound_payload,
+                        ));
+                        self.broadcasts
+                            .push((packet_id::LEVEL_SOUND_EVENT, sound_payload));
                     }
 
                     // Spawn a dropped item entity — règle vanilla :
@@ -602,9 +610,8 @@ impl Connection {
                 )],
                 tick: self.tick,
             };
-            let bytes =
-                self.encode_compressed_packet(packet_id::SET_ACTOR_DATA, &actor_data.encode());
-            self.broadcasts.push(bytes);
+            self.broadcasts
+                .push((packet_id::SET_ACTOR_DATA, actor_data.encode()));
         }
 
         if let Some(ref interaction) = pkt.item_interaction {
@@ -845,9 +852,10 @@ impl Connection {
             flags: 3,
             layer: 0,
         };
-        let update_bytes = self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &update.encode());
-        responses.push(update_bytes.clone());
-        self.broadcasts.push(update_bytes);
+        let update_payload = update.encode();
+        responses.push(self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &update_payload));
+        self.broadcasts
+            .push((packet_id::UPDATE_BLOCK, update_payload));
 
         // Send place sound
         let block_center = [tx as f32 + 0.5, ty as f32 + 0.5, tz as f32 + 0.5];
@@ -856,10 +864,10 @@ impl Connection {
             block_center,
             block_runtime_id as i32,
         );
-        let sound_bytes =
-            self.encode_compressed_packet(packet_id::LEVEL_SOUND_EVENT, &sound.encode());
-        responses.push(sound_bytes.clone());
-        self.broadcasts.push(sound_bytes);
+        let sound_payload = sound.encode();
+        responses.push(self.encode_compressed_packet(packet_id::LEVEL_SOUND_EVENT, &sound_payload));
+        self.broadcasts
+            .push((packet_id::LEVEL_SOUND_EVENT, sound_payload));
 
         // Decrement item count in inventory via manager (track + queue sync).
         // Survival only — en créatif/spectateur les items sont infinis.
@@ -962,18 +970,20 @@ impl Connection {
             flags: 3,
             layer: 0,
         };
-        let bytes = self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &update.encode());
-        responses.push(bytes.clone());
-        self.broadcasts.push(bytes);
+        let update_payload = update.encode();
+        responses.push(self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &update_payload));
+        self.broadcasts
+            .push((packet_id::UPDATE_BLOCK, update_payload));
 
         let particle = LevelEvent {
             event_id: LevelEvent::PARTICLE_DESTROY,
             position: block_center,
             event_data: old_block_id as i32,
         };
-        let pbytes = self.encode_compressed_packet(packet_id::LEVEL_EVENT, &particle.encode());
-        responses.push(pbytes.clone());
-        self.broadcasts.push(pbytes);
+        let particle_payload = particle.encode();
+        responses.push(self.encode_compressed_packet(packet_id::LEVEL_EVENT, &particle_payload));
+        self.broadcasts
+            .push((packet_id::LEVEL_EVENT, particle_payload));
 
         // Drop standard (pas de tool-gating : les plantes tombent toujours).
         if let Some(drop_item) = crate::inventory::block_drop(old_block_id) {

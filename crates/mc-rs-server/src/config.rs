@@ -112,6 +112,21 @@ session_duration_hours = 24
 enabled = false
 cert_path = ""
 key_path = ""
+
+[rcon]
+# RCON Source-format : console distante TCP (compatible mcrcon, BungeeCord, etc.).
+# ATTENTION : ne pas exposer sans firewall — auth = mot de passe en clair.
+enabled = false
+address = "127.0.0.1"
+port = 25575
+password = ""
+
+[query]
+# Query Gamespy v4 (UDP) : status serveur public (motd, joueurs, version).
+# Utilisé par les outils tiers (BungeeCord, GameTracker, etc.). Lecture seule.
+enabled = false
+address = "0.0.0.0"
+port = 19132
 "#;
 
 #[derive(Debug, Deserialize)]
@@ -127,6 +142,66 @@ pub struct ServerConfig {
     /// Section `[webui]` — panel d'administration web optionnel.
     #[serde(default)]
     pub webui: mc_rs_webui::WebUiConfig,
+    #[serde(default)]
+    pub rcon: RconSection,
+    #[serde(default)]
+    pub query: QuerySection,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RconSection {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_rcon_address")]
+    pub address: String,
+    #[serde(default = "default_rcon_port")]
+    pub port: u16,
+    #[serde(default)]
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct QuerySection {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_query_address")]
+    pub address: String,
+    #[serde(default = "default_query_port")]
+    pub port: u16,
+}
+
+fn default_rcon_address() -> String {
+    "127.0.0.1".to_string()
+}
+fn default_rcon_port() -> u16 {
+    25575
+}
+fn default_query_address() -> String {
+    "0.0.0.0".to_string()
+}
+fn default_query_port() -> u16 {
+    19132
+}
+
+impl Default for RconSection {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            address: default_rcon_address(),
+            port: default_rcon_port(),
+            password: String::new(),
+        }
+    }
+}
+
+impl Default for QuerySection {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            address: default_query_address(),
+            port: default_query_port(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -271,6 +346,8 @@ impl Default for ServerConfig {
             gameplay: GameplaySection::default(),
             logging: LoggingSection::default(),
             webui: mc_rs_webui::WebUiConfig::default(),
+            rcon: RconSection::default(),
+            query: QuerySection::default(),
         }
     }
 }
