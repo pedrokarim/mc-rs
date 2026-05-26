@@ -97,6 +97,52 @@ impl StructureKind {
             _ => "overworld",
         }
     }
+
+    /// Résout un identifiant ("village", "minecraft:village") vers un StructureKind.
+    pub fn parse(name: &str) -> Option<Self> {
+        let n = name.strip_prefix("minecraft:").unwrap_or(name);
+        Some(match n {
+            "village" => Self::Village,
+            "stronghold" => Self::Stronghold,
+            "mineshaft" => Self::MineshaftNormal,
+            "mineshaft_mesa" => Self::MineshaftMesa,
+            "monument" | "ocean_monument" => Self::OceanMonument,
+            "fortress" | "nether_fortress" => Self::NetherFortress,
+            "bastion_remnant" => Self::BastionRemnant,
+            "endcity" | "end_city" => Self::EndCity,
+            "mansion" | "woodland_mansion" => Self::WoodlandMansion,
+            "ocean_ruin_cold" => Self::OceanRuinCold,
+            "ocean_ruin_warm" => Self::OceanRuinWarm,
+            "shipwreck" | "shipwreck_buried" => Self::ShipwreckBuried,
+            "shipwreck_beached" => Self::ShipwreckBeached,
+            "desert_pyramid" => Self::DesertPyramid,
+            "jungle_pyramid" | "jungle_temple" => Self::JungleTemple,
+            "swamp_hut" | "witch_hut" => Self::SwampHut,
+            "igloo" => Self::Igloo,
+            "ruined_portal" => Self::RuinedPortalOverworld,
+            "ruined_portal_nether" => Self::RuinedPortalNether,
+            "pillager_outpost" => Self::PillagerOutpost,
+            "buried_treasure" => Self::BuriedTreasure,
+            "ancient_city" => Self::AncientCity,
+            "trail_ruins" | "trailruin" => Self::Trailruin,
+            _ => return None,
+        })
+    }
+}
+
+/// Localise la structure la plus proche du point donné via une approximation
+/// grid-based (séparation moyenne en chunks). PMMP ne fait pas de /locate ;
+/// vanilla Bedrock fait une recherche réelle dans les chunks générés. Ici on
+/// donne juste la position de la cellule la plus proche dans la grille de
+/// séparation — utilisable comme indicateur, pas comme garantie absolue.
+pub fn locate_nearest(kind: StructureKind, from: [f32; 3]) -> [i32; 3] {
+    let sep = kind.average_separation_chunks() as i32;
+    let cx = (from[0] / 16.0).floor() as i32;
+    let cz = (from[2] / 16.0).floor() as i32;
+    // Snap au multiple de sep le plus proche.
+    let snap_x = ((cx as f32 / sep as f32).round() as i32) * sep;
+    let snap_z = ((cz as f32 / sep as f32).round() as i32) * sep;
+    [snap_x * 16 + 8, 64, snap_z * 16 + 8]
 }
 
 #[cfg(test)]

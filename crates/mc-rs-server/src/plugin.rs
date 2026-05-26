@@ -1769,6 +1769,46 @@ mod tests {
             Vec::new()
         }
 
+        fn spawn_item_world(
+            &mut self,
+            _position: [f32; 3],
+            _item: mc_rs_proto::packets::player::ItemStack,
+        ) {
+        }
+
+        fn roll_chest_loot_drops(&self, _table_name: &str) -> Vec<(String, u32)> {
+            Vec::new()
+        }
+
+        fn damage_player(&mut self, _addr: SocketAddr, _amount: f32) -> Result<bool, String> {
+            Ok(false)
+        }
+
+        fn actor_event_broadcast(
+            &mut self,
+            _runtime_entity_id: u64,
+            _event_id: u32,
+            _data: i32,
+        ) {
+        }
+
+        fn first_entity_runtime_id(&self, _token: &str) -> Option<u64> {
+            None
+        }
+
+        fn reload_server_state(&mut self) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn set_player_ability(
+            &mut self,
+            _addr: SocketAddr,
+            _ability: &str,
+            _value: bool,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+
         fn online_players(&self) -> usize {
             0
         }

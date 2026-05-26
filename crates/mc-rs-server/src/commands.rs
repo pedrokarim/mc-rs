@@ -185,6 +185,30 @@ pub trait ServerCommandRuntime: CommandSender + SoftEnumSource {
     fn player_tag_remove(&mut self, addr: SocketAddr, tag: &str) -> bool;
     /// Liste les tags d'un joueur (alphabétique pour /tag list).
     fn player_tag_list(&self, addr: SocketAddr) -> Vec<String>;
+    /// Spawn un item entity au sol (PendingItemEntitySpawn::stationary) — pour /loot.
+    fn spawn_item_world(&mut self, position: [f32; 3], item: ItemStack);
+    /// Roll une chest loot table par nom (ex `minecraft:simple_dungeon`) et
+    /// renvoie les drops résolus (name, count).
+    fn roll_chest_loot_drops(&self, table_name: &str) -> Vec<(String, u32)>;
+    /// Inflige `amount` HP de dégâts à un joueur via combat::attack_entity.
+    /// Retourne true si le joueur est mort suite au dégât.
+    fn damage_player(&mut self, addr: SocketAddr, amount: f32) -> Result<bool, String>;
+    /// Broadcast un ActorEvent (event_id + data) pour une entité — pour /event.
+    fn actor_event_broadcast(&mut self, runtime_entity_id: u64, event_id: u32, data: i32);
+    /// Récupère le runtime entity ID pour un selector unique (premier match).
+    fn first_entity_runtime_id(&self, token: &str) -> Option<u64>;
+    /// Recharge l'état persistant (ops/whitelist/bans) depuis disque. Note :
+    /// ne reload PAS server.toml, ni les chunks, ni les plugins déjà chargés.
+    fn reload_server_state(&mut self) -> Result<(), String>;
+    /// Toggle un flag d'ability (mayfly, mute, worldbuilder…) sur un joueur.
+    /// Envoie un UpdateAbilities one-shot. Pas persistant : un changement de
+    /// gamemode reset les abilities aux defaults.
+    fn set_player_ability(
+        &mut self,
+        addr: SocketAddr,
+        ability: &str,
+        value: bool,
+    ) -> Result<(), String>;
     fn online_players(&self) -> usize;
     fn max_players(&self) -> u32;
     fn execute_plugin_command(
@@ -1775,6 +1799,150 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
         let mut tags: Vec<String> = conn.tags.iter().cloned().collect();
         tags.sort();
         tags
+    }
+
+    fn spawn_item_world(&mut self, position: [f32; 3], item: ItemStack) {
+        self.spawn_world_item_entity(
+            crate::item_entities::PendingItemEntitySpawn::stationary(item, position),
+        );
+    }
+
+    fn roll_chest_loot_drops(&self, table_name: &str) -> Vec<(String, u32)> {
+        let normalized = if table_name.contains(':') {
+            table_name.to_string()
+        } else {
+            format!("minecraft:{table_name}")
+        };
+        crate::loot_table::roll_chest_loot(&normalized)
+    }
+
+    fn actor_event_broadcast(&mut self, runtime_entity_id: u64, event_id: u32, data: i32) {
+        let payload =
+            crate::combat_packets::encode_actor_event(runtime_entity_id, event_id, data);
+        let addrs: Vec<SocketAddr> = self
+            .connections
+            .iter()
+            .filter_map(|(addr, conn)| conn.is_in_game().then_some(*addr))
+            .collect();
+        for addr in addrs {
+            self.send_compressed(addr, packet_id::ACTOR_EVENT, &payload);
+        }
+    }
+
+    fn first_entity_runtime_id(&self, token: &str) -> Option<u64> {
+        // Pour @s sur sender player, on retourne directement le sender.
+        // Pour les autres tokens, on prend le premier match dans selector_entities.
+        let candidates = self.selector_entities();
+        let resolved = resolve_target_token_with_index(token, self, &candidates, 0).ok()?;
+        resolved.first().map(|e| e.id)
+    }
+
+    fn set_player_ability(
+        &mut self,
+        addr: SocketAddr,
+        ability: &str,
+        value: bool,
+    ) -> Result<(), String> {
+        use mc_rs_proto::packets::player::ability;
+        let bit = match ability.to_ascii_lowercase().as_str() {
+            "mayfly" | "may_fly" | "allowflight" => ability::ALLOW_FLIGHT,
+            "fly" | "flying" => ability::FLYING,
+            "noclip" | "no_clip" => ability::NO_CLIP,
+            "invulnerable" | "godmode" => ability::INVULNERABLE,
+            "mute" | "muted" => ability::MUTED,
+            "worldbuilder" | "world_builder" => ability::WORLD_BUILDER,
+            "build" => ability::BUILD,
+            "mine" => ability::MINE,
+            "doorsandswitches" | "doors_and_switches" => ability::DOORS_AND_SWITCHES,
+            "opencontainers" | "open_containers" => ability::OPEN_CONTAINERS,
+            "attackplayers" | "attack_players" => ability::ATTACK_PLAYERS,
+            "attackmobs" | "attack_mobs" => ability::ATTACK_MOBS,
+            "operator" | "op" => ability::OPERATOR,
+            "teleport" => ability::TELEPORT,
+            "infiniteresources" | "infinite_resources" => ability::INFINITE_RESOURCES,
+            "lightning" => ability::LIGHTNING,
+            other => {
+                return Err(format!("Unknown ability: {other}"));
+            }
+        };
+
+        let Some(conn) = self.connections.get_mut(&addr) else {
+            return Err("Player not connected.".into());
+        };
+        let is_op = conn.is_op;
+        let mut abilities = match conn.gamemode {
+            1 => mc_rs_proto::packets::player::UpdateAbilities::default_creative(
+                conn.entity_runtime_id as i64,
+                is_op,
+            ),
+            3 => mc_rs_proto::packets::player::UpdateAbilities::default_spectator(
+                conn.entity_runtime_id as i64,
+                is_op,
+            ),
+            _ => mc_rs_proto::packets::player::UpdateAbilities::default_survival(
+                conn.entity_runtime_id as i64,
+                is_op,
+            ),
+        };
+        if let Some(layer) = abilities.layers.first_mut() {
+            layer.abilities_set |= bit;
+            if value {
+                layer.abilities_values |= bit;
+            } else {
+                layer.abilities_values &= !bit;
+            }
+        }
+        let payload = abilities.encode();
+        self.send_compressed(addr, packet_id::UPDATE_ABILITIES, &payload);
+        Ok(())
+    }
+
+    fn reload_server_state(&mut self) -> Result<(), String> {
+        // Recharge uniquement la partie persistante (ops/whitelist/bans) depuis
+        // server-state.json. On garde les champs ephemeral en l'état (motd,
+        // world_name, seed, max_players, scoreboards, game_rules).
+        let new_state = crate::server_state::ServerState::load(
+            self.server_state.server_motd.clone(),
+            self.server_state.world_name.clone(),
+            self.server_state.world_seed,
+            self.server_state.max_players,
+        );
+        self.server_state.persistent = new_state.persistent;
+        // Resync permissions des connexions selon le nouvel état des ops.
+        let addrs: Vec<SocketAddr> = self.connections.keys().copied().collect();
+        for addr in addrs {
+            if let Some(conn) = self.connections.get_mut(&addr) {
+                let name = conn.display_name.clone().unwrap_or_default();
+                conn.is_op = self.server_state.is_op(&name);
+            }
+        }
+        Ok(())
+    }
+
+    fn damage_player(&mut self, addr: SocketAddr, amount: f32) -> Result<bool, String> {
+        let Some(conn) = self.connections.get_mut(&addr) else {
+            return Err("Player not connected.".into());
+        };
+        // attack_entity gère i-frames + event dispatch. cause::Custom car
+        // /damage est une source admin générique.
+        let mut ev_guard = conn
+            .events
+            .lock()
+            .map_err(|_| "Event manager poisoned.".to_string())?;
+        let outcome = crate::combat::attack_entity(
+            &mut ev_guard,
+            conn.entity_runtime_id,
+            conn.position,
+            &mut conn.attributes,
+            &mut conn.combat,
+            crate::event::entity::DamageCause::Custom,
+            amount,
+            None,
+            None,
+            0.0,
+        );
+        drop(ev_guard);
+        Ok(outcome.died)
     }
 
     fn replace_player_slot(
@@ -4653,6 +4821,576 @@ pub fn build_command_system() -> ServerCommandSystem {
         },
     );
 
+    // ── /loot spawn <x y z> loot <table>  |  /loot give <target> loot <table> ──
+    let mut loot = CommandDefinition::new("loot", "Drop or give loot from a loot table");
+    loot.usage = "/loot spawn <x> <y> <z> loot <table>  OR  /loot give <target> loot <table>".into();
+    loot.permissions = vec!["server.command.loot".into()];
+    loot.overloads.push(CommandOverload {
+        parameters: vec![
+            hard_enum_param("mode", "loot_mode", &["spawn", "give"], false),
+            param("target_or_x", ParamType::String, false),
+            param("y_or_subcmd", ParamType::String, true),
+            param("z_or_table", ParamType::String, true),
+            param("subcmd", ParamType::String, true),
+            param("table", ParamType::String, true),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        loot,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            let Some(mode) = invocation.arg(0) else {
+                return usage(
+                    "Usage: /loot spawn <x> <y> <z> loot <table>  OR  /loot give <target> loot <table>",
+                );
+            };
+            match mode.to_ascii_lowercase().as_str() {
+                "spawn" => {
+                    // /loot spawn x y z loot <table>
+                    if invocation.args.len() < 6 {
+                        return usage("Usage: /loot spawn <x> <y> <z> loot <table>");
+                    }
+                    let origin = if runtime.sender_is_player() {
+                        Some(runtime.sender_position())
+                    } else {
+                        None
+                    };
+                    let pos = parse_position_triplet_for_source(
+                        runtime,
+                        origin,
+                        invocation.arg(1).unwrap(),
+                        invocation.arg(2).unwrap(),
+                        invocation.arg(3).unwrap(),
+                    )?;
+                    let subcmd = invocation.arg(4).unwrap();
+                    if !subcmd.eq_ignore_ascii_case("loot") {
+                        return usage("Expected 'loot' before table name.");
+                    }
+                    let table = invocation.arg(5).unwrap();
+                    let drops = runtime.roll_chest_loot_drops(table);
+                    if drops.is_empty() {
+                        return Err(CommandDispatchError::Message(format!(
+                            "Empty or unknown loot table: {table}"
+                        )));
+                    }
+                    let mut count_total = 0u32;
+                    for (name, count) in drops {
+                        let stack = match parse_item_stack(&name, count as u16) {
+                            Ok(s) => s,
+                            Err(_) => continue,
+                        };
+                        runtime.spawn_item_world(pos, stack);
+                        count_total += count;
+                    }
+                    runtime.send_feedback(&format!(
+                        "Spawned {count_total} loot item(s) at ({:.0},{:.0},{:.0}).",
+                        pos[0], pos[1], pos[2]
+                    ));
+                }
+                "give" => {
+                    // /loot give <target> loot <table>
+                    if invocation.args.len() < 4 {
+                        return usage("Usage: /loot give <target> loot <table>");
+                    }
+                    let target_token = invocation.arg(1).unwrap();
+                    let subcmd = invocation.arg(2).unwrap();
+                    if !subcmd.eq_ignore_ascii_case("loot") {
+                        return usage("Expected 'loot' before table name.");
+                    }
+                    let table = invocation.arg(3).unwrap();
+                    let drops = runtime.roll_chest_loot_drops(table);
+                    if drops.is_empty() {
+                        return Err(CommandDispatchError::Message(format!(
+                            "Empty or unknown loot table: {table}"
+                        )));
+                    }
+                    let targets = resolve_player_targets(runtime, Some(target_token), true)?;
+                    if targets.is_empty() {
+                        return Err(CommandDispatchError::Message("No matching player.".into()));
+                    }
+                    let mut count_total = 0u32;
+                    for addr in &targets {
+                        for (name, count) in &drops {
+                            let stack = match parse_item_stack(name, *count as u16) {
+                                Ok(s) => s,
+                                Err(_) => continue,
+                            };
+                            let _ = runtime.give_item(*addr, stack);
+                            count_total += count;
+                        }
+                    }
+                    runtime.send_feedback(&format!(
+                        "Gave {count_total} loot item(s) to {} player(s).",
+                        targets.len()
+                    ));
+                }
+                _ => return usage("Mode must be spawn or give."),
+            }
+            Ok(())
+        },
+    );
+
+    // ── /damage <target> <amount> [cause] ──
+    let mut damage = CommandDefinition::new("damage", "Damage an entity");
+    damage.usage = "/damage <target> <amount> [cause]".into();
+    damage.permissions = vec!["server.command.damage".into()];
+    damage.overloads.push(CommandOverload {
+        parameters: vec![
+            param("target", ParamType::Target, false),
+            param("amount", ParamType::Float, false),
+            param("cause", ParamType::String, true),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        damage,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            if invocation.args.len() < 2 {
+                return usage("Usage: /damage <target> <amount> [cause]");
+            }
+            let targets = resolve_player_targets(runtime, invocation.arg(0), true)?;
+            if targets.is_empty() {
+                return Err(CommandDispatchError::Message("No matching player.".into()));
+            }
+            let amount: f32 = invocation
+                .arg(1)
+                .and_then(|s| s.parse().ok())
+                .ok_or_else(|| CommandDispatchError::Message("Amount must be a number.".into()))?;
+            if amount < 0.0 {
+                return Err(CommandDispatchError::Message(
+                    "Amount must be ≥ 0.".into(),
+                ));
+            }
+            // Note : la `cause` est ignorée pour l'instant — combat::attack_entity
+            // utilise toujours DamageCause::Custom pour /damage (les modifiers
+            // armor/effect ne dépendent pas de cause atm).
+            let mut died_count = 0;
+            for addr in &targets {
+                if runtime.damage_player(*addr, amount).unwrap_or(false) {
+                    died_count += 1;
+                }
+            }
+            runtime.send_feedback(&format!(
+                "Damaged {} player(s) for {} HP{}.",
+                targets.len(),
+                amount,
+                if died_count > 0 {
+                    format!(" ({died_count} died)")
+                } else {
+                    String::new()
+                }
+            ));
+            Ok(())
+        },
+    );
+
+    // ── /event entity <target> <event_id_or_name> ──
+    let mut event_cmd = CommandDefinition::new("event", "Trigger an entity event");
+    event_cmd.usage = "/event entity <target> <event_id|hurt|death|eating|respawn>".into();
+    event_cmd.permissions = vec!["server.command.event".into()];
+    event_cmd.overloads.push(CommandOverload {
+        parameters: vec![
+            hard_enum_param("kind", "event_kind", &["entity"], false),
+            param("target", ParamType::Target, false),
+            param("event", ParamType::String, false),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        event_cmd,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            if invocation.args.len() < 3 {
+                return usage("Usage: /event entity <target> <event_id|hurt|death|eating|respawn>");
+            }
+            if !invocation.arg(0).unwrap().eq_ignore_ascii_case("entity") {
+                return usage("Only 'entity' kind is supported.");
+            }
+            let target_token = invocation.arg(1).unwrap();
+            let event_arg = invocation.arg(2).unwrap();
+            // Résolution event_id : numérique ou nom court PMMP actor_event::*
+            let event_id: u32 = match event_arg.to_ascii_lowercase().as_str() {
+                "hurt" | "hurt_animation" => crate::combat_packets::actor_event::HURT_ANIMATION,
+                "death" | "death_animation" => crate::combat_packets::actor_event::DEATH_ANIMATION,
+                "eating" | "eating_item" => crate::combat_packets::actor_event::EATING_ITEM,
+                "respawn" => crate::combat_packets::actor_event::RESPAWN,
+                "tame_success" => crate::combat_packets::actor_event::TAME_SUCCESS,
+                "tame_fail" => crate::combat_packets::actor_event::TAME_FAIL,
+                "shake_wet" => crate::combat_packets::actor_event::SHAKE_WET,
+                "complete_trade" => crate::combat_packets::actor_event::COMPLETE_TRADE,
+                other => other.parse::<u32>().map_err(|_| {
+                    CommandDispatchError::Message(format!("Unknown event: {event_arg}"))
+                })?,
+            };
+
+            let Some(rid) = runtime.first_entity_runtime_id(target_token) else {
+                return Err(CommandDispatchError::Message("No matching entity.".into()));
+            };
+            runtime.actor_event_broadcast(rid, event_id, 0);
+            runtime.send_feedback(&format!("Triggered event {event_id} on entity {rid}."));
+            Ok(())
+        },
+    );
+
+    // ── /testfor <target> ──
+    // Vanilla : compte les entités matchant + feedback. Sert souvent comme
+    // gate dans command blocks (success = nombre matché).
+    let mut testfor = CommandDefinition::new("testfor", "Test for matching entities");
+    testfor.usage = "/testfor <target>".into();
+    testfor.permissions = vec!["server.command.testfor".into()];
+    testfor.overloads.push(CommandOverload {
+        parameters: vec![param("target", ParamType::Target, false)],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        testfor,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            let Some(token) = invocation.arg(0) else {
+                return usage("Usage: /testfor <target>");
+            };
+            // resolve_player_targets renvoie une erreur si aucun match — on
+            // veut juste le count, donc on attrape l'erreur.
+            let count = match resolve_player_targets(runtime, Some(token), true) {
+                Ok(targets) => targets.len(),
+                Err(_) => 0,
+            };
+            if count > 0 {
+                runtime.send_feedback(&format!("Found {count} matching player(s)."));
+            } else {
+                runtime.send_feedback("No matching player.");
+            }
+            Ok(())
+        },
+    );
+
+    // ── /testforblock <x> <y> <z> <block> ──
+    let mut testforblock =
+        CommandDefinition::new("testforblock", "Test the block at a position");
+    testforblock.usage = "/testforblock <x> <y> <z> <block>".into();
+    testforblock.permissions = vec!["server.command.testforblock".into()];
+    testforblock.overloads.push(CommandOverload {
+        parameters: vec![
+            param("x", ParamType::Position, false),
+            param("y", ParamType::Position, false),
+            param("z", ParamType::Position, false),
+            param("block", ParamType::String, false),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        testforblock,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            if invocation.args.len() < 4 {
+                return usage("Usage: /testforblock <x> <y> <z> <block>");
+            }
+            let origin = if runtime.sender_is_player() {
+                Some(runtime.sender_position())
+            } else {
+                None
+            };
+            let pos = parse_position_triplet_for_source(
+                runtime,
+                origin,
+                invocation.arg(0).unwrap(),
+                invocation.arg(1).unwrap(),
+                invocation.arg(2).unwrap(),
+            )?;
+            let (ix, iy, iz) = (
+                pos[0].floor() as i32,
+                pos[1].floor() as i32,
+                pos[2].floor() as i32,
+            );
+            let expected_name = invocation.arg(3).unwrap();
+            let Some(expected_id) = runtime.resolve_block_name(expected_name) else {
+                return Err(CommandDispatchError::Message(format!(
+                    "Unknown block: {expected_name}"
+                )));
+            };
+            let actual_id = runtime.world_block_at(ix, iy, iz);
+            if actual_id == expected_id {
+                runtime.send_feedback(&format!(
+                    "Block at ({ix},{iy},{iz}) matches {expected_name}."
+                ));
+            } else {
+                runtime.send_feedback(&format!(
+                    "Block at ({ix},{iy},{iz}) does NOT match {expected_name} (got id={actual_id})."
+                ));
+            }
+            Ok(())
+        },
+    );
+
+    // ── /spreadplayers <cx> <cz> <spreadDist> <maxRange> <targets...> ──
+    // Vanilla : disperse les joueurs aléatoirement dans un disque autour de
+    // (cx, cz), avec une distance minimum `spreadDist` entre joueurs et un
+    // rayon maximum `maxRange`. On simplifie : on prend une position aléatoire
+    // dans le carré [cx-maxRange, cx+maxRange] × [cz-maxRange, cz+maxRange]
+    // et on cherche la surface via chunk_cache. Pas de respect strict du
+    // spreadDist minimum entre joueurs (gros effort algorithmique).
+    let mut spread = CommandDefinition::new(
+        "spreadplayers",
+        "Spread players around a center point",
+    );
+    spread.usage = "/spreadplayers <cx> <cz> <spreadDist> <maxRange> <target>".into();
+    spread.permissions = vec!["server.command.spreadplayers".into()];
+    spread.overloads.push(CommandOverload {
+        parameters: vec![
+            param("cx", ParamType::Position, false),
+            param("cz", ParamType::Position, false),
+            param("spreadDist", ParamType::Float, false),
+            param("maxRange", ParamType::Float, false),
+            param("target", ParamType::Target, false),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        spread,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            if invocation.args.len() < 5 {
+                return usage(
+                    "Usage: /spreadplayers <cx> <cz> <spreadDist> <maxRange> <target>",
+                );
+            }
+            let origin = if runtime.sender_is_player() {
+                Some(runtime.sender_position())
+            } else {
+                None
+            };
+            // cx, cz : utilise X et Z avec parse_coord (~). Y est fictif (ignoré).
+            let cx_str = invocation.arg(0).unwrap();
+            let cz_str = invocation.arg(1).unwrap();
+            let center_x = parse_coord(cx_str, origin.map(|o| o[0]).unwrap_or(0.0))
+                .ok_or_else(|| CommandDispatchError::Message("Invalid cx".into()))?;
+            let center_z = parse_coord(cz_str, origin.map(|o| o[2]).unwrap_or(0.0))
+                .ok_or_else(|| CommandDispatchError::Message("Invalid cz".into()))?;
+            let spread_dist: f32 = invocation
+                .arg(2)
+                .and_then(|s| s.parse().ok())
+                .ok_or_else(|| CommandDispatchError::Message("spreadDist must be a number".into()))?;
+            let max_range: f32 = invocation
+                .arg(3)
+                .and_then(|s| s.parse().ok())
+                .ok_or_else(|| CommandDispatchError::Message("maxRange must be a number".into()))?;
+            if max_range <= 0.0 {
+                return Err(CommandDispatchError::Message("maxRange must be > 0".into()));
+            }
+            let _ = spread_dist; // pas appliqué dans cette MVP — note doc.
+
+            let targets = resolve_player_targets(runtime, invocation.arg(4), true)?;
+            if targets.is_empty() {
+                return Err(CommandDispatchError::Message("No matching player.".into()));
+            }
+            let count = targets.len();
+            for addr in targets {
+                let dx = (runtime.random_index(1000) as f32 / 1000.0) * 2.0 * max_range
+                    - max_range;
+                let dz = (runtime.random_index(1000) as f32 / 1000.0) * 2.0 * max_range
+                    - max_range;
+                let tx = center_x + dx;
+                let tz = center_z + dz;
+                // Y : on prend une altitude raisonnable au-dessus du terrain.
+                // 128 = safe height qui retombe en y=64 ground typique.
+                runtime.teleport_player(addr, [tx, 128.0, tz]);
+            }
+            runtime.send_feedback(&format!(
+                "Spread {count} player(s) around ({center_x:.0},{center_z:.0})."
+            ));
+            Ok(())
+        },
+    );
+
+    // ── /locate <structure> ──
+    // Approximation grid-based — voir structures::locate_nearest. Pas un
+    // /locate vanilla complet (qui scanne réellement les chunks générés et
+    // respecte les contraintes biome).
+    let mut locate = CommandDefinition::new("locate", "Locate the nearest structure");
+    locate.usage = "/locate <structure>".into();
+    locate.permissions = vec!["server.command.locate".into()];
+    locate.overloads.push(CommandOverload {
+        parameters: vec![param("structure", ParamType::String, false)],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        locate,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            let Some(name) = invocation.arg(0) else {
+                return usage("Usage: /locate <structure>");
+            };
+            let Some(kind) = crate::structures::StructureKind::parse(name) else {
+                return Err(CommandDispatchError::Message(format!(
+                    "Unknown structure: {name}"
+                )));
+            };
+            if !runtime.sender_is_player() {
+                return Err(CommandDispatchError::Message(
+                    "Console must be in a player context for /locate.".into(),
+                ));
+            }
+            let origin = runtime.sender_position();
+            let pos = crate::structures::locate_nearest(kind, origin);
+            let dx = pos[0] as f32 - origin[0];
+            let dz = pos[2] as f32 - origin[2];
+            let dist = (dx * dx + dz * dz).sqrt();
+            runtime.send_feedback(&format!(
+                "Nearest {} estimated at ({}, ~{}, {}) — {} blocks away (approximation grid).",
+                kind.identifier(),
+                pos[0],
+                pos[1],
+                pos[2],
+                dist as i32,
+            ));
+            Ok(())
+        },
+    );
+
+    // ── /reload ──
+    // Recharge ops/whitelist/bans depuis disque. Pas un reload complet (les
+    // chunks, plugins déjà chargés et server.toml ne sont pas relus).
+    let mut reload = CommandDefinition::new("reload", "Reload server state from disk");
+    reload.usage = "/reload".into();
+    reload.permissions = vec!["server.command.reload".into()];
+    register_command(
+        &mut permissions,
+        &mut map,
+        reload,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, _invocation: &CommandInvocation| {
+            runtime
+                .reload_server_state()
+                .map_err(CommandDispatchError::Message)?;
+            runtime.send_feedback("Reloaded ops/whitelist/bans from disk.");
+            runtime.sync_available_commands_for_all();
+            Ok(())
+        },
+    );
+
+    // ── /ability <target> <ability> <true|false> ──
+    let mut ability_cmd = CommandDefinition::new("ability", "Toggle a player ability");
+    ability_cmd.usage = "/ability <target> <mayfly|mute|worldbuilder|...> <true|false>".into();
+    ability_cmd.permissions = vec!["server.command.ability".into()];
+    ability_cmd.overloads.push(CommandOverload {
+        parameters: vec![
+            param("target", ParamType::Target, false),
+            param("ability", ParamType::String, false),
+            hard_enum_param("value", "ability_value", &["true", "false"], false),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        ability_cmd,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            if invocation.args.len() < 3 {
+                return usage("Usage: /ability <target> <ability> <true|false>");
+            }
+            let targets = resolve_player_targets(runtime, invocation.arg(0), true)?;
+            if targets.is_empty() {
+                return Err(CommandDispatchError::Message("No matching player.".into()));
+            }
+            let ability_name = invocation.arg(1).unwrap();
+            let value = match invocation.arg(2).unwrap().to_ascii_lowercase().as_str() {
+                "true" | "1" | "on" | "yes" => true,
+                "false" | "0" | "off" | "no" => false,
+                _ => {
+                    return Err(CommandDispatchError::Message(
+                        "Value must be true or false.".into(),
+                    ))
+                }
+            };
+            let count = targets.len();
+            for addr in targets {
+                runtime
+                    .set_player_ability(addr, ability_name, value)
+                    .map_err(CommandDispatchError::Message)?;
+            }
+            runtime.send_feedback(&format!(
+                "Set {ability_name}={value} for {count} player(s)."
+            ));
+            Ok(())
+        },
+    );
+
+    // ── /music play|stop|volume <track> [volume] ──
+    // Simplification : on délègue à PlaySound (le client traite les sons
+    // commençant par "music." comme musique). Pas de queue / fade comme
+    // vanilla, juste play/stop/volume.
+    let mut music = CommandDefinition::new("music", "Control music playback");
+    music.usage = "/music play|stop|volume <track|amount> [volume]".into();
+    music.permissions = vec!["server.command.music".into()];
+    music.overloads.push(CommandOverload {
+        parameters: vec![
+            hard_enum_param("action", "music_action", &["play", "stop", "volume"], false),
+            param("arg", ParamType::String, true),
+            param("volume", ParamType::Float, true),
+        ],
+    });
+    register_command(
+        &mut permissions,
+        &mut map,
+        music,
+        PermissionDefault::Op,
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            let Some(action) = invocation.arg(0) else {
+                return usage("Usage: /music play|stop|volume <track|amount> [volume]");
+            };
+            let action = action.to_ascii_lowercase();
+            // Broadcast (pas de target select pour /music vanilla — tous les
+            // joueurs du serveur).
+            let center = if runtime.sender_is_player() {
+                runtime.sender_position()
+            } else {
+                [0.0, 64.0, 0.0]
+            };
+            match action.as_str() {
+                "play" => {
+                    let Some(track) = invocation.arg(1) else {
+                        return usage("Usage: /music play <track> [volume]");
+                    };
+                    let volume: f32 = invocation
+                        .arg(2)
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(1.0);
+                    // Préfixe `music.` si absent — convention Bedrock.
+                    let sound = if track.contains('.') {
+                        track.to_string()
+                    } else {
+                        format!("music.{track}")
+                    };
+                    runtime.play_sound(&[], &sound, center, volume, 1.0);
+                    runtime.send_feedback(&format!("Now playing: {sound}"));
+                }
+                "stop" => {
+                    // Stop tout son côté client (paramètre None = stop_all).
+                    runtime.stop_sound(&[], None);
+                    runtime.send_feedback("Stopped music.");
+                }
+                "volume" => {
+                    // Pas de mécanisme vanilla pour ajuster un son déjà en
+                    // cours — on accepte la commande mais on ne change rien.
+                    runtime.send_feedback(
+                        "Music volume command accepted (no-op — re-play to change volume).",
+                    );
+                }
+                _ => return usage("Action must be play, stop, or volume."),
+            }
+            Ok(())
+        },
+    );
+
     let mut title = CommandDefinition::new("title", "Send Bedrock title packets");
     title.usage = "/title <target> <clear|reset|title|subtitle|actionbar|times> [...]".into();
     title.permissions = vec!["server.command.title".into()];
@@ -5366,6 +6104,41 @@ mod tests {
 
         fn player_tag_list(&self, _addr: SocketAddr) -> Vec<String> {
             Vec::new()
+        }
+
+        fn spawn_item_world(&mut self, _position: [f32; 3], _item: ItemStack) {}
+
+        fn roll_chest_loot_drops(&self, _table_name: &str) -> Vec<(String, u32)> {
+            Vec::new()
+        }
+
+        fn damage_player(&mut self, _addr: SocketAddr, _amount: f32) -> Result<bool, String> {
+            Ok(false)
+        }
+
+        fn actor_event_broadcast(
+            &mut self,
+            _runtime_entity_id: u64,
+            _event_id: u32,
+            _data: i32,
+        ) {
+        }
+
+        fn first_entity_runtime_id(&self, _token: &str) -> Option<u64> {
+            None
+        }
+
+        fn reload_server_state(&mut self) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn set_player_ability(
+            &mut self,
+            _addr: SocketAddr,
+            _ability: &str,
+            _value: bool,
+        ) -> Result<(), String> {
+            Ok(())
         }
 
         fn online_players(&self) -> usize {
