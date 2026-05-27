@@ -400,10 +400,7 @@ impl Connection {
         vec![self.encode_compressed_packet(packet_id::RESOURCE_PACK_STACK, writer.as_bytes())]
     }
 
-    fn encode_resource_pack_data_info(
-        &self,
-        pack: &crate::resource_pack::ResourcePack,
-    ) -> Vec<u8> {
+    fn encode_resource_pack_data_info(&self, pack: &crate::resource_pack::ResourcePack) -> Vec<u8> {
         let chunk_size = crate::pack_encoder::CHUNK_SIZE as u32;
         let total = pack.size();
         let chunk_count = crate::pack_encoder::num_chunks(total) as u32;
