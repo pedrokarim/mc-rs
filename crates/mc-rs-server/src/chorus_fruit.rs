@@ -20,6 +20,7 @@ pub fn popped_chorus_result() -> &'static str {
 }
 
 #[cfg(test)]
+#[allow(clippy::assertions_on_constants)]
 mod tests {
     use super::*;
 

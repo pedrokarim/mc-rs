@@ -16,6 +16,7 @@ pub fn becomes_dry_in_nether() -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::assertions_on_constants)]
 mod tests {
     #[test]
     fn constants_sane() {

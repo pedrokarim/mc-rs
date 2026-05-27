@@ -32,8 +32,10 @@ mod tests {
 
     #[test]
     fn named_persists() {
-        let mut f = PersistenceFlags::default();
-        f.has_custom_name = true;
+        let f = PersistenceFlags {
+            has_custom_name: true,
+            ..Default::default()
+        };
         assert!(f.should_persist());
     }
 }

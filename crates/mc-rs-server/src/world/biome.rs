@@ -1105,7 +1105,7 @@ mod tests {
         assert!(min > 70.0, "Mountains should be above sea level");
         assert!(max > 90.0, "Mountains should go high");
 
-        let (min, max) = noise_type_to_elevation("deep_ocean");
+        let (min, _max) = noise_type_to_elevation("deep_ocean");
         assert!(min < 40.0, "Deep ocean should be very low");
     }
 

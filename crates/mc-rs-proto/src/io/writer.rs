@@ -275,10 +275,11 @@ mod tests {
     #[test]
     fn test_f32_le_roundtrip() {
         let mut w = ProtoWriter::new();
-        w.write_f32_le(3.14);
+        let probe: f32 = 1.5;
+        w.write_f32_le(probe);
         let mut r = ProtoReader::new(w.as_bytes());
         let v = r.read_f32_le().unwrap();
-        assert!((v - 3.14).abs() < 0.001);
+        assert!((v - probe).abs() < 0.001);
     }
 
     #[test]
@@ -304,7 +305,7 @@ mod tests {
         assert_eq!(r.read_i32_be().unwrap(), 924);
         assert_eq!(r.read_var_u32().unwrap(), 300);
         assert_eq!(r.read_string().unwrap(), "test");
-        assert_eq!(r.read_bool().unwrap(), true);
+        assert!(r.read_bool().unwrap());
         assert_eq!(r.remaining(), 0);
     }
 }

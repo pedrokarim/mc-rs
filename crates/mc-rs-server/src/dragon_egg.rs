@@ -8,6 +8,7 @@ pub const TELEPORT_RANGE: i32 = 15;
 pub const HAS_GRAVITY: bool = true;
 
 #[cfg(test)]
+#[allow(clippy::assertions_on_constants)]
 mod tests {
     #[test]
     fn gravity_true() {

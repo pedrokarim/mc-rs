@@ -23,6 +23,7 @@ pub const COUNTING_RADIUS: u32 = 128;
 pub const SPAWN_ATTEMPT_INTERVAL: u32 = 400;
 
 #[cfg(test)]
+#[allow(clippy::assertions_on_constants)]
 mod tests {
     use super::*;
 

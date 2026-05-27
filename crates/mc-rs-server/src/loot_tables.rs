@@ -189,6 +189,6 @@ mod tests {
             }
         }
         // Because min_count=0, it's possible (but very unlikely over 100) to get 0.
-        assert!(got_flesh || true); // loose assert — just verify it runs
+        let _ = got_flesh; // loose: min_count=0 → 0 results valides ; on vérifie juste que ça tourne sans paniquer.
     }
 }

@@ -10,6 +10,7 @@ pub fn scares_piglins() -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::assertions_on_constants)]
 mod tests {
     #[test]
     fn soul_damage_higher() {

@@ -56,7 +56,7 @@ mod tests {
     fn xp_in_range() {
         for _ in 0..100 {
             let xp = ExperienceBottle::roll_xp();
-            assert!(xp >= XP_MIN && xp <= XP_MAX);
+            assert!((XP_MIN..=XP_MAX).contains(&xp));
         }
     }
 }

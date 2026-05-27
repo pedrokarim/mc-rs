@@ -377,7 +377,7 @@ mod tests {
             for z in 0..50 {
                 let v = s.get_noise_3d(x as f64, 0.0, z as f64);
                 assert!(
-                    v >= -32.0 && v <= 32.0,
+                    (-32.0..=32.0).contains(&v),
                     "noise out of range: {v} at ({x}, 0, {z})"
                 );
             }

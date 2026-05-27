@@ -190,7 +190,7 @@ mod tests {
         let mut reader = ProtoReader::new(&encoded);
         assert_eq!(reader.read_u16_le().unwrap(), 1); // threshold
         assert_eq!(reader.read_u16_le().unwrap(), 0); // algorithm (zlib)
-        assert_eq!(reader.read_bool().unwrap(), false); // throttle
+        assert!(!reader.read_bool().unwrap()); // throttle
     }
 
     #[test]

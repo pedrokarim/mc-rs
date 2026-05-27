@@ -837,7 +837,9 @@ mod tests {
         let biome_ids = [[biome_id::SWAMPLAND; 16]; 16];
         let mut surfaces = [[65i32; 16]; 16];
         // Some columns underwater for waterlily
+        #[allow(clippy::needless_range_loop)]
         for x in 0..4 {
+            #[allow(clippy::needless_range_loop)]
             for z in 0..4 {
                 surfaces[x][z] = 58;
             }

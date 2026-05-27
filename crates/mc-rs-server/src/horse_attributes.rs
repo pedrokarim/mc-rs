@@ -49,12 +49,12 @@ mod tests {
     #[test]
     fn horse_health_in_range() {
         let h = random_horse_health();
-        assert!(h >= 15.0 && h <= 30.0);
+        assert!((15.0..=30.0).contains(&h));
     }
 
     #[test]
     fn horse_jump_in_range() {
         let j = random_horse_jump_strength();
-        assert!(j >= 0.4 && j <= 1.0);
+        assert!((0.4..=1.0).contains(&j));
     }
 }

@@ -135,8 +135,7 @@ mod tests {
 
     #[test]
     fn take_bonemeal_only_when_full() {
-        let mut c = ComposterState::default();
-        c.level = 3;
+        let mut c = ComposterState { level: 3 };
         assert!(!c.take_bonemeal());
         c.level = 7;
         assert!(c.take_bonemeal());

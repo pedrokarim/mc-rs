@@ -16,6 +16,7 @@ pub fn frost_walker_prevents_damage() -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::assertions_on_constants)]
 mod tests {
     #[test]
     fn damage_nonzero() {

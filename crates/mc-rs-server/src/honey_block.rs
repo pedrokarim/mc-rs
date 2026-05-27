@@ -19,6 +19,7 @@ pub fn sticks_to_slime() -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::assertions_on_constants)]
 mod tests {
     use super::*;
 

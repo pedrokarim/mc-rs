@@ -144,7 +144,7 @@ mod tests {
         let bytes = pkt.encode();
         // dimension(1) + actor_uid(varint64 zigzag -1 = 1 byte) + 3x f32 (12) +
         // string varlen(1) + "minecraft:basic_flame_particle"(30) + bool(1)
-        assert!(bytes.len() >= 1 + 1 + 12 + 1 + 30 + 1);
+        assert!(bytes.len() > 1 + 1 + 12 + 1 + 30);
         assert_eq!(bytes[0], 0); // overworld
     }
 
@@ -153,6 +153,6 @@ mod tests {
         let bytes = boss_show(-1, "Ender Dragon", 1.0, boss_color::PURPLE);
         let title_start = bytes.iter().position(|&b| b == b'E').unwrap();
         let title_bytes = &bytes[title_start..title_start + 12];
-        assert_eq!(&title_bytes[..], b"Ender Dragon");
+        assert_eq!(title_bytes, b"Ender Dragon");
     }
 }

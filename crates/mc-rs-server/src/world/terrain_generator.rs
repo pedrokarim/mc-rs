@@ -816,7 +816,7 @@ mod tests {
     fn test_surface_height_reasonable() {
         let h = get_surface_height(0, 0, 42);
         assert!(
-            h >= 40 && h <= 140,
+            (40..=140).contains(&h),
             "Surface height {h} out of expected range"
         );
     }

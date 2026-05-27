@@ -57,6 +57,7 @@ pub fn repair_damage(current_damage: u32, max_durability: u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::enchantments::EnchantmentKind;
 
     #[test]
     fn combine_same_level_increments() {
