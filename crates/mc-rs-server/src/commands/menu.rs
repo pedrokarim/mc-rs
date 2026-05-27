@@ -29,16 +29,16 @@ pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCom
         map,
         menu,
         PermissionDefault::True,
-        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
-            match invocation.arg(0) {
-                None => {
-                    runtime.open_sender_menu();
-                    Ok(())
-                }
-                Some(panel) => runtime
-                    .open_sender_panel(panel)
-                    .map_err(CommandDispatchError::Message),
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| match invocation
+            .arg(0)
+        {
+            None => {
+                runtime.open_sender_menu();
+                Ok(())
             }
+            Some(panel) => runtime
+                .open_sender_panel(panel)
+                .map_err(CommandDispatchError::Message),
         },
     );
 }

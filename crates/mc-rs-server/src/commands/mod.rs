@@ -2606,7 +2606,8 @@ mod tests {
         }
 
         fn open_sender_panel(&mut self, panel: &str) -> Result<(), String> {
-            self.feedback.push(format!("Console cannot open panel: {panel}"));
+            self.feedback
+                .push(format!("Console cannot open panel: {panel}"));
             Ok(())
         }
 
