@@ -3,26 +3,22 @@
 
     "backdrop": {
         "type": "image",
-        "texture": "textures/ui/Black",
-        "size": ["100%", "100%"],
-        "color": "$mcrs_panel_bg_color",
-        "alpha": 0.95
+        "texture": "textures/ui/mcrs/panel_bg_solid",
+        "size": ["100%", "100%"]
     },
 
     "top_border": {
         "type": "image",
-        "texture": "textures/ui/White",
-        "size": ["100%", 2],
-        "color": "$mcrs_panel_border_color",
+        "texture": "textures/ui/mcrs/strip_gold",
+        "size": ["100%", 3],
         "anchor_from": "top_middle",
         "anchor_to": "top_middle"
     },
 
     "bottom_border": {
         "type": "image",
-        "texture": "textures/ui/White",
-        "size": ["100%", 2],
-        "color": "$mcrs_panel_border_color",
+        "texture": "textures/ui/mcrs/strip_gold",
+        "size": ["100%", 3],
         "anchor_from": "bottom_middle",
         "anchor_to": "bottom_middle"
     },
@@ -45,10 +41,8 @@
 
     "grid_button_default_layer": {
         "type": "image",
-        "texture": "textures/ui/Black",
+        "texture": "textures/ui/mcrs/button_default",
         "size": ["100%", "100%"],
-        "color": "$mcrs_button_default_color",
-        "alpha": 0.9,
         "controls": [
             {
                 "txt": {
@@ -72,10 +66,8 @@
 
     "grid_button_hover_layer": {
         "type": "image",
-        "texture": "textures/ui/Black",
+        "texture": "textures/ui/mcrs/button_hover",
         "size": ["100%", "100%"],
-        "color": "$mcrs_button_hover_color",
-        "alpha": 1.0,
         "controls": [
             {
                 "txt": {
@@ -99,10 +91,8 @@
 
     "grid_button_pressed_layer": {
         "type": "image",
-        "texture": "textures/ui/Black",
+        "texture": "textures/ui/mcrs/button_pressed",
         "size": ["100%", "100%"],
-        "color": "$mcrs_button_pressed_color",
-        "alpha": 1.0,
         "controls": [
             {
                 "txt": {
