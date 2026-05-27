@@ -126,6 +126,7 @@ pub trait ServerCommandRuntime: CommandSender + SoftEnumSource {
     fn broadcast_chat(&mut self, source: &str, message: &str);
     fn broadcast_action(&mut self, source: &str, message: &str);
     fn open_sender_menu(&mut self);
+    fn open_sender_panel(&mut self, panel: &str) -> Result<(), String>;
     fn show_sender_biome(&mut self);
     fn selector_entities(&self) -> Vec<SelectorEntity>;
     fn random_index(&mut self, upper: usize) -> usize;
@@ -1116,6 +1117,22 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
         let prepared = connection.prepare_for_send(batch);
         self.raknet
             .send_to_session(&addr, prepared, Reliability::ReliableOrdered, true);
+    }
+
+    fn open_sender_panel(&mut self, panel: &str) -> Result<(), String> {
+        let Some(addr) = self.source_addr() else {
+            return Err("Console cannot open the in-game menu.".into());
+        };
+        let Some(connection) = self.connections.get_mut(&addr) else {
+            return Err("Sender connection not found.".into());
+        };
+        let batch = connection
+            .build_demo_panel_batch(panel)
+            .ok_or_else(|| format!("Unknown panel: {panel}"))?;
+        let prepared = connection.prepare_for_send(batch);
+        self.raknet
+            .send_to_session(&addr, prepared, Reliability::ReliableOrdered, true);
+        Ok(())
     }
 
     fn show_sender_biome(&mut self) {
@@ -2586,6 +2603,11 @@ mod tests {
         fn open_sender_menu(&mut self) {
             self.feedback
                 .push("Console cannot open the in-game menu.".to_string());
+        }
+
+        fn open_sender_panel(&mut self, panel: &str) -> Result<(), String> {
+            self.feedback.push(format!("Console cannot open panel: {panel}"));
+            Ok(())
         }
 
         fn show_sender_biome(&mut self) {

@@ -1519,6 +1519,10 @@ mod tests {
 
         fn open_sender_menu(&mut self) {}
 
+        fn open_sender_panel(&mut self, _panel: &str) -> Result<(), String> {
+            Ok(())
+        }
+
         fn show_sender_biome(&mut self) {}
 
         fn selector_entities(&self) -> Vec<mc_rs_command::SelectorEntity> {

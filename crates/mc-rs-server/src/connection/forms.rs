@@ -139,6 +139,38 @@ impl Connection {
         self.encode_form(PendingFormKind::DemoWrapped, &json)
     }
 
+    /// Liste des panels exposés en autocomplete `/menu <panel>`.
+    pub const DEMO_PANEL_NAMES: &'static [&'static str] = &[
+        "hub",
+        "showcase",
+        "grid",
+        "left_button",
+        "bottom_button",
+        "image_grid",
+        "square_image",
+        "motd",
+        "store",
+        "wrapped",
+    ];
+
+    /// Construit le batch ouvrant la démo nommée `panel` (utilisé par
+    /// `/menu <panel>`). Retourne `None` si `panel` n'est pas reconnu.
+    pub fn build_demo_panel_batch(&mut self, panel: &str) -> Option<Vec<u8>> {
+        Some(match panel {
+            "hub" => self.build_hub_form_batch(),
+            "showcase" => self.build_ui_showcase_batch(),
+            "grid" => self.build_demo_grid_batch(),
+            "left_button" => self.build_demo_left_button_batch(),
+            "bottom_button" => self.build_demo_bottom_button_batch(),
+            "image_grid" => self.build_demo_image_grid_batch(),
+            "square_image" => self.build_demo_square_image_batch(),
+            "motd" => self.build_demo_motd_batch(),
+            "store" => self.build_demo_store_batch(),
+            "wrapped" => self.build_demo_wrapped_batch(),
+            _ => return None,
+        })
+    }
+
     /// Décode `ModalFormResponse` et déclenche soit une commande (`pending_commands`),
     /// soit un sous-menu (`pending_form_batches`).
     pub(super) fn handle_modal_form_response(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
