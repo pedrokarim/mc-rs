@@ -300,7 +300,8 @@ impl ReceiveLayer {
         if split.count > MAX_SPLIT_PART_COUNT || split.count == 0 {
             tracing::warn!(
                 "split FATAL: invalid part count {} (max {}) — disconnecting peer",
-                split.count, MAX_SPLIT_PART_COUNT
+                split.count,
+                MAX_SPLIT_PART_COUNT
             );
             self.fatal = Some("invalid split packet part count");
             return None;
@@ -308,7 +309,8 @@ impl ReceiveLayer {
         if split.index >= split.count {
             tracing::warn!(
                 "split FATAL: invalid part index {} (count {}) — disconnecting peer",
-                split.index, split.count
+                split.index,
+                split.count
             );
             self.fatal = Some("invalid split packet part index");
             return None;

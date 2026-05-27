@@ -274,7 +274,10 @@ impl RakNetSession {
         // would wedge the ordered channel forever. The client then reconnects
         // with a fresh reliability layer.
         if let Some(reason) = self.recv_layer.fatal_error() {
-            warn!("Disconnecting {} — fatal RakNet error: {}", self.addr, reason);
+            warn!(
+                "Disconnecting {} — fatal RakNet error: {}",
+                self.addr, reason
+            );
             self.state = SessionState::Disconnected;
             let _ = self.event_tx.send(SessionEvent::Disconnected);
             return;
@@ -286,7 +289,8 @@ impl RakNetSession {
         // game layer (out_total frozen) for several seconds. When that
         // happens we dump the FULL receive-layer state so the next repro tells
         // us EXACTLY which mechanism wedged — no more guessing.
-        if self.state == SessionState::Connected && self.diag_last_log.elapsed().as_secs_f64() >= 1.0
+        if self.state == SessionState::Connected
+            && self.diag_last_log.elapsed().as_secs_f64() >= 1.0
         {
             self.diag_last_log = Instant::now();
             let d = self.recv_layer.diag();

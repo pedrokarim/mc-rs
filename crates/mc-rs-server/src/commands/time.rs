@@ -6,10 +6,7 @@ use mc_rs_command::{
     CommandOverload, ParamType, PermissionDefault, PermissionRegistry,
 };
 
-use super::{
-    parse_time_value, register_command,
-    ServerCommandMap, ServerCommandRuntime,
-};
+use super::{parse_time_value, register_command, ServerCommandMap, ServerCommandRuntime};
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
     let mut time = CommandDefinition::new("time", "Control world time");

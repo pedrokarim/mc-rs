@@ -7,15 +7,14 @@ use mc_rs_command::{
 };
 
 use super::{
-    parse_item_stack, register_command, resolve_player_targets,
-    ServerCommandMap, ServerCommandRuntime,
+    parse_item_stack, register_command, resolve_player_targets, ServerCommandMap,
+    ServerCommandRuntime,
 };
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
     let mut replaceitem =
         CommandDefinition::new("replaceitem", "Replace an item slot of an entity");
-    replaceitem.usage =
-        "/replaceitem entity <target> <slot_type> [slot] <item> [count]".into();
+    replaceitem.usage = "/replaceitem entity <target> <slot_type> [slot] <item> [count]".into();
     replaceitem.permissions = vec!["server.command.replaceitem".into()];
     replaceitem.overloads.push(CommandOverload {
         parameters: vec![
@@ -48,16 +47,13 @@ pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCom
 
             // Détermine si le slot_type prend un index numérique (hotbar/inventory)
             // ou non (armor.head/chest/legs/feet, weapon.mainhand/offhand).
-            let needs_index =
-                slot_type == "slot.hotbar" || slot_type == "slot.inventory";
+            let needs_index = slot_type == "slot.hotbar" || slot_type == "slot.inventory";
 
             // Récupère index slot + item + count selon présence de l'index.
             let (slot_index_token, item_token, count_token): (Option<&str>, &str, Option<&str>) =
                 if needs_index {
                     if invocation.args.len() < 5 {
-                        return usage(
-                            "slot.hotbar/slot.inventory require <slot> <item> [count]",
-                        );
+                        return usage("slot.hotbar/slot.inventory require <slot> <item> [count]");
                     }
                     (
                         Some(invocation.arg(3).unwrap()),
@@ -65,11 +61,7 @@ pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCom
                         invocation.arg(5),
                     )
                 } else {
-                    (
-                        None,
-                        invocation.arg(3).unwrap(),
-                        invocation.arg(4),
-                    )
+                    (None, invocation.arg(3).unwrap(), invocation.arg(4))
                 };
 
             // Résout slot_type + index → (InvKey, slot_index)
@@ -109,9 +101,7 @@ pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCom
                 }
             };
 
-            let count: u16 = count_token
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(1);
+            let count: u16 = count_token.and_then(|s| s.parse().ok()).unwrap_or(1);
             let stack = parse_item_stack(item_token, count)?;
 
             // /replaceitem doit cibler des joueurs en jeu — pas les mob entities

@@ -2,14 +2,12 @@
 //! .reference/PocketMine-MP/src/command/defaults/ pour la sémantique vanilla.
 
 use mc_rs_command::{
-    hard_enum_param, param, parse_position_triplet_for_source, usage, CommandDefinition, CommandDispatchError, CommandInvocation,
-    CommandOverload, ParamType, PermissionDefault, PermissionRegistry,
+    hard_enum_param, param, parse_position_triplet_for_source, usage, CommandDefinition,
+    CommandDispatchError, CommandInvocation, CommandOverload, ParamType, PermissionDefault,
+    PermissionRegistry,
 };
 
-use super::{
-    register_command,
-    ServerCommandMap, ServerCommandRuntime,
-};
+use super::{register_command, ServerCommandMap, ServerCommandRuntime};
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
     let mut fill = CommandDefinition::new("fill", "Fill a region with a block");
@@ -84,9 +82,7 @@ pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCom
             let z2 = (from[2].floor() as i32).max(to[2].floor() as i32);
 
             // Vanilla limit : 32 768 blocs par /fill.
-            let volume = ((x2 - x1 + 1) as i64)
-                * ((y2 - y1 + 1) as i64)
-                * ((z2 - z1 + 1) as i64);
+            let volume = ((x2 - x1 + 1) as i64) * ((y2 - y1 + 1) as i64) * ((z2 - z1 + 1) as i64);
             if volume > 32_768 {
                 return Err(CommandDispatchError::Message(format!(
                     "Region too large ({volume} blocks). Maximum is 32768."
@@ -98,12 +94,8 @@ pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCom
             for y in y1..=y2 {
                 for z in z1..=z2 {
                     for x in x1..=x2 {
-                        let is_border = x == x1
-                            || x == x2
-                            || y == y1
-                            || y == y2
-                            || z == z1
-                            || z == z2;
+                        let is_border =
+                            x == x1 || x == x2 || y == y1 || y == y2 || z == z1 || z == z2;
                         let new_id = match mode.as_str() {
                             "keep" => {
                                 if runtime.world_block_at(x, y, z) != air {

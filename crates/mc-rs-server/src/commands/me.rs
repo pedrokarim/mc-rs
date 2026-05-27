@@ -2,14 +2,11 @@
 //! .reference/PocketMine-MP/src/command/defaults/ pour la sémantique vanilla.
 
 use mc_rs_command::{
-    usage, CommandDefinition, CommandInvocation,
-    CommandOverload, CommandParameter, ParamType, PermissionDefault, PermissionRegistry,
+    usage, CommandDefinition, CommandInvocation, CommandOverload, CommandParameter, ParamType,
+    PermissionDefault, PermissionRegistry,
 };
 
-use super::{
-    register_command,
-    ServerCommandMap, ServerCommandRuntime,
-};
+use super::{register_command, ServerCommandMap, ServerCommandRuntime};
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
     let mut me = CommandDefinition::new("me", "Broadcast an emote");

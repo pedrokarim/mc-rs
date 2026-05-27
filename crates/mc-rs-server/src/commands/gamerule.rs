@@ -2,14 +2,11 @@
 //! .reference/PocketMine-MP/src/command/defaults/ pour la sémantique vanilla.
 
 use mc_rs_command::{
-    param, CommandDefinition, CommandDispatchError, CommandInvocation,
-    CommandOverload, ParamType, PermissionDefault, PermissionRegistry,
+    param, CommandDefinition, CommandDispatchError, CommandInvocation, CommandOverload, ParamType,
+    PermissionDefault, PermissionRegistry,
 };
 
-use super::{
-    register_command,
-    ServerCommandMap, ServerCommandRuntime,
-};
+use super::{register_command, ServerCommandMap, ServerCommandRuntime};
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
     let mut gamerule = CommandDefinition::new("gamerule", "Show or change game rules");
@@ -69,7 +66,10 @@ pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCom
                 )));
             };
             let parsed = match existing {
-                crate::game_rules::GameRuleValue::Bool(_) => match raw_value.to_ascii_lowercase().as_str() {
+                crate::game_rules::GameRuleValue::Bool(_) => match raw_value
+                    .to_ascii_lowercase()
+                    .as_str()
+                {
                     "true" | "1" | "on" | "yes" => crate::game_rules::GameRuleValue::Bool(true),
                     "false" | "0" | "off" | "no" => crate::game_rules::GameRuleValue::Bool(false),
                     _ => {
@@ -82,17 +82,13 @@ pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCom
                     .parse::<i32>()
                     .map(crate::game_rules::GameRuleValue::Int)
                     .map_err(|_| {
-                        CommandDispatchError::Message(format!(
-                            "Invalid int value '{raw_value}'."
-                        ))
+                        CommandDispatchError::Message(format!("Invalid int value '{raw_value}'."))
                     })?,
                 crate::game_rules::GameRuleValue::Float(_) => raw_value
                     .parse::<f32>()
                     .map(crate::game_rules::GameRuleValue::Float)
                     .map_err(|_| {
-                        CommandDispatchError::Message(format!(
-                            "Invalid float value '{raw_value}'."
-                        ))
+                        CommandDispatchError::Message(format!("Invalid float value '{raw_value}'."))
                     })?,
             };
             runtime

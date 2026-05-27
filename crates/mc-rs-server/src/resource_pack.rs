@@ -199,11 +199,7 @@ mod tests {
 
     fn temp_dir(suffix: &str) -> PathBuf {
         let mut p = std::env::temp_dir();
-        p.push(format!(
-            "mc-rs-test-pack-{}-{}",
-            suffix,
-            std::process::id()
-        ));
+        p.push(format!("mc-rs-test-pack-{}-{}", suffix, std::process::id()));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         p

@@ -2,13 +2,13 @@
 //! .reference/PocketMine-MP/src/command/defaults/ pour la sémantique vanilla.
 
 use mc_rs_command::{
-    hard_enum_param, message, param, usage, CommandDefinition, CommandDispatchError, CommandInvocation,
-    CommandOverload, ParamType, PermissionDefault, PermissionRegistry,
+    hard_enum_param, message, param, usage, CommandDefinition, CommandDispatchError,
+    CommandInvocation, CommandOverload, ParamType, PermissionDefault, PermissionRegistry,
 };
 
 use super::{
-    parse_gamemode, register_command, resolve_player_targets,
-    ServerCommandMap, ServerCommandRuntime,
+    parse_gamemode, register_command, resolve_player_targets, ServerCommandMap,
+    ServerCommandRuntime,
 };
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {

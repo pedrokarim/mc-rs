@@ -2,14 +2,11 @@
 //! .reference/PocketMine-MP/src/command/defaults/ pour la sémantique vanilla.
 
 use mc_rs_command::{
-    usage, CommandDefinition, CommandInvocation,
-    CommandOverload, PermissionDefault, PermissionRegistry,
+    usage, CommandDefinition, CommandInvocation, CommandOverload, PermissionDefault,
+    PermissionRegistry,
 };
 
-use super::{
-    register_command, soft_player_param,
-    ServerCommandMap, ServerCommandRuntime,
-};
+use super::{register_command, soft_player_param, ServerCommandMap, ServerCommandRuntime};
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
     let mut op = CommandDefinition::new("op", "Grant operator status");

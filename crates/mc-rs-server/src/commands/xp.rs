@@ -6,10 +6,7 @@ use mc_rs_command::{
     CommandOverload, ParamType, PermissionDefault, PermissionRegistry,
 };
 
-use super::{
-    register_command,
-    ServerCommandMap, ServerCommandRuntime,
-};
+use super::{register_command, ServerCommandMap, ServerCommandRuntime};
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
     let mut xp = CommandDefinition::new("xp", "Manage player experience");

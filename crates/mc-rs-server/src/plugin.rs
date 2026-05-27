@@ -1784,13 +1784,7 @@ mod tests {
             Ok(false)
         }
 
-        fn actor_event_broadcast(
-            &mut self,
-            _runtime_entity_id: u64,
-            _event_id: u32,
-            _data: i32,
-        ) {
-        }
+        fn actor_event_broadcast(&mut self, _runtime_entity_id: u64, _event_id: u32, _data: i32) {}
 
         fn first_entity_runtime_id(&self, _token: &str) -> Option<u64> {
             None

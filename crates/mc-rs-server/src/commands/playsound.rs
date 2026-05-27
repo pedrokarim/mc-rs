@@ -2,14 +2,11 @@
 //! .reference/PocketMine-MP/src/command/defaults/ pour la sémantique vanilla.
 
 use mc_rs_command::{
-    param, parse_position_triplet_for_source, usage, CommandDefinition, CommandDispatchError, CommandInvocation,
-    CommandOverload, ParamType, PermissionDefault, PermissionRegistry,
+    param, parse_position_triplet_for_source, usage, CommandDefinition, CommandDispatchError,
+    CommandInvocation, CommandOverload, ParamType, PermissionDefault, PermissionRegistry,
 };
 
-use super::{
-    register_command, resolve_player_targets,
-    ServerCommandMap, ServerCommandRuntime,
-};
+use super::{register_command, resolve_player_targets, ServerCommandMap, ServerCommandRuntime};
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
     let mut playsound = CommandDefinition::new("playsound", "Play a sound for players");
@@ -74,10 +71,7 @@ pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCom
             // Bedrock attend les noms avec préfixe (`random.click`, `mob.cow.say`,
             // etc.) — on transmet brut.
             runtime.play_sound(&targets, sound, pos, volume, pitch);
-            runtime.send_feedback(&format!(
-                "Played {sound} for {} player(s).",
-                targets.len()
-            ));
+            runtime.send_feedback(&format!("Played {sound} for {} player(s).", targets.len()));
             Ok(())
         },
     );

@@ -2,14 +2,11 @@
 //! .reference/PocketMine-MP/src/command/defaults/ pour la sémantique vanilla.
 
 use mc_rs_command::{
-    usage, CommandDefinition, CommandInvocation,
-    CommandOverload, CommandParameter, ParamType, PermissionDefault, PermissionRegistry,
+    usage, CommandDefinition, CommandInvocation, CommandOverload, CommandParameter, ParamType,
+    PermissionDefault, PermissionRegistry,
 };
 
-use super::{
-    register_command, resolve_player_targets,
-    ServerCommandMap, ServerCommandRuntime,
-};
+use super::{register_command, resolve_player_targets, ServerCommandMap, ServerCommandRuntime};
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
     let mut tell = CommandDefinition::new("tell", "Send a private message");

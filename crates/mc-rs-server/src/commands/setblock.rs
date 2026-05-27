@@ -2,14 +2,12 @@
 //! .reference/PocketMine-MP/src/command/defaults/ pour la sémantique vanilla.
 
 use mc_rs_command::{
-    hard_enum_param, param, parse_position_triplet_for_source, usage, CommandDefinition, CommandDispatchError, CommandInvocation,
-    CommandOverload, ParamType, PermissionDefault, PermissionRegistry,
+    hard_enum_param, param, parse_position_triplet_for_source, usage, CommandDefinition,
+    CommandDispatchError, CommandInvocation, CommandOverload, ParamType, PermissionDefault,
+    PermissionRegistry,
 };
 
-use super::{
-    register_command,
-    ServerCommandMap, ServerCommandRuntime,
-};
+use super::{register_command, ServerCommandMap, ServerCommandRuntime};
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
     let mut setblock = CommandDefinition::new("setblock", "Set a block at a position");
@@ -74,9 +72,7 @@ pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCom
                 "keep" => {
                     let current = runtime.world_block_at(ix, iy, iz);
                     if current != air {
-                        runtime.send_feedback(&format!(
-                            "Kept existing block at ({ix},{iy},{iz})."
-                        ));
+                        runtime.send_feedback(&format!("Kept existing block at ({ix},{iy},{iz})."));
                         return Ok(());
                     }
                 }

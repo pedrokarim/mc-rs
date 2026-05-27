@@ -5,10 +5,7 @@ use mc_rs_command::{
     CommandDefinition, CommandDispatchError, PermissionDefault, PermissionRegistry,
 };
 
-use super::{
-    register_command,
-    ServerCommandMap, ServerCommandRuntime,
-};
+use super::{register_command, ServerCommandMap, ServerCommandRuntime};
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
     let mut save = CommandDefinition::new("save", "Save the world immediately");

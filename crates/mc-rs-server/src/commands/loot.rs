@@ -2,18 +2,20 @@
 //! .reference/PocketMine-MP/src/command/defaults/ pour la sémantique vanilla.
 
 use mc_rs_command::{
-    hard_enum_param, param, parse_position_triplet_for_source, usage, CommandDefinition, CommandDispatchError, CommandInvocation,
-    CommandOverload, ParamType, PermissionDefault, PermissionRegistry,
+    hard_enum_param, param, parse_position_triplet_for_source, usage, CommandDefinition,
+    CommandDispatchError, CommandInvocation, CommandOverload, ParamType, PermissionDefault,
+    PermissionRegistry,
 };
 
 use super::{
-    parse_item_stack, register_command, resolve_player_targets,
-    ServerCommandMap, ServerCommandRuntime,
+    parse_item_stack, register_command, resolve_player_targets, ServerCommandMap,
+    ServerCommandRuntime,
 };
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
     let mut loot = CommandDefinition::new("loot", "Drop or give loot from a loot table");
-    loot.usage = "/loot spawn <x> <y> <z> loot <table>  OR  /loot give <target> loot <table>".into();
+    loot.usage =
+        "/loot spawn <x> <y> <z> loot <table>  OR  /loot give <target> loot <table>".into();
     loot.permissions = vec!["server.command.loot".into()];
     loot.overloads.push(CommandOverload {
         parameters: vec![

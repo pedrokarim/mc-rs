@@ -1,14 +1,9 @@
 //! Port de PMMP `src/command/defaults/DumpmemoryCommand.php` — voir
 //! .reference/PocketMine-MP/src/command/defaults/ pour la sémantique vanilla.
 
-use mc_rs_command::{
-    CommandDefinition, PermissionDefault, PermissionRegistry,
-};
+use mc_rs_command::{CommandDefinition, PermissionDefault, PermissionRegistry};
 
-use super::{
-    register_command,
-    ServerCommandMap, ServerCommandRuntime,
-};
+use super::{register_command, ServerCommandMap, ServerCommandRuntime};
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
     let mut dumpmemory = CommandDefinition::new("dumpmemory", "Show lightweight memory/debug info");

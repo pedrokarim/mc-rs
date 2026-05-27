@@ -7,8 +7,8 @@ use mc_rs_command::{
 };
 
 use super::{
-    register_command, resolve_player_targets, send_title_to_targets,
-    ServerCommandMap, ServerCommandRuntime, TitlePacketAction,
+    register_command, resolve_player_targets, send_title_to_targets, ServerCommandMap,
+    ServerCommandRuntime, TitlePacketAction,
 };
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {

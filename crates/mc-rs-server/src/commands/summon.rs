@@ -2,14 +2,12 @@
 //! .reference/PocketMine-MP/src/command/defaults/ pour la sémantique vanilla.
 
 use mc_rs_command::{
-    message, param, parse_position_triplet_for_source, usage, CommandDefinition, CommandDispatchError, CommandInvocation,
-    CommandOverload, CommandParameter, ParamType, PermissionDefault, PermissionRegistry,
+    message, param, parse_position_triplet_for_source, usage, CommandDefinition,
+    CommandDispatchError, CommandInvocation, CommandOverload, CommandParameter, ParamType,
+    PermissionDefault, PermissionRegistry,
 };
 
-use super::{
-    register_command,
-    ServerCommandMap, ServerCommandRuntime,
-};
+use super::{register_command, ServerCommandMap, ServerCommandRuntime};
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
     let mut summon = CommandDefinition::new("summon", "Summon a basic mob entity");

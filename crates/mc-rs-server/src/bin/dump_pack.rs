@@ -29,8 +29,14 @@ fn add_dir<W: Write + std::io::Seek>(
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let src = args.get(1).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("resource_packs/mcrs_ui"));
-    let dst = args.get(2).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("mcrs_ui_dump.zip"));
+    let src = args
+        .get(1)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("resource_packs/mcrs_ui"));
+    let dst = args
+        .get(2)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("mcrs_ui_dump.zip"));
     let mut buf = Cursor::new(Vec::new());
     {
         let mut w = zip::ZipWriter::new(&mut buf);

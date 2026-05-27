@@ -42,7 +42,10 @@ fn main() {
 
     let key_bytes = key_str.as_bytes();
     if key_bytes.len() != 32 {
-        eprintln!("content_key must be exactly 32 ASCII chars (got {})", key_bytes.len());
+        eprintln!(
+            "content_key must be exactly 32 ASCII chars (got {})",
+            key_bytes.len()
+        );
         std::process::exit(1);
     }
     let iv: &[u8] = &key_bytes[..16];
@@ -54,7 +57,8 @@ fn main() {
 
     // Step 1 : read raw bytes of every file into memory, write unencrypted ones
     // straight to disk. Keep encrypted blobs in a map for step 2.
-    let mut raw_blobs: std::collections::HashMap<String, Vec<u8>> = std::collections::HashMap::new();
+    let mut raw_blobs: std::collections::HashMap<String, Vec<u8>> =
+        std::collections::HashMap::new();
     for i in 0..archive.len() {
         let mut f = archive.by_index(i).unwrap();
         let name = f.name().to_string();
@@ -67,9 +71,14 @@ fn main() {
     }
 
     // Step 2 : decrypt contents.json.
-    let contents_raw = raw_blobs.remove("contents.json").expect("no contents.json in pack");
+    let contents_raw = raw_blobs
+        .remove("contents.json")
+        .expect("no contents.json in pack");
     if contents_raw.len() < 0x100 {
-        eprintln!("contents.json too small ({} bytes), expected >= 256", contents_raw.len());
+        eprintln!(
+            "contents.json too small ({} bytes), expected >= 256",
+            contents_raw.len()
+        );
         std::process::exit(1);
     }
     let header = &contents_raw[..0x100];
@@ -82,15 +91,24 @@ fn main() {
     decrypt_cfb8(&mut payload, key_bytes, iv);
 
     // Some payloads have trailing zero padding after the JSON. Trim to last `}`.
-    let last_brace = payload.iter().rposition(|&b| b == b'}').unwrap_or(payload.len() - 1);
+    let last_brace = payload
+        .iter()
+        .rposition(|&b| b == b'}')
+        .unwrap_or(payload.len() - 1);
     let trimmed = &payload[..=last_brace];
     let json_str = String::from_utf8_lossy(trimmed).into_owned();
     let out_contents = Path::new(out_dir).join("contents.json");
     std::fs::write(&out_contents, &json_str).unwrap();
-    println!("Wrote decrypted contents.json ({} bytes) → {:?}", json_str.len(), out_contents);
+    println!(
+        "Wrote decrypted contents.json ({} bytes) → {:?}",
+        json_str.len(),
+        out_contents
+    );
 
     let parsed: serde_json::Value = serde_json::from_str(&json_str).expect("parse contents.json");
-    let content_list = parsed["content"].as_array().expect("no `content` array in contents.json");
+    let content_list = parsed["content"]
+        .as_array()
+        .expect("no `content` array in contents.json");
 
     // Step 3 : iterate content list, decrypt each file that has a `key`.
     let mut keyed_paths: std::collections::HashSet<String> = std::collections::HashSet::new();

@@ -3,11 +3,11 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use mc_rs_command::{
-    resolve_target_token_with_index, CommandDefinition, CommandDispatchError,
-    CommandInvocation, CommandParameter, CommandSender, ParamType,
-    PermissionDefault, PermissionDefinition, PermissionRegistry, PermissionState,
-    RegistrationError, SelectorEntity, SelectorError, SoftEnumSource, VisibleCommand,
-    VisibleCommandOverload, VisibleCommandParameter, VisibleParamType,
+    resolve_target_token_with_index, CommandDefinition, CommandDispatchError, CommandInvocation,
+    CommandParameter, CommandSender, ParamType, PermissionDefault, PermissionDefinition,
+    PermissionRegistry, PermissionState, RegistrationError, SelectorEntity, SelectorError,
+    SoftEnumSource, VisibleCommand, VisibleCommandOverload, VisibleCommandParameter,
+    VisibleParamType,
 };
 use mc_rs_proto::packets::login::{Disconnect, DisconnectReason};
 use mc_rs_proto::packets::packet_id;
@@ -37,71 +37,71 @@ use crate::world::terrain_generator;
 use crate::world::tick::{encode_set_time, WorldState};
 
 // === Sub-modules: one file per command (PMMP-style) ===
-mod help;
-mod version;
-mod plugins;
-mod status;
-mod stop;
-mod save;
-mod save_on;
-mod save_off;
-mod gc;
-mod dumpmemory;
-mod timings;
-mod list;
-mod menu;
-mod say;
-mod me;
-mod tell;
-mod kick;
-mod op;
-mod deop;
-mod whitelist;
+mod ability;
 mod ban;
 mod ban_ip;
 mod banlist;
-mod pardon;
-mod pardon_ip;
-mod gamemode;
-mod tp;
-mod kill;
+mod boss;
 mod clear;
-mod give;
-mod summon;
-mod spawnpoint;
-mod setworldspawn;
-mod time;
-mod difficulty;
+mod clone;
+mod damage;
 mod defaultgamemode;
-mod seed;
-mod weather;
-mod xp;
+mod deop;
+mod difficulty;
+mod dumpmemory;
 mod effect;
 mod enchant;
-mod boss;
-mod scoreboard;
-mod particle;
-mod setblock;
-mod fill;
-mod clone;
-mod gamerule;
-mod tellraw;
-mod playsound;
-mod stopsound;
-mod replaceitem;
-mod tag;
-mod loot;
-mod damage;
 mod event;
+mod fill;
+mod gamemode;
+mod gamerule;
+mod gc;
+mod give;
+mod help;
+mod kick;
+mod kill;
+mod list;
+mod locate;
+mod loot;
+mod me;
+mod menu;
+mod music;
+mod op;
+mod pardon;
+mod pardon_ip;
+mod particle;
+mod playsound;
+mod plugins;
+mod reload;
+mod replaceitem;
+mod save;
+mod save_off;
+mod save_on;
+mod say;
+mod scoreboard;
+mod seed;
+mod setblock;
+mod setworldspawn;
+mod spawnpoint;
+mod spreadplayers;
+mod status;
+mod stop;
+mod stopsound;
+mod summon;
+mod tag;
+mod tell;
+mod tellraw;
 mod testfor;
 mod testforblock;
-mod spreadplayers;
-mod locate;
-mod reload;
-mod ability;
-mod music;
+mod time;
+mod timings;
 mod title;
+mod tp;
 mod transferserver;
+mod version;
+mod weather;
+mod whitelist;
+mod xp;
 
 pub const SERVER_VERSION: &str = "mc-rs 0.1.0";
 
@@ -1878,9 +1878,9 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
     }
 
     fn spawn_item_world(&mut self, position: [f32; 3], item: ItemStack) {
-        self.spawn_world_item_entity(
-            crate::item_entities::PendingItemEntitySpawn::stationary(item, position),
-        );
+        self.spawn_world_item_entity(crate::item_entities::PendingItemEntitySpawn::stationary(
+            item, position,
+        ));
     }
 
     fn roll_chest_loot_drops(&self, table_name: &str) -> Vec<(String, u32)> {
@@ -1893,8 +1893,7 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
     }
 
     fn actor_event_broadcast(&mut self, runtime_entity_id: u64, event_id: u32, data: i32) {
-        let payload =
-            crate::combat_packets::encode_actor_event(runtime_entity_id, event_id, data);
+        let payload = crate::combat_packets::encode_actor_event(runtime_entity_id, event_id, data);
         let addrs: Vec<SocketAddr> = self
             .connections
             .iter()
@@ -2039,9 +2038,7 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
             _ => false,
         };
         if !bounds_ok {
-            return Err(format!(
-                "Slot {slot_index} out of range for {inv_key:?}"
-            ));
+            return Err(format!("Slot {slot_index} out of range for {inv_key:?}"));
         }
         connection
             .inventory_manager
@@ -2972,13 +2969,7 @@ mod tests {
             Ok(false)
         }
 
-        fn actor_event_broadcast(
-            &mut self,
-            _runtime_entity_id: u64,
-            _event_id: u32,
-            _data: i32,
-        ) {
-        }
+        fn actor_event_broadcast(&mut self, _runtime_entity_id: u64, _event_id: u32, _data: i32) {}
 
         fn first_entity_runtime_id(&self, _token: &str) -> Option<u64> {
             None
@@ -3206,7 +3197,10 @@ mod tests {
             }
         }
         assert!(
-            runtime.feedback.iter().any(|m| m.contains("Filled 8 blocks")),
+            runtime
+                .feedback
+                .iter()
+                .any(|m| m.contains("Filled 8 blocks")),
             "expected 'Filled 8 blocks' feedback, got: {:?}",
             runtime.feedback
         );
@@ -3313,10 +3307,7 @@ mod tests {
 
         dispatch_ok(&system, &mut runtime, "setblock 0 64 0 stone");
         dispatch_ok(&system, &mut runtime, "testforblock 0 64 0 stone");
-        assert!(runtime
-            .feedback
-            .iter()
-            .any(|m| m.contains("matches")));
+        assert!(runtime.feedback.iter().any(|m| m.contains("matches")));
 
         dispatch_ok(&system, &mut runtime, "testforblock 0 64 0 dirt");
         assert!(runtime
@@ -3331,6 +3322,9 @@ mod tests {
         let mut runtime = TestRuntime::new(&system);
         // /locate exige un sender player, on peut juste vérifier l'erreur console.
         let err = dispatch_err(&system, &mut runtime, "locate village");
-        assert!(err.contains("Console must be in a player context"), "got: {err}");
+        assert!(
+            err.contains("Console must be in a player context"),
+            "got: {err}"
+        );
     }
 }

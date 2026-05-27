@@ -4,14 +4,14 @@
     "name": "mc-rs UI",
     "description": "Custom UI pack served by mc-rs server. Implements a title-flag dispatcher for ModalForm rendering.",
     "uuid": "d2b5a26f-85d7-45b6-ab1b-27be83c89779",
-    "version": [1, 1, 0],
+    "version": [1, 2, 0],
     "min_engine_version": [1, 21, 0]
   },
   "modules": [
     {
       "type": "resources",
       "uuid": "91ab2dba-d4c8-4ade-a2ad-c43c44c2d28f",
-      "version": [1, 1, 0]
+      "version": [1, 2, 0]
     }
   ]
 }

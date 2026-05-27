@@ -2,15 +2,11 @@
 //! .reference/PocketMine-MP/src/command/defaults/ pour la sémantique vanilla.
 
 use mc_rs_command::{
-    message, param, CommandDefinition, CommandDispatchError, CommandInvocation,
-    CommandOverload, ParamType, PermissionDefault, PermissionRegistry,
+    message, param, CommandDefinition, CommandDispatchError, CommandInvocation, CommandOverload,
+    ParamType, PermissionDefault, PermissionRegistry,
 };
 
-use super::{
-    register_command,
-    resolve_entity_targets,
-    ServerCommandMap, ServerCommandRuntime,
-};
+use super::{register_command, resolve_entity_targets, ServerCommandMap, ServerCommandRuntime};
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
     let mut kill = CommandDefinition::new("kill", "Kill players or remove entities");

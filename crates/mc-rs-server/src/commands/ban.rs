@@ -2,14 +2,11 @@
 //! .reference/PocketMine-MP/src/command/defaults/ pour la sémantique vanilla.
 
 use mc_rs_command::{
-    param, usage, CommandDefinition, CommandInvocation,
-    CommandOverload, ParamType, PermissionDefault, PermissionRegistry,
+    param, usage, CommandDefinition, CommandInvocation, CommandOverload, ParamType,
+    PermissionDefault, PermissionRegistry,
 };
 
-use super::{
-    register_command, resolve_player_targets,
-    ServerCommandMap, ServerCommandRuntime,
-};
+use super::{register_command, resolve_player_targets, ServerCommandMap, ServerCommandRuntime};
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
     let mut ban = CommandDefinition::new("ban", "Ban a player name");

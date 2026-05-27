@@ -2,18 +2,14 @@
 //! .reference/PocketMine-MP/src/command/defaults/ pour la sémantique vanilla.
 
 use mc_rs_command::{
-    param, parse_position_triplet_for_source, usage, CommandDefinition, CommandDispatchError, CommandInvocation,
-    CommandOverload, ParamType, PermissionDefault, PermissionRegistry,
+    param, parse_position_triplet_for_source, usage, CommandDefinition, CommandDispatchError,
+    CommandInvocation, CommandOverload, ParamType, PermissionDefault, PermissionRegistry,
 };
 
-use super::{
-    register_command,
-    ServerCommandMap, ServerCommandRuntime,
-};
+use super::{register_command, ServerCommandMap, ServerCommandRuntime};
 
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
-    let mut testforblock =
-        CommandDefinition::new("testforblock", "Test the block at a position");
+    let mut testforblock = CommandDefinition::new("testforblock", "Test the block at a position");
     testforblock.usage = "/testforblock <x> <y> <z> <block>".into();
     testforblock.permissions = vec!["server.command.testforblock".into()];
     testforblock.overloads.push(CommandOverload {
