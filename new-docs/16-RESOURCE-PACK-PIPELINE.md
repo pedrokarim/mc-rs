@@ -6,6 +6,10 @@
 > Sujets : pipeline serveur (zip, chunks, SHA, encryption), structure d'un pack
 > côté disque, mécanisme du **title-flag dispatcher**, boucle
 > `/menu` ↔ `ModalFormResponse`, outils annexes (`dump_pack`, `decrypt_pack`).
+>
+> **Pour la documentation détaillée de chaque layout custom (`grid`, `motd`,
+> `store`, etc.) et le tutoriel "comment créer son propre layout", voir
+> [17 — UI Layouts](17-UI-LAYOUTS.md).**
 
 ---
 
@@ -215,24 +219,91 @@ write_bool(false);           // useVanillaEditorPacks
 
 Fichier : `crates/mc-rs-server/src/connection/forms.rs`
 
-#### Émission d'un form (`ModalFormRequest`, S→C, paquet `0x64`)
+Le module supporte aujourd'hui **un arbre de menus à 2 niveaux** : un menu racine
+(`HubMenu`), un sous-menu listant les layouts (`UiShowcase`), et 8 démos
+individuelles (`DemoGrid`, `DemoMotd`, etc.). Chaque entrée de l'arbre est
+typée via `PendingFormKind` pour router la réponse au bon handler.
+
+#### Énumération des formes
 
 ```rust
-pub fn build_hub_form_batch(&mut self) -> Vec<u8> {
-    let form_id = self.next_form_id.max(1);
-    self.next_form_id = form_id.wrapping_add(1).max(1);
-    self.pending_form = Some(PendingForm {
-        form_id, kind: PendingFormKind::HubMenu,
-    });
-
-    let json = r#"{"type":"form","title":"§m§a §l§6mc-rs§r §eHUB","content":"…","buttons":[…]}"#;
-
-    let req = ModalFormRequest { form_id, form_data: json.to_string() };
-    self.encode_compressed_packet(packet_id::MODAL_FORM_REQUEST, &req.encode())
+pub enum PendingFormKind {
+    HubMenu,       // racine /menu
+    UiShowcase,    // sous-menu "UI Showcase"
+    DemoGrid, DemoLeftButton, DemoBottomButton,
+    DemoImageGrid, DemoSquareImage,
+    DemoMotd, DemoStore, DemoWrapped,
 }
 ```
 
-Le champ `title` contient un **préfixe `§m§a `** qui active le layout `grid` côté pack (voir §4). Le `form_id` est tracké pour pouvoir router la réponse asynchrone.
+#### Émission d'un form (`ModalFormRequest`, S→C, paquet `0x64`)
+
+Tous les builders passent par `encode_form(kind, json)` qui :
+1. alloue un `form_id` croissant
+2. mémorise la `PendingFormKind` dans `self.pending_form`
+3. construit le `ModalFormRequest { form_id, form_data: json }`
+4. retourne le batch compressé prêt à passer dans `prepare_for_send`
+
+```rust
+fn encode_form(&mut self, kind: PendingFormKind, json: &str) -> Vec<u8> {
+    let form_id = self.allocate_form_id();
+    self.pending_form = Some(PendingForm { form_id, kind });
+    let req = ModalFormRequest { form_id, form_data: json.to_string() };
+    self.encode_compressed_packet(packet_id::MODAL_FORM_REQUEST, &req.encode())
+}
+
+pub fn build_hub_form_batch(&mut self) -> Vec<u8> {
+    let title = format!("{FLAG_GRID} §l§6mc-rs§r §eHUB");
+    let json = format!(r#"{{"type":"form","title":"{title}",
+        "content":"§7Choisis une action :",
+        "buttons":[
+            {{"text":"§a▶ Téléporter au spawn"}},
+            {{"text":"§b▶ Mode Créatif"}},
+            {{"text":"§e▶ Mode Survie"}},
+            {{"text":"§d▶ Régler sur Jour"}},
+            {{"text":"§9▶ Régler sur Nuit"}},
+            {{"text":"§7▶ Infos biome"}},
+            {{"text":"§6▶ §lUI Showcase"}}
+        ]}}"#);
+    self.encode_form(PendingFormKind::HubMenu, &json)
+}
+```
+
+Le champ `title` contient un **préfixe `§m§<flag>`** qui active le layout
+correspondant côté pack (voir §4). Les 8 flags sont exposés en constantes :
+
+```rust
+const FLAG_GRID:          &str = "§m§a";
+const FLAG_LEFT_BUTTON:   &str = "§m§b";
+const FLAG_BOTTOM_BUTTON: &str = "§m§c";
+const FLAG_IMAGE_GRID:    &str = "§m§d";
+const FLAG_SQUARE_IMAGE:  &str = "§m§e";
+const FLAG_MOTD:          &str = "§m§f";
+const FLAG_STORE:         &str = "§m§0";
+const FLAG_WRAPPED:       &str = "§m§1";
+```
+
+#### API publique pour ouvrir un panel par son nom
+
+```rust
+pub const DEMO_PANEL_NAMES: &'static [&'static str] = &[
+    "hub", "showcase", "grid", "left_button", "bottom_button",
+    "image_grid", "square_image", "motd", "store", "wrapped",
+];
+
+pub fn build_demo_panel_batch(&mut self, panel: &str) -> Option<Vec<u8>> {
+    Some(match panel {
+        "hub" => self.build_hub_form_batch(),
+        "showcase" => self.build_ui_showcase_batch(),
+        "grid" => self.build_demo_grid_batch(),
+        // …
+        _ => return None,
+    })
+}
+```
+
+Cette API est utilisée par `/menu <panel>` (HardEnum côté commande) pour
+ouvrir un layout sans passer par l'arbre de menus.
 
 #### Réception (`ModalFormResponse`, C→S, paquet `0x65`)
 
@@ -247,57 +318,110 @@ pub(super) fn handle_modal_form_response(&mut self, reader: &mut ProtoReader)
     let data = resp.response_data?;
     let index: usize = data.trim().parse().ok()?;
 
-    // Pour PendingFormKind::HubMenu → 6 boutons.
-    // L'index reçu (0..5) est mappé sur une commande qu'on push dans
-    // self.pending_commands, exécutée au prochain tick par la main loop.
-    match index {
-        0 => self.pending_commands.push(format!("tp {} {} {}", …)),
-        1 => self.pending_commands.push("gamemode creative".into()),
-        2 => self.pending_commands.push("gamemode survival".into()),
-        3 => self.pending_commands.push("time set day".into()),
-        4 => self.pending_commands.push("time set night".into()),
-        5 => self.pending_commands.push("biome".into()),
-        _ => {}
+    match pending.kind {
+        PendingFormKind::HubMenu     => self.handle_hub_menu(index),
+        PendingFormKind::UiShowcase  => self.handle_ui_showcase(index),
+        PendingFormKind::DemoBottomButton => self.handle_demo_bottom_button(index),
+        // toutes les autres démos → "↩ Retour" = remonter au showcase
+        _ => self.handle_demo_back_to_showcase(),
     }
-    Vec::new()
 }
 ```
 
-⚠ Les commandes vont dans `pending_commands` (sans le `/`), consommées par `main.rs` au tick suivant via `dispatch_command_line` standard.
+**Trois patterns de routing différents** :
+
+1. **Bouton → commande** (HubMenu) : on push une commande dans
+   `pending_commands`, consommée par `main.rs` au tick suivant via
+   `dispatch_command_line` (sans le `/` initial).
+2. **Bouton → sous-menu** (HubMenu bouton 6, ou n'importe quelle démo) :
+   on retourne directement le batch d'un autre form via `encode_form`.
+   Le moteur RakNet l'envoie comme réponse à la `ModalFormResponse`.
+3. **Combinaison** : un handler peut faire les deux (push commande +
+   ouvrir un autre form).
+
+⚠ Ne pas appeler `prepare_for_send` dans le handler : la main loop le fait
+quand elle reçoit les `Vec<Vec<u8>>` de `handle_raw_batch`.
 
 ### 2.4 Commande `/menu` (`commands/menu.rs`)
 
 Fichier : `crates/mc-rs-server/src/commands/menu.rs`
 
+La commande prend un argument optionnel `panel` (HardEnum) qui permet d'ouvrir
+directement n'importe quel layout. L'autocomplete client liste les 10 valeurs
+exposées par `Connection::DEMO_PANEL_NAMES`.
+
 ```rust
 pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCommandMap) {
-    let mut menu = CommandDefinition::new("menu", "Open the hub menu");
-    menu.usage = "/menu".into();
+    let mut menu = CommandDefinition::new("menu", "Open the hub menu or a specific UI panel");
+    menu.usage = "/menu [panel]".into();
     menu.permissions = vec!["server.command.menu".into()];
+    menu.overloads.push(CommandOverload {
+        parameters: vec![hard_enum_param(
+            "panel", "menu_panel",
+            Connection::DEMO_PANEL_NAMES, // ["hub","showcase","grid",...]
+            true,                          // optionnel
+        )],
+    });
     register_command(
         permissions, map, menu, PermissionDefault::True,
-        |runtime: &mut dyn ServerCommandRuntime, _| {
-            runtime.open_sender_menu();
-            Ok(())
+        |runtime: &mut dyn ServerCommandRuntime, invocation: &CommandInvocation| {
+            match invocation.arg(0) {
+                None => { runtime.open_sender_menu(); Ok(()) }
+                Some(panel) => runtime.open_sender_panel(panel)
+                    .map_err(CommandDispatchError::Message),
+            }
         },
     );
 }
 ```
 
-Le trait `ServerCommandRuntime::open_sender_menu()` est implémenté dans `commands/mod.rs` :
+Le trait `ServerCommandRuntime` expose deux entrées :
+
+```rust
+fn open_sender_menu(&mut self);
+fn open_sender_panel(&mut self, panel: &str) -> Result<(), String>;
+```
+
+Implémentation côté `commands/mod.rs` :
 
 ```rust
 fn open_sender_menu(&mut self) {
-    let Some(addr) = self.source_addr() else {
-        self.send_feedback("Console cannot open the in-game menu.");
-        return;
-    };
-    let Some(connection) = self.connections.get_mut(&addr) else { return; };
+    let addr = self.source_addr().expect("must be a player");
+    let connection = self.connections.get_mut(&addr).unwrap();
     let batch = connection.build_hub_form_batch();
     let prepared = connection.prepare_for_send(batch);
-    self.raknet
-        .send_to_session(&addr, prepared, Reliability::ReliableOrdered, true);
+    self.raknet.send_to_session(&addr, prepared, Reliability::ReliableOrdered, true);
 }
+
+fn open_sender_panel(&mut self, panel: &str) -> Result<(), String> {
+    let addr = self.source_addr().ok_or("Console cannot open menu")?;
+    let connection = self.connections.get_mut(&addr).ok_or("conn missing")?;
+    let batch = connection.build_demo_panel_batch(panel)
+        .ok_or_else(|| format!("Unknown panel: {panel}"))?;
+    let prepared = connection.prepare_for_send(batch);
+    self.raknet.send_to_session(&addr, prepared, Reliability::ReliableOrdered, true);
+    Ok(())
+}
+```
+
+#### Arbre de navigation final
+
+```
+/menu                  /menu <panel>
+  │                          │
+  ▼                          ▼
+HubMenu                build_demo_panel_batch(panel)
+  ├─ 0..5 commandes vanilla    │
+  └─ 6 → UiShowcase          (ouvre directement)
+            ├─ 0 grid
+            ├─ 1 left_button
+            ├─ 2 bottom_button
+            ├─ 3 image_grid
+            ├─ 4 square_image
+            ├─ 5 motd
+            ├─ 6 store
+            ├─ 7 wrapped
+            └─ 8 ↩ retour HubMenu
 ```
 
 ### 2.5 Champ Connection lié au pipeline
@@ -326,19 +450,54 @@ Tout pack est dans `resource_packs/<id>/`. Le nom du dossier n'est pas significa
 resource_packs/mcrs_ui/
 ├── manifest.json                              # métadonnées : UUID, version, min_engine_version
 ├── pack_icon.png                              # icône affichée dans Settings > My Packs
-├── textures/                                  # textures GUI custom
-│   ├── gui/...
-│   └── ui/...
+├── font/
+│   └── glyph_E1.png                           # glyphes custom (range U+E100..U+E1FF)
+├── textures/
+│   ├── gui/newgui/mob_effects/                # overrides icônes effets vanilla
+│   ├── items/                                 # overrides icônes items vanilla (friends, locker)
+│   └── ui/
+│       ├── title.png                          # logo mc-rs (écran titre)
+│       ├── village_hero_effect.png            # override effet vanilla
+│       └── mcrs/                              # tous nos assets UI
+│           ├── button_default.png / _hover / _pressed
+│           ├── panel_bg.png / _solid
+│           ├── strip_gold.png / strip_orange.png
+│           └── panels/                        # textures spécifiques aux layouts custom
+│               ├── mcrs_rounded_corners.png   # 9-slice 12×12, base_size 24×24
+│               ├── mcrs_inside_corners.png
+│               ├── mcrs_rounded_border.png
+│               ├── mcrs_normal_button*.png    # variantes default/hover/uv
+│               ├── mcrs_special_button*.png   # idem, version "spéciale" (violet)
+│               ├── mcrs_green_button.png
+│               ├── mcrs_scoreboard_entry.png
+│               ├── featured_bg_slice.png
+│               ├── loading_grid.png           # placeholder pendant chargement d'image
+│               ├── shop_close_button_default.png
+│               ├── whitetransparency.png      # base pour overlays semi-opaques
+│               └── whitetransparencygradient.png
 └── ui/
     ├── _ui_defs.json                          # liste les fichiers UI custom à charger
     ├── _global_variables.json                 # override les variables UI globales ($vars)
     ├── server_form.json                       # dispatcher Form (le plus important)
+    ├── chest_screen.json                      # override vanilla (large chest marker @@@@)
+    ├── hud_screen.json                        # override vanilla (notifications + titres custom)
+    ├── scoreboards.json                       # override vanilla (sidebar stylée mc-rs)
+    ├── ui_common.json                         # override vanilla (scrollbar)
     └── mcrs/
-        └── server_form/
-            └── button_grid_panel.json         # layout `grid` (le seul implémenté à ce jour)
+        └── server_form/                       # 8 layouts custom (1 par flag)
+            ├── button_grid_panel.json         # layout `grid` — grille de boutons rect.
+            ├── button_image_grid_panel.json   # layout `image_grid` — grille d'images
+            ├── left_button_panel.json         # layout `left_button` — boutons à gauche, description à droite
+            ├── bottom_button_panel.json       # layout `bottom_button` — bannière en haut, boutons en bas
+            ├── square_image_panel.json        # layout `square_image` — image centrale carrée
+            ├── motd_panel.json                # layout `motd` — bannière + texte + 2 boutons
+            ├── store_panel.json               # layout `store` — onglets de catégories + grille produits
+            └── wrapped_panel.json             # layout `wrapped` — scroll d'images + URL
 ```
 
-Le pack contient **uniquement les fichiers strictement nécessaires** au pipeline de test. À étoffer plus tard avec d'autres layouts (left-button, image-grid, etc.) selon les besoins.
+Voir [17 — UI Layouts](17-UI-LAYOUTS.md) pour la description détaillée de
+chaque layout, le flag qui le déclenche, et le format JSON attendu côté
+`ModalFormRequest`.
 
 ### 3.1 `manifest.json`
 
@@ -511,31 +670,56 @@ Les codes sont des séquences `§m§<X>` :
 
 Visuellement le préfixe disparaît (ou est confondu avec du bruit) ; mais dans le **texte brut** stocké côté client, la sous-chaîne `§m§a` reste présente et matchable par le binding `(#title_text - "§m§a") != #title_text`.
 
-Notre `_global_variables.json` définit trois flags pour démarrer :
+Notre `_global_variables.json` définit **8 flags** correspondant aux 8 layouts
+custom :
 
-| Flag | Code | Layout cible |
-|---|---|---|
-| `$flag_grid` | `§m§a` | Grille de boutons (le seul implémenté) |
-| `$flag_left_button` | `§m§b` | Réservé (layout à écrire) |
-| `$flag_bottom_button` | `§m§c` | Réservé (layout à écrire) |
+| Flag | Code | Layout cible | Namespace UI |
+|---|---|---|---|
+| `$flag_grid` | `§m§a` | Grille verticale de boutons rectangulaires | `mcrs_grid_modal` |
+| `$flag_left_button_panel` | `§m§b` | Boutons à gauche, description à droite | `mcrs_left_button_modal` |
+| `$flag_bottom_button_panel` | `§m§c` | Bannière en haut, liste de boutons en bas | `mcrs_bottom_button_modal` |
+| `$flag_image_grid` | `§m§d` | Grille d'images avec titre superposé | `mcrs_image_grid_modal` |
+| `$flag_square_image` | `§m§e` | Image carrée centrale + description | `mcrs_square_image_modal` |
+| `$flag_motd` | `§m§f` | Bannière + texte + boutons (style MOTD) | `mcrs_motd_modal` |
+| `$flag_store` | `§m§0` | Onglets de catégories + grille de produits | `mcrs_store_modal` |
+| `$flag_wrapped` | `§m§1` | Scroll d'images + URL + boutons (style rewind) | `mcrs_wrapped_modal` |
 
-D'autres codes (`§m§d`, `§m§e`, etc.) peuvent être ajoutés selon les layouts qu'on souhaite supporter.
+Voir [17 — UI Layouts](17-UI-LAYOUTS.md) pour la description détaillée
+de chaque layout et le format attendu côté `buttons[]`.
 
 ### 4.2 Côté serveur — émission
 
 ```rust
-let title = format!("§m§a {}", "Mon Hub");   // active le layout grid
+let title = format!("§m§a {}", "Mon Hub");      // active le layout grid
+let title = format!("§m§f {}", "Bienvenue !");  // active le layout motd
 ```
 
 ### 4.3 Côté client — dispatch
 
-Le `_global_variables.json` définit les flags :
+Le `_global_variables.json` définit les 8 flags. `server_form.json` les
+utilise dans les bindings pour décider quel layout rendre. Structure complète
+du dispatcher (8 variantes + fallback vanilla) :
 
 ```json
-{ "$flag_grid": "§m§a", "$flag_left_button": "§m§b", "$flag_bottom_button": "§m§c" }
+"mcrs_switching_long_form": {
+  "type": "panel",
+  "$flag_grid": "§m§a", "$flag_left_button_panel": "§m§b",
+  "$flag_bottom_button_panel": "§m§c", "$flag_image_grid": "§m§d",
+  "$flag_square_image": "§m§e", "$flag_motd": "§m§f",
+  "$flag_store": "§m§0", "$flag_wrapped": "§m§1",
+  "controls": [
+    { "long_form@long_form": { /* fallback : aucun flag présent */ } },
+    { "mcrs_button_grid@mcrs_grid_modal.main_panel": { /* visible si #title_text contient $flag_grid */ } },
+    { "mcrs_left_button_panel@mcrs_left_button_modal.main_panel": { /* … $flag_left_button_panel */ } },
+    { "mcrs_bottom_button_panel@mcrs_bottom_button_modal.main_panel": { /* … */ } },
+    { "mcrs_button_image_grid@mcrs_image_grid_modal.main_panel": { /* … */ } },
+    { "mcrs_square_image@mcrs_square_image_modal.main_panel": { /* … */ } },
+    { "mcrs_motd_panel@mcrs_motd_modal.main_panel": { /* … */ } },
+    { "mcrs_store_panel@mcrs_store_modal.main_panel": { /* … */ } },
+    { "mcrs_wrapped_panel@mcrs_wrapped_modal.main_panel": { /* … */ } }
+  ]
+}
 ```
-
-Et `server_form.json` les utilise dans les bindings pour décider quel layout rendre.
 
 ### 4.4 Cas du fallback
 
@@ -701,16 +885,19 @@ Deux endroits dans `connection/login.rs` :
 ## 10. Ce qui marche aujourd'hui
 
 - ✅ Pipeline RP complet : DL, chunks, validation SHA
-- ✅ `/menu` envoie un form, reçoit la réponse, dispatche une commande
+- ✅ `/menu` + `/menu <panel>` avec autocomplete sur 10 valeurs
+- ✅ Arbre `HubMenu → UiShowcase → 8 démos` avec navigation "↩ Retour"
+- ✅ 8 layouts custom rendus côté client via title-flag dispatcher
+- ✅ 4 overrides vanilla (chest, hud, scoreboard, ui_common)
 - ✅ Pack chargé et appliqué côté client (codes `§` rendus, icône custom visible dans Settings)
 - ✅ `must_accept = true` force la priorité du pack
 - ✅ Outils `dump_pack` + `decrypt_pack` opérationnels
 
 ## 11. Pour aller plus loin
 
-- Implémenter d'autres layouts (`left_button_panel.json`, `bottom_button_panel.json`, `image_grid_panel.json`, `square_image_panel.json`, etc.)
-- Servir plusieurs packs simultanément (la struct supporte `Vec<ResourcePack>`)
+- Servir plusieurs packs simultanément (la struct supporte déjà `Vec<ResourcePack>`)
 - Ajouter un cache disque des chunks pré-compressés pour les très gros packs
 - Implémenter le chiffrement côté serveur (`encryptionKey` dans `ResourcePackInfoEntry`) si jamais on veut protéger un pack distribué
 - Étendre la commande `/menu` pour générer dynamiquement les boutons selon les permissions du joueur
 - Sortir le pack de `resource_packs/mcrs_ui/` vers un dépôt séparé une fois mature (versionning indépendant)
+- Ajouter des layouts supplémentaires (modal de confirmation, formulaire de saisie, etc.) — voir le tutoriel "[Créer un nouveau layout](17-UI-LAYOUTS.md#10--tutoriel--créer-son-propre-layout)"
