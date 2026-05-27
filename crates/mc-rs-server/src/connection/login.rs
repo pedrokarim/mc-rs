@@ -352,7 +352,7 @@ impl Connection {
     fn send_resource_packs_info(&self) -> Vec<Vec<u8>> {
         let packs = self.resource_packs.as_ref();
         let mut writer = mc_rs_proto::io::ProtoWriter::with_capacity(128 + 96 * packs.len());
-        writer.write_bool(false); // must_accept
+        writer.write_bool(true); // must_accept — force server pack priority
         writer.write_bool(false); // has_addons
         writer.write_bool(false); // has_scripts
         writer.write_bool(false); // force_disable_vibrant_visuals
@@ -383,7 +383,7 @@ impl Connection {
     fn send_resource_pack_stack(&self) -> Vec<Vec<u8>> {
         let packs = self.resource_packs.as_ref();
         let mut writer = mc_rs_proto::io::ProtoWriter::with_capacity(64 + 48 * packs.len());
-        writer.write_bool(false); // must_accept
+        writer.write_bool(true); // must_accept — force stack priority
         writer.write_var_u32(packs.len() as u32);
         for pack in packs {
             // PMMP ResourcePackStackEntry : pack_id en STRING ici (pas UUID

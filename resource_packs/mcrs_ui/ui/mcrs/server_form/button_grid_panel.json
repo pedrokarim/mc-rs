@@ -1,0 +1,206 @@
+{
+    "namespace": "mcrs_grid_modal",
+
+    "backdrop": {
+        "type": "image",
+        "texture": "textures/ui/Black",
+        "size": ["100%", "100%"],
+        "color": "$mcrs_panel_bg_color",
+        "alpha": 0.95
+    },
+
+    "top_border": {
+        "type": "image",
+        "texture": "textures/ui/White",
+        "size": ["100%", 2],
+        "color": "$mcrs_panel_border_color",
+        "anchor_from": "top_middle",
+        "anchor_to": "top_middle"
+    },
+
+    "bottom_border": {
+        "type": "image",
+        "texture": "textures/ui/White",
+        "size": ["100%", 2],
+        "color": "$mcrs_panel_border_color",
+        "anchor_from": "bottom_middle",
+        "anchor_to": "bottom_middle"
+    },
+
+    "title_label": {
+        "type": "label",
+        "text": "#title_text",
+        "color": "$mcrs_title_text_color",
+        "shadow": true,
+        "font_scale_factor": 1.4,
+        "anchor_from": "top_middle",
+        "anchor_to": "top_middle",
+        "offset": [0, 8],
+        "bindings": [
+            {
+                "binding_name": "#title_text"
+            }
+        ]
+    },
+
+    "grid_button_default_layer": {
+        "type": "image",
+        "texture": "textures/ui/Black",
+        "size": ["100%", "100%"],
+        "color": "$mcrs_button_default_color",
+        "alpha": 0.9,
+        "controls": [
+            {
+                "txt": {
+                    "type": "label",
+                    "text": "#form_button_text",
+                    "color": "$mcrs_button_text_color",
+                    "shadow": true,
+                    "anchor_from": "center",
+                    "anchor_to": "center",
+                    "bindings": [
+                        {
+                            "binding_name": "#form_button_text",
+                            "binding_type": "collection",
+                            "binding_collection_name": "form_buttons"
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+
+    "grid_button_hover_layer": {
+        "type": "image",
+        "texture": "textures/ui/Black",
+        "size": ["100%", "100%"],
+        "color": "$mcrs_button_hover_color",
+        "alpha": 1.0,
+        "controls": [
+            {
+                "txt": {
+                    "type": "label",
+                    "text": "#form_button_text",
+                    "color": "$mcrs_button_text_hover_color",
+                    "shadow": true,
+                    "anchor_from": "center",
+                    "anchor_to": "center",
+                    "bindings": [
+                        {
+                            "binding_name": "#form_button_text",
+                            "binding_type": "collection",
+                            "binding_collection_name": "form_buttons"
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+
+    "grid_button_pressed_layer": {
+        "type": "image",
+        "texture": "textures/ui/Black",
+        "size": ["100%", "100%"],
+        "color": "$mcrs_button_pressed_color",
+        "alpha": 1.0,
+        "controls": [
+            {
+                "txt": {
+                    "type": "label",
+                    "text": "#form_button_text",
+                    "color": "$mcrs_title_text_color",
+                    "shadow": true,
+                    "anchor_from": "center",
+                    "anchor_to": "center",
+                    "bindings": [
+                        {
+                            "binding_name": "#form_button_text",
+                            "binding_type": "collection",
+                            "binding_collection_name": "form_buttons"
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+
+    "grid_button": {
+        "type": "button",
+        "size": [120, 36],
+        "$pressed_button_name": "button.form_button_click",
+        "default_control": "default",
+        "hover_control": "hover",
+        "pressed_control": "pressed",
+        "controls": [
+            { "default@mcrs_grid_modal.grid_button_default_layer": {} },
+            { "hover@mcrs_grid_modal.grid_button_hover_layer": {} },
+            { "pressed@mcrs_grid_modal.grid_button_pressed_layer": {} }
+        ],
+        "bindings": [
+            {
+                "binding_name": "#form_button_click",
+                "binding_type": "collection",
+                "binding_collection_name": "form_buttons"
+            }
+        ]
+    },
+
+    "buttons_grid": {
+        "type": "grid",
+        "anchor_from": "top_middle",
+        "anchor_to": "top_middle",
+        "size": ["100%c + 8px", "100%c + 8px"],
+        "grid_item_template": "mcrs_grid_modal.grid_item_cell",
+        "grid_dimensions": [2, "#grid_rows"],
+        "collection_name": "form_buttons",
+        "bindings": [
+            {
+                "binding_name": "#form_button_contents",
+                "binding_name_override": "#collection_length"
+            },
+            {
+                "binding_type": "view",
+                "source_property_name": "(math.ceil((#collection_length + 1) / 2))",
+                "target_property_name": "#grid_rows"
+            }
+        ]
+    },
+
+    "grid_item_cell": {
+        "type": "panel",
+        "size": [128, 44],
+        "controls": [
+            {
+                "btn@mcrs_grid_modal.grid_button": {
+                    "anchor_from": "center",
+                    "anchor_to": "center"
+                }
+            }
+        ]
+    },
+
+    "main_panel": {
+        "type": "panel",
+        "size": [280, 240],
+        "anchor_from": "center",
+        "anchor_to": "center",
+        "controls": [
+            { "backdrop@mcrs_grid_modal.backdrop": {} },
+            { "top_border@mcrs_grid_modal.top_border": {} },
+            { "bottom_border@mcrs_grid_modal.bottom_border": {} },
+            { "title@mcrs_grid_modal.title_label": {} },
+            {
+                "grid_wrapper": {
+                    "type": "panel",
+                    "size": ["100%", "100% - 36px"],
+                    "anchor_from": "top_middle",
+                    "anchor_to": "top_middle",
+                    "offset": [0, 30],
+                    "controls": [
+                        { "grid@mcrs_grid_modal.buttons_grid": {} }
+                    ]
+                }
+            }
+        ]
+    }
+}

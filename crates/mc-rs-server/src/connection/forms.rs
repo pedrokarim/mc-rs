@@ -14,7 +14,7 @@ pub struct PendingForm {
 
 #[derive(Debug, Clone, Copy)]
 pub enum PendingFormKind {
-    /// Menu hub style Hive — 6 boutons (spawn, gamemode, time, biome).
+    /// Menu hub mc-rs — 6 boutons (spawn, gamemode, time, biome).
     HubMenu,
 }
 
@@ -29,8 +29,13 @@ impl Connection {
             kind: PendingFormKind::HubMenu,
         });
 
-        // Bedrock ActionForm — JSON inline. Codes couleur § interprétés.
-        let json = r#"{"type":"form","title":"§l§6HIVE§r §eHUB","content":"§7Choisis une action :","buttons":[{"text":"§a▶ Téléporter au spawn"},{"text":"§b▶ Mode Créatif"},{"text":"§e▶ Mode Survie"},{"text":"§d▶ Régler sur Jour"},{"text":"§9▶ Régler sur Nuit"},{"text":"§7▶ Infos biome"}]}"#;
+        // Bedrock ActionForm. Le préfixe "§m§a " active le layout `grid`
+        // de notre pack `resource_packs/mcrs_ui/ui/mcrs/server_form/` — title
+        // flag dispatcher. Le code "§m§a" est invisible à l'écran (le format
+        // "§m" passe le caractère suivant en magic obfuscated), mais le
+        // texte BRUT du titre contient bien la sous-chaîne "§m§a" qu'on
+        // matche dans `server_form.json` côté pack.
+        let json = r#"{"type":"form","title":"§m§a §l§6mc-rs§r §eHUB","content":"§7Choisis une action :","buttons":[{"text":"§a▶ Téléporter au spawn"},{"text":"§b▶ Mode Créatif"},{"text":"§e▶ Mode Survie"},{"text":"§d▶ Régler sur Jour"},{"text":"§9▶ Régler sur Nuit"},{"text":"§7▶ Infos biome"}]}"#;
 
         let req = ModalFormRequest {
             form_id,

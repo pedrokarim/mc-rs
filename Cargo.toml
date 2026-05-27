@@ -35,4 +35,5 @@ p384 = { version = "0.13", features = ["ecdh", "ecdsa", "pkcs8"] }
 sha2 = "0.10"
 aes = "0.8"
 ctr = "0.9"
+cfb8 = "0.8"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }

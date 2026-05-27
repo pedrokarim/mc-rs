@@ -28,3 +28,5 @@ mc-rs-webui = { path = "../mc-rs-webui", features = ["tls"] }
 flate2 = "1"
 sha2 = { workspace = true }
 zip = { workspace = true }
+aes = { workspace = true }
+cfb8 = { workspace = true }
