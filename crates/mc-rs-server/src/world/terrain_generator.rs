@@ -661,7 +661,7 @@ pub fn generate_terrain_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Ve
             max_block_y = max_block_y.max(world_y);
         }
     }
-    for (&(_, world_y, _), _) in &struct_map {
+    for &(_, world_y, _) in struct_map.keys() {
         max_block_y = max_block_y.max(world_y);
     }
     let sub_chunk_count = (((max_block_y + 64) / 16) + 1).clamp(1, 24) as usize;

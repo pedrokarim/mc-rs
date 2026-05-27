@@ -52,7 +52,7 @@ impl AchievementManager {
     }
 
     pub fn has(&self, addr: &SocketAddr, kind: AchievementKind) -> bool {
-        self.unlocked.get(addr).map_or(false, |s| s.contains(&kind))
+        self.unlocked.get(addr).is_some_and(|s| s.contains(&kind))
     }
 
     pub fn count(&self, addr: &SocketAddr) -> usize {

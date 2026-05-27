@@ -1,6 +1,6 @@
 //! Entity persistence flags.
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct PersistenceFlags {
     pub persistent: bool,   // Never despawns
     pub from_spawner: bool, // From mob spawner (despawns quickly)
@@ -8,19 +8,6 @@ pub struct PersistenceFlags {
     pub has_custom_name: bool,
     pub is_pet: bool, // Tamed
     pub is_leashed: bool,
-}
-
-impl Default for PersistenceFlags {
-    fn default() -> Self {
-        Self {
-            persistent: false,
-            from_spawner: false,
-            from_bucket: false,
-            has_custom_name: false,
-            is_pet: false,
-            is_leashed: false,
-        }
-    }
 }
 
 impl PersistenceFlags {

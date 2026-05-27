@@ -28,6 +28,7 @@ struct ConfigTemplate {
     user_name: String,
     user_role: String,
     toml_content: String,
+    #[allow(dead_code)]
     path: String,
 }
 

@@ -328,7 +328,7 @@ impl PlayerInventory {
     /// Returns the slot index if successful, None if inventory is full.
     pub fn add_item(&mut self, item: ItemStack) -> Option<usize> {
         // Max stack dépend du type d'item (sword=1, ender_pearl=16, stone=64).
-        let max_stack = crate::item_registry::item_name_by_id(item.id as i32)
+        let max_stack = crate::item_registry::item_name_by_id(item.id)
             .map(crate::stack_sizes::max_stack_size)
             .unwrap_or(64);
         // First try to stack with existing items

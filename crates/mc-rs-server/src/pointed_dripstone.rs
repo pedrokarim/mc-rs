@@ -24,7 +24,7 @@ pub struct PointedDripstone {
 
 /// Sharp dripstone damages entities falling on it.
 pub fn landing_damage(fall_distance: f32) -> f32 {
-    (fall_distance as f32 * 2.0).max(2.0).min(40.0)
+    (fall_distance * 2.0).clamp(2.0, 40.0)
 }
 
 /// Thrown trident breaks dripstone.

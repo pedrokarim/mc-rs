@@ -101,7 +101,7 @@ impl BlockRegistry {
         let mapping = build_block_mapping();
         let m = &mapping;
 
-        let result = Self {
+        Self {
             air: Self::lookup(m, "minecraft:air"),
             stone: Self::lookup(m, "minecraft:stone"),
             dirt: Self::lookup(m, "minecraft:dirt"),
@@ -171,8 +171,7 @@ impl BlockRegistry {
             reeds: Self::lookup(m, "minecraft:reeds"),
             bamboo: Self::lookup(m, "minecraft:bamboo"),
             name_to_id: mapping,
-        };
-        result
+        }
     }
 
     pub fn get(&self, name: &str) -> u32 {

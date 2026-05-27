@@ -9,7 +9,7 @@ pub const DAY_LENGTH: u64 = 24000;
 
 pub fn is_daytime(time_of_day: u64) -> bool {
     let t = time_of_day % DAY_LENGTH;
-    t >= SUN_RISE_TICK || t < SUN_SET_TICK
+    !(SUN_SET_TICK..SUN_RISE_TICK).contains(&t)
 }
 
 pub fn is_night(time_of_day: u64) -> bool {

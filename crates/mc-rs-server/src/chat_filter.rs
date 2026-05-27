@@ -13,7 +13,7 @@ pub fn is_profanity(text: &str) -> bool {
 pub fn censor(text: &str) -> String {
     let mut censored = text.to_string();
     for p in BANNED_PATTERNS {
-        let replacement: String = std::iter::repeat('*').take(p.len()).collect();
+        let replacement: String = std::iter::repeat_n('*', p.len()).collect();
         // Case-insensitive replace.
         let lower = censored.to_lowercase();
         while let Some(idx) = lower.find(p) {

@@ -28,9 +28,9 @@ pub fn yaw_to_cardinal(yaw: f32) -> &'static str {
     let n = wrap_degrees(yaw);
     if n > -45.0 && n < 45.0 {
         "south"
-    } else if n >= 45.0 && n < 135.0 {
+    } else if (45.0..135.0).contains(&n) {
         "west"
-    } else if n >= -135.0 && n < -45.0 {
+    } else if (-135.0..-45.0).contains(&n) {
         "east"
     } else {
         "north"

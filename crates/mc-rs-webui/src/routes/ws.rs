@@ -73,7 +73,7 @@ async fn logs_task(socket: WebSocket, mut rx: tokio::sync::broadcast::Receiver<c
                 match msg {
                     Ok(line) => {
                         if let Ok(json) = serde_json::to_string(&line) {
-                            if sender.send(Message::Text(json.into())).await.is_err() {
+                            if sender.send(Message::Text(json)).await.is_err() {
                                 break;
                             }
                         }
@@ -100,7 +100,7 @@ async fn events_task(socket: WebSocket, mut rx: tokio::sync::broadcast::Receiver
                 match msg {
                     Ok(ev) => {
                         if let Ok(json) = serde_json::to_string(&ev) {
-                            if sender.send(Message::Text(json.into())).await.is_err() {
+                            if sender.send(Message::Text(json)).await.is_err() {
                                 break;
                             }
                         }
@@ -139,7 +139,7 @@ async fn snapshot_task(
                     }
                     val.to_string()
                 };
-                if sender.send(Message::Text(snap_json.into())).await.is_err() {
+                if sender.send(Message::Text(snap_json)).await.is_err() {
                     break;
                 }
             }

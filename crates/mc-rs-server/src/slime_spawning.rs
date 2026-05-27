@@ -25,7 +25,7 @@ pub fn is_slime_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> bool {
     let a = Wrapping(1181783497276652981_u64);
     let b = Wrapping(0x1_u64);
     let next = xored.0.wrapping_mul(a.0).wrapping_add(b.0);
-    (next >> 17) % 10 == 0
+    (next >> 17).is_multiple_of(10)
 }
 
 #[cfg(test)]

@@ -21,7 +21,7 @@ pub fn is_in_radius(px: i32, pz: i32, cx: i32, cz: i32, radius: i32) -> bool {
 
 /// Distance (chunk units).
 pub fn chunk_distance(a: (i32, i32), b: (i32, i32)) -> i32 {
-    ((a.0 - b.0).pow(2) + (a.1 - b.1).pow(2)) as i32
+    (a.0 - b.0).pow(2) + (a.1 - b.1).pow(2)
 }
 
 #[cfg(test)]

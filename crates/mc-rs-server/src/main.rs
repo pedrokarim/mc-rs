@@ -1347,17 +1347,17 @@ async fn main() {
     // ── Web admin panel (mc-rs-webui) ──
     // Channels + snapshot partagés avec le crate webui. La main loop met à
     // jour le snapshot ~20 Hz, push les events+logs dans les broadcasts.
-    let webui_snapshot = std::sync::Arc::new(tokio::sync::RwLock::new({
-        let mut snap = mc_rs_webui::ServerSnapshot::default();
-        snap.motd = config.server.motd.clone();
-        snap.world_name = config.world.name.clone();
-        snap.max_players = config.server.max_players;
-        snap.gamemode = config.gameplay.gamemode_id();
-        snap.difficulty = config.gameplay.difficulty_id();
-        snap.boot_instant = Some(std::time::Instant::now());
-        snap.uptime_start_unix = chrono::Utc::now().timestamp();
-        snap
-    }));
+    let webui_snapshot =
+        std::sync::Arc::new(tokio::sync::RwLock::new(mc_rs_webui::ServerSnapshot {
+            motd: config.server.motd.clone(),
+            world_name: config.world.name.clone(),
+            max_players: config.server.max_players,
+            gamemode: config.gameplay.gamemode_id(),
+            difficulty: config.gameplay.difficulty_id(),
+            boot_instant: Some(std::time::Instant::now()),
+            uptime_start_unix: chrono::Utc::now().timestamp(),
+            ..Default::default()
+        }));
 
     let webui_task = if config.webui.enabled {
         let handle = mc_rs_webui::WebUiHandle::new(
@@ -1562,7 +1562,7 @@ async fn main() {
                 webui_snapshot_counter = webui_snapshot_counter.wrapping_add(1);
 
                 // Snapshot update ~20 Hz (tous les 5 server ticks à 100 TPS).
-                if webui_snapshot_counter % 5 == 0 {
+                if webui_snapshot_counter.is_multiple_of(5) {
                     let players_snap: Vec<mc_rs_webui::PlayerSnapshot> = registry
                         .players
                         .values()
@@ -1631,7 +1631,7 @@ async fn main() {
 
                 // Push history rings ~1 Hz (tous les 100 server ticks à 100 TPS).
                 webui_history_counter = webui_history_counter.wrapping_add(1);
-                if webui_history_counter % 100 == 0 {
+                if webui_history_counter.is_multiple_of(100) {
                     let sys = webui_system_probe.sample();
                     let now_unix = chrono::Utc::now().timestamp();
                     if let Ok(mut snap) = webui_snapshot.try_write() {
@@ -2864,7 +2864,7 @@ fn process_peer_events(
                                         let events = target_conn.events.clone();
                                         let mut ev = events.lock().unwrap();
                                         crate::combat::attack_entity(
-                                            &mut *ev,
+                                            &mut ev,
                                             target_conn.entity_runtime_id,
                                             target_conn.position,
                                             &mut target_conn.attributes,

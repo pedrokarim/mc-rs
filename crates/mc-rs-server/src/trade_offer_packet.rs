@@ -31,7 +31,7 @@ impl TradeOffer {
     pub fn current_buy_price(&self) -> u16 {
         let demand_increase = (self.demand as f32 * self.price_multiplier).max(0.0);
         let base = self.buy_a.count as f32 + demand_increase + self.special_price as f32;
-        base.max(1.0).min(64.0) as u16
+        base.clamp(1.0, 64.0) as u16
     }
 }
 

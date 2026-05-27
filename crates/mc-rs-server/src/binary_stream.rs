@@ -87,7 +87,7 @@ impl BinaryStream {
         let mut v = v as u32;
         loop {
             if v >= 0x80 {
-                self.write_byte((v as u8 | 0x80) as u8);
+                self.write_byte(v as u8 | 0x80);
                 v >>= 7;
             } else {
                 self.write_byte(v as u8);

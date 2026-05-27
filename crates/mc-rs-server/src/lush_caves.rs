@@ -1,12 +1,10 @@
 //! Lush caves — underground biome.
-
 /// Azalea tree roots generate moss.
 /// Moss + bone meal spreads.
 /// Glow berries hang from cave vines.
 /// Spore blossoms hang from ceiling.
 /// Dripleaf + small dripleaf.
-/// Rooted dirt grows hanging roots.
-
+// Rooted dirt grows hanging roots.
 pub const MIN_Y: i32 = -60;
 pub const MAX_Y: i32 = 50;
 

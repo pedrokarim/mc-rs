@@ -529,8 +529,7 @@ impl InventoryManager {
         // PMMP check: "si networkIdToInventoryMap[last] existe". On reproduit :
         // uniquement si `id` correspond à une fenêtre dynamique (≥ FIRST, ≤ LAST)
         // distincte des windowIds permanents (0/119/120/124).
-        if id >= container_ids::FIRST
-            && id <= container_ids::LAST
+        if (container_ids::FIRST..=container_ids::LAST).contains(&id)
             && self.network_id_to_key.contains_key(&id)
         {
             // remove

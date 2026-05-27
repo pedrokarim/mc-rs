@@ -35,7 +35,7 @@ impl Bundle {
             .sum()
     }
 
-    pub fn can_add(&self, item_id: u16, count: u16, max_stack: u16) -> bool {
+    pub fn can_add(&self, _item_id: u16, count: u16, max_stack: u16) -> bool {
         let getter = |_: u16| max_stack;
         let current = self.current_weight(getter);
         let additional = (count as u32) * item_weight(max_stack);

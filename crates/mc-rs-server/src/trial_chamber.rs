@@ -1,5 +1,4 @@
 //! Trial Chamber — 1.21 structure.
-
 pub const MIN_DEPTH: i32 = -40;
 pub const MAX_DEPTH: i32 = 30;
 
@@ -9,8 +8,7 @@ pub const MAX_DEPTH: i32 = 30;
 /// - Ominous vaults (with ominous loot)
 /// - Chiseled tuff
 /// - Copper
-/// - New wind charges
-
+// - New wind charges
 pub fn structure_name() -> &'static str {
     "trial_chambers"
 }

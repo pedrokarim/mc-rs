@@ -41,7 +41,7 @@ impl ElytraState {
 
     pub fn tick(&mut self) {
         if self.gliding {
-            if self.durability > 0 && rand::random::<u32>() % 20 == 0 {
+            if self.durability > 0 && rand::random::<u32>().is_multiple_of(20) {
                 self.durability -= 1;
             }
             if self.durability == 0 {

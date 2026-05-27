@@ -514,6 +514,7 @@ fn footprint_surface_stats(
     (min_surface, max_surface, avg_surface)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn placement_y_for_footprint(
     def: &StructureDef,
     rules: StructureGroupRules,

@@ -72,9 +72,8 @@ pub fn colors_for_biome(biome_id: u8) -> BiomeColors {
             dry_foliage: [118, 142, 81],
         },
         6 | 134 => SWAMP_COLORS,
-        11..=30 => SNOWY_COLORS,
-        14 | 15 => MUSHROOM_COLORS,
         21..=23 | 149 | 151 => JUNGLE_COLORS,
+        11..=30 => SNOWY_COLORS,
         _ => PLAINS_COLORS,
     }
 }

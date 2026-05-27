@@ -2,9 +2,7 @@
 //! Port PMMP `src/network/mcpe/protocol/types/entity/EntityIds.php`.
 
 use crate::mob_ai::MobKind;
-use crate::passive_entities::*;
 use crate::projectiles::ProjectileKind;
-use crate::vehicles::VehicleKind;
 
 /// Tous les identifiants réseau d'entités que le serveur peut spawn.
 pub fn all_entity_network_ids() -> Vec<&'static str> {

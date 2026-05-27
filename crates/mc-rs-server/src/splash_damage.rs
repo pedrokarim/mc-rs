@@ -11,8 +11,8 @@ pub fn explosion_damage(
         return 0.0;
     }
     let impact = (1.0 - distance / (power as f64 * 2.0)) as f32 * block_exposure;
-    let damage = ((impact * impact + impact) / 2.0 * 7.0 * power + 1.0).max(0.0);
-    damage
+
+    ((impact * impact + impact) / 2.0 * 7.0 * power + 1.0).max(0.0)
 }
 
 /// Knockback impulse from explosion.
@@ -25,7 +25,7 @@ pub fn explosion_knockback(distance: f64, power: f32) -> f32 {
 
 /// Block break range from explosion.
 pub fn explosion_break_range(power: f32) -> f64 {
-    (0.7 + 0.6 * power as f64) as f64
+    0.7 + 0.6 * power as f64
 }
 
 #[cfg(test)]

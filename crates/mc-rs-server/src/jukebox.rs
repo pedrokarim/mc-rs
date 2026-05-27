@@ -1,7 +1,6 @@
 //! Jukebox — port PMMP `src/block/tile/Jukebox.php`.
 
-use mc_rs_proto::packets::player::ItemStack;
-
+#[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MusicDiscKind {
     C418_13,

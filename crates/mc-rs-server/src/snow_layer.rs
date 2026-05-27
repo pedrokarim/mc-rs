@@ -9,12 +9,9 @@ pub const LAYER_HEIGHT: f32 = 0.125;
 pub const ACCUMULATION_CHANCE: f32 = 0.1;
 
 /// Breakdown: silk_touch/shovel drops snowballs.
-pub fn snowballs_dropped(layers: u8, silk_touch: bool) -> u32 {
-    if silk_touch {
-        layers as u32
-    } else {
-        layers as u32
-    }
+pub fn snowballs_dropped(layers: u8, _silk_touch: bool) -> u32 {
+    // Snow layer drops 1 snowball per layer regardless of silk touch.
+    layers as u32
 }
 
 /// Only accumulate in cold biomes.

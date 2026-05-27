@@ -1210,7 +1210,7 @@ fn resolve_main_script(root_dir: &Path, main: &str) -> Option<PathBuf> {
         }
     }
 
-    let dotted = trimmed.replace('\\', ".").replace('/', ".");
+    let dotted = trimmed.replace(['\\', '/'], ".");
     let dotted_path = root_dir
         .join(dotted.replace('.', "/"))
         .with_extension("lua");
@@ -1278,9 +1278,9 @@ fn order_plugins(mut plugins: Vec<LoadedPlugin>) -> Vec<LoadedPlugin> {
     if ordered_names.len() != plugins.len() {
         let mut remaining = plugins
             .iter()
-            .filter_map(|plugin| {
+            .filter(|plugin| {
                 let key = plugin.manifest.name.to_ascii_lowercase();
-                (!ordered_names.iter().any(|name| name == &key)).then_some(plugin)
+                !ordered_names.iter().any(|name| name == &key)
             })
             .collect::<Vec<_>>();
         remaining.sort_by(|left, right| {

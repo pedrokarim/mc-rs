@@ -99,7 +99,7 @@ impl PressurePlate {
                     0
                 }
             }
-            PressurePlateKind::GoldHeavyWeighted => ((entity_count + 3) / 4).min(15) as u8,
+            PressurePlateKind::GoldHeavyWeighted => entity_count.div_ceil(4).min(15) as u8,
             PressurePlateKind::IronLightWeighted => (entity_count).min(15) as u8,
         };
     }

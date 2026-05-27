@@ -63,8 +63,8 @@ pub fn stonecutter_recipes() -> Vec<StonecutterRecipe> {
         .iter()
         .flat_map(|(input, outs)| {
             outs.iter().map(move |o| StonecutterRecipe {
-                input: *input,
-                output: *o,
+                input,
+                output: o,
                 count: 1,
             })
         })

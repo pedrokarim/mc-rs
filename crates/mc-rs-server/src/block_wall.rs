@@ -35,7 +35,8 @@ impl Wall {
         let s = self.south != WallConnection::None;
         let e = self.east != WallConnection::None;
         let w = self.west != WallConnection::None;
-        !(n && s && !e && !w) && !(e && w && !n && !s)
+        // Has a post unless connections are exactly a straight line (N+S only, or E+W only).
+        !((n && s && !e && !w) || (e && w && !n && !s))
     }
 }
 

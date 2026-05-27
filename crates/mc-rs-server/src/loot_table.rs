@@ -59,6 +59,7 @@ impl IntOrRange {
 }
 
 #[derive(Deserialize, Debug, Clone)]
+#[allow(dead_code)]
 struct RawFunction {
     function: String,
     #[serde(default)]
@@ -70,11 +71,11 @@ struct RawFunction {
     #[serde(default)]
     data: Option<IntOrRange>,
     #[serde(default)]
-    #[allow(dead_code)]
     values: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
+#[allow(dead_code)]
 struct RawCondition {
     condition: String,
     #[serde(default)]

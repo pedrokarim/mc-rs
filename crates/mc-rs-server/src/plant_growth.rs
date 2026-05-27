@@ -63,7 +63,7 @@ pub fn tree_default_height(species: &str) -> u32 {
 }
 
 pub fn check_growable(plant_name: &str, light_level: u8, farmland: bool) -> bool {
-    if let Some(_) = crop_max_stage(plant_name) {
+    if crop_max_stage(plant_name).is_some() {
         can_crop_grow(light_level, farmland)
     } else {
         light_level >= 9

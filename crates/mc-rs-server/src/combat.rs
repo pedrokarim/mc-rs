@@ -76,6 +76,7 @@ pub struct AttackOutcome {
 /// - décrémente HEALTH, détecte mort (→ `EntityDeathEvent`)
 ///
 /// `attacker_position` : position XZ de l'attaquant pour calculer le knockback.
+#[allow(clippy::too_many_arguments)]
 pub fn attack_entity(
     events: &mut EventManager,
     target_entity_id: u64,

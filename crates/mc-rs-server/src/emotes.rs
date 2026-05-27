@@ -32,7 +32,7 @@ impl EmoteRegistry {
     pub fn has(&self, addr: &SocketAddr, emote_id: &uuid::Uuid) -> bool {
         self.per_player
             .get(addr)
-            .map_or(false, |p| p.emote_ids.contains(emote_id))
+            .is_some_and(|p| p.emote_ids.contains(emote_id))
     }
 }
 

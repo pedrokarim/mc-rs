@@ -34,7 +34,7 @@ impl Default for PlayerSaveData {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SavedItemStackData {
     pub id: i32,
     pub count: u16,
@@ -42,18 +42,6 @@ pub struct SavedItemStackData {
     pub block_runtime_id: i32,
     #[serde(default)]
     pub extra_data: Vec<u8>,
-}
-
-impl Default for SavedItemStackData {
-    fn default() -> Self {
-        Self {
-            id: 0,
-            count: 0,
-            meta: 0,
-            block_runtime_id: 0,
-            extra_data: Vec::new(),
-        }
-    }
 }
 
 impl From<&ItemStack> for SavedItemStackData {

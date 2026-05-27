@@ -274,10 +274,8 @@ impl MobAi {
                 let dy = ppos[1] - self.position[1];
                 let dz = ppos[2] - self.position[2];
                 let dist = (dx * dx + dy * dy + dz * dz).sqrt();
-                if dist < range {
-                    if closest.map_or(true, |(_, d)| dist < d) {
-                        closest = Some((*pid, dist));
-                    }
+                if dist < range && closest.is_none_or(|(_, d)| dist < d) {
+                    closest = Some((*pid, dist));
                 }
             }
             if let Some((pid, dist)) = closest {

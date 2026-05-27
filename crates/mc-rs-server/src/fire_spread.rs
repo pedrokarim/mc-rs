@@ -25,7 +25,7 @@ pub fn flammability_for(block_id: u16) -> Flammability {
             burn_chance: 30,
             spread_chance: 60,
         }, // leaves
-        37 | 38 | 39 | 40 => Flammability {
+        37..=40 => Flammability {
             burn_chance: 60,
             spread_chance: 100,
         }, // flowers/mushrooms

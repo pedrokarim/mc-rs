@@ -25,7 +25,7 @@ fn disable_udp_conn_reset(socket: &UdpSocket) {
     // SIO_UDP_CONNRESET = _WSAIOW(IOC_VENDOR, 12) = 0x9800000C
     const SIO_UDP_CONNRESET: u32 = 0x9800_000C;
 
-    #[allow(non_camel_case_types)]
+    #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
     type SOCKET = usize;
 
     extern "system" {
@@ -140,7 +140,7 @@ impl RakNetServer {
                 use std::sync::atomic::{AtomicU64, Ordering};
                 static ERR_COUNT: AtomicU64 = AtomicU64::new(0);
                 let n = ERR_COUNT.fetch_add(1, Ordering::Relaxed);
-                if n == 0 || n % 500 == 0 {
+                if n == 0 || n.is_multiple_of(500) {
                     tracing::warn!(
                         "recv_from error #{n}: kind={:?} raw_os={:?} msg={}",
                         e.kind(),

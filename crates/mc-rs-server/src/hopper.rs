@@ -55,15 +55,13 @@ impl Hopper {
     pub fn add_item(&mut self, id: u16, count: u16) -> u16 {
         let mut remaining = count;
         // First try to stack.
-        for slot in self.inventory.iter_mut() {
-            if let Some((sid, scount)) = slot {
-                if *sid == id && *scount < 64 {
-                    let add = (64 - *scount).min(remaining);
-                    *scount += add;
-                    remaining -= add;
-                    if remaining == 0 {
-                        return 0;
-                    }
+        for (sid, scount) in self.inventory.iter_mut().flatten() {
+            if *sid == id && *scount < 64 {
+                let add = (64 - *scount).min(remaining);
+                *scount += add;
+                remaining -= add;
+                if remaining == 0 {
+                    return 0;
                 }
             }
         }

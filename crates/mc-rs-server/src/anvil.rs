@@ -1,6 +1,6 @@
 //! Anvil — port PMMP `src/block/Anvil.php` + enchant/rename logic.
 
-use crate::enchantments::{EnchantmentInstance, EnchantmentKind};
+use crate::enchantments::EnchantmentInstance;
 
 /// Coût XP pour une opération anvil.
 #[derive(Debug, Clone, Default)]

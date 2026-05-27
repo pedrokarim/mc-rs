@@ -40,15 +40,15 @@ impl Dripleaf {
 
     pub fn tick(&mut self) {
         self.ticks_since_entity += 1;
-        if matches!(self.tilt, DripleafTilt::Unstable | DripleafTilt::Partial) {
-            if self.ticks_since_entity >= TILT_TICKS {
-                self.tilt = match self.tilt {
-                    DripleafTilt::Unstable => DripleafTilt::Partial,
-                    DripleafTilt::Partial => DripleafTilt::Full,
-                    _ => self.tilt,
-                };
-                self.ticks_since_entity = 0;
-            }
+        if matches!(self.tilt, DripleafTilt::Unstable | DripleafTilt::Partial)
+            && self.ticks_since_entity >= TILT_TICKS
+        {
+            self.tilt = match self.tilt {
+                DripleafTilt::Unstable => DripleafTilt::Partial,
+                DripleafTilt::Partial => DripleafTilt::Full,
+                _ => self.tilt,
+            };
+            self.ticks_since_entity = 0;
         }
     }
 

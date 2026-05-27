@@ -6,7 +6,7 @@ mod login;
 mod movement;
 mod spawn;
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 

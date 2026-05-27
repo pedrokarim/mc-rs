@@ -1,9 +1,7 @@
 //! Random tick speed and scheduled tick system.
-
 /// Default random tick speed (3).
 pub const DEFAULT_RANDOM_TICK_SPEED: u32 = 3;
-/// Per-chunk random ticks = randomTickSpeed blocks per section per tick.
-
+// Per-chunk random ticks = randomTickSpeed blocks per section per tick.
 /// Scheduled ticks take effect after N game ticks.
 #[derive(Debug, Clone)]
 pub struct ScheduledBlockTick {

@@ -17,10 +17,7 @@ pub fn should_decay(persistent: bool, distance_to_log: Option<u8>) -> bool {
     if persistent {
         return false;
     }
-    match distance_to_log {
-        Some(d) if d <= MAX_DISTANCE_FROM_LOG => false,
-        _ => true,
-    }
+    !matches!(distance_to_log, Some(d) if d <= MAX_DISTANCE_FROM_LOG)
 }
 
 /// Shears + silk touch prevent decay drops.

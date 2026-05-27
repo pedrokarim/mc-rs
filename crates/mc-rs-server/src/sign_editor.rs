@@ -9,21 +9,11 @@ pub enum SignFace {
     Back, // 1.20+ hanging signs can have 2 sides
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SignText {
     pub lines: [String; 4],
     pub glow: bool,
     pub color: u32, // 0xRRGGBB
-}
-
-impl Default for SignText {
-    fn default() -> Self {
-        Self {
-            lines: [String::new(), String::new(), String::new(), String::new()],
-            glow: false,
-            color: 0x000000,
-        }
-    }
 }
 
 impl SignText {

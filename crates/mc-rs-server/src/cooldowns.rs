@@ -79,7 +79,7 @@ impl CooldownManager {
     pub fn is_on_cooldown(&self, addr: &SocketAddr, kind: CooldownKind) -> bool {
         self.per_player
             .get(addr)
-            .map_or(false, |p| p.is_on_cooldown(kind))
+            .is_some_and(|p| p.is_on_cooldown(kind))
     }
 }
 

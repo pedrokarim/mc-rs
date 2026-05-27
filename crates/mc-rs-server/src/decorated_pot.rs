@@ -52,10 +52,8 @@ impl DecoratedPot {
     /// Pot breaks when hit with non-tool item — drops sherds.
     pub fn break_returns_sherds(&self) -> Vec<&'static str> {
         let mut out = Vec::new();
-        for slot in &self.sherds {
-            if let Some(name) = slot {
-                out.push(*name);
-            }
+        for name in self.sherds.iter().flatten() {
+            out.push(*name);
         }
         out
     }

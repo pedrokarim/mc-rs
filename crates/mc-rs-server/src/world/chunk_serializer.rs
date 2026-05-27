@@ -65,7 +65,9 @@ pub fn serialize_biome_sections_from_columns(
 ) -> Vec<u8> {
     let mut coarse = [0u32; 64];
 
+    #[allow(clippy::needless_range_loop)]
     for coarse_x in 0..4usize {
+        #[allow(clippy::needless_range_loop)]
         for coarse_z in 0..4usize {
             let mut counts: Vec<(u32, usize)> = Vec::new();
             for x in (coarse_x * 4)..(coarse_x * 4 + 4) {

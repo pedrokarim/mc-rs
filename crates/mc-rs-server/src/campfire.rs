@@ -55,10 +55,8 @@ impl Campfire {
         if !self.lit {
             return;
         }
-        for slot in self.slots.iter_mut() {
-            if let Some(s) = slot {
-                s.cook_ticks += 1;
-            }
+        for s in self.slots.iter_mut().flatten() {
+            s.cook_ticks += 1;
         }
     }
 

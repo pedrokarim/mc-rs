@@ -54,7 +54,7 @@ impl SleepManager {
 /// Condition pour dormir : il doit faire nuit (time >= 12541 && time <= 23458).
 pub fn can_sleep(game_time: i32) -> bool {
     let t = game_time.rem_euclid(24000);
-    t >= 12541 && t <= 23458
+    (12541..=23458).contains(&t)
 }
 
 /// Passer au matin (PMMP `sleep_until_morning`). Retourne le nouveau game_time.

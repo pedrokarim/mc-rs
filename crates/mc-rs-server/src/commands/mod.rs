@@ -535,6 +535,7 @@ fn normalize_command_label(label: &str) -> String {
     label.trim().trim_start_matches('/').to_ascii_lowercase()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn dispatch_command_line(
     source: CommandSource,
     line: &str,
@@ -578,6 +579,7 @@ pub fn dispatch_command_line(
 }
 
 impl ExecutionContext<'_> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new<'a>(
         source: CommandSource,
         command_system: &'a ServerCommandSystem,
@@ -725,7 +727,7 @@ impl ExecutionContext<'_> {
         let viewer = ViewerContext {
             addr,
             permissions: &self.command_system.permissions,
-            connections: &self.connections,
+            connections: self.connections,
         };
         Some(
             self.command_system

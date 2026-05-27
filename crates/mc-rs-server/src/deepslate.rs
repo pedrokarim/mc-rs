@@ -1,5 +1,4 @@
 //! Deepslate blocks + ore variants.
-
 /// Deepslate harder than stone.
 pub const DEEPSLATE_HARDNESS: f32 = 3.0;
 pub const DEEPSLATE_BLAST_RESISTANCE: f32 = 6.0;
@@ -7,8 +6,7 @@ pub const DEEPSLATE_BLAST_RESISTANCE: f32 = 6.0;
 /// Deepslate ore generation depth range.
 pub const DEEPSLATE_MIN_Y: i32 = 0;
 pub const DEEPSLATE_MAX_Y: i32 = 8;
-/// Transition zone: stone → deepslate (0-8).
-
+// Transition zone: stone → deepslate (0-8).
 pub fn is_deepslate_block(block_id: u16) -> bool {
     matches!(
         block_id,

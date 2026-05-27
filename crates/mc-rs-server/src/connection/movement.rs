@@ -600,7 +600,7 @@ impl Connection {
             if self.is_sneaking {
                 flags |= entity_flags::SNEAKING;
             }
-            let player_name = self.display_name.clone().unwrap_or_default();
+            let _player_name = self.display_name.clone().unwrap_or_default();
             let actor_data = SetActorData {
                 runtime_entity_id: self.entity_runtime_id,
                 metadata: vec![(
@@ -877,7 +877,7 @@ impl Connection {
                 let cur = &self.inventory.slots[slot].item;
                 let was_air = cur.is_air();
                 let prev = cur.count;
-                let next = if prev > 1 { prev - 1 } else { 0 };
+                let next = prev.saturating_sub(1);
                 (prev, next, was_air)
             };
             let new_item = if new_count == 0 {

@@ -212,9 +212,7 @@ pub enum ChainVerifyError {
 }
 
 fn split_signing_input(jwt: &str) -> Option<(String, &str)> {
-    let mut iter = jwt.rsplitn(2, '.');
-    let sig = iter.next()?;
-    let signing = iter.next()?;
+    let (signing, sig) = jwt.rsplit_once('.')?;
     Some((signing.to_string(), sig))
 }
 
@@ -245,7 +243,7 @@ fn verify_jwt_signature(jwt: &str, pub_key_b64: &str) -> Result<(), ChainVerifyE
 /// Vérifie la chain JWT du Certificate field (login authentifié Xbox).
 /// Algorithme PMMP `XboxAuthJwt::validateLoginJwt` :
 ///   - chain[0] : si header.x5u est la clé Mojang root, signed by Mojang
-///                (sinon self-signed mais validé via x5u du JWT lui-même).
+///     (sinon self-signed mais validé via x5u du JWT lui-même).
 ///   - chain[i>0] : signed by claims.identityPublicKey de chain[i-1].
 ///
 /// Retourne la clé publique du LAST JWT (le ClientPublicKey utilisé pour

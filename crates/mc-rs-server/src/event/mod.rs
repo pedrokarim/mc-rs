@@ -188,7 +188,7 @@ impl EventManager {
     pub fn has_handlers<E: Event>(&self) -> bool {
         self.handlers
             .get(&TypeId::of::<E>())
-            .map_or(false, |v| !v.is_empty())
+            .is_some_and(|v| !v.is_empty())
     }
 
     /// PMMP `Event::call()` : dispatch dans l'ordre de priorité.

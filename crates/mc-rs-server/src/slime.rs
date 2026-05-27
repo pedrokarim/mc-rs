@@ -61,11 +61,9 @@ impl Slime {
                     .wrapping_mul(0x4307a7),
             )
             ^ 0x3ad8025f;
-        (seed
-            .wrapping_mul(seed.wrapping_mul(6364136223846793005))
+        seed.wrapping_mul(seed.wrapping_mul(6364136223846793005))
             .wrapping_add(1442695040888963407)
-            % 10)
-            == 0
+            .is_multiple_of(10)
     }
 }
 
