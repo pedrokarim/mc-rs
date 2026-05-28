@@ -44,9 +44,15 @@ crates/
         └── random.rs           — RNG déterministe
 ```
 
-## old_crates/
+## Code legacy (supprimé)
 
-**NE JAMAIS TOUCHER**. Ancien code qui ne compile pas avec le nouveau. Sert uniquement de référence pour voir comment certains systèmes étaient implémentés.
+`old_crates/` et `docs_initial/` (première tentative du serveur + sa doc de conception) ont été
+**supprimés du repo le 2026-05-28**. Ils polluaient la base de code et ne compilaient plus.
+
+**NE JAMAIS les réutiliser ni s'en servir de référence d'implémentation.** Seule référence
+canonique : PocketMine-MP dans `.reference/PocketMine-MP/`. Ce qu'ils contenaient est documenté
+dans [`docs/ARCHIVE-legacy-code.md`](docs/ARCHIVE-legacy-code.md) ; le code reste récupérable
+dans l'historique git (commit `788b429`) si jamais besoin de consulter.
 
 ## Builds et tests
 

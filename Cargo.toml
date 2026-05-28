@@ -10,9 +10,6 @@ members = [
     "crates/mc-rs-server",
     "benchmark",
 ]
-exclude = [
-    "old_crates",
-]
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
