@@ -193,7 +193,15 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
 
     // 3) Surface rules vanilla (par biome) : grass/dirt/sable/grès/gravier/
     // terracotta + bedrock/deepslate.
-    super::surface::build(&mut grid, seed, base_x, base_z, &biome_idx, &BIOMES.names);
+    super::surface::build(
+        &mut grid,
+        seed,
+        base_x,
+        base_z,
+        &biome_idx,
+        &BIOMES.names,
+        &surfaces,
+    );
 
     // 4) Décoration (arbres, herbe, fleurs, cactus…) par biome — réutilise le
     // module `vegetation` (les IDs Bedrock de notre carte sont ceux qu'il

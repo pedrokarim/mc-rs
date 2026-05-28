@@ -92,9 +92,30 @@ enum Cond {
         max: f64,
     },
     Hole,
-    /// `temperature` / `steep` non encore portés.
+    /// `coldEnoughToSnow` vanilla. Approximé par l'appartenance du biome à
+    /// l'ensemble des biomes froids (base temp < 0.15) ; l'ajustement de
+    /// température par l'altitude (terme de bruit) est négligé.
+    Temperature,
+    /// Pente raide : différence de hauteur de surface ≥ 4 avec un voisin.
+    Steep,
+    /// Type de condition non géré.
     AlwaysFalse,
 }
+
+/// Biomes froids (base temperature < 0.15) → `coldEnoughToSnow` vrai.
+const COLD_BIOMES: &[&str] = &[
+    "minecraft:snowy_plains",
+    "minecraft:ice_spikes",
+    "minecraft:snowy_taiga",
+    "minecraft:snowy_beach",
+    "minecraft:grove",
+    "minecraft:snowy_slopes",
+    "minecraft:frozen_peaks",
+    "minecraft:jagged_peaks",
+    "minecraft:frozen_ocean",
+    "minecraft:deep_frozen_ocean",
+    "minecraft:frozen_river",
+];
 
 enum Rule {
     Block(u32),
@@ -116,6 +137,7 @@ struct Ctx<'a> {
     surface_secondary: f64,
     min_surface_level: i32,
     biome: &'a str,
+    steep: bool,
 }
 
 impl Cond {
@@ -181,6 +203,8 @@ impl Cond {
                 v >= *min && v <= *max
             }
             Cond::Hole => c.surface_depth <= 0.0,
+            Cond::Temperature => COLD_BIOMES.contains(&c.biome),
+            Cond::Steep => c.steep,
             Cond::AlwaysFalse => false,
         }
     }
@@ -255,7 +279,10 @@ fn parse_rule(v: &Value, deriver: &super::rng::PositionalRandomFactory) -> Rule 
             parse_cond(&v["if_true"], deriver),
             Box::new(parse_rule(&v["then_run"], deriver)),
         ),
-        _ => Rule::Noop, // bandlands, etc.
+        // `bandlands` (terracotta des badlands) : approximation en terracotta
+        // uniforme (les bandes colorées par Y restent à porter).
+        "bandlands" => Rule::Block(resolve_block("minecraft:terracotta")),
+        _ => Rule::Noop,
     }
 }
 
@@ -306,7 +333,9 @@ fn parse_cond(v: &Value, deriver: &super::rng::PositionalRandomFactory) -> Cond 
             }
         }
         "hole" => Cond::Hole,
-        _ => Cond::AlwaysFalse, // temperature, steep
+        "temperature" => Cond::Temperature,
+        "steep" => Cond::Steep,
+        _ => Cond::AlwaysFalse,
     }
 }
 
@@ -322,6 +351,7 @@ pub fn build(
     base_z: i32,
     biome_idx: &[[u16; 16]; 16],
     biome_names: &[String],
+    surfaces: &[[i32; 16]; 16],
 ) {
     let mut guard = BUILDER.lock().unwrap();
     if guard.1.is_none() || guard.0 != seed {
@@ -333,6 +363,20 @@ pub fn build(
         for lz in 0..16usize {
             let wx = base_x + lx as i32;
             let wz = base_z + lz as i32;
+
+            // Pente raide (vanilla `steep`) : diff. de hauteur ≥ 4 avec un
+            // voisin cardinal (hauteurs de colonne, bornées au chunk).
+            let steep = {
+                let zk = lz.saturating_sub(1);
+                let zl = (lz + 1).min(15);
+                if surfaces[lx][zl] >= surfaces[lx][zk] + 4 {
+                    true
+                } else {
+                    let xo = lx.saturating_sub(1);
+                    let xp = (lx + 1).min(15);
+                    surfaces[xo][lz] >= surfaces[xp][lz] + 4
+                }
+            };
             let surface_depth = b.surface_noise.get_value(wx as f64, 0.0, wz as f64) * 2.75 + 3.0;
             let surface_secondary = b
                 .surface_secondary_noise
@@ -400,6 +444,7 @@ pub fn build(
                     surface_secondary,
                     min_surface_level,
                     biome,
+                    steep,
                 };
                 if let Some(id) = run_rule(&b.rule, &ctx) {
                     grid[i] = id;
@@ -471,7 +516,8 @@ mod tests {
         let idx = [[0u16; 16]; 16];
         let names = vec!["minecraft:plains".to_string()];
 
-        build(&mut grid, 42, 0, 0, &idx, &names);
+        let surfaces = [[top; 16]; 16];
+        build(&mut grid, 42, 0, 0, &idx, &names, &surfaces);
 
         assert_eq!(
             grid[grid_index(0, top, 0)],
@@ -498,7 +544,8 @@ mod tests {
         let idx = [[0u16; 16]; 16];
         let names = vec!["minecraft:desert".to_string()];
 
-        build(&mut grid, 42, 0, 0, &idx, &names);
+        let surfaces = [[top; 16]; 16];
+        build(&mut grid, 42, 0, 0, &idx, &names, &surfaces);
 
         // Le désert pose du sable en surface (condition biome activée).
         assert_eq!(
