@@ -18,3 +18,4 @@ webui.db-journal
 webui.db-wal
 webui.db-shm
 WEBUI_ACCESS.md
+.obsidian/
