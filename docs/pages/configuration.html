@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Configuration — MC-RS Documentation</title>
+  <link rel="icon" type="image/png" href="../logo-simple.png">
   <link rel="stylesheet" href="../style.css">
 </head>
 <body>
@@ -12,14 +13,7 @@
 <header class="site-header">
   <button class="hamburger" aria-label="Menu">&#9776;</button>
   <a href="../" class="header-logo">
-    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="8" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.3"/>
-      <rect x="8" y="2" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.6"/>
-      <rect x="6" y="6" width="16" height="16" rx="2" fill="#4ecca3"/>
-      <rect x="10" y="10" width="4" height="4" fill="#0f0f1a"/>
-      <rect x="18" y="10" width="4" height="4" fill="#0f0f1a"/>
-      <rect x="12" y="16" width="8" height="3" rx="1" fill="#0f0f1a"/>
-    </svg>
+    <img src="../logo-simple.png" alt="MC-RS" class="header-logo-img" style="height:30px;width:auto">
     <span>MC<span class="accent">-RS</span></span>
   </a>
   <div class="search-wrapper">
@@ -81,6 +75,21 @@
     </a>
   </div>
   <div class="sidebar-section">
+    <div class="sidebar-section-title">Extensions</div>
+    <a href="plugins.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      Plugins
+    </a>
+    <a href="web-panel.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+      Web Panel
+    </a>
+    <a href="resource-packs.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+      Resource Packs &amp; UI
+    </a>
+  </div>
+  <div class="sidebar-section">
     <div class="sidebar-section-title">Links</div>
     <a href="https://github.com/pedrokarim/mc-rs" class="sidebar-link" target="_blank" rel="noopener">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
@@ -125,16 +134,39 @@
 
 <span class="ty">[world]</span>
 <span class="kw">name</span> = <span class="str">"world"</span>                 <span class="cm"># World directory name</span>
-<span class="kw">generator</span> = <span class="str">"flat"</span>             <span class="cm"># World generator type</span>
+<span class="kw">generator</span> = <span class="str">"normal"</span>           <span class="cm"># "normal" (Simplex 3D) or "flat"</span>
 <span class="kw">seed</span> = <span class="num">0</span>                       <span class="cm"># World seed (0 = random)</span>
 
 <span class="ty">[gameplay]</span>
-<span class="kw">gamemode</span> = <span class="str">"creative"</span>          <span class="cm"># Default game mode for new players</span>
+<span class="kw">gamemode</span> = <span class="str">"survival"</span>          <span class="cm"># Default game mode for new players</span>
 <span class="kw">difficulty</span> = <span class="str">"normal"</span>          <span class="cm"># World difficulty</span>
 <span class="kw">pvp</span> = <span class="num">true</span>                     <span class="cm"># Player vs Player combat</span>
 <span class="kw">do_daylight_cycle</span> = <span class="num">true</span>      <span class="cm"># Day/night cycle progression</span>
 <span class="kw">do_weather_cycle</span> = <span class="num">false</span>      <span class="cm"># Weather changes over time</span>
-<span class="kw">spawn_protection</span> = <span class="num">16</span>         <span class="cm"># Spawn area protection radius</span></code></pre>
+<span class="kw">spawn_protection</span> = <span class="num">16</span>         <span class="cm"># Spawn area protection radius</span>
+
+<span class="ty">[logging]</span>
+<span class="kw">directory</span> = <span class="str">"logs"</span>             <span class="cm"># Log output directory</span>
+<span class="kw">rotation</span> = <span class="str">"daily"</span>            <span class="cm"># daily | hourly | minutely | never</span>
+<span class="kw">max_files</span> = <span class="num">14</span>                 <span class="cm"># Archives to keep (0 = unlimited)</span>
+<span class="kw">level</span> = <span class="str">"info"</span>                <span class="cm"># env_logger filter (RUST_LOG overrides)</span>
+<span class="kw">stdout</span> = <span class="num">true</span>                  <span class="cm"># Log to console</span>
+<span class="kw">file</span> = <span class="num">true</span>                    <span class="cm"># Log to file</span>
+<span class="kw">ansi</span> = <span class="num">true</span>                    <span class="cm"># ANSI colors on stdout</span>
+
+<span class="ty">[webui]</span>
+<span class="kw">enabled</span> = <span class="num">true</span>                 <span class="cm"># Enable the web admin panel</span>
+<span class="kw">bind</span> = <span class="str">"127.0.0.1:8080"</span>       <span class="cm"># Panel listen address</span>
+<span class="kw">database_url</span> = <span class="str">"sqlite://webui.db"</span>
+<span class="kw">session_duration_hours</span> = <span class="num">24</span>    <span class="cm"># JWT session lifetime</span>
+
+<span class="ty">[webui.tls]</span>
+<span class="kw">enabled</span> = <span class="num">false</span>                <span class="cm"># Serve the panel over HTTPS</span>
+<span class="kw">cert_path</span> = <span class="str">""</span>
+<span class="kw">key_path</span> = <span class="str">""</span>
+
+<span class="ty">[resource_pack]</span>
+<span class="kw">must_accept</span> = <span class="num">true</span>             <span class="cm"># Force clients to accept the bundled pack</span></code></pre>
 
     <!-- [server] Section -->
     <h2>[server] Section</h2>
@@ -178,8 +210,8 @@
         <tr>
           <td><code>view_distance</code></td>
           <td>Integer</td>
-          <td><code>8</code></td>
-          <td>Chunk render distance in chunks. Higher values increase the visible area but require more memory and bandwidth. Typical values: 4 (low), 8 (medium), 16 (high).</td>
+          <td><code>16</code></td>
+          <td>Maximum chunk render distance (2&ndash;32). The client may request less, never more. Higher values increase the visible area but require more memory and bandwidth.</td>
         </tr>
         <tr>
           <td><code>tick_rate</code></td>
@@ -208,8 +240,8 @@
         <tr>
           <td><code>generator</code></td>
           <td>String</td>
-          <td><code>"flat"</code></td>
-          <td>World generator type. Valid values: <code>"flat"</code> (superflat world with grass, dirt, and bedrock layers) or <code>"terrain"</code> (Perlin noise hills with dynamic terrain generation).</td>
+          <td><code>"normal"</code></td>
+          <td>World generator type. Valid values: <code>"normal"</code> (Simplex 3D terrain with biomes, ores and trees) or <code>"flat"</code> (superflat world for building and testing).</td>
         </tr>
         <tr>
           <td><code>seed</code></td>
@@ -221,7 +253,7 @@
     </table>
 
     <div class="alert alert-info">
-      <strong>Generator types:</strong> The <code>flat</code> generator creates a classic superflat world ideal for building and testing. The <code>terrain</code> generator uses Perlin noise to create rolling hills with varied elevation, suitable for survival gameplay.
+      <strong>Generator types:</strong> The <code>normal</code> generator uses Simplex 3D noise to produce biomes, caves, ores, trees and water — suitable for survival. The <code>flat</code> generator creates a classic superflat world ideal for building and testing.
     </div>
 
     <!-- [gameplay] Section -->
@@ -236,7 +268,7 @@
         <tr>
           <td><code>gamemode</code></td>
           <td>String</td>
-          <td><code>"creative"</code></td>
+          <td><code>"survival"</code></td>
           <td>Default game mode for new players. Valid values: <code>"survival"</code>, <code>"creative"</code>, <code>"adventure"</code>, <code>"spectator"</code>.</td>
         </tr>
         <tr>
@@ -272,6 +304,44 @@
       </tbody>
     </table>
 
+    <!-- [logging] Section -->
+    <h2>[logging] Section</h2>
+    <p>Controls log output and rotation. The <code>RUST_LOG</code> environment variable always overrides <code>level</code> if set.</p>
+    <table>
+      <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>directory</code></td><td><code>"logs"</code></td><td>Directory for log files (<code>server.&lt;DATE&gt;.log</code>)</td></tr>
+        <tr><td><code>rotation</code></td><td><code>"daily"</code></td><td><code>daily</code> / <code>hourly</code> / <code>minutely</code> / <code>never</code></td></tr>
+        <tr><td><code>max_files</code></td><td><code>14</code></td><td>Number of archives to keep (0 = unlimited)</td></tr>
+        <tr><td><code>level</code></td><td><code>"info"</code></td><td>env_logger filter, e.g. <code>"info,mc_rs_raknet=debug"</code></td></tr>
+        <tr><td><code>stdout</code> / <code>file</code></td><td><code>true</code></td><td>Write logs to console / file</td></tr>
+        <tr><td><code>ansi</code></td><td><code>true</code></td><td>Color stdout logs with ANSI codes</td></tr>
+      </tbody>
+    </table>
+
+    <!-- [webui] Section -->
+    <h2>[webui] Section</h2>
+    <p>Controls the built-in web admin panel (the <code>mc-rs-webui</code> crate).</p>
+    <table>
+      <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>enabled</code></td><td><code>true</code></td><td>Enable the panel and its HTTP server</td></tr>
+        <tr><td><code>bind</code></td><td><code>"127.0.0.1:8080"</code></td><td>Listen address (bind to <code>0.0.0.0</code> to expose on the network)</td></tr>
+        <tr><td><code>database_url</code></td><td><code>"sqlite://webui.db"</code></td><td>Backing store for users/audit (SQLite; Postgres/Mongo planned)</td></tr>
+        <tr><td><code>session_duration_hours</code></td><td><code>24</code></td><td>JWT session lifetime</td></tr>
+        <tr><td><code>tls.enabled</code></td><td><code>false</code></td><td>Serve the panel over HTTPS (<code>tls.cert_path</code> / <code>tls.key_path</code>)</td></tr>
+      </tbody>
+    </table>
+
+    <!-- [resource_pack] Section -->
+    <h2>[resource_pack] Section</h2>
+    <table>
+      <thead><tr><th>Option</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>must_accept</code></td><td><code>true</code></td><td>Force clients to accept the bundled pack. Recommended when the pack provides structural UI overrides (otherwise Bedrock may silently ignore them).</td></tr>
+      </tbody>
+    </table>
+
     <!-- File Locations -->
     <h2>File Locations</h2>
     <p>MC-RS uses the following files and directories relative to the working directory:</p>
@@ -286,8 +356,24 @@
           <td>Main configuration file. Auto-created on first run with default values.</td>
         </tr>
         <tr>
+          <td><code>worlds/&lt;name&gt;/</code></td>
+          <td>World data: LevelDB chunk storage (<code>db/</code>), <code>level.dat</code>, and <code>level_seed.txt</code>.</td>
+        </tr>
+        <tr>
           <td><code>players/</code></td>
-          <td>Player data directory. Stores per-player state (position, inventory, game mode) as individual files keyed by player name or XUID.</td>
+          <td>Per-player state (position, inventory, gamemode) as JSON files keyed by XUID.</td>
+        </tr>
+        <tr>
+          <td><code>resource_packs/</code></td>
+          <td>Resource packs served to clients (e.g. the bundled <code>mcrs_ui</code> UI pack).</td>
+        </tr>
+        <tr>
+          <td><code>logs/</code></td>
+          <td>Rotating server logs; <code>CRASH-*.log</code> on panic.</td>
+        </tr>
+        <tr>
+          <td><code>webui.db</code></td>
+          <td>SQLite database for the web admin panel (users, audit log).</td>
         </tr>
       </tbody>
     </table>

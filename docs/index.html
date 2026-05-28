@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MC-RS — Minecraft Bedrock Server in Rust</title>
+  <link rel="icon" type="image/png" href="logo-simple.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -12,14 +13,7 @@
 <header class="site-header">
   <button class="hamburger" aria-label="Menu">&#9776;</button>
   <a href="./" class="header-logo">
-    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="8" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.3"/>
-      <rect x="8" y="2" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.6"/>
-      <rect x="6" y="6" width="16" height="16" rx="2" fill="#4ecca3"/>
-      <rect x="10" y="10" width="4" height="4" fill="#0f0f1a"/>
-      <rect x="18" y="10" width="4" height="4" fill="#0f0f1a"/>
-      <rect x="12" y="16" width="8" height="3" rx="1" fill="#0f0f1a"/>
-    </svg>
+    <img src="logo-simple.png" alt="MC-RS" class="header-logo-img" style="height:30px;width:auto">
     <span>MC<span class="accent">-RS</span></span>
   </a>
   <div class="search-wrapper">
@@ -81,6 +75,21 @@
     </a>
   </div>
   <div class="sidebar-section">
+    <div class="sidebar-section-title">Extensions</div>
+    <a href="pages/plugins.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      Plugins
+    </a>
+    <a href="pages/web-panel.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+      Web Panel
+    </a>
+    <a href="pages/resource-packs.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+      Resource Packs &amp; UI
+    </a>
+  </div>
+  <div class="sidebar-section">
     <div class="sidebar-section-title">Links</div>
     <a href="https://github.com/pedrokarim/mc-rs" class="sidebar-link" target="_blank" rel="noopener">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
@@ -97,32 +106,33 @@
 
     <!-- Hero -->
     <div class="hero">
-      <h1>MC<span style="color:var(--accent)">-RS</span></h1>
-      <p class="page-subtitle">A Minecraft Bedrock Edition server written in Rust, based on PocketMine-MP. Clean architecture, functional networking, and real protocol compliance.</p>
+      <img src="logo.png" alt="MC-RS" class="hero-logo" style="max-width:320px;width:60%;height:auto;display:block;margin:0 auto 0.5rem">
+      <h1 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">MC-RS</h1>
+      <p class="page-subtitle">A Minecraft Bedrock Edition server written in Rust, based on PocketMine-MP. Clean architecture, real protocol compliance, and a broad gameplay layer.</p>
       <div class="hero-badges">
         <span class="badge badge-green">Rust</span>
         <span class="badge badge-green">MIT License</span>
-        <span class="badge badge-blue">Protocol 924</span>
-        <span class="badge badge-orange">Bedrock 1.26.2</span>
+        <span class="badge badge-blue">Protocol 975</span>
+        <span class="badge badge-orange">Bedrock 1.26.20</span>
       </div>
     </div>
 
     <!-- Stats -->
     <div class="stats-row">
       <div class="stat">
-        <div class="stat-number">6</div>
+        <div class="stat-number">7</div>
         <div class="stat-label">Crates</div>
       </div>
       <div class="stat">
-        <div class="stat-number">16</div>
+        <div class="stat-number">65</div>
         <div class="stat-label">Commands</div>
       </div>
       <div class="stat">
-        <div class="stat-number">924</div>
+        <div class="stat-number">975</div>
         <div class="stat-label">Protocol</div>
       </div>
       <div class="stat">
-        <div class="stat-number">~4.6K</div>
+        <div class="stat-number">~90K</div>
         <div class="stat-label">Lines</div>
       </div>
     </div>
@@ -149,7 +159,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg>
         </div>
         <h3>World Generation</h3>
-        <p>Flat world generator and Perlin noise terrain generator with hills and varied elevation.</p>
+        <p>Simplex 3D terrain with biomes, ores, trees and structures, plus a flat generator. LevelDB-backed chunk persistence.</p>
       </a>
       <a href="pages/overview.html" class="card" style="text-decoration:none">
         <div class="card-icon">
@@ -162,15 +172,29 @@
         <div class="card-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
         </div>
-        <h3>Commands</h3>
-        <p>16 built-in commands including /tp, /gamemode, /time, /weather, /spawn, and more.</p>
+        <h3>65 Commands</h3>
+        <p>Vanilla command set with tab-complete: /tp, /gamemode, /fill, /clone, /scoreboard, /effect, /enchant, /summon, and more.</p>
       </a>
-      <a href="pages/architecture.html" class="card" style="text-decoration:none">
+      <a href="pages/plugins.html" class="card" style="text-decoration:none">
         <div class="card-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
         </div>
-        <h3>NBT Codec</h3>
-        <p>NBT serialization with little-endian disk format and network ZigZag VarInt variants.</p>
+        <h3>Lua Plugins</h3>
+        <p>plugin.yml manifests, Lua 5.4 scripting (mlua), event hooks, a tick scheduler, and custom command registration.</p>
+      </a>
+      <a href="pages/web-panel.html" class="card" style="text-decoration:none">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        </div>
+        <h3>Web Admin Panel</h3>
+        <p>Built-in dashboard (mc-rs-webui): live metrics over WebSocket, console, player/user management, world view, audit log, JWT auth.</p>
+      </a>
+      <a href="pages/resource-packs.html" class="card" style="text-decoration:none">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        </div>
+        <h3>Resource Packs &amp; UI</h3>
+        <p>Server-driven resource pack pipeline plus 8 custom form layouts via a title-flag UI dispatcher.</p>
       </a>
     </div>
 
@@ -187,17 +211,20 @@ cargo run --release</code></pre>
 
     <!-- Crates Table -->
     <h2>Workspace Crates</h2>
+    <p>The workspace is split into 7 crates (~90K lines of Rust). World
+    generation, entities, and gameplay all live inside <code>mc-rs-server</code>.</p>
     <table>
       <thead>
         <tr><th>Crate</th><th>Description</th></tr>
       </thead>
       <tbody>
-        <tr><td><code>mc-rs-server</code></td><td>Server entry point, tokio async runtime, connection state machine, game tick loop, player broadcasts</td></tr>
-        <tr><td><code>mc-rs-proto</code></td><td>Packet encoding/decoding, VarInt/VarUInt codec, batch compression (zlib/snappy), ~30 packet types</td></tr>
-        <tr><td><code>mc-rs-raknet</code></td><td>RakNet UDP transport with reliability, fragmentation, ordering, ACK/NACK, MOTD</td></tr>
-        <tr><td><code>mc-rs-crypto</code></td><td>ECDH P-384 key exchange, AES-256-CTR encryption, JWT parsing and verification</td></tr>
+        <tr><td><code>mc-rs-server</code></td><td>Main binary: tokio runtime, connection state machine, game loop, world generation &amp; persistence, entities, gameplay systems, commands, plugins, RCON/Query</td></tr>
+        <tr><td><code>mc-rs-proto</code></td><td>Packet encoding/decoding, VarInt/VarUInt codec, batch compression (zlib/snappy), Bedrock packet types</td></tr>
+        <tr><td><code>mc-rs-raknet</code></td><td>RakNet UDP transport: reliability, fragmentation, ordering, ACK/NACK, unconnected ping/MOTD</td></tr>
+        <tr><td><code>mc-rs-crypto</code></td><td>ECDH P-384 key exchange, AES-256-CTR packet encryption, JWT parsing and chain verification</td></tr>
         <tr><td><code>mc-rs-nbt</code></td><td>NBT little-endian (disk) and network (ZigZag VarInt) variants, all tag types</td></tr>
-        <tr><td><code>mc-rs-command</code></td><td>16 built-in commands with CommandAction system, relative coordinates, typed arguments</td></tr>
+        <tr><td><code>mc-rs-command</code></td><td>Generic command engine: registry, parser, permissions, entity selectors, typed arguments</td></tr>
+        <tr><td><code>mc-rs-webui</code></td><td>Web admin panel: Axum server, JWT auth, SQLite backend, live metrics over WebSocket, audit log</td></tr>
       </tbody>
     </table>
 

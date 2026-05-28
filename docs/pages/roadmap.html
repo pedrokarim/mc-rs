@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Roadmap — MC-RS Documentation</title>
+  <link rel="icon" type="image/png" href="../logo-simple.png">
   <link rel="stylesheet" href="../style.css">
 </head>
 <body>
@@ -12,14 +13,7 @@
 <header class="site-header">
   <button class="hamburger" aria-label="Menu">&#9776;</button>
   <a href="../" class="header-logo">
-    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="8" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.3"/>
-      <rect x="8" y="2" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.6"/>
-      <rect x="6" y="6" width="16" height="16" rx="2" fill="#4ecca3"/>
-      <rect x="10" y="10" width="4" height="4" fill="#0f0f1a"/>
-      <rect x="18" y="10" width="4" height="4" fill="#0f0f1a"/>
-      <rect x="12" y="16" width="8" height="3" rx="1" fill="#0f0f1a"/>
-    </svg>
+    <img src="../logo-simple.png" alt="MC-RS" class="header-logo-img" style="height:30px;width:auto">
     <span>MC<span class="accent">-RS</span></span>
   </a>
   <div class="search-wrapper">
@@ -81,6 +75,21 @@
     </a>
   </div>
   <div class="sidebar-section">
+    <div class="sidebar-section-title">Extensions</div>
+    <a href="plugins.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      Plugins
+    </a>
+    <a href="web-panel.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+      Web Panel
+    </a>
+    <a href="resource-packs.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+      Resource Packs &amp; UI
+    </a>
+  </div>
+  <div class="sidebar-section">
     <div class="sidebar-section-title">Links</div>
     <a href="https://github.com/pedrokarim/mc-rs" class="sidebar-link" target="_blank" rel="noopener">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
@@ -108,7 +117,7 @@
     <p>The foundational layer that gets a player connected, authenticated, and into a world.</p>
     <ul>
       <li><strong>RakNet UDP transport</strong> &mdash; Full RakNet implementation with reliability, ordering, fragmentation, and MTU discovery</li>
-      <li><strong>Bedrock protocol codec</strong> &mdash; Packet encoding/decoding for protocol version 924 (Bedrock 1.26.2)</li>
+      <li><strong>Bedrock protocol codec</strong> &mdash; Packet encoding/decoding for protocol version 975 (Bedrock 1.26.20)</li>
       <li><strong>Login sequence</strong> &mdash; Complete login flow: NetworkSettings, Login, JWT verification, PlayStatus, ResourcePacks, StartGame</li>
       <li><strong>AES-256-CTR encryption</strong> &mdash; ECDH P-384 key exchange and encrypted packet transport</li>
       <li><strong>Flat world generation</strong> &mdash; Superflat chunk generation with grass, dirt, and bedrock layers</li>
@@ -124,8 +133,8 @@
     <p>Multi-player support, server management, and world variety.</p>
     <ul>
       <li><strong>Multi-player sync</strong> &mdash; AddPlayer/RemovePlayer, position broadcasting, player list</li>
-      <li><strong>16 built-in commands</strong> &mdash; help, list, tp, gamemode, say, time, kill, stop, ping, seed, pos, difficulty, weather, spawn, up, clear</li>
-      <li><strong>Terrain generation</strong> &mdash; Perlin noise terrain generator with dynamic hills and varied elevation</li>
+      <li><strong>65 built-in commands</strong> &mdash; full vanilla command set with tab-complete and entity selectors</li>
+      <li><strong>Terrain generation</strong> &mdash; Simplex 3D terrain generator with biomes, ores, trees and water</li>
       <li><strong>Time and weather</strong> &mdash; Day/night cycle with SetTime, weather system with clear/rain/thunder</li>
       <li><strong>Player persistence</strong> &mdash; Save and restore player position, game mode, and state across sessions</li>
       <li><strong>Configuration</strong> &mdash; server.toml with server, world, and gameplay sections</li>
@@ -134,8 +143,8 @@
 
     <!-- Phase 3 -->
     <h2>Phase 3: World Interaction</h2>
-    <div class="alert alert-warn">
-      <strong>NEXT</strong> &mdash; This is the next phase in development.
+    <div class="alert alert-info">
+      <strong>DONE</strong> &mdash; This phase is complete.
     </div>
     <p>The phase that makes the world interactive &mdash; players can modify terrain and manage items.</p>
     <ul>
@@ -149,8 +158,8 @@
 
     <!-- Phase 4 -->
     <h2>Phase 4: Entities &amp; Combat</h2>
-    <div class="alert alert-warn">
-      <strong>PLANNED</strong> &mdash; This phase is planned for future development.
+    <div class="alert alert-info">
+      <strong>DONE</strong> &mdash; This phase is complete.
     </div>
     <p>Bringing the world to life with mobs, combat mechanics, and survival systems.</p>
     <ul>
@@ -165,8 +174,8 @@
 
     <!-- Phase 5 -->
     <h2>Phase 5: Game Systems</h2>
-    <div class="alert alert-warn">
-      <strong>PLANNED</strong> &mdash; This phase is planned for future development.
+    <div class="alert alert-info">
+      <strong>DONE</strong> &mdash; This phase is complete.
     </div>
     <p>Advanced gameplay systems that complete the survival experience.</p>
     <ul>
@@ -180,57 +189,75 @@
 
     <!-- Phase 6 -->
     <h2>Phase 6: Plugin System</h2>
-    <div class="alert alert-warn">
-      <strong>PLANNED</strong> &mdash; This phase is planned for future development.
+    <div class="alert alert-info">
+      <strong>DONE</strong> &mdash; Lua runtime implemented.
     </div>
-    <p>Extensibility through a plugin API supporting multiple runtimes.</p>
+    <p>Extensibility through a Lua plugin runtime.</p>
     <ul>
-      <li><strong>Event system</strong> &mdash; Subscribe to server events (player join, block break, chat, etc.)</li>
-      <li><strong>Lua plugins</strong> &mdash; Lightweight scripting via mlua for simple customization</li>
-      <li><strong>WASM plugins</strong> &mdash; Sandboxed WebAssembly plugins via wasmtime for high-performance extensions</li>
-      <li><strong>Plugin API</strong> &mdash; Stable Rust API for native plugin development</li>
-      <li><strong>Hot-reload</strong> &mdash; Reload plugins without restarting the server</li>
-      <li><strong>Forms UI</strong> &mdash; Server-side forms for plugin configuration and player interaction</li>
+      <li><strong>Plugin manifests</strong> &mdash; PMMP-style <code>plugin.yml</code> discovery (name, version, commands, permissions)</li>
+      <li><strong>Lua plugins</strong> &mdash; Lua 5.4 scripting via mlua</li>
+      <li><strong>Event system</strong> &mdash; Subscribe to server events (e.g. PlayerJoin) from Lua</li>
+      <li><strong>Scheduler</strong> &mdash; Schedule Lua callbacks after N server ticks</li>
+      <li><strong>Custom commands</strong> &mdash; Commands declared in the manifest with a Lua handler</li>
+      <li><strong>Forms UI</strong> &mdash; Server-driven forms with 8 custom layouts via the title-flag dispatcher</li>
     </ul>
+    <div class="alert alert-warn">
+      <strong>Not planned (today):</strong> a sandboxed WASM runtime. The current
+      extension story is Lua plus the native Rust command/runtime traits.
+    </div>
 
     <!-- Phase 7 -->
-    <h2>Phase 7: Polish</h2>
-    <div class="alert alert-warn">
-      <strong>PLANNED</strong> &mdash; This phase is planned for future development.
+    <h2>Phase 7: Server Tooling</h2>
+    <div class="alert alert-info">
+      <strong>DONE</strong> &mdash; This phase is complete.
     </div>
-    <p>Production readiness, operational tooling, and performance optimization.</p>
+    <p>Operational tooling and administration.</p>
     <ul>
-      <li><strong>Performance optimization</strong> &mdash; Chunk generation caching, packet batching, memory pooling</li>
-      <li><strong>Anti-cheat</strong> &mdash; Movement validation, speed checks, reach distance enforcement</li>
+      <li><strong>Anti-cheat</strong> &mdash; Movement validation (NaN reject, void kill), reach/speed checks</li>
       <li><strong>RCON protocol</strong> &mdash; Remote console for server administration</li>
-      <li><strong>Query protocol</strong> &mdash; Standard Minecraft query protocol for server list pings</li>
-      <li><strong>Scoreboard</strong> &mdash; SetDisplayObjective and SetScore for sidebar, player list, and below-name displays</li>
-      <li><strong>Permissions</strong> &mdash; Operator levels, whitelist, ban list</li>
-      <li><strong>Advanced commands</strong> &mdash; /setblock, /fill, /clone, /execute, /scoreboard</li>
+      <li><strong>Query protocol</strong> &mdash; GameSpy4 query for server-list pings</li>
+      <li><strong>Web admin panel</strong> &mdash; Live metrics, console, players, users, world, audit log</li>
+      <li><strong>Scoreboard &amp; boss bars</strong> &mdash; Objectives, display slots, boss bars</li>
+      <li><strong>Permissions</strong> &mdash; Operator levels, whitelist, ban list (name + IP)</li>
+      <li><strong>Advanced commands</strong> &mdash; /setblock, /fill, /clone, /scoreboard, /effect, /enchant, /summon, …</li>
+      <li><strong>Resource packs</strong> &mdash; Server-driven pack delivery + custom UI pipeline</li>
+    </ul>
+
+    <!-- Phase 8 -->
+    <h2>Phase 8: Vanilla Parity &amp; Polish</h2>
+    <div class="alert alert-warn">
+      <strong>IN PROGRESS</strong> &mdash; Ongoing work.
+    </div>
+    <p>Closing the gap to full vanilla parity and tuning performance.</p>
+    <ul>
+      <li>Complete coverage of every block behaviour, structure and redstone device</li>
+      <li>Full mob roster with parity AI and drops</li>
+      <li>Performance tuning (chunk caching, packet batching, entity culling)</li>
+      <li>Postgres / MongoDB backends for the web panel</li>
     </ul>
 
     <!-- Current Status -->
     <h2>Current Status</h2>
     <div class="stats-row">
       <div class="stat">
-        <div class="stat-number">6</div>
+        <div class="stat-number">7</div>
         <div class="stat-label">Crates</div>
       </div>
       <div class="stat">
-        <div class="stat-number">924</div>
+        <div class="stat-number">975</div>
         <div class="stat-label">Protocol</div>
       </div>
       <div class="stat">
-        <div class="stat-number">16</div>
+        <div class="stat-number">65</div>
         <div class="stat-label">Commands</div>
       </div>
       <div class="stat">
-        <div class="stat-number">2/7</div>
-        <div class="stat-label">Phases Done</div>
+        <div class="stat-number">~90K</div>
+        <div class="stat-label">Lines</div>
       </div>
     </div>
 
-    <p>Phases 1 and 2 are fully implemented. The server can accept multiple Bedrock 1.26.2 clients, authenticate them, send encrypted chunk data, synchronize player positions, and handle 16 built-in commands. The next milestone is Phase 3: making blocks breakable and placeable with full inventory support.</p>
+    <p>The networking, world, gameplay and tooling phases are implemented: multiple Bedrock 1.26.20 clients can connect, authenticate, receive the resource pack and encrypted chunks, interact with a persistent world, fight and survive, and be administered via 65 commands, RCON, Query or the web panel. Current work (Phase 8) is breadth and polish — closing the remaining gap to full vanilla parity and tuning performance.</p>
 
   </div>
 </main>

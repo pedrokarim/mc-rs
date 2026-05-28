@@ -6,29 +6,40 @@ nav_exclude: true
 
 # MC-RS Developer Documentation
 
-The plugin system for MC-RS is currently **planned** and not yet implemented.
+MC-RS targets **protocol 975 (Bedrock 1.26.20)** and reimplements PocketMine-MP
+in Rust across a 7-crate workspace (~90k lines).
 
-## Current Status
+## Implemented foundations
 
-MC-RS is focused on building a solid foundation first:
+- RakNet transport (UDP, reliability, ordering, fragmentation, ACK/NACK)
+- Bedrock protocol codec (VarInt, zlib/snappy batches, packet headers)
+- Login & encryption (ECDH P-384, AES-256-CTR, Xbox Live JWT chain + offline)
+- World generation (flat + Simplex 3D terrain, biomes, ores, trees, structures)
+- Persistence (LevelDB chunk storage, player data, level.dat)
+- Multi-player sync, day/night cycle, weather
+- 65 built-in commands with tab-complete
+- Web admin panel (`mc-rs-webui`), RCON, GameSpy4 Query
 
-- RakNet networking
-- Bedrock protocol (v924, Bedrock 1.26.2)
-- Login & encryption (ECDH P-384, AES-256-CTR)
-- World generation (flat & Perlin terrain)
-- Multi-player support
-- 16 built-in commands
-- Day/night & weather cycles
+## Plugin system (Lua)
 
-## Planned Plugin Features
+The plugin runtime is **implemented** using `mlua` (Lua 5.4). Plugins are
+discovered from a `plugin.yml` manifest (PMMP-style) and can:
 
-Once the core gameplay systems (block interaction, inventory, entities) are implemented, the plugin system will be developed with:
+- **Register commands** declared in the manifest, with a Lua handler
+- **Subscribe to events** (e.g. `PlayerJoin`) via `RegisterEvent`
+- **Schedule tasks** to fire after N server ticks
+- **Log / broadcast** messages through the host API
 
-- **Event system** — Subscribe to server events (player join, chat, block changes)
-- **Lua scripting** — Lightweight scripts for simple plugins
-- **WASM plugins** — Sandboxed WebAssembly for performance-critical plugins
-- **Rust API** — Native plugin trait for maximum performance
+> A native Rust plugin trait (`ServerCommandRuntime`) backs the command engine;
+> a WASM runtime is a possible future addition but is not implemented today.
 
-## Follow Development
+## Resource packs & custom UI
 
-Check the [main documentation](../) for the current project status, or visit the [GitHub repository](https://github.com/pedrokarim/mc-rs) to follow progress.
+See [Resource Pack & Custom UI]({{ '/dev/resource-pack-ui/' | relative_url }})
+for the server-driven UI system: the title-flag dispatcher, the 8 custom
+form layouts, and the step-by-step guide for creating your own layout.
+
+## Follow development
+
+Check the [main documentation](../) for project status, or visit the
+[GitHub repository](https://github.com/pedrokarim/mc-rs).

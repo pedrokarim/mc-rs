@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>World System — MC-RS Documentation</title>
+  <link rel="icon" type="image/png" href="../logo-simple.png">
   <link rel="stylesheet" href="../style.css">
 </head>
 <body>
@@ -12,14 +13,7 @@
 <header class="site-header">
   <button class="hamburger" aria-label="Menu">&#9776;</button>
   <a href="../" class="header-logo">
-    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="8" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.3"/>
-      <rect x="8" y="2" width="20" height="20" rx="2" fill="#4ecca3" opacity="0.6"/>
-      <rect x="6" y="6" width="16" height="16" rx="2" fill="#4ecca3"/>
-      <rect x="10" y="10" width="4" height="4" fill="#0f0f1a"/>
-      <rect x="18" y="10" width="4" height="4" fill="#0f0f1a"/>
-      <rect x="12" y="16" width="8" height="3" rx="1" fill="#0f0f1a"/>
-    </svg>
+    <img src="../logo-simple.png" alt="MC-RS" class="header-logo-img" style="height:30px;width:auto">
     <span>MC<span class="accent">-RS</span></span>
   </a>
   <div class="search-wrapper">
@@ -81,6 +75,21 @@
     </a>
   </div>
   <div class="sidebar-section">
+    <div class="sidebar-section-title">Extensions</div>
+    <a href="plugins.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      Plugins
+    </a>
+    <a href="web-panel.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+      Web Panel
+    </a>
+    <a href="resource-packs.html" class="sidebar-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+      Resource Packs &amp; UI
+    </a>
+  </div>
+  <div class="sidebar-section">
     <div class="sidebar-section-title">Links</div>
     <a href="https://github.com/pedrokarim/mc-rs" class="sidebar-link" target="_blank" rel="noopener">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
@@ -96,7 +105,7 @@
   <div class="content-inner">
 
     <h1>World System</h1>
-    <p class="page-subtitle">Chunk-based world with flat and Perlin noise terrain generation.</p>
+    <p class="page-subtitle">Chunk-based world with flat and Simplex 3D terrain generation, biomes, and LevelDB persistence.</p>
 
     <!-- Chunk Format -->
     <h2>Chunk Format</h2>
@@ -145,20 +154,20 @@
     </ul>
     <p>Block IDs are resolved as sequential indices from <code>canonical_block_states.nbt</code>. All sub-chunks above the surface layer are empty (air) and omitted from the network payload.</p>
 
-    <h3>Perlin Noise Generator</h3>
-    <p>The Perlin generator uses <strong>multi-octave 2D Perlin noise</strong> (fractional Brownian motion) to produce dynamic terrain heights. The noise is sampled at each (x, z) column position and scaled to produce varied elevation.</p>
+    <h3>Normal Generator (Simplex 3D)</h3>
+    <p>The <code>normal</code> generator uses <strong>Simplex 3D noise</strong> to carve terrain, combined with a temperature/rainfall biome classifier. Each column's surface, sub-surface and decoration are chosen by its biome.</p>
 
-    <p>Block placement is determined by height relative to sea level and noise values:</p>
+    <p>The generator produces:</p>
     <ul>
-      <li><strong>Stone</strong> &mdash; Fill below the surface depth</li>
-      <li><strong>Dirt</strong> &mdash; Several layers below the surface</li>
-      <li><strong>Grass</strong> &mdash; Surface block for normal-height terrain</li>
-      <li><strong>Sand</strong> &mdash; Surface block near water level (beaches)</li>
-      <li><strong>Water</strong> &mdash; Fills columns below sea level where no solid block exists</li>
-      <li><strong>Gravel</strong> &mdash; Underwater floor in some areas</li>
-      <li><strong>Snow</strong> &mdash; Surface block at high elevations</li>
-      <li><strong>Oak log + leaves</strong> &mdash; Simple trees placed on grass surfaces</li>
+      <li><strong>11 biomes</strong> &mdash; classified from temperature &amp; rainfall noise</li>
+      <li><strong>Stone / dirt / grass / sand / gravel / snow</strong> &mdash; biome-aware surface and sub-surface layers</li>
+      <li><strong>Water</strong> &mdash; fills columns below sea level</li>
+      <li><strong>Ores</strong> &mdash; vein placement by depth (coal, iron, gold, redstone, diamond, …)</li>
+      <li><strong>Trees</strong> &mdash; species per biome</li>
+      <li><strong>Structures</strong> &mdash; villages, temples, mineshafts, strongholds, ocean monuments and more</li>
     </ul>
+
+    <p>Other dimensions (Nether, End) and their generators/structures are also implemented.</p>
 
     <div class="alert alert-info">
       <strong>Parallel generation:</strong> Chunk generation is offloaded to tokio's blocking thread pool via <code>spawn_blocking</code>. Multiple chunks can be generated in parallel, and the results are cached for subsequent player connections.
@@ -166,11 +175,9 @@
 
     <!-- Block Network IDs -->
     <h2>Block Network IDs</h2>
-    <p>MC-RS sets <code>block_network_ids_are_hashes=true</code> in the <code>StartGame</code> packet. This avoids sending the full block palette (15,000+ entries) to each connecting client.</p>
+    <p>MC-RS sets <code>block_network_ids_are_hashes=false</code> in the <code>StartGame</code> packet. Block runtime IDs are therefore <strong>sequential indices</strong> into <code>canonical_block_states.nbt</code> &mdash; the block at index 0 has network ID 0, index 1 has ID 1, and so on.</p>
 
-    <p>Block network IDs are <strong>FNV-1a hashes</strong> computed from the canonical NBT representation of each block state. The canonical form is serialized as <strong>Network Little-Endian NBT</strong> (using ZigZag VarInt encoding for integer types) from <code>canonical_block_states.nbt</code>.</p>
-
-    <p>MC-RS uses sequential indices from <code>canonical_block_states.nbt</code> as block runtime IDs. The file is parsed at startup using Network LE NBT decoding, and each block state's position in the file corresponds to its network ID.</p>
+    <p>The file is parsed at startup using <strong>Network Little-Endian NBT</strong> decoding (ZigZag VarInt for integer types), and each block state's position in the file becomes its network ID.</p>
 
     <pre><code><span class="cm">// canonical_block_states.nbt format</span>
 <span class="cm">// Network Little-Endian NBT (ZigZag VarInt for int types)</span>
@@ -202,10 +209,10 @@
       <li><strong>NetworkChunkPublisherUpdate</strong> &mdash; The server announces the center position and radius of the chunk area it considers "published" (loaded and available to the client).</li>
     </ol>
 
-    <p>As the player moves, new chunks entering the radius are generated and sent, while chunks leaving the radius are no longer tracked. Chunks are generated on demand and cached in memory for the lifetime of the server process.</p>
+    <p>As the player moves, new chunks entering the radius are generated and sent, while chunks leaving the radius are released. Chunks are generated on demand, cached in memory, and persisted to disk.</p>
 
-    <div class="alert alert-warn">
-      <strong>No chunk persistence:</strong> MC-RS does not use LevelDB or any disk-based chunk storage. Chunks exist only in memory and are regenerated on server restart. Only player data (position, game mode, etc.) is persisted as JSON files.
+    <div class="alert alert-info">
+      <strong>Persistence:</strong> Chunks are stored in <strong>LevelDB</strong> under <code>worlds/&lt;name&gt;/db</code>. A modified chunk is written back so the world survives restarts; player data (position, inventory, gamemode) is persisted as JSON in <code>players/</code>.
     </div>
 
     <!-- Day/Night Cycle -->
@@ -229,20 +236,23 @@
     <h2>Weather</h2>
     <p>MC-RS supports three weather states: <strong>clear</strong>, <strong>rain</strong>, and <strong>thunder</strong>. Weather transitions are controlled by the <code>do_weather_cycle</code> game rule. When enabled, weather changes occur at random intervals. Weather state can also be set manually via the <code>/weather</code> command.</p>
 
-    <!-- Limitations -->
-    <h2>Current Limitations</h2>
-    <p>The world system is focused on core chunk serialization and basic terrain. The following features are <strong>not implemented</strong>:</p>
+    <!-- Implemented -->
+    <h2>Implemented</h2>
+    <p>The world system now covers most of vanilla generation and interaction:</p>
 
     <ul>
-      <li><strong>No chunk persistence</strong> &mdash; Chunks are generated in memory only. No LevelDB or disk storage for chunks.</li>
-      <li><strong>No caves</strong> &mdash; No 3D noise carving or cave generation.</li>
-      <li><strong>No ores</strong> &mdash; No ore vein placement.</li>
-      <li><strong>No structures</strong> &mdash; No villages, dungeons, temples, or other structures.</li>
-      <li><strong>No biome diversity</strong> &mdash; The Perlin generator uses height-based block selection rather than a biome classification system.</li>
-      <li><strong>No Nether or End</strong> &mdash; Only the Overworld dimension exists.</li>
-      <li><strong>No block ticks</strong> &mdash; No crop growth, fluid flow, or redstone simulation.</li>
-      <li><strong>No block updates</strong> &mdash; Players cannot currently place or break blocks.</li>
+      <li><strong>LevelDB persistence</strong> &mdash; modified chunks are written to disk and reloaded on restart.</li>
+      <li><strong>Simplex 3D terrain</strong> with 11 biomes classified from temperature/rainfall noise.</li>
+      <li><strong>Ores</strong> &mdash; depth-based vein placement.</li>
+      <li><strong>Trees</strong> &mdash; species per biome.</li>
+      <li><strong>Structures</strong> &mdash; villages, temples, mineshafts, strongholds, ocean monuments, Nether/End structures, and more.</li>
+      <li><strong>Multiple dimensions</strong> &mdash; Overworld, Nether and End.</li>
+      <li><strong>Block updates</strong> &mdash; server-authoritative break/place with broadcasts; random ticks for crop growth, fire, fluids, etc.</li>
     </ul>
+
+    <div class="alert alert-warn">
+      <strong>In progress:</strong> full vanilla parity for every block behaviour and structure, plus performance tuning of generation and chunk streaming.
+    </div>
 
   </div>
 </main>
