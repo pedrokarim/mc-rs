@@ -9,6 +9,7 @@
 pub mod blended_noise;
 pub mod climate;
 pub mod data;
+pub mod decoration;
 pub mod density;
 pub mod noise_chunk;
 pub mod perlin;

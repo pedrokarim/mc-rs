@@ -203,18 +203,18 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
         &surfaces,
     );
 
-    // 4) Décoration (arbres, herbe, fleurs, cactus…) par biome — réutilise le
-    // module `vegetation` (les IDs Bedrock de notre carte sont ceux qu'il
-    // attend). Posée au-dessus de la surface.
-    let mut veg_rng = super::super::random::Random::new(
-        0xdead_beef_i64 ^ ((chunk_x as i64) << 8) ^ chunk_z as i64 ^ seed as i64,
+    // 4) Décoration riche par biome (arbres variés + lianes, herbe/fleurs,
+    // aquatique : kelp/seagrass/coraux). Pilotée par les noms de biome Java,
+    // opère directement sur la grille.
+    super::decoration::decorate(
+        &mut grid,
+        seed,
+        chunk_x,
+        chunk_z,
+        &biome_idx,
+        &BIOMES.names,
+        &surfaces,
     );
-    let veg = super::super::vegetation::generate_vegetation(&biome_ids, &surfaces, &mut veg_rng);
-    for (&(lx, wy, lz), &block) in &veg {
-        if (MIN_Y..MAX_Y).contains(&wy) {
-            grid[grid_index(lx as usize, wy, lz as usize)] = block;
-        }
-    }
 
     // 5) Sérialisation sub-chunk par sub-chunk.
     let mut payload = Vec::with_capacity(16384);
