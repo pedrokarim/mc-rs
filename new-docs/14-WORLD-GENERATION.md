@@ -216,3 +216,144 @@ pub fn get_surface_height(world_x: i32, world_z: i32, seed: u64) -> i32;
 
 **Block IDs :** Indices séquentiels de `canonical_block_states.nbt` (copié dans `data/`).
 Fichier de référence parsé via `mc-rs-nbt` pour extraire les IDs exacts.
+
+> ⚠️ La section ci-dessus décrit le générateur **legacy** (`generator = "normal"`),
+> un port heightmap de PMMP. Un **nouveau générateur moderne** le remplace
+> progressivement — voir ci-dessous.
+
+---
+
+## Générateur moderne « noise » — architecture Minecraft 1.18+ (Caves & Cliffs)
+
+Réécriture complète de la génération sur le **système Java 1.18+** (density
+functions), pour un rendu fidèle à Minecraft moderne / Bedrock plutôt que le
+heightmap legacy. **Opt-in** via `generator = "noise"` dans `server.toml` (le
+legacy `"normal"` reste le défaut le temps de la migration).
+
+### Principe
+
+Le terrain 1.18 n'est plus une heightmap mais un **champ de densité 3D** évalué
+en chaque point : densité > 0 → solide, < 0 → air. Ce champ est un **arbre de
+density functions** (bruit, splines, opérations) que l'on évalue. Les biomes
+sont placés par un **climat multi-noise 6D**, les surfaces par des **surface
+rules** data-driven, puis la **décoration** est posée par biome.
+
+**Méthodo : zéro invention.** Les données (density functions, paramètres de
+bruit, noise settings, param list de biomes, surface rules) sont la **donnée
+worldgen vanilla Java verbatim**, vendorée dans `crates/mc-rs-server/data/worldgen/`
+et embarquée via `include_dir`. Le code Rust n'est que l'évaluateur, porté
+depuis la sémantique vanilla (réf. deepslate pour le bruit/les surfaces).
+
+### Modules : `mc-rs-server/src/world/worldgen/`
+
+| Fichier | Rôle |
+|---|---|
+| `rng.rs` | RNG vanilla : Xoroshiro128++ + seeding 128-bit + `fromHashOf` (md5) |
+| `perlin.rs` | Bruit : `ImprovedNoise` → `PerlinNoise` → `NormalNoise` + chargeur params |
+| `blended_noise.rs` | `old_blended_noise` (bruit 3D terrain legacy, surplombs) |
+| `spline.rs` | Splines cubiques d'Hermite vanilla |
+| `density.rs` | Interpréteur de density functions (~30 ops) + `NoiseRouter` |
+| `data.rs` | Accès aux données vendorées (`include_dir`) |
+| `climate.rs` | Moteur climat multi-noise 6D + param list overworld + mapping Bedrock |
+| `noise_chunk.rs` | Échantillonnage cellulaire + interpolation + pipeline de chunk |
+| `surface.rs` | Interpréteur de surface rules vanilla |
+| `decoration.rs` | Décoration riche par biome (arbres, lianes, aquatique, …) |
+
+### Pipeline d'un chunk (`noise_chunk::generate_noise_chunk`)
+
+1. **Échantillonnage du terrain** : `final_density` évalué aux **coins des
+   cellules** (4×4 horizontal, 8 vertical) puis **interpolation trilinéaire** par
+   bloc → grille pleine hauteur (`-64..320`) remplie en stone / water / air.
+2. **Biomes** : climat 6D échantillonné à la surface de chaque colonne → biome le
+   plus proche → ID Bedrock.
+3. **Surface rules** : grass/dirt/sable/grès/gravier/terracotta + bedrock/deepslate
+   selon le biome.
+4. **Minerais** : clusters insérés dans la roche souterraine.
+5. **Décoration** : arbres, lianes, herbe/fleurs, aquatique, etc. par biome.
+6. **Sérialisation** : sub-chunks (paletté) + carte de biomes.
+
+### ✅ Fait
+
+**Terrain (phases A1→A4)**
+- **A1** RNG vanilla (Xoroshiro128++, `fromHashOf`).
+- **A2** Bruit Perlin/Normal + chargement des 60 paramètres de bruit vendorés.
+- **A3** Interpréteur de density functions (~30 ops : add/mul/min/max, splines,
+  `shifted_noise`, `weird_scaled_sampler`, `range_choice`, `y_clamped_gradient`,
+  caches, `old_blended_noise`…) — parse l'arbre `final_density` overworld complet.
+- **A4** Échantillonnage NoiseChunk (cellules 4×8) + interpolation trilinéaire +
+  remplissage stone/eau/air. **Validé : relief vanilla y31→y208** (montagnes +
+  océans), grottes présentes (déjà dans `final_density`).
+
+**Biomes (phase B)** — placement multi-noise 6D
+- Moteur climat 6D porté de deepslate (`ParamPoint`/`TargetPoint`, métrique de
+  fittness, recherche du plus proche).
+- **Param list overworld résolu** vendoré (sortie `OverworldBiomeBuilder`, 7593
+  points / 54 biomes ; source mcmeta `1.21.4-data`).
+- Mapping noms Java → **IDs Bedrock via Geyser** (autoritaire, validé vs
+  `biomes.json` : 0 mismatch). Teintes herbe/eau/feuillage correctes par biome.
+
+**Surfaces (phase C-full)** — interpréteur `surface_rule` vanilla complet
+- Moteur par colonne (suivi `stoneDepth`/`waterHeight`) + arbre de règles évalué
+  verbatim. Conditions : `above_preliminary_surface`, `biome`, `not`,
+  `stone_depth` (+ `surface_secondary`), `vertical_gradient`, `water`, `y_above`,
+  `noise_threshold`, `hole`, `temperature` (neige), `steep` (pentes).
+- Résultats par biome : grass/dirt, **sable** (désert/plage), **gravier** (océans),
+  **neige** (biomes froids), **terracotta** (badlands), mud (mangroves), etc.
+
+**Minerais** — réutilise `ore.rs` : clusters (charbon/fer/or/diamant/redstone/
+lapis + poches dirt/gravel) insérés dans stone/deepslate.
+
+**Décoration (phase E)** — module `decoration.rs`, par biome :
+- **Arbres variés** par espèce/taille : chêne petit & grand, bouleau, sapin
+  conique, jungle petite & **géante 2×2**, chêne noir 2×2, acacia (tronc oblique
+  + disque).
+- **Lianes** pendantes sur les arbres de jungle.
+- **Aquatique** : récifs de **corail** (5 couleurs) + **sea pickles** (océan
+  chaud), **kelp** (colonnes) + **seagrass** (océans/rivières).
+- Herbe haute / fougères (taïga) / fleurs par biome ; cactus & arbustes morts
+  (désert), **bambou** (jungle), **canne à sucre** (bord de l'eau), **nénuphars**
+  (marais).
+
+**Données vendorées** (`data/worldgen/`) : 35 density functions, 60 params de
+bruit, noise_settings overworld (avec `surface_rule`), param list de biomes
+(`biome_parameters/overworld.json`), mapping `java_to_bedrock.json`.
+
+### ⏳ Reste à faire (pour coller 100 % à Bedrock)
+
+**Fidélité fine du terrain/surface**
+- `vertical_gradient` en cutoff déterministe (pas la bande probabiliste vanilla,
+  faute de RNG positionnel `at(x,y,z)`).
+- `min_surface_level` approximé par le plus haut bloc solide (vs vrai
+  `preliminary_surface_level`).
+- `bandlands` : terracotta **uniforme** au lieu des bandes colorées par Y.
+- Terme aléatoire ±0.25 de `surfaceDepth` omis.
+- Parité numérique exacte du bruit vs vanilla **non cross-validée** (à confirmer
+  contre deepslate).
+
+**Biomes**
+- Carte de biomes **2D** (répétée verticalement) → passer en **3D** (biomes de
+  grottes : lush_caves, dripstone_caves, deep_dark).
+
+**Décoration manquante**
+- `snow_layer` au sol des biomes froids ; citrouilles/melons (jungle) ; buissons
+  de baies (taïga) ; champignons + **mushroom fields** (mycélium + champignons
+  géants) ; variété de fleurs (flower_forest) ; arbres cerisier/mangrove
+  (blocs dédiés) ; formes d'arbres encore approximatives (vs `tree` feature
+  vanilla avec trunk/foliage placers).
+- Portage **100 % data-driven** du système `placed_feature`/`configured_feature`
+  (au lieu des features curées actuelles).
+
+**Phase D — aquifères**
+- Aquifères par bruit (niveaux de fluide eau/lave dans les grottes). Les grottes
+  elles-mêmes sont déjà présentes via `final_density`.
+
+**Divers**
+- Structures (villages, donjons, etc.).
+- Spawn `find_spawn_position` utilise encore le calcul legacy (désync possible
+  avec le terrain noise).
+
+### Validation
+
+`cargo fmt && cargo clippy --all-targets -- -D warnings && cargo test` — 33 tests
+worldgen verts (RNG, bruit, density, climat, surface, décoration). Validation
+visuelle en jeu via `generator = "noise"`.
