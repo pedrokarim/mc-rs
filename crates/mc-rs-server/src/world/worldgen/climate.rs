@@ -122,11 +122,13 @@ impl<T: Copy> BiomeParameters<T> {
     }
 }
 
-/// Param list overworld chargé : points de paramètres → index de biome, plus
-/// la table des noms de biomes Java (`minecraft:plains`, …).
+/// Param list overworld chargé : points de paramètres → index de biome, la
+/// table des noms de biomes Java (`minecraft:plains`, …) et l'ID de biome
+/// Bedrock correspondant (mapping autoritaire Geyser, validé vs `biomes.json`).
 pub struct OverworldBiomes {
     pub params: BiomeParameters<u16>,
     pub names: Vec<String>,
+    pub bedrock_ids: Vec<u32>,
 }
 
 fn read_param(v: &Value) -> Param {
@@ -170,9 +172,23 @@ pub fn load_overworld() -> OverworldBiomes {
         ));
     }
 
+    // Mapping nom Java → ID Bedrock (Geyser, validé vs biomes.json).
+    let map_json =
+        data::biome_parameters_json("java_to_bedrock").expect("mapping java_to_bedrock vendoré");
+    let map: Value = serde_json::from_str(map_json).expect("mapping JSON valide");
+    let bedrock_ids: Vec<u32> = names
+        .iter()
+        .map(|n| {
+            map[n]
+                .as_u64()
+                .unwrap_or_else(|| panic!("biome sans ID Bedrock: {n}")) as u32
+        })
+        .collect();
+
     OverworldBiomes {
         params: BiomeParameters::new(entries),
         names,
+        bedrock_ids,
     }
 }
 
@@ -271,6 +287,27 @@ mod tests {
         let idx = ow.params.find(&target);
         assert!((idx as usize) < ow.names.len());
         assert!(ow.names[idx as usize].starts_with("minecraft:"));
+    }
+
+    #[test]
+    fn produces_varied_biomes_over_area() {
+        let router = density::build_overworld(42);
+        let sampler = ClimateSampler::from_router(&router);
+        let ow = load_overworld();
+        let mut seen = std::collections::HashSet::new();
+        // Grille large de cellules climat (quart de bloc), surface ~y64.
+        for qx in (-200i32..=200).step_by(20) {
+            for qz in (-200i32..=200).step_by(20) {
+                let t = sampler.sample(qx, 16, qz);
+                let idx = ow.params.find(&t);
+                seen.insert(ow.bedrock_ids[idx as usize]);
+            }
+        }
+        assert!(
+            seen.len() >= 3,
+            "trop peu de biomes distincts sur la zone: {}",
+            seen.len()
+        );
     }
 
     #[test]

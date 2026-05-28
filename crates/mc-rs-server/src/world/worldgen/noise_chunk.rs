@@ -140,7 +140,12 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
     let base_x = chunk_x * 16;
     let base_z = chunk_z * 16;
 
-    let corners = with_router(seed, |router| sample_corners(base_x, base_z, router));
+    let (corners, climate) = with_router(seed, |router| {
+        (
+            sample_corners(base_x, base_z, router),
+            super::climate::ClimateSampler::from_router(router),
+        )
+    });
 
     // 1) Forme du terrain : grille pleine hauteur (stone / water / air).
     let mut grid = vec![BLOCKS.air; GRID_LEN].into_boxed_slice();
@@ -191,8 +196,30 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
         }
     }
 
-    // Biomes : Plains (id 1) partout — placeholder jusqu'à la Phase B.
-    let biome_ids = [[1u32; 16]; 16];
+    // Biomes : placement multi-noise 6D échantillonné à la surface de chaque
+    // colonne, mappé vers les IDs Bedrock (Phase B). La carte reste 2D pour
+    // l'instant (répétée verticalement par le sérialiseur).
+    static BIOMES: LazyLock<super::climate::OverworldBiomes> =
+        LazyLock::new(super::climate::load_overworld);
+    let mut biome_ids = [[0u32; 16]; 16];
+    for lx in 0..16usize {
+        for lz in 0..16usize {
+            let wx = base_x + lx as i32;
+            let wz = base_z + lz as i32;
+            // Surface = bloc le plus haut qui n'est ni air ni eau.
+            let mut sy = SEA_LEVEL;
+            for wy in (MIN_Y..MAX_Y).rev() {
+                let b = grid[grid_index(lx, wy, lz)];
+                if b != BLOCKS.air && b != BLOCKS.water {
+                    sy = wy;
+                    break;
+                }
+            }
+            let target = climate.sample(wx >> 2, sy >> 2, wz >> 2);
+            let idx = BIOMES.params.find(&target);
+            biome_ids[lx][lz] = BIOMES.bedrock_ids[idx as usize];
+        }
+    }
     let biome_data =
         chunk_serializer::serialize_biome_sections_from_columns(&biome_ids, SUB_CHUNK_COUNT);
     payload.extend_from_slice(&biome_data);
