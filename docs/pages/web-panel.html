@@ -104,28 +104,71 @@
   <div class="content-inner">
 
     <h1>Web Admin Panel</h1>
-    <p class="page-subtitle">A built-in web dashboard (the <code>mc-rs-webui</code> crate) for monitoring and administering the server.</p>
+    <p class="page-subtitle">A built-in web back-office (the <code>mc-rs-webui</code> crate) — real-time monitoring, remote control, player management and an audit trail, served straight from the server binary. No external panel to install.</p>
 
-    <p>When <code>[webui] enabled = true</code>, the server starts an <a href="https://github.com/tokio-rs/axum" target="_blank" rel="noopener">Axum</a> HTTP server (default <code>http://127.0.0.1:8080</code>) as a separate tokio task. It reads a shared snapshot the game loop pushes ~20 times per second, so it never blocks gameplay.</p>
+    <p>When <code>[webui] enabled = true</code>, the server starts an <a href="https://github.com/tokio-rs/axum" target="_blank" rel="noopener">Axum</a> HTTP server (default <code>http://127.0.0.1:8080</code>) as a separate tokio task. It reads a shared snapshot the game loop pushes ~20&nbsp;times per second, so the panel never blocks gameplay.</p>
 
-    <h2>Features</h2>
+    <!-- Dashboard showcase -->
+    <h2>Dashboard</h2>
+    <p>Live metrics — TPS, players, chunks, memory, CPU, entities, uptime and world state — as headline cards with per-card sparklines, plus 5-minute time-series charts (uPlot) and a live connected-players table and event feed.</p>
+    <figure style="margin:1.5rem 0;text-align:center">
+      <img src="../screenshots/02-dashboard.png" alt="MC-RS web dashboard"
+           style="width:min(420px,95%);height:auto;border-radius:10px;border:1px solid #2a2a45;box-shadow:0 8px 30px rgba(0,0,0,0.4)">
+      <figcaption style="color:#9a9ab0;font-size:0.85rem;margin-top:0.5rem">The dashboard: headline cards, 5-minute charts, live players &amp; events.</figcaption>
+    </figure>
+
+    <!-- Screenshot gallery -->
+    <h2>Pages</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.25rem;margin:1.5rem 0">
+      <figure style="margin:0">
+        <img src="../screenshots/03-console.png" alt="Console" style="width:100%;height:auto;border-radius:8px;border:1px solid #2a2a45">
+        <figcaption style="color:#9a9ab0;font-size:0.85rem;margin-top:0.4rem"><strong>Console</strong> — live log stream + a command terminal that runs anything you'd type in the server console.</figcaption>
+      </figure>
+      <figure style="margin:0">
+        <img src="../screenshots/04-world.png" alt="World controls" style="width:100%;height:auto;border-radius:8px;border:1px solid #2a2a45">
+        <figcaption style="color:#9a9ab0;font-size:0.85rem;margin-top:0.4rem"><strong>World</strong> — one-click time / weather / difficulty controls.</figcaption>
+      </figure>
+      <figure style="margin:0">
+        <img src="../screenshots/05-audit.png" alt="Audit log" style="width:100%;height:auto;border-radius:8px;border:1px solid #2a2a45">
+        <figcaption style="color:#9a9ab0;font-size:0.85rem;margin-top:0.4rem"><strong>Audit log</strong> — paginated, immutable history of every admin action (who, when, what).</figcaption>
+      </figure>
+      <figure style="margin:0">
+        <img src="../screenshots/06-users.png" alt="User management" style="width:100%;height:auto;border-radius:8px;border:1px solid #2a2a45">
+        <figcaption style="color:#9a9ab0;font-size:0.85rem;margin-top:0.4rem"><strong>Users</strong> — admin-only account CRUD (create / delete / password / role).</figcaption>
+      </figure>
+      <figure style="margin:0">
+        <img src="../screenshots/01-login.png" alt="Login" style="width:100%;height:auto;border-radius:8px;border:1px solid #2a2a45">
+        <figcaption style="color:#9a9ab0;font-size:0.85rem;margin-top:0.4rem"><strong>Login</strong> — JWT sessions, Argon2id passwords, rate-limited. First boot redirects to <code>/setup</code>.</figcaption>
+      </figure>
+    </div>
+
     <table>
-      <thead><tr><th>Area</th><th>Description</th></tr></thead>
+      <thead><tr><th>Page</th><th>What it does</th></tr></thead>
       <tbody>
-        <tr><td><strong>Dashboard</strong></td><td>Live metrics (TPS, players, memory, uptime) streamed over WebSocket.</td></tr>
-        <tr><td><strong>Console</strong></td><td>Run server commands and stream log output from the browser.</td></tr>
-        <tr><td><strong>Players</strong></td><td>View connected players and act on them.</td></tr>
-        <tr><td><strong>Users</strong></td><td>Manage panel accounts and roles (admin / moderator).</td></tr>
-        <tr><td><strong>World</strong></td><td>Inspect world state and configuration.</td></tr>
-        <tr><td><strong>Audit log</strong></td><td>Record of administrative actions.</td></tr>
+        <tr><td><strong>Dashboard</strong></td><td>Live metrics (TPS, players, chunks, memory, CPU, entities, uptime) with 5-minute charts and per-card sparklines.</td></tr>
+        <tr><td><strong>Players</strong></td><td>Connected players list with kick / op / deop / gamemode actions.</td></tr>
+        <tr><td><strong>Console</strong></td><td>Live log stream + a command terminal.</td></tr>
+        <tr><td><strong>World</strong></td><td>One-click time / weather / difficulty controls.</td></tr>
+        <tr><td><strong>Configuration</strong></td><td>View &amp; hot-edit <code>server.toml</code> (validated + atomic write).</td></tr>
+        <tr><td><strong>Audit log</strong></td><td>Immutable history of every admin action.</td></tr>
+        <tr><td><strong>Users</strong></td><td>Admin-only user CRUD (create / delete / password / role).</td></tr>
       </tbody>
     </table>
 
-    <h2>Authentication</h2>
-    <p>Login is JWT-based with Argon2-hashed passwords, rate limiting on the login route, and a configurable session lifetime (<code>session_duration_hours</code>). On first run the panel guides you through creating the initial admin account.</p>
+    <!-- How it works -->
+    <h2>How it works</h2>
+    <p>The panel is wired into the server through three lightweight channels — <strong>no duplication of game logic</strong>:</p>
+    <ol>
+      <li><strong>Commands</strong> — every admin action (stop, kick, op, <code>/time</code>, <code>/weather</code>…) is pushed into the same <code>console_tx</code> channel that feeds the server's stdin console, then dispatched via the existing <code>dispatch_command_line</code>. The web layer never reimplements gameplay.</li>
+      <li><strong>State snapshot</strong> — an <code>Arc&lt;RwLock&lt;ServerSnapshot&gt;&gt;</code> is refreshed by the main loop (~20&nbsp;Hz for TPS / players / chunks / world, ~1&nbsp;Hz for system metrics and 5-minute ring buffers) and <strong>pushed over WebSocket</strong> to connected browsers. Zero polling.</li>
+      <li><strong>Events &amp; logs</strong> — server events (join / quit / chat / death / gamemode) and every <code>tracing</code> log line are fanned out over <code>broadcast</code> channels and streamed live to the dashboard and console.</li>
+    </ol>
 
-    <h2>Storage backends</h2>
-    <p>The panel persists users and the audit log via a pluggable database layer. <strong>SQLite</strong> is the default (<code>sqlite://webui.db</code>); Postgres and MongoDB backends are planned.</p>
+    <h2>Authentication</h2>
+    <p>Multi-user auth with <strong>Argon2id</strong> password hashing and <strong>JWT</strong> sessions (secret auto-generated and persisted on first boot). Login is rate-limited (5 attempts / 5&nbsp;min / IP) and the session lifetime is configurable (<code>session_duration_hours</code>). On first boot with an empty database the panel redirects to <code>/setup</code> to create the first administrator; afterwards <code>/setup</code> is locked and login is required.</p>
+
+    <h2>Storage &amp; stack</h2>
+    <p>Users and the audit log are persisted via a pluggable database layer: <strong>SQLite</strong> by default (<code>sqlite://webui.db</code>), with <strong>PostgreSQL</strong> and <strong>MongoDB</strong> behind feature flags. Optional <strong>TLS</strong> via the <code>tls</code> feature. The UI is server-rendered (Askama + htmx + Alpine.js + Lucide icons) — no JavaScript build step.</p>
 
     <h2>Configuration</h2>
     <pre><code><span class="ty">[webui]</span>
@@ -140,7 +183,7 @@
 <span class="kw">key_path</span> = <span class="str">""</span></code></pre>
 
     <div class="alert alert-warn">
-      <strong>Exposing the panel:</strong> bind to <code>0.0.0.0</code> only behind TLS and a strong admin password. The panel is an administrative surface — treat it like SSH.
+      <strong>Exposing the panel:</strong> the panel is off by default. Bind to <code>0.0.0.0</code> only behind TLS and a strong admin password — it is an administrative surface, treat it like SSH.
     </div>
 
     <p>See <a href="configuration.html">Configuration</a> for the full option reference.</p>
