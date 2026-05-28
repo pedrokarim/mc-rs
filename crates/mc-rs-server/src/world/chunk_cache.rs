@@ -166,10 +166,10 @@ impl ChunkCache {
         let generated = loaded.is_none();
         let column = loaded.unwrap_or_else(|| {
             // Generate new chunk using the configured generator
-            let (sub_count, payload) = if self.generator == "flat" {
-                super::flat_generator::generate_flat_chunk()
-            } else {
-                terrain_generator::generate_terrain_chunk(cx, cz, self.seed)
+            let (sub_count, payload) = match self.generator.as_str() {
+                "flat" => super::flat_generator::generate_flat_chunk(),
+                "noise" => super::worldgen::noise_chunk::generate_noise_chunk(cx, cz, self.seed),
+                _ => terrain_generator::generate_terrain_chunk(cx, cz, self.seed),
             };
 
             let (sub_chunks, biome_data) =

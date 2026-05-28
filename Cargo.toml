@@ -33,7 +33,9 @@ base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
 p384 = { version = "0.13", features = ["ecdh", "ecdsa", "pkcs8"] }
 sha2 = "0.10"
+md-5 = "0.10"
 aes = "0.8"
 ctr = "0.9"
 cfb8 = "0.8"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
+include_dir = "0.7"

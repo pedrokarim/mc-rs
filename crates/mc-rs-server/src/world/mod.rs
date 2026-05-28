@@ -12,3 +12,4 @@ pub mod structure;
 pub mod terrain_generator;
 pub mod tick;
 pub mod vegetation;
+pub mod worldgen;

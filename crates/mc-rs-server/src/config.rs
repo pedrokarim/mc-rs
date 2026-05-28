@@ -127,6 +127,14 @@ password = ""
 enabled = false
 address = "0.0.0.0"
 port = 19132
+
+[resource_pack]
+# Si `true`, le client doit accepter le pack pour pouvoir jouer
+# (recommandé quand le pack fournit des overrides UI structurels
+# comme `server_form.json` — Bedrock les applique alors en priorité).
+# Si `false`, le client peut télécharger le pack mais Bedrock peut
+# silencieusement ignorer les overrides UI qu'il juge incertains.
+must_accept = true
 "#;
 
 #[derive(Debug, Deserialize)]
@@ -146,6 +154,30 @@ pub struct ServerConfig {
     pub rcon: RconSection,
     #[serde(default)]
     pub query: QuerySection,
+    #[serde(default)]
+    pub resource_pack: ResourcePackSection,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ResourcePackSection {
+    /// Si `true`, le client doit accepter le pack pour pouvoir jouer
+    /// (Bedrock applique alors les overrides UI structurels en priorité).
+    /// Si `false`, le pack reste optionnel — le client peut DL le pack mais
+    /// Bedrock ignorera silencieusement les overrides UI qu'il juge incertains.
+    #[serde(default = "default_pack_must_accept")]
+    pub must_accept: bool,
+}
+
+fn default_pack_must_accept() -> bool {
+    true
+}
+
+impl Default for ResourcePackSection {
+    fn default() -> Self {
+        Self {
+            must_accept: default_pack_must_accept(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -275,6 +307,7 @@ pub struct ConnectionConfig {
     pub max_view_distance: i32,
     pub generator_id: i32, // 1=infinite, 2=flat for StartGame
     pub world_seed: u64,
+    pub resource_pack_must_accept: bool,
 }
 
 fn default_server() -> ServerSection {
@@ -348,6 +381,7 @@ impl Default for ServerConfig {
             webui: mc_rs_webui::WebUiConfig::default(),
             rcon: RconSection::default(),
             query: QuerySection::default(),
+            resource_pack: ResourcePackSection::default(),
         }
     }
 }
@@ -531,11 +565,12 @@ impl ServerConfig {
             world_name: self.world.name.clone(),
             max_view_distance: self.server.view_distance,
             generator_id: match self.world.generator.to_lowercase().as_str() {
-                "normal" => 1, // infinite
-                "flat" => 2,   // flat
-                _ => 2,
+                "flat" => 2,             // flat
+                "normal" | "noise" => 1, // infinite
+                _ => 1,
             },
             world_seed,
+            resource_pack_must_accept: self.resource_pack.must_accept,
         })
     }
 }
