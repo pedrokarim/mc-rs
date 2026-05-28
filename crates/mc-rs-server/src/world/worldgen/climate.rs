@@ -17,6 +17,9 @@
 
 use std::sync::Arc;
 
+use serde_json::Value;
+
+use super::data;
 use super::density::{Df, NoiseRouter};
 
 #[inline]
@@ -119,6 +122,60 @@ impl<T: Copy> BiomeParameters<T> {
     }
 }
 
+/// Param list overworld chargé : points de paramètres → index de biome, plus
+/// la table des noms de biomes Java (`minecraft:plains`, …).
+pub struct OverworldBiomes {
+    pub params: BiomeParameters<u16>,
+    pub names: Vec<String>,
+}
+
+fn read_param(v: &Value) -> Param {
+    match v {
+        Value::Number(n) => Param::point(n.as_f64().unwrap()),
+        Value::Array(a) => Param::range(a[0].as_f64().unwrap(), a[1].as_f64().unwrap()),
+        other => panic!("paramètre climat invalide: {other}"),
+    }
+}
+
+/// Charge le param list multi-noise overworld résolu et vendoré
+/// (`data/worldgen/biome_parameters/overworld.json`).
+pub fn load_overworld() -> OverworldBiomes {
+    let json = data::biome_parameters_json("overworld").expect("param list overworld vendoré");
+    let arr: Value = serde_json::from_str(json).expect("param list JSON valide");
+    let arr = arr.as_array().expect("param list = tableau");
+
+    let mut names: Vec<String> = Vec::new();
+    let mut entries: Vec<(ParamPoint, u16)> = Vec::with_capacity(arr.len());
+    for e in arr {
+        let name = e["biome"].as_str().expect("biome name");
+        let idx = match names.iter().position(|n| n == name) {
+            Some(i) => i as u16,
+            None => {
+                names.push(name.to_string());
+                (names.len() - 1) as u16
+            }
+        };
+        let p = &e["parameters"];
+        entries.push((
+            ParamPoint {
+                temperature: read_param(&p["temperature"]),
+                humidity: read_param(&p["humidity"]),
+                continentalness: read_param(&p["continentalness"]),
+                erosion: read_param(&p["erosion"]),
+                depth: read_param(&p["depth"]),
+                weirdness: read_param(&p["weirdness"]),
+                offset: p["offset"].as_f64().unwrap_or(0.0),
+            },
+            idx,
+        ));
+    }
+
+    OverworldBiomes {
+        params: BiomeParameters::new(entries),
+        names,
+    }
+}
+
 /// Échantillonneur climatique : les 6 fonctions de densité du router.
 pub struct ClimateSampler {
     temperature: Arc<Df>,
@@ -194,6 +251,26 @@ mod tests {
             ..hot_target
         };
         assert_eq!(params.find(&cold_target), 1);
+    }
+
+    #[test]
+    fn loads_overworld_param_list() {
+        let ow = load_overworld();
+        // 54 biomes distincts, ~7593 points de paramètres.
+        assert_eq!(ow.names.len(), 54, "nombre de biomes inattendu");
+        // find renvoie un index valide pour une cible donnée.
+        let target = TargetPoint {
+            temperature: 0.0,
+            humidity: 0.0,
+            continentalness: 0.3,
+            erosion: 0.0,
+            depth: 0.0,
+            weirdness: 0.0,
+            offset: 0.0,
+        };
+        let idx = ow.params.find(&target);
+        assert!((idx as usize) < ow.names.len());
+        assert!(ow.names[idx as usize].starts_with("minecraft:"));
     }
 
     #[test]

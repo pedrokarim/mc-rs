@@ -33,6 +33,13 @@ pub fn noise_settings_json(id: &str) -> Option<&'static str> {
     WORLDGEN.get_file(&path)?.contents_utf8()
 }
 
+/// JSON brut du param list multi-noise résolu
+/// (`data/worldgen/biome_parameters/<id>.json`).
+pub fn biome_parameters_json(id: &str) -> Option<&'static str> {
+    let path = format!("biome_parameters/{}.json", strip(id));
+    WORLDGEN.get_file(&path)?.contents_utf8()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
