@@ -203,7 +203,21 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
         &surfaces,
     );
 
-    // 4) Décoration riche par biome (arbres variés + lianes, herbe/fleurs,
+    // 4) Minerais : insérés dans la roche (stone/deepslate) souterraine.
+    let mut ore_rng = super::super::random::Random::new(
+        0x006f_7265_i64 ^ ((chunk_x as i64) << 16) ^ chunk_z as i64 ^ seed as i64,
+    );
+    let ores = super::super::ore::generate_ores(chunk_x, chunk_z, &mut ore_rng);
+    for (&(lx, wy, lz), &ore) in &ores {
+        if (MIN_Y..MAX_Y).contains(&wy) {
+            let i = grid_index(lx as usize, wy, lz as usize);
+            if grid[i] == BLOCKS.stone || grid[i] == BLOCKS.deepslate {
+                grid[i] = ore;
+            }
+        }
+    }
+
+    // 5) Décoration riche par biome (arbres variés + lianes, herbe/fleurs,
     // aquatique : kelp/seagrass/coraux). Pilotée par les noms de biome Java,
     // opère directement sur la grille.
     super::decoration::decorate(
