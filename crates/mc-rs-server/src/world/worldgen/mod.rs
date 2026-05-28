@@ -7,6 +7,7 @@
 //! la migration.
 
 pub mod blended_noise;
+pub mod climate;
 pub mod data;
 pub mod density;
 pub mod noise_chunk;

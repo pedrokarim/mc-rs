@@ -429,9 +429,16 @@ impl Builder {
     }
 }
 
-/// Router de bruit overworld (le sous-ensemble utile au terrain pour l'instant).
+/// Router de bruit overworld : terrain + les 6 fonctions climat utilisées par
+/// le placement des biomes multi-noise (Phase B).
 pub struct NoiseRouter {
     pub final_density: Arc<Df>,
+    pub temperature: Arc<Df>,
+    pub vegetation: Arc<Df>,
+    pub continents: Arc<Df>,
+    pub erosion: Arc<Df>,
+    pub depth: Arc<Df>,
+    pub ridges: Arc<Df>,
 }
 
 /// Construit le router overworld pour une seed donnée (équiv. `RandomState`).
@@ -450,8 +457,16 @@ pub fn build_overworld(seed: u64) -> NoiseRouter {
         blended: None,
     };
 
-    let final_density = Arc::new(builder.parse(&router["final_density"]));
-    NoiseRouter { final_density }
+    let mut stage = |key: &str| Arc::new(builder.parse(&router[key]));
+    NoiseRouter {
+        final_density: stage("final_density"),
+        temperature: stage("temperature"),
+        vegetation: stage("vegetation"),
+        continents: stage("continents"),
+        erosion: stage("erosion"),
+        depth: stage("depth"),
+        ridges: stage("ridges"),
+    }
 }
 
 #[cfg(test)]
