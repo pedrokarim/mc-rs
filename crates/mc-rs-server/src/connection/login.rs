@@ -6,7 +6,6 @@ use mc_rs_crypto::jwt;
 use mc_rs_proto::io::ProtoReader;
 use mc_rs_proto::packets::login::*;
 use mc_rs_proto::packets::packet_id;
-use mc_rs_proto::packets::player::{ItemStack, ItemStackWrapper};
 
 use crate::player_data;
 
