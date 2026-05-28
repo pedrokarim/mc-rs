@@ -24,11 +24,23 @@ use super::super::chunk_serializer;
 use super::density::{self, NoiseRouter};
 
 /// Plancher du monde (overworld 1.18+).
-const MIN_Y: i32 = -64;
+pub(super) const MIN_Y: i32 = -64;
 /// Hauteur totale colonne (overworld). `noise.height` de `noise_settings`.
-const HEIGHT: i32 = 384;
+pub(super) const HEIGHT: i32 = 384;
+/// Plafond (exclusif) = MIN_Y + HEIGHT.
+pub(super) const MAX_Y: i32 = MIN_Y + HEIGHT;
 /// Niveau de la mer (`sea_level` de `noise_settings/overworld.json`).
-const SEA_LEVEL: i32 = 63;
+pub(super) const SEA_LEVEL: i32 = 63;
+/// Colonnes par chunk (16×16).
+pub(super) const COLS: usize = 256;
+/// Taille de la grille de blocs d'un chunk (toute la hauteur).
+pub(super) const GRID_LEN: usize = HEIGHT as usize * COLS;
+
+/// Index dans la grille de blocs pleine hauteur, ordre `[y][x][z]`.
+#[inline]
+pub(super) fn grid_index(lx: usize, wy: i32, lz: usize) -> usize {
+    ((wy - MIN_Y) as usize) * COLS + lx * 16 + lz
+}
 
 /// Largeur d'une cellule horizontale = `size_horizontal(1) * 4`.
 const CELL_W: i32 = 4;
@@ -130,8 +142,26 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
 
     let corners = with_router(seed, |router| sample_corners(base_x, base_z, router));
 
-    let mut payload = Vec::with_capacity(16384);
+    // 1) Forme du terrain : grille pleine hauteur (stone / water / air).
+    let mut grid = vec![BLOCKS.air; GRID_LEN].into_boxed_slice();
+    for lx in 0..16usize {
+        for lz in 0..16usize {
+            for wy in MIN_Y..MAX_Y {
+                let d = density_at(&corners, lx, wy, lz);
+                if d > 0.0 {
+                    grid[grid_index(lx, wy, lz)] = BLOCKS.stone;
+                } else if wy <= SEA_LEVEL {
+                    grid[grid_index(lx, wy, lz)] = BLOCKS.water;
+                }
+            }
+        }
+    }
 
+    // 2) Habillage de surface (grass/dirt/gravel + bedrock/deepslate).
+    super::surface::apply(&mut grid, seed, base_x, base_z);
+
+    // 3) Sérialisation sub-chunk par sub-chunk.
+    let mut payload = Vec::with_capacity(16384);
     for sub_idx in 0..SUB_CHUNK_COUNT {
         let sub_y_start = MIN_Y + sub_idx as i32 * 16;
 
@@ -142,14 +172,10 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
             for lz in 0..16usize {
                 for ly in 0..16usize {
                     let wy = sub_y_start + ly as i32;
-                    let d = density_at(&corners, lx, wy, lz);
-                    let block = if d > 0.0 {
-                        BLOCKS.stone
-                    } else if wy <= SEA_LEVEL {
-                        BLOCKS.water
-                    } else {
-                        continue; // air → laisse l'index 0
-                    };
+                    let block = grid[grid_index(lx, wy, lz)];
+                    if block == BLOCKS.air {
+                        continue;
+                    }
                     let pidx = palette_index(&mut palette, block);
                     blocks[(lx << 8) | (lz << 4) | ly] = pidx;
                 }

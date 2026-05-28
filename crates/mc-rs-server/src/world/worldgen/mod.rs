@@ -13,3 +13,4 @@ pub mod noise_chunk;
 pub mod perlin;
 pub mod rng;
 pub mod spline;
+pub mod surface;
