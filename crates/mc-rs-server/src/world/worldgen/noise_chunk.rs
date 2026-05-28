@@ -170,6 +170,7 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
         LazyLock::new(super::climate::load_overworld);
     let mut biome_idx = [[0u16; 16]; 16];
     let mut biome_ids = [[0u32; 16]; 16];
+    let mut surfaces = [[MIN_Y; 16]; 16];
     for lx in 0..16usize {
         for lz in 0..16usize {
             let wx = base_x + lx as i32;
@@ -182,6 +183,7 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
                     break;
                 }
             }
+            surfaces[lx][lz] = sy;
             let target = climate.sample(wx >> 2, sy >> 2, wz >> 2);
             let idx = BIOMES.params.find(&target);
             biome_idx[lx][lz] = idx;
@@ -193,7 +195,20 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
     // terracotta + bedrock/deepslate.
     super::surface::build(&mut grid, seed, base_x, base_z, &biome_idx, &BIOMES.names);
 
-    // 4) Sérialisation sub-chunk par sub-chunk.
+    // 4) Décoration (arbres, herbe, fleurs, cactus…) par biome — réutilise le
+    // module `vegetation` (les IDs Bedrock de notre carte sont ceux qu'il
+    // attend). Posée au-dessus de la surface.
+    let mut veg_rng = super::super::random::Random::new(
+        0xdead_beef_i64 ^ ((chunk_x as i64) << 8) ^ chunk_z as i64 ^ seed as i64,
+    );
+    let veg = super::super::vegetation::generate_vegetation(&biome_ids, &surfaces, &mut veg_rng);
+    for (&(lx, wy, lz), &block) in &veg {
+        if (MIN_Y..MAX_Y).contains(&wy) {
+            grid[grid_index(lx as usize, wy, lz as usize)] = block;
+        }
+    }
+
+    // 5) Sérialisation sub-chunk par sub-chunk.
     let mut payload = Vec::with_capacity(16384);
     for sub_idx in 0..SUB_CHUNK_COUNT {
         let sub_y_start = MIN_Y + sub_idx as i32 * 16;
@@ -224,7 +239,7 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
         }
     }
 
-    // 5) Biomes sérialisés (carte 2D répétée verticalement).
+    // 6) Biomes sérialisés (carte 2D répétée verticalement).
     let biome_data =
         chunk_serializer::serialize_biome_sections_from_columns(&biome_ids, SUB_CHUNK_COUNT);
     payload.extend_from_slice(&biome_data);
