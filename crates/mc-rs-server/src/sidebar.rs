@@ -21,7 +21,7 @@ impl Sidebar {
             return;
         }
         self.entries.push((text, score));
-        self.entries.sort_by(|a, b| b.1.cmp(&a.1));
+        self.entries.sort_by_key(|entry| std::cmp::Reverse(entry.1));
     }
 
     pub fn clear(&mut self) {

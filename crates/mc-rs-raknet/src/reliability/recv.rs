@@ -531,9 +531,9 @@ mod tests {
 
         // Simulate a long mining burst: far more than RECV_WINDOW_SIZE
         // datagrams. Every one must still be delivered (no silent drop).
-        let mut next_seq = 7u32;
-        let mut next_ord = 6u32;
-        for _ in 0..(RECV_WINDOW_SIZE * 3) {
+        for i in 0..(RECV_WINDOW_SIZE * 3) {
+            let next_seq = 7 + i;
+            let next_ord = 6 + i;
             let pkt = make_reliable_ordered(vec![0xAB], next_ord, next_ord);
             let out = layer.on_datagram(next_seq, vec![pkt]);
             assert_eq!(
@@ -542,8 +542,6 @@ mod tests {
                 "datagram seq {} dropped — receive window wedged",
                 next_seq
             );
-            next_seq += 1;
-            next_ord += 1;
             layer.update();
         }
     }

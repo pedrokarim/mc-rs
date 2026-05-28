@@ -784,7 +784,7 @@ impl CreativeContent {
     /// Encode un CreativeContent avec groupes + items.
     ///
     /// Format PMMP (`CreativeContentPacket::encodePayload`) :
-    /// ```
+    /// ```text
     /// groups_count (VarU32)
     /// for each group: category_id (i32 LE) + category_name (string) + icon (ItemStackWithoutStackId)
     /// items_count (VarU32)

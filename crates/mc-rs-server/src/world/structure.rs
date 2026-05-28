@@ -477,11 +477,7 @@ fn biome_coverage_pct(
         }
     }
 
-    if total == 0 {
-        0
-    } else {
-        matching * 100 / total
-    }
+    (matching * 100).checked_div(total).unwrap_or(0)
 }
 
 fn chunk_biome_coverage_pct(biome_ids: &[[u32; 16]; 16], allowed_biomes: &[u32]) -> usize {

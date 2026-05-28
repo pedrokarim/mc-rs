@@ -127,10 +127,7 @@ fn handle_client(
         }
         buf.extend_from_slice(&tmp[..n]);
 
-        loop {
-            let Some((consumed, req_id, ptype, body)) = decode_packet(&buf) else {
-                break;
-            };
+        while let Some((consumed, req_id, ptype, body)) = decode_packet(&buf) {
             buf.drain(..consumed);
 
             match RconPacketType::from_id(ptype) {
