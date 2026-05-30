@@ -347,36 +347,45 @@ enum Species {
     Acacia,
 }
 
-/// (densité ≈ arbres par chunk, espèces pondérées) par biome Java.
-fn tree_plan(biome: &str) -> (i32, &'static [(Species, i32)]) {
+/// (densité = arbres/chunk, espèces pondérées) par biome Java.
+///
+/// Densités = valeurs **officielles vanilla** (moyenne du modificateur `count`
+/// des `placed_feature` Java : `trees_<biome>`, etc.). Ex. plaines `{0:19,1:1}`
+/// → 0.05 ; jungle `{50:9,51:1}` → 50.1 ; mangrove `count 25`.
+fn tree_plan(biome: &str) -> (f64, &'static [(Species, i32)]) {
     use Species::*;
     match biome {
-        "minecraft:forest" | "minecraft:flower_forest" => {
-            (10, &[(OakSmall, 7), (Birch, 2), (OakLarge, 1)])
-        }
-        "minecraft:birch_forest" => (11, &[(Birch, 1)]),
-        "minecraft:old_growth_birch_forest" => (12, &[(Birch, 1)]),
-        "minecraft:dark_forest" => (20, &[(DarkOak, 6), (OakSmall, 3), (Birch, 1)]),
-        "minecraft:taiga" | "minecraft:snowy_taiga" => (10, &[(Spruce, 1)]),
+        "minecraft:forest" => (10.0, &[(OakSmall, 6), (Birch, 4), (OakLarge, 1)]),
+        "minecraft:flower_forest" => (6.0, &[(OakSmall, 6), (Birch, 4), (OakLarge, 1)]),
+        "minecraft:birch_forest" => (10.0, &[(Birch, 1)]),
+        "minecraft:old_growth_birch_forest" => (10.0, &[(Birch, 1)]),
+        "minecraft:dark_forest" => (16.0, &[(DarkOak, 6), (OakSmall, 3), (Birch, 1)]),
+        "minecraft:taiga" | "minecraft:snowy_taiga" => (10.0, &[(Spruce, 1)]),
         "minecraft:old_growth_pine_taiga" | "minecraft:old_growth_spruce_taiga" => {
-            (14, &[(Spruce, 1)])
+            (10.0, &[(Spruce, 1)])
         }
-        "minecraft:grove" | "minecraft:snowy_slopes" => (9, &[(Spruce, 1)]),
-        "minecraft:jungle" => (45, &[(JungleSmall, 10), (JungleGiant, 2), (OakLarge, 1)]),
-        "minecraft:bamboo_jungle" => (28, &[(JungleSmall, 4), (JungleGiant, 1)]),
-        "minecraft:sparse_jungle" => (7, &[(JungleSmall, 2), (OakSmall, 1)]),
+        "minecraft:grove" => (10.0, &[(Spruce, 1)]),
+        "minecraft:snowy_slopes" => (0.1, &[(Spruce, 1)]),
+        "minecraft:jungle" => (50.0, &[(JungleSmall, 10), (JungleGiant, 2), (OakLarge, 1)]),
+        "minecraft:bamboo_jungle" => (30.0, &[(JungleSmall, 4), (JungleGiant, 1)]),
+        "minecraft:sparse_jungle" => (2.0, &[(JungleSmall, 2), (OakSmall, 1)]),
         "minecraft:savanna" | "minecraft:savanna_plateau" | "minecraft:windswept_savanna" => {
-            (2, &[(Acacia, 4), (OakSmall, 1)])
+            (1.1, &[(Acacia, 4), (OakSmall, 1)])
         }
-        "minecraft:swamp" | "minecraft:mangrove_swamp" => (3, &[(OakSmall, 1)]),
-        "minecraft:plains" | "minecraft:sunflower_plains" | "minecraft:meadow" => {
-            (1, &[(OakSmall, 4), (OakLarge, 1)])
+        "minecraft:swamp" => (0.1, &[(OakSmall, 1)]),
+        // Mangrove : dense (count 25). Approximé en chêne + lianes faute de
+        // blocs de palétuvier dédiés.
+        "minecraft:mangrove_swamp" => (25.0, &[(OakSmall, 1)]),
+        "minecraft:plains" | "minecraft:sunflower_plains" => {
+            (0.05, &[(OakSmall, 4), (OakLarge, 1)])
         }
-        "minecraft:windswept_hills"
-        | "minecraft:windswept_forest"
-        | "minecraft:windswept_gravelly_hills" => (2, &[(Spruce, 2), (OakSmall, 1)]),
-        "minecraft:cherry_grove" => (8, &[(OakSmall, 1)]),
-        _ => (0, &[]),
+        "minecraft:meadow" => (0.05, &[(OakSmall, 1)]),
+        "minecraft:windswept_forest" => (3.0, &[(Spruce, 2), (OakSmall, 1)]),
+        "minecraft:windswept_hills" | "minecraft:windswept_gravelly_hills" => {
+            (0.1, &[(Spruce, 2), (OakSmall, 1)])
+        }
+        "minecraft:cherry_grove" => (10.0, &[(OakSmall, 1)]),
+        _ => (0.0, &[]),
     }
 }
 
@@ -414,18 +423,22 @@ fn place_tree(
 }
 
 /// Densité d'herbe/fleurs (tentatives par chunk).
+///
+/// Basée sur les `patch_grass_*` vanilla (jungle `count 25`, forêt `count 2`).
+/// En vanilla les plaines/savanes utilisent `noise_threshold_count` (densité
+/// variable selon un bruit) — approximé ici par une valeur fixe modérée.
 fn grass_density(biome: &str) -> i32 {
     match biome {
-        "minecraft:plains" | "minecraft:sunflower_plains" | "minecraft:meadow" => 12,
-        "minecraft:forest" | "minecraft:flower_forest" => 14,
         "minecraft:jungle" | "minecraft:bamboo_jungle" => 25,
-        "minecraft:sparse_jungle" => 15,
-        "minecraft:savanna" | "minecraft:savanna_plateau" | "minecraft:windswept_savanna" => 20,
-        "minecraft:taiga" | "minecraft:snowy_taiga" | "minecraft:grove" => 8,
-        "minecraft:swamp" | "minecraft:mangrove_swamp" => 8,
-        "minecraft:birch_forest" | "minecraft:old_growth_birch_forest" => 10,
-        "minecraft:dark_forest" => 6,
-        _ => 2,
+        "minecraft:sparse_jungle" => 12,
+        "minecraft:plains" | "minecraft:sunflower_plains" | "minecraft:meadow" => 10,
+        "minecraft:savanna" | "minecraft:savanna_plateau" | "minecraft:windswept_savanna" => 8,
+        "minecraft:forest" | "minecraft:flower_forest" => 2,
+        "minecraft:taiga" | "minecraft:snowy_taiga" | "minecraft:grove" => 4,
+        "minecraft:swamp" | "minecraft:mangrove_swamp" => 5,
+        "minecraft:birch_forest" | "minecraft:old_growth_birch_forest" => 3,
+        "minecraft:dark_forest" => 2,
+        _ => 1,
     }
 }
 
@@ -464,13 +477,20 @@ pub fn decorate(
 
     let biome_at = |lx: usize, lz: usize| -> &str { &biome_names[biome_idx[lx][lz] as usize] };
 
-    // ── Arbres ──
+    // ── Arbres ── (densité moyenne du chunk = moyenne des densités officielles
+    // par colonne ; arrondi probabiliste pour les biomes clairsemés < 1/chunk).
     let tree_attempts: i32 = {
-        let sum: i32 = (0..16)
+        let sum: f64 = (0..16)
             .flat_map(|x| (0..16).map(move |z| (x, z)))
             .map(|(x, z)| tree_plan(biome_at(x, z)).0)
             .sum();
-        sum / 256
+        let mean = sum / 256.0;
+        mean.floor() as i32
+            + if rng.next_float() < mean.fract() {
+                1
+            } else {
+                0
+            }
     };
     for _ in 0..tree_attempts {
         let lx = rng.next_bounded_int(16);
