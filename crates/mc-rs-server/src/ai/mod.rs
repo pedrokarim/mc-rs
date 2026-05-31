@@ -18,6 +18,7 @@
 pub mod behavior;
 pub mod controller;
 pub mod memory;
+pub mod route;
 pub mod sensor;
 
 use crate::entity::EntityBase;
@@ -292,13 +293,12 @@ impl BehaviorGroup {
     }
 
     /// Met à jour la route et le segment de direction courant (port
-    /// `updateRoute`). Le recalcul A\* effectif est branché à l'étape 3 ; ici on
-    /// gère le suivi de waypoints et l'avance au point suivant.
-    fn update_route(&mut self, memory: &mut Memory, base: &mut EntityBase, _chunk_cache: &mut ChunkCache) {
+    /// `updateRoute`) : recalcul périodique de l'A\*, puis suivi de waypoints.
+    fn update_route(&mut self, memory: &mut Memory, base: &mut EntityBase, chunk_cache: &mut ChunkCache) {
         if !self.route_enabled {
             return;
         }
-        let Some(_move_target) = memory.move_target else {
+        let Some(move_target) = memory.move_target else {
             memory.clear_move_direction();
             return;
         };
@@ -312,8 +312,20 @@ impl BehaviorGroup {
             }
         }
 
-        // Étape 3 : appel du RouteFinder quand `route_update_required` ou route
-        // épuisée. (Le finder remplira `memory.route` + remettra `node_index`.)
+        // Recalcul A\* quand demandé ou route épuisée.
+        if memory.route_update_required || !memory.has_next_node() {
+            memory.route_update_required = false;
+            let start = base.position;
+            let route = route::find_ground_path(
+                start,
+                move_target,
+                route::DEFAULT_MAX_EXPANDED,
+                route::DEFAULT_MAX_FALL,
+                |x, y, z| route::walkable_ground(chunk_cache, x, y, z),
+            );
+            memory.route = route;
+            memory.node_index = 0;
+        }
 
         // Avance au waypoint suivant quand l'entité est assez proche (port du
         // "followThePath" : maxDist basé sur la largeur de hitbox).
