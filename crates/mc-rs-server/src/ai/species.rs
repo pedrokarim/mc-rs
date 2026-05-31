@@ -108,7 +108,8 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
         ];
         let controllers: Vec<Box<dyn Controller>> = vec![
             Box::new(WalkController::new()),
-            Box::new(LookController::new(false, true)),
+            // (cible + route) : fixe le joueur proche à l'arrêt, sinon suit la route.
+            Box::new(LookController::new(true, true)),
         ];
         BehaviorGroup::new(vec![], normal, sensors, controllers, true)
     }

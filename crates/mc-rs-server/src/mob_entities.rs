@@ -168,6 +168,10 @@ impl MobKind {
 pub struct MobEntity {
     pub base: EntityBase,
     pub kind: MobKind,
+    /// Ticks passés loin de tout joueur (despawn des hostiles — voir tick).
+    despawn_timer: u32,
+    /// Compteur pour les dégâts de feu (sun-burning des zombies/skeletons).
+    fire_tick: u32,
 }
 
 impl MobEntity {
@@ -181,7 +185,12 @@ impl MobEntity {
             health_attributes(kind.max_health()),
             living_metadata(width, height, None),
         );
-        Self { base, kind }
+        Self {
+            base,
+            kind,
+            despawn_timer: 0,
+            fire_tick: 0,
+        }
     }
 
     pub fn add_actor_packet(&self) -> Vec<u8> {
@@ -212,7 +221,19 @@ pub struct TickResult {
     pub movement_updates: Vec<MovementUpdate>,
     /// Attaques mob→joueur à appliquer par `main.rs` (= `syncedActions` Allay).
     pub attack_requests: Vec<AiEffect>,
+    /// Mobs hostiles despawnés (trop loin des joueurs) → `main.rs` broadcast Remove.
+    pub despawned: Vec<MobEntity>,
+    /// SetActorData à diffuser (changement de flag, ex ONFIRE) : (unique_id, bytes).
+    pub metadata_updates: Vec<(i64, Vec<u8>)>,
+    /// Runtime ids de mobs à blesser par le feu (sun-burning) → `main.rs` applique.
+    pub fire_damage: Vec<u64>,
 }
+
+/// Distances de despawn des hostiles (port des règles Bedrock).
+const DESPAWN_INSTANT_DIST_SQ: f64 = 128.0 * 128.0;
+const DESPAWN_FAR_DIST_SQ: f64 = 32.0 * 32.0;
+/// Ticks loin (>32 blocs) avant despawn (~30 s à 20 TPS).
+const DESPAWN_TIMER_MAX: u32 = 600;
 
 pub struct MobEntityManager {
     entities: HashMap<u64, MobEntity>,
@@ -337,15 +358,49 @@ impl MobEntityManager {
         })
     }
 
-    pub fn tick(&mut self, chunk_cache: &mut ChunkCache, players: &[PlayerSnapshot]) -> TickResult {
+    pub fn tick(
+        &mut self,
+        chunk_cache: &mut ChunkCache,
+        players: &[PlayerSnapshot],
+        is_day: bool,
+    ) -> TickResult {
         let mut movement_updates = Vec::new();
         let mut attack_requests = Vec::new();
+        let mut to_despawn = Vec::new();
+        let mut metadata_updates = Vec::new();
+        let mut fire_damage = Vec::new();
         let ids = self.entities.keys().copied().collect::<Vec<_>>();
 
         for entity_id in ids {
             let Some(entity) = self.entities.get_mut(&entity_id) else {
                 continue;
             };
+
+            // --- Despawn des hostiles trop loin de tout joueur (règles Bedrock) ---
+            // (Si aucun joueur connecté, on ne despawn pas : pas de référentiel.)
+            if entity.kind.is_hostile() && !players.is_empty() {
+                let nearest_sq = players
+                    .iter()
+                    .map(|p| {
+                        let dx = (p.position[0] - entity.base.position[0]) as f64;
+                        let dy = (p.position[1] - entity.base.position[1]) as f64;
+                        let dz = (p.position[2] - entity.base.position[2]) as f64;
+                        dx * dx + dy * dy + dz * dz
+                    })
+                    .fold(f64::MAX, f64::min);
+                if nearest_sq > DESPAWN_INSTANT_DIST_SQ {
+                    to_despawn.push(entity_id); // trop loin → despawn immédiat
+                    continue;
+                } else if nearest_sq > DESPAWN_FAR_DIST_SQ {
+                    entity.despawn_timer += 1;
+                    if entity.despawn_timer >= DESPAWN_TIMER_MAX {
+                        to_despawn.push(entity_id);
+                        continue;
+                    }
+                } else {
+                    entity.despawn_timer = 0;
+                }
+            }
 
             // --- IA : sensors → behaviors → controllers (pose vélocité/yaw) ---
             // Tournée AVANT la physique pour que le WalkController fixe la
@@ -399,6 +454,29 @@ impl MobEntityManager {
             entity.base.velocity[0] *= friction;
             entity.base.velocity[2] *= friction;
 
+            // --- Sun-burning : zombies/skeletons brûlent en plein jour à découvert ---
+            if matches!(entity.kind, MobKind::Zombie | MobKind::Skeleton) {
+                let p = entity.base.position;
+                let burning = is_day
+                    && !in_water(chunk_cache, p)
+                    && sky_exposed(chunk_cache, p, height);
+                // Toggle du flag ONFIRE (broadcast SetActorData uniquement si changement).
+                use mc_rs_proto::packets::player::entity_flags;
+                if entity.base.set_entity_flag(entity_flags::ONFIRE, burning) {
+                    metadata_updates
+                        .push((entity.base.entity_unique_id, entity.base.actor_data_packet()));
+                }
+                if burning {
+                    entity.fire_tick += 1;
+                    if entity.fire_tick >= 20 {
+                        entity.fire_tick = 0;
+                        fire_damage.push(entity_id); // 1 HP/s appliqué par main.rs
+                    }
+                } else {
+                    entity.fire_tick = 0;
+                }
+            }
+
             let position_changed = (0..3).any(|i| {
                 (entity.base.position[i] - old_position[i]).abs() > 0.0001
             });
@@ -418,11 +496,43 @@ impl MobEntityManager {
             }
         }
 
+        // Retire les mobs despawnés (entité + composant IA) et les renvoie pour
+        // que `main.rs` broadcast leur RemoveEntity.
+        let mut despawned = Vec::new();
+        for id in to_despawn {
+            self.ai.remove(&id);
+            if let Some(e) = self.entities.remove(&id) {
+                despawned.push(e);
+            }
+        }
+
         TickResult {
             movement_updates,
             attack_requests,
+            despawned,
+            metadata_updates,
+            fire_damage,
         }
     }
+}
+
+/// Le mob a-t-il les pieds dans l'eau ?
+fn in_water(cache: &mut ChunkCache, pos: [f32; 3]) -> bool {
+    let id = cache.get_block(pos[0].floor() as i32, pos[1].floor() as i32, pos[2].floor() as i32);
+    id == BLOCKS.water
+}
+
+/// Le mob est-il exposé au ciel (aucun bloc opaque au-dessus, jusqu'à 64 blocs) ?
+fn sky_exposed(cache: &mut ChunkCache, pos: [f32; 3], height: f32) -> bool {
+    let x = pos[0].floor() as i32;
+    let z = pos[2].floor() as i32;
+    let head = (pos[1] + height).floor() as i32;
+    for dy in 1..=64 {
+        if is_supporting_block(cache.get_block(x, head + dy, z)) {
+            return false;
+        }
+    }
+    true
 }
 
 /// Déplace le mob horizontalement selon sa vélocité, **axe par axe** (glissement
@@ -588,7 +698,7 @@ mod tests {
         let entity_id = entity.base.entity_runtime_id;
 
         for _ in 0..200 {
-            let _ = mobs.tick(&mut cache, &[]);
+            let _ = mobs.tick(&mut cache, &[], false);
         }
 
         let settled = mobs

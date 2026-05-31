@@ -76,6 +76,25 @@ impl EntityBase {
         .encode()
     }
 
+    /// Active/désactive un flag d'entité (ex `entity_flags::ONFIRE`) dans le
+    /// champ de flags (clé 0, type Long) des métadonnées. Renvoie `true` si la
+    /// valeur a changé (→ il faut broadcast un `SetActorData`).
+    pub fn set_entity_flag(&mut self, bit: i64, on: bool) -> bool {
+        for (key, _ty, value) in self.metadata.iter_mut() {
+            if *key == 0 {
+                if let MetadataValue::Long(flags) = value {
+                    let new = if on { *flags | bit } else { *flags & !bit };
+                    if new != *flags {
+                        *flags = new;
+                        return true;
+                    }
+                    return false;
+                }
+            }
+        }
+        false
+    }
+
     pub fn actor_data_packet(&self) -> Vec<u8> {
         SetActorData {
             runtime_entity_id: self.entity_runtime_id,

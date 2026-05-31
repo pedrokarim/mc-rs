@@ -23,13 +23,16 @@ IDs autoritatifs (BedrockProtocol) : LevelEvent `PARTICLE_EXPLODE=2025` ; LevelS
 - 💤 A4 — Swing de bras mêlée : **différé** (nécessite `AnimatePacket`, absent du proto ; visuel mineur).
 - ✅ A5 — Dégâts mêlée + flèche mis à l'échelle par difficulté (peaceful 0 / easy 0.67 / normal 1 / hard 1.5).
 
-## Phase 2 — IA hostile (fidélité Bedrock)
-- ⬜ B1 — Sun-burning : zombie/skeleton prennent feu (flag `ONFIRE`) + dégâts de feu en plein
-  jour s'ils sont exposés au ciel (et pas dans l'eau / sous un bloc).
-- ⬜ B2 — Ligne de vue (LOS) : ne cible que si le joueur est visible (raycast blocs).
-- ⬜ B3 — Despawn des hostiles : retrait quand trop loin de tout joueur (Bedrock : >128 instantané,
-  32–128 aléatoire dans le temps).
-- ⬜ B4 — Regard vers le joueur à l'arrêt (LookAtPlayer quand on erre près d'un joueur).
+## Phase 2 — IA hostile (fidélité Bedrock) ✅ (B2 différé)
+- ✅ B1 — Sun-burning : zombie/skeleton prennent feu (flag `ONFIRE` + SetActorData) + 1 HP/s en
+  plein jour s'ils sont exposés au ciel (≤64 blocs) et hors de l'eau. Dégâts via le chemin
+  `apply_mob_damage_broadcast` (son + mort + drops).
+- 💤 B2 — Ligne de vue (LOS) : **différé** — gain mineur (l'A\* bloque déjà aux murs, donc un mob
+  ciblant à travers un mur reste coincé contre, sans le traverser).
+- ✅ B3 — Despawn des hostiles : >128 blocs instantané, >32 blocs pendant ~30 s → despawn
+  (pas de despawn si aucun joueur connecté).
+- ✅ B4 — Regard vers le joueur à l'arrêt : le roam fixe le joueur proche ; LookController passif
+  passé en (cible+route).
 
 ## Phase 3 — Physique des mobs (fidélité)
 - ⬜ D1 — Dégâts de chute (fall damage) pour les mobs.

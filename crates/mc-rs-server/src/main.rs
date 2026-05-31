@@ -2069,8 +2069,13 @@ async fn main() {
                     .collect();
                 // Dégâts mêlée/flèche des mobs mis à l'échelle selon la difficulté.
                 let dmg_mult = difficulty_damage_multiplier(config.gameplay.difficulty_id());
+                // Jour (sun-burning des zombies/skeletons) : hors plage de nuit Bedrock.
+                let is_day = {
+                    let t = world_state.time.rem_euclid(24000);
+                    !(13000..23000).contains(&t)
+                };
                 let mob_tick_result = if let Ok(mut cache) = chunk_cache.lock() {
-                    Some(mob_entities.tick(&mut cache, &player_snapshots))
+                    Some(mob_entities.tick(&mut cache, &player_snapshots, is_day))
                 } else {
                     None
                 };
@@ -2145,6 +2150,38 @@ async fn main() {
                                 );
                             }
                         }
+                    }
+                    // Mobs despawnés (trop loin) → RemoveEntity.
+                    for mob in tick_result.despawned {
+                        let remove_bytes = mob.remove_packet();
+                        broadcast_entity_remove_culled(
+                            &mut connections,
+                            &mut raknet,
+                            mob.base.entity_unique_id,
+                            &remove_bytes,
+                        );
+                    }
+                    // Changements de flag (ONFIRE du sun-burning) → SetActorData cullé.
+                    for (unique, bytes) in tick_result.metadata_updates {
+                        for (addr, conn) in connections.iter_mut() {
+                            if conn.is_in_game() && conn.visible_entities.contains(&unique) {
+                                let pkt =
+                                    conn.encode_compressed_packet(packet_id::SET_ACTOR_DATA, &bytes);
+                                let prep = conn.prepare_for_send(pkt);
+                                raknet.send_to_session(addr, prep, Reliability::ReliableOrdered, true);
+                            }
+                        }
+                    }
+                    // Dégâts de feu (sun-burning) : 1 HP/s, mêmes conséquences que PvE.
+                    for id in tick_result.fire_damage {
+                        apply_mob_damage_broadcast(
+                            &mut mob_entities,
+                            &mut connections,
+                            &mut raknet,
+                            &mut item_entities,
+                            id,
+                            1.0,
+                        );
                     }
                 }
 
@@ -2417,6 +2454,66 @@ fn difficulty_damage_multiplier(difficulty_id: i32) -> f32 {
         1 => 0.67, // easy
         3 => 1.5,  // hard
         _ => 1.0,  // normal
+    }
+}
+
+/// Applique des dégâts à un mob (joueur, feu, …) et diffuse les conséquences :
+/// son hurt/death, UpdateAttributes (cullé), RemoveEntity + drops à la mort.
+/// Factorise le chemin PvE et le sun-burning.
+fn apply_mob_damage_broadcast(
+    mob_entities: &mut crate::mob_entities::MobEntityManager,
+    connections: &mut HashMap<SocketAddr, Connection>,
+    raknet: &mut RakNetServer,
+    item_entities: &mut crate::item_entities::ItemEntityManager,
+    runtime_id: u64,
+    damage: f32,
+) {
+    use mc_rs_proto::packets::world::LevelSoundEvent;
+    // Position/type AVANT (le mob peut être retiré s'il meurt) — pour le son.
+    let info = mob_entities
+        .all()
+        .find(|e| e.base.entity_runtime_id == runtime_id)
+        .map(|e| (e.base.position, e.kind.actor_type(), e.base.entity_unique_id));
+    let Some(result) = mob_entities.apply_attack(runtime_id, damage) else {
+        return;
+    };
+    let unique = runtime_id as i64;
+
+    if let Some((spos, stype, suid)) = info {
+        let sid = if result.remove_packet.is_some() {
+            LevelSoundEvent::DEATH
+        } else {
+            LevelSoundEvent::HURT
+        };
+        let snd = LevelSoundEvent::actor_sound(sid, spos, stype, suid, false).encode();
+        broadcast_packet_all(connections, raknet, packet_id::LEVEL_SOUND_EVENT, &snd);
+    }
+
+    if let Some(update_bytes) = result.update_attributes_packet {
+        // Culling : seuls les joueurs qui voient le mob reçoivent ses attributs.
+        for (addr, conn) in connections.iter_mut() {
+            if conn.is_in_game() && conn.visible_entities.contains(&unique) {
+                let pkt = conn.encode_compressed_packet(packet_id::UPDATE_ATTRIBUTES, &update_bytes);
+                let prep = conn.prepare_for_send(pkt);
+                raknet.send_to_session(addr, prep, Reliability::ReliableOrdered, true);
+            }
+        }
+    }
+
+    if let Some(remove_bytes) = result.remove_packet {
+        broadcast_entity_remove_culled(connections, raknet, unique, &remove_bytes);
+    }
+
+    if let Some(death_position) = result.death_position {
+        for drop in result.drops {
+            spawn_and_broadcast_item_entity(
+                "mob-death",
+                connections,
+                raknet,
+                item_entities,
+                PendingItemEntitySpawn::with_scatter(drop, death_position),
+            );
+        }
     }
 }
 
@@ -3382,81 +3479,15 @@ fn process_peer_events(
                             continue;
                         }
 
-                        // Position/type du mob AVANT l'attaque (il peut être retiré
-                        // s'il meurt) — pour le son hurt/death.
-                        let mob_sound_info = mob_entities
-                            .all()
-                            .find(|e| e.base.entity_runtime_id == attack.target_runtime_id)
-                            .map(|e| (e.base.position, e.kind.actor_type(), e.base.entity_unique_id));
-
-                        if let Some(result) =
-                            mob_entities.apply_attack(attack.target_runtime_id, 4.0)
-                        {
-                            let target_unique_id = attack.target_runtime_id as i64;
-                            // Son de blessure / de mort du mob.
-                            if let Some((spos, stype, suid)) = mob_sound_info {
-                                let sid = if result.remove_packet.is_some() {
-                                    mc_rs_proto::packets::world::LevelSoundEvent::DEATH
-                                } else {
-                                    mc_rs_proto::packets::world::LevelSoundEvent::HURT
-                                };
-                                let snd = mc_rs_proto::packets::world::LevelSoundEvent::actor_sound(
-                                    sid, spos, stype, suid, false,
-                                )
-                                .encode();
-                                broadcast_packet_all(
-                                    connections,
-                                    raknet,
-                                    packet_id::LEVEL_SOUND_EVENT,
-                                    &snd,
-                                );
-                            }
-                            if let Some(update_bytes) = result.update_attributes_packet {
-                                // Culling : un joueur qui ne voit pas le mob
-                                // n'a pas besoin de ses UpdateAttributes.
-                                for (other_addr, other_conn) in connections.iter_mut() {
-                                    if !other_conn.is_in_game() {
-                                        continue;
-                                    }
-                                    if !other_conn.visible_entities.contains(&target_unique_id) {
-                                        continue;
-                                    }
-                                    let pkt = other_conn.encode_compressed_packet(
-                                        packet_id::UPDATE_ATTRIBUTES,
-                                        &update_bytes,
-                                    );
-                                    let prepared = other_conn.prepare_for_send(pkt);
-                                    raknet.send_to_session(
-                                        other_addr,
-                                        prepared,
-                                        Reliability::ReliableOrdered,
-                                        true,
-                                    );
-                                }
-                            }
-
-                            if let Some(remove_bytes) = result.remove_packet {
-                                broadcast_entity_remove_culled(
-                                    connections,
-                                    raknet,
-                                    target_unique_id,
-                                    &remove_bytes,
-                                );
-                            }
-
-                            if let Some(death_position) = result.death_position {
-                                let log_context = format!("{addr}:mob-death");
-                                for drop in result.drops {
-                                    spawn_and_broadcast_item_entity(
-                                        &log_context,
-                                        connections,
-                                        raknet,
-                                        item_entities,
-                                        PendingItemEntitySpawn::with_scatter(drop, death_position),
-                                    );
-                                }
-                            }
-                        }
+                        // Dégâts joueur→mob (épée = 4.0 placeholder) : son + mort + drops.
+                        apply_mob_damage_broadcast(
+                            mob_entities,
+                            connections,
+                            raknet,
+                            item_entities,
+                            attack.target_runtime_id,
+                            4.0,
+                        );
                     }
                 }
                 SessionEvent::Disconnected => {

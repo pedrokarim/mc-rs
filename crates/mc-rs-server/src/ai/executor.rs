@@ -378,6 +378,17 @@ impl Executor for FlatRandomRoamExecutor {
     }
 
     fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
+        // Regard « idle » : on fixe le joueur le plus proche s'il y en a un.
+        match ctx.memory.nearest_player.and_then(|pid| {
+            ctx.players.iter().find(|p| p.runtime_id == pid).copied()
+        }) {
+            Some(p) => {
+                ctx.memory.look_target =
+                    Some([p.position[0] as f64, (p.position[1] + 1.62) as f64, p.position[2] as f64]);
+            }
+            None => ctx.memory.look_target = None,
+        }
+
         if let Some(target) = ctx.memory.move_target {
             let dx = target[0] - ctx.base.position[0] as f64;
             let dz = target[2] - ctx.base.position[2] as f64;
