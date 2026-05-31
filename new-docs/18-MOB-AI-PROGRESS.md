@@ -96,13 +96,17 @@ Roster passé de 7 à **~51 mobs**.
 CreeperSwell, Passive, Neutral, Flying, FlyingShooter, FlyingMelee) sont faits. Les restants
 demandent **chacun une mécanique bespoke** :
 
+- ✅ **Vague 7 — Bosses** : barre de boss (`BossEventPacket` 0x4A : SHOW/HEALTH/HIDE, encodeurs
+  `combat_packets::boss_*`). **Wither** (vol + wither skulls via FlyingShooter, barre violette) +
+  **Ender Dragon** (vol + fonce via FlyingMelee, barre rose). PV élevés (mob_hp : 300/200). main.rs
+  diffuse SHOW (porte la santé) chaque tick + HIDE à la disparition. Follow-ups : séquence de spawn
+  du wither + armure, phases/end-crystals du dragon, hitbox multi-parties.
+
 ### Vagues restantes (mécaniques bespoke)
 - ⬜ **Witch** : jet de potions (projectile arcé) + immunité aux potions.
 - ⬜ **Shulker** : stationnaire, projectile à tête chercheuse.
 - ⬜ **Guardian/Elder Guardian** : rayon laser + nage dédiée (aquatique).
 - ⬜ **Breeze** (wind charge), **warden** (capteur de vibrations + sonic boom), **creaking**.
-- ⬜ **Bosses** : wither (vol, 3 têtes, wither skulls, barre de boss), ender_dragon (phases, vol
-  autour des end crystals, barre de boss).
 - ⬜ **Nage dédiée** pour squid/dauphin/poissons (profil passif terrestre pour l'instant).
 - ⬜ **Règles de spawn par biome** (le spawner ne filtre pas par biome → husk/drowned/stray
   peuvent apparaître hors biome ; à raffiner quand le spawner lira le biome au point de spawn).

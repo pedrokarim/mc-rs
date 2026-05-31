@@ -119,10 +119,10 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
         }
         AiProfile::FlyingShooter => {
             // Vol + tir de boules de feu (ghast = grosse portée, blaze = courte).
-            let (fireball, dmg, range) = if matches!(kind, MobKind::Ghast) {
-                ("minecraft:fireball", 6.0, 32.0)
-            } else {
-                ("minecraft:small_fireball", 5.0, 14.0)
+            let (fireball, dmg, range) = match kind {
+                MobKind::Ghast => ("minecraft:fireball", 6.0, 32.0),
+                MobKind::Wither => ("minecraft:wither_skull_dangerous", 8.0, 24.0),
+                _ => ("minecraft:small_fireball", 5.0, 14.0),
             };
             let combat = combat_behavior(Box::new(FlyShootExecutor::new(
                 speed,

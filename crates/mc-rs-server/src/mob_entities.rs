@@ -95,6 +95,9 @@ pub enum MobKind {
     Ghast,
     Phantom,
     Vex,
+    // Boss
+    Wither,
+    EnderDragon,
     // Neutres
     ZombifiedPiglin,
     Piglin,
@@ -160,6 +163,8 @@ impl MobKind {
         Self::Ghast,
         Self::Phantom,
         Self::Vex,
+        Self::Wither,
+        Self::EnderDragon,
         Self::ZombifiedPiglin,
         Self::Piglin,
         Self::IronGolem,
@@ -237,6 +242,8 @@ impl MobKind {
             Self::Ghast => d!("minecraft:ghast", "Ghast", 4.0, 4.0, Hostile, FlyingShooter, 0.0, 0.15, &[]),
             Self::Phantom => d!("minecraft:phantom", "Phantom", 0.9, 0.5, Hostile, FlyingMelee, 6.0, 0.4, &[]),
             Self::Vex => d!("minecraft:vex", "Vex", 0.4, 0.8, Hostile, FlyingMelee, 9.0, 0.45, &[]),
+            Self::Wither => d!("minecraft:wither", "Wither", 0.9, 3.5, Hostile, FlyingShooter, 0.0, 0.3, &[]),
+            Self::EnderDragon => d!("minecraft:ender_dragon", "Ender Dragon", 6.0, 2.0, Hostile, FlyingMelee, 10.0, 0.5, &[]),
             Self::ZombifiedPiglin => d!("minecraft:zombie_pigman", "Zombified Piglin", 0.6, 1.9, Neutral, Neutral, 0.0, 0.23, &[]),
             Self::Piglin => d!("minecraft:piglin", "Piglin", 0.6, 1.95, Neutral, Neutral, 0.0, 0.35, &[]),
             Self::IronGolem => d!("minecraft:iron_golem", "Iron Golem", 1.4, 2.7, Neutral, Neutral, 0.0, 0.25, &[]),
@@ -333,10 +340,25 @@ impl MobKind {
         matches!(self, Self::Enderman)
     }
 
+    /// Boss (affiche une barre de boss).
+    pub fn is_boss(self) -> bool {
+        matches!(self, Self::Wither | Self::EnderDragon)
+    }
+
+    /// Couleur de la barre de boss (cf `combat_packets::boss_event`).
+    pub fn boss_bar_color(self) -> u32 {
+        match self {
+            Self::Wither => 5,       // violet
+            Self::EnderDragon => 0,  // rose/magenta
+            _ => 0,
+        }
+    }
+
     /// Distance de détection d'un joueur (blocs).
     pub fn sight_range(self) -> f64 {
         match self {
-            Self::Ghast => 48.0, // tire de loin
+            Self::Ghast | Self::EnderDragon => 48.0, // détectent de loin
+            Self::Wither => 40.0,
             Self::Enderman => 32.0,
             _ => 16.0,
         }

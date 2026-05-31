@@ -1294,6 +1294,8 @@ async fn main() {
     // entrée/sortie de vue des entités stationnaires quand un joueur se
     // déplace. Les entités mobiles sont déjà gérées par leur MovementUpdate.
     let mut entity_visibility_scan_counter: u32 = 0;
+    // Ids (unique) des boss dont la barre est actuellement affichée (pour HIDE).
+    let mut shown_bosses: std::collections::HashSet<i64> = std::collections::HashSet::new();
     let (console_tx, mut console_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let console_tx_stdin = console_tx.clone();
     tokio::spawn(async move {
@@ -2314,6 +2316,52 @@ async fn main() {
                         packet_id::LEVEL_SOUND_EVENT,
                         &sound,
                     );
+                }
+
+                // Barres de boss : SHOW (porte la santé) pour chaque boss vivant,
+                // HIDE pour ceux disparus depuis le dernier tick.
+                {
+                    let mut current_bosses: std::collections::HashSet<i64> =
+                        std::collections::HashSet::new();
+                    let boss_bars: Vec<Vec<u8>> = mob_entities
+                        .all()
+                        .filter(|m| m.kind.is_boss())
+                        .map(|m| {
+                            current_bosses.insert(m.base.entity_unique_id);
+                            let hp = m
+                                .base
+                                .attributes
+                                .iter()
+                                .find(|a| a.name == "minecraft:health")
+                                .map(|a| (a.current / a.max.max(1.0)).clamp(0.0, 1.0))
+                                .unwrap_or(1.0);
+                            crate::combat_packets::boss_show(
+                                m.base.entity_unique_id,
+                                m.kind.display_name(),
+                                hp,
+                                m.kind.boss_bar_color(),
+                            )
+                        })
+                        .collect();
+                    for bytes in boss_bars {
+                        broadcast_packet_all(
+                            &mut connections,
+                            &mut raknet,
+                            packet_id::BOSS_EVENT,
+                            &bytes,
+                        );
+                    }
+                    // Boss disparus → HIDE.
+                    for old in shown_bosses.difference(&current_bosses) {
+                        let bytes = crate::combat_packets::boss_hide(*old);
+                        broadcast_packet_all(
+                            &mut connections,
+                            &mut raknet,
+                            packet_id::BOSS_EVENT,
+                            &bytes,
+                        );
+                    }
+                    shown_bosses = current_bosses;
                 }
 
                 entity_visibility_scan_counter += 1;
