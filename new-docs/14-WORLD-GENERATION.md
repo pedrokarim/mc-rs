@@ -304,15 +304,44 @@ depuis la sémantique vanilla (réf. deepslate pour le bruit/les surfaces).
 lapis + poches dirt/gravel) insérés dans stone/deepslate.
 
 **Décoration (phase E)** — module `decoration.rs`, par biome :
-- **Arbres variés** par espèce/taille : chêne petit & grand, bouleau, sapin
-  conique, jungle petite & **géante 2×2**, chêne noir 2×2, acacia (tronc oblique
-  + disque).
-- **Lianes** pendantes sur les arbres de jungle.
+- **Arbres data-fidèles** : chaque biome reçoit sa **composition vanilla
+  officielle** (sélecteur `random_selector` = espèce par défaut + alternatives à
+  chances exactes). Espèces : chêne, **fancy oak** (gros chêne touffu à branches
+  + grappes de feuillage), bouleau / super bouleau, sapin, **pin**, **méga
+  conifère 2×2**, jungle / **buisson** / **méga jungle 2×2**, chêne noir 2×2,
+  acacia, **cerisier** (`cherry_*`), **palétuvier** (`mangrove_*` + racines).
+  Sélection par la sémantique vanilla `random_selector` (test ordonné des chances).
+- **Lianes** sur les arbres de jungle/palétuvier.
 - **Aquatique** : récifs de **corail** (5 couleurs) + **sea pickles** (océan
   chaud), **kelp** (colonnes) + **seagrass** (océans/rivières).
-- Herbe haute / fougères (taïga) / fleurs par biome ; cactus & arbustes morts
-  (désert), **bambou** (jungle), **canne à sucre** (bord de l'eau), **nénuphars**
-  (marais).
+- Herbe / fougères (taïga) / fleurs ; cactus & arbustes morts (désert),
+  **bambou** (jungle), **canne à sucre** (bord de l'eau), **nénuphars** (marais).
+
+#### Densités de décoration — **toutes officielles** (donnée vanilla)
+
+Chaque biome (`worldgen/biome/<nom>.json`) a un champ `features` = 11 étapes de
+génération ; l'étape **`vegetal_decoration`** liste *chaque* feature avec son
+modificateur `count` / `rarity_filter`. Donc le taux d'**herbe, fleurs, lianes,
+citrouilles, melons, champignons, bambou, canne, buissons…** est défini
+exactement, par biome. Exemples extraits :
+
+| Feature | Jungle | Plaines |
+|---|---|---|
+| Arbres (`trees_*` count) | 50 | 0.05 |
+| Herbe (`patch_grass_*`) | 25 | bruit |
+| **Lianes** (`vines` count) | **127** | — |
+| Fleurs (`flower_*` rarity) | 1/16 | 1/32 |
+| Bambou | 1/4 | — |
+| Citrouille / Melon | 1/300 / 1/6 | 1/300 / — |
+| Canne à sucre | 1/6 | 1/6 |
+| Champignons brun/rouge | 1/256 / 1/512 | 1/256 / 1/512 |
+| Glow lichen | 104–157 | 104–157 |
+
+**Densités d'arbres** déjà appliquées aux valeurs officielles (moyenne du `count`
+des `placed_feature` : plaines 0.05, jungle 50, mangrove 25…). L'herbe utilise
+les `patch_grass_*` (jungle 25, forêt 2) ; plaines/savanes = `noise_threshold_count`
+(approximé). Les autres densités (vines 127, citrouilles, champignons, bushes,
+glow lichen…) restent à aligner exactement (voir « Reste à faire »).
 
 **Données vendorées** (`data/worldgen/`) : 35 density functions, 60 params de
 bruit, noise_settings overworld (avec `surface_rule`), param list de biomes
@@ -334,14 +363,18 @@ bruit, noise_settings overworld (avec `surface_rule`), param list de biomes
 - Carte de biomes **2D** (répétée verticalement) → passer en **3D** (biomes de
   grottes : lush_caves, dripstone_caves, deep_dark).
 
-**Décoration manquante**
-- `snow_layer` au sol des biomes froids ; citrouilles/melons (jungle) ; buissons
-  de baies (taïga) ; champignons + **mushroom fields** (mycélium + champignons
-  géants) ; variété de fleurs (flower_forest) ; arbres cerisier/mangrove
-  (blocs dédiés) ; formes d'arbres encore approximatives (vs `tree` feature
-  vanilla avec trunk/foliage placers).
+**Décoration — densités à aligner sur l'officiel + features manquantes**
+- Aligner sur le `count`/`rarity` exact : **lianes jungle = 127** (actuellement
+  une poignée), citrouilles 1/300, melons 1/6, champignons 1/256·1/512, fleurs
+  1/16·1/32, canne 1/6.
+- Features pas encore générées : `glow_lichen`, **bushes** (buissons), **firefly
+  bush**, **mushroom fields** (mycélium + champignons géants), **leaf litter**
+  (sous les arbres de forêt), buissons de baies (taïga), variété de fleurs par
+  biome (flower_forest), `snow_layer` au sol des biomes froids.
+- Formes d'arbres = approximations fidèles des trunk/foliage placers (pas le
+  portage exact des placers vanilla).
 - Portage **100 % data-driven** du système `placed_feature`/`configured_feature`
-  (au lieu des features curées actuelles).
+  (l'objectif final : lire les `features` du biome au lieu de les coder en dur).
 
 **Phase D — aquifères**
 - Aquifères par bruit (niveaux de fluide eau/lave dans les grottes). Les grottes
@@ -354,6 +387,7 @@ bruit, noise_settings overworld (avec `surface_rule`), param list de biomes
 
 ### Validation
 
-`cargo fmt && cargo clippy --all-targets -- -D warnings && cargo test` — 33 tests
-worldgen verts (RNG, bruit, density, climat, surface, décoration). Validation
-visuelle en jeu via `generator = "noise"`.
+`cargo fmt && cargo clippy --all-targets -- -D warnings && cargo test` — 35 tests
+worldgen verts (RNG, bruit, density, climat, surface, décoration, dont fancy oak
+= plus de feuillage qu'un chêne, cerisier/palétuvier). Validation visuelle en jeu
+via `generator = "noise"`.
