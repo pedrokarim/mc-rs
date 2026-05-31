@@ -156,6 +156,19 @@ impl MobKind {
         crate::mob_hp::mob_max_hp(self.actor_type())
     }
 
+    /// Mob qui peut se reproduire (animaux passifs avec une nourriture).
+    pub fn is_breedable(self) -> bool {
+        matches!(self, Self::Cow | Self::Pig | Self::Sheep | Self::Chicken)
+    }
+
+    /// Cet item (network id) met-il ce mob en mode amour ? (même set que `tempting_items`.)
+    pub fn is_breeding_food(self, item_id: i32) -> bool {
+        self.tempting_items()
+            .iter()
+            .filter_map(|n| item_registry::network_id(n))
+            .any(|id| id == item_id)
+    }
+
     pub fn default_loot(self) -> Vec<ItemStack> {
         fn item(name: &str, count: u16) -> ItemStack {
             ItemStack::new(item_registry::required_item_id(name), count, 0)
@@ -190,6 +203,14 @@ pub struct MobEntity {
     fire_tick: u32,
     /// Distance de chute accumulée (dégâts de chute à l'atterrissage).
     fall_distance: f32,
+    /// Ticks restants en « mode amour » (reproduction) ; 0 = pas en amour.
+    in_love: u32,
+    /// Ticks restants avant de pouvoir se reproduire à nouveau.
+    breed_cooldown: u32,
+    /// Le mob est un bébé.
+    baby: bool,
+    /// Ticks écoulés depuis la naissance (croissance bébé → adulte).
+    baby_age: u32,
 }
 
 impl MobEntity {
@@ -209,7 +230,21 @@ impl MobEntity {
             despawn_timer: 0,
             fire_tick: 0,
             fall_distance: 0.0,
+            in_love: 0,
+            breed_cooldown: 0,
+            baby: false,
+            baby_age: 0,
         }
+    }
+
+    /// Spawn d'un bébé (issu de la reproduction) : flag `BABY` + échelle réduite.
+    pub fn spawn_baby(kind: MobKind, position: [f32; 3]) -> Self {
+        use mc_rs_proto::packets::player::entity_flags;
+        let mut mob = Self::spawn(kind, position);
+        mob.baby = true;
+        mob.base.set_entity_flag(entity_flags::BABY, true);
+        mob.base.set_scale(0.5);
+        mob
     }
 
     pub fn add_actor_packet(&self) -> Vec<u8> {
@@ -258,6 +293,12 @@ const WATER_BUOYANCY: f32 = 0.05;
 const WATER_MAX_RISE: f32 = 0.1;
 /// Hauteur de chute (blocs) sans dégât ; au-delà : 1 dégât par bloc supplémentaire.
 const FALL_DAMAGE_THRESHOLD: f32 = 3.0;
+/// Reproduction (ticks 20 TPS) : durée du mode amour (~30 s), cooldown après
+/// reproduction (~5 min), croissance bébé → adulte (~20 min). Distance d'appariement.
+const LOVE_TICKS: u32 = 600;
+const BREED_COOLDOWN: u32 = 6000;
+const BABY_GROW_TICKS: u32 = 24000;
+const BREED_RANGE_SQ: f64 = 9.0;
 
 pub struct MobEntityManager {
     entities: HashMap<u64, MobEntity>,
@@ -280,20 +321,43 @@ impl MobEntityManager {
         }
     }
 
-    pub fn spawn(&mut self, kind: MobKind, position: [f32; 3]) -> MobEntity {
-        let entity = MobEntity::spawn(kind, position);
+    /// Insère un mob déjà construit + son composant IA.
+    fn insert_with_ai(&mut self, entity: MobEntity) {
         let id = entity.base.entity_runtime_id;
-        self.entities.insert(id, entity.clone());
+        let kind = entity.kind;
+        self.entities.insert(id, entity);
         self.ai.insert(
             id,
             AiComponent::new(crate::ai::species::build_behavior_group(kind), kind.movement_speed()),
         );
+    }
+
+    pub fn spawn(&mut self, kind: MobKind, position: [f32; 3]) -> MobEntity {
+        let entity = MobEntity::spawn(kind, position);
+        self.insert_with_ai(entity.clone());
         entity
     }
 
     pub fn remove(&mut self, entity_runtime_id: u64) -> Option<MobEntity> {
         self.ai.remove(&entity_runtime_id);
         self.entities.remove(&entity_runtime_id)
+    }
+
+    /// Nourrit un mob : s'il est reproductible, adulte, hors cooldown et que
+    /// l'item correspond à sa nourriture → le met en mode amour. Renvoie `true`
+    /// si la nourriture a été acceptée (à consommer côté joueur).
+    pub fn feed_mob(&mut self, runtime_id: u64, item_id: i32) -> bool {
+        if let Some(e) = self.entities.get_mut(&runtime_id) {
+            if e.kind.is_breedable()
+                && !e.baby
+                && e.breed_cooldown == 0
+                && e.kind.is_breeding_food(item_id)
+            {
+                e.in_love = LOVE_TICKS;
+                return true;
+            }
+        }
+        false
     }
 
     pub fn all(&self) -> impl Iterator<Item = &MobEntity> {
@@ -442,6 +506,25 @@ impl MobEntityManager {
                 }
             }
 
+            // --- Timers de reproduction + croissance des bébés ---
+            if entity.in_love > 0 {
+                entity.in_love -= 1;
+            }
+            if entity.breed_cooldown > 0 {
+                entity.breed_cooldown -= 1;
+            }
+            if entity.baby {
+                entity.baby_age += 1;
+                if entity.baby_age >= BABY_GROW_TICKS {
+                    use mc_rs_proto::packets::player::entity_flags;
+                    entity.baby = false;
+                    entity.base.set_entity_flag(entity_flags::BABY, false);
+                    entity.base.set_scale(1.0);
+                    metadata_updates
+                        .push((entity.base.entity_unique_id, entity.base.actor_data_packet()));
+                }
+            }
+
             // --- IA : sensors → behaviors → controllers (pose vélocité/yaw) ---
             // Tournée AVANT la physique pour que le WalkController fixe la
             // vélocité que la physique intègre ensuite. `self.ai` et
@@ -565,12 +648,56 @@ impl MobEntityManager {
             }
         }
 
+        // Reproduction : apparie deux adultes en amour, de même espèce, proches.
+        self.try_breed();
+
         TickResult {
             movement_updates,
             attack_requests,
             despawned,
             metadata_updates,
             damage_requests,
+        }
+    }
+
+    /// Apparie deux adultes en mode amour, de même espèce, à portée → un bébé
+    /// naît entre eux ; les deux parents passent en cooldown. Une paire/tick.
+    fn try_breed(&mut self) {
+        let lovers: Vec<(u64, MobKind, [f32; 3])> = self
+            .entities
+            .values()
+            .filter(|e| e.in_love > 0 && !e.baby && e.breed_cooldown == 0)
+            .map(|e| (e.base.entity_runtime_id, e.kind, e.base.position))
+            .collect();
+
+        for i in 0..lovers.len() {
+            for j in (i + 1)..lovers.len() {
+                let (id_a, kind_a, pos_a) = lovers[i];
+                let (id_b, kind_b, pos_b) = lovers[j];
+                if kind_a != kind_b {
+                    continue;
+                }
+                let dx = (pos_a[0] - pos_b[0]) as f64;
+                let dz = (pos_a[2] - pos_b[2]) as f64;
+                if dx * dx + dz * dz > BREED_RANGE_SQ {
+                    continue;
+                }
+                // Naissance au milieu des parents ; reset amour + cooldown.
+                for id in [id_a, id_b] {
+                    if let Some(e) = self.entities.get_mut(&id) {
+                        e.in_love = 0;
+                        e.breed_cooldown = BREED_COOLDOWN;
+                    }
+                }
+                let mid = [
+                    (pos_a[0] + pos_b[0]) * 0.5,
+                    (pos_a[1] + pos_b[1]) * 0.5,
+                    (pos_a[2] + pos_b[2]) * 0.5,
+                ];
+                let baby = MobEntity::spawn_baby(kind_a, mid);
+                self.insert_with_ai(baby);
+                return; // une seule reproduction par tick
+            }
         }
     }
 }
@@ -728,6 +855,28 @@ mod tests {
             total_fall_dmg > 0.0,
             "le mob doit subir des dégâts de chute (got {total_fall_dmg})"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn two_fed_cows_breed_into_a_baby() {
+        let (mut cache, dir) = temp_cache("mob-breed");
+        let mut mobs = MobEntityManager::new();
+        let a = mobs.spawn(MobKind::Cow, [0.5, 64.0, 0.5]);
+        let b = mobs.spawn(MobKind::Cow, [1.5, 64.0, 0.5]); // à 1 bloc → à portée
+        let wheat = crate::item_registry::network_id("minecraft:wheat").expect("blé existe");
+
+        assert!(mobs.feed_mob(a.base.entity_runtime_id, wheat), "vache A nourrie");
+        assert!(mobs.feed_mob(b.base.entity_runtime_id, wheat), "vache B nourrie");
+
+        let before = mobs.all().count();
+        let _ = mobs.tick(&mut cache, &[], false);
+        assert_eq!(mobs.all().count(), before + 1, "un bébé doit naître");
+        assert!(mobs.all().any(|e| e.baby), "le nouveau-né est un bébé");
+
+        // Nourrir un mob non reproductible (zombie) échoue.
+        let z = mobs.spawn(MobKind::Zombie, [50.0, 64.0, 50.0]);
+        assert!(!mobs.feed_mob(z.base.entity_runtime_id, wheat), "zombie non reproductible");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -3323,6 +3323,35 @@ fn process_peer_events(
                     for attack in pending_entity_attacks {
                         const ACTION_ATTACK: u32 = 1;
                         if attack.action_type != ACTION_ATTACK {
+                            // Interaction clic-droit : tentative de nourrissage (reproduction).
+                            let held = connections.get(&addr).map(|c| {
+                                let slot = c.inventory.held_slot as usize;
+                                (c.inventory.slots[slot].item.id, slot, c.gamemode)
+                            });
+                            if let Some((held_id, slot, gm)) = held {
+                                if mob_entities.feed_mob(attack.target_runtime_id, held_id) {
+                                    // Consomme 1 nourriture en survie.
+                                    if gm == 0 {
+                                        if let Some(conn) = connections.get_mut(&addr) {
+                                            let cur = &conn.inventory.slots[slot].item;
+                                            let next = cur.count.saturating_sub(1);
+                                            let new_item = if next == 0 {
+                                                mc_rs_proto::packets::player::ItemStack::AIR
+                                            } else {
+                                                let mut n = cur.clone();
+                                                n.count = next;
+                                                n
+                                            };
+                                            conn.inventory_manager.set_slot(
+                                                &mut conn.inventory,
+                                                crate::inventory_manager::InvKey::Main,
+                                                slot,
+                                                new_item,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
                             continue;
                         }
 

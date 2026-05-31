@@ -95,6 +95,17 @@ impl EntityBase {
         false
     }
 
+    /// Met à l'échelle l'entité (clé métadonnée 38, Float). Pour les bébés (0.5)
+    /// et le retour à l'adulte (1.0).
+    pub fn set_scale(&mut self, scale: f32) {
+        for (key, _ty, value) in self.metadata.iter_mut() {
+            if *key == 38 {
+                *value = MetadataValue::Float(scale);
+                return;
+            }
+        }
+    }
+
     pub fn actor_data_packet(&self) -> Vec<u8> {
         SetActorData {
             runtime_entity_id: self.entity_runtime_id,

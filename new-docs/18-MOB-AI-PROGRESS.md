@@ -45,10 +45,14 @@ IDs autoritatifs (BedrockProtocol) : LevelEvent `PARTICLE_EXPLODE=2025` ; LevelS
 ## Phase 4 — IA passive (fidélité)
 - ✅ C1 — Tempt : le mob passif suit le joueur (≤10 blocs) tenant sa nourriture (blé/carotte/graines).
   `PlayerSnapshot.held_item` + `TemptExecutor` + `ClosureEvaluator`. Priorité Flee(4) > Tempt(3) > Roam(1).
-- 💤 C2 — Reproduction (feed 2 adultes → bébé) — nécessite l'interaction clic-droit sur entité (non câblée).
-- 💤 C3 — Mouton qui mange l'herbe (regagne sa laine) — nécessite l'état laine + changement de bloc.
-- 💤 C4 — Bébés mobs : **différé** — flag `BABY` non défini dans le proto + pas de source de bébés
-  sans reproduction (C2). À traiter avec C2.
+- ✅ C2 — Reproduction : clic-droit avec la nourriture (interaction entité action 0) → mode amour
+  (`feed_mob`, consomme l'item en survie) ; 2 adultes en amour proches (≤3) → bébé (`try_breed`),
+  cooldown 5 min. Priorité Flee > Tempt > Roam (la reproduction se résout dans le tick manager).
+- 💤 C3 — Mouton qui mange l'herbe (regagne sa laine) : **différé** — dépend de la **tonte**
+  (shearing, interaction item non implémentée). Sans état « tondu », manger l'herbe ne ferait que
+  détruire du terrain sans effet → reporté avec le shearing.
+- ✅ C4 — Bébés mobs : flag `BABY` (bit 11) + échelle 0.5 à la naissance ; croissance → adulte
+  après ~20 min (clear flag + échelle 1.0 + SetActorData). Source : reproduction (C2).
 
 ## Hors-scope de cette passe (chantiers séparés)
 - 💤 Extension du roster de mobs (spider, enderman, slime, …) — ~60 types : réseau, modèles,
@@ -64,6 +68,9 @@ IDs autoritatifs (BedrockProtocol) : LevelEvent `PARTICLE_EXPLODE=2025` ; LevelS
   `apply_mob_damage_broadcast` (PvE + feu + chute).
 - **Phase 4** — tempt (suivre la nourriture). C2 reproduction / C3 mouton-herbe / C4 bébés = stretch.
 
-### Reste (stretch / chantiers séparés)
-- A4 swing-bras (AnimatePacket), B2 LOS (raycast), C2 reproduction + C4 bébés, C3 mouton-herbe.
-- Extension du roster de mobs (spider, enderman, slime, …) = chantier « entités », pas « IA ».
+### Reste (chantiers séparés, hors « IA des mobs »)
+- **C3 mouton-herbe** → dépend de la **tonte** (shearing), une interaction item à implémenter d'abord.
+- **Spawn naturel de bébés** (Bedrock : ~5 % des animaux spawnent bébés) — petit ajout au spawner.
+- **Extension du roster** (spider, enderman, slime, …) = chantier « entités » (réseau/loot/spawn/modèles),
+  pas « IA » : le framework `ai/` accueille déjà n'importe quelle espèce, il manque les définitions.
+- Tout le reste de la checklist (A1–A5, B1–B4, C1/C2/C4, D1–D3) est **fait**.
