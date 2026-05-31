@@ -12,10 +12,6 @@ pub mod advancements;
 pub mod adventure_mode;
 pub mod ai;
 #[allow(dead_code)]
-pub mod ai_goals;
-#[allow(dead_code)]
-pub mod ai_states;
-#[allow(dead_code)]
 pub mod allay;
 #[allow(dead_code)]
 pub mod amethyst;

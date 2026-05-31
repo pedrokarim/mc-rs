@@ -90,6 +90,13 @@ powershell -Command "Get-Process mc-rs-server -ErrorAction SilentlyContinue | St
 - World persistence (ChunkCache + LevelDB)
 - Block breaking (UpdateBlock broadcast)
 - SetActorData avec flags (BREATHING, HAS_GRAVITY, HAS_COLLISION)
+- IA des mobs : framework générique inspiré d'Allay dans `crates/mc-rs-server/src/ai/`
+  (sensors → behaviors priorisés → controllers, mémoire typée, navigation A\* au sol).
+  Hostiles (zombie/skeleton/creeper) traquent le joueur via A\* (step-up/saut) et
+  l'attaquent en mêlée (dégâts via `combat::attack_entity`) ; passifs errent et fuient
+  quand blessés. Collision horizontale + step-up dans la physique des mobs. Référence =
+  Allay (`.reference/Allay/.../entity/ai/`), car PMMP n'a pas d'IA de mobs.
+  Skeleton-arc / Creeper-explosion = follow-ups non faits.
 
 ### Bugs connus
 - **Gel per-connexion** : RÉSOLU (2026-05-19). Cause = fenêtre reliable RakNet
