@@ -18,6 +18,8 @@ pub struct EntityBase {
     pub yaw: f32,
     pub head_yaw: f32,
     pub body_yaw: f32,
+    /// Au sol au dernier tick de physique (lu par le `WalkController` pour le saut).
+    pub on_ground: bool,
     pub attributes: Vec<AddActorAttribute>,
     pub metadata: Vec<(u32, u32, MetadataValue)>,
 }
@@ -44,6 +46,7 @@ impl EntityBase {
             yaw: 0.0,
             head_yaw: 0.0,
             body_yaw: 0.0,
+            on_ground: false,
             attributes,
             metadata,
         }

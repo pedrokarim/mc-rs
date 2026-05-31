@@ -16,7 +16,9 @@
 //!   par `main.rs` (équivalent des `syncedActions` d'Allay).
 
 pub mod behavior;
+pub mod controller;
 pub mod memory;
+pub mod sensor;
 
 use crate::entity::EntityBase;
 use crate::mob_entities::MobKind;
