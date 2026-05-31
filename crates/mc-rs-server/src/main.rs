@@ -2086,20 +2086,36 @@ async fn main() {
                     // Attaques mob→joueur (drainées hors du tick, comme les
                     // syncedActions d'Allay) : on réutilise le chemin combat PvP.
                     for effect in tick_result.attack_requests {
-                        let crate::ai::AiEffect::Attack {
-                            attacker_runtime_id,
-                            attacker_position,
-                            target_runtime_id,
-                            damage,
-                        } = effect;
-                        apply_mob_attack_to_player(
-                            &mut connections,
-                            &mut raknet,
-                            attacker_runtime_id,
-                            attacker_position,
-                            target_runtime_id,
-                            damage,
-                        );
+                        match effect {
+                            crate::ai::AiEffect::Attack {
+                                attacker_runtime_id,
+                                attacker_position,
+                                target_runtime_id,
+                                damage,
+                            } => {
+                                apply_mob_attack_to_player(
+                                    &mut connections,
+                                    &mut raknet,
+                                    attacker_runtime_id,
+                                    attacker_position,
+                                    target_runtime_id,
+                                    damage,
+                                );
+                            }
+                            crate::ai::AiEffect::Explode {
+                                attacker_runtime_id,
+                                center,
+                            } => {
+                                apply_mob_explosion(
+                                    &mut connections,
+                                    &mut raknet,
+                                    &mut mob_entities,
+                                    &chunk_cache,
+                                    attacker_runtime_id,
+                                    center,
+                                );
+                            }
+                        }
                     }
                 }
 
@@ -2362,6 +2378,85 @@ fn apply_mob_attack_to_player(
             let prep = tc.prepare_for_send(pkt);
             raknet.send_to_session(&tgt_addr, prep, Reliability::ReliableOrdered, true);
         }
+    }
+}
+
+/// Applique l'explosion d'un mob (creeper) : détruit les blocs cassables
+/// (broadcast UpdateBlock), inflige les dégâts radiaux aux joueurs (réutilise le
+/// chemin combat) et retire le mob. Réutilise `explosion::Explosion`.
+fn apply_mob_explosion(
+    connections: &mut HashMap<SocketAddr, Connection>,
+    raknet: &mut RakNetServer,
+    mob_entities: &mut crate::mob_entities::MobEntityManager,
+    chunk_cache: &std::sync::Arc<std::sync::Mutex<ChunkCache>>,
+    attacker_runtime_id: u64,
+    center: [f32; 3],
+) {
+    use crate::world::block_registry::BLOCKS;
+    let explosion =
+        crate::explosion::Explosion::new(crate::explosion::ExplosionSource::Creeper, center);
+    let air = BLOCKS.air;
+
+    // 1) Calcul des blocs détruits + mise à air (sous lock, sans I/O réseau).
+    let destroyed: Vec<[i32; 3]> = if let Ok(mut cache) = chunk_cache.lock() {
+        let result = explosion.compute_result(|x, y, z| {
+            let id = cache.get_block(x, y, z);
+            if id == air {
+                return false;
+            }
+            // Bedrock (hardness < 0) indestructible → ne casse pas.
+            let name = BLOCKS.name_for(id).unwrap_or("");
+            crate::block_hardness::hardness(name) >= 0.0
+        });
+        for b in &result.blocks_destroyed {
+            cache.set_block(b[0], b[1], b[2], air);
+        }
+        result.blocks_destroyed
+    } else {
+        Vec::new()
+    };
+
+    // 2) Broadcast UpdateBlock pour chaque bloc détruit.
+    for b in &destroyed {
+        let payload = mc_rs_proto::packets::world::UpdateBlock {
+            position: *b,
+            runtime_id: air,
+            flags: 3, // FLAG_NEIGHBORS | FLAG_NETWORK
+            layer: 0,
+        }
+        .encode();
+        for (addr, conn) in connections.iter_mut() {
+            if conn.is_in_game() {
+                let pkt = conn.encode_compressed_packet(packet_id::UPDATE_BLOCK, &payload);
+                let prep = conn.prepare_for_send(pkt);
+                raknet.send_to_session(addr, prep, Reliability::ReliableOrdered, true);
+            }
+        }
+    }
+
+    // 3) Dégâts radiaux aux joueurs (knockback depuis le centre de l'explosion).
+    let targets: Vec<(u64, f32)> = connections
+        .values()
+        .filter(|c| c.is_in_game())
+        .filter_map(|c| {
+            explosion
+                .entity_damage(c.position)
+                .map(|d| (c.entity_runtime_id, d))
+        })
+        .collect();
+    for (rid, dmg) in targets {
+        apply_mob_attack_to_player(connections, raknet, attacker_runtime_id, center, rid, dmg);
+    }
+
+    // 4) Le creeper meurt dans l'explosion : retrait + broadcast RemoveEntity.
+    if let Some(removed) = mob_entities.remove(attacker_runtime_id) {
+        let remove_bytes = removed.remove_packet();
+        broadcast_entity_remove_culled(
+            connections,
+            raknet,
+            removed.base.entity_unique_id,
+            &remove_bytes,
+        );
     }
 }
 

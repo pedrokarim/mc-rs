@@ -128,6 +128,83 @@ impl Executor for MeleeAttackExecutor {
 }
 
 // ---------------------------------------------------------------------------
+// Creeper : chasse + amorçage (fuse) + explosion
+// ---------------------------------------------------------------------------
+
+/// Le creeper traque le joueur ; à portée d'amorçage il s'arrête et amorce
+/// (fuse). Si le joueur s'éloigne, le fuse se réinitialise. À la fin du fuse, il
+/// émet [`AiEffect::Explode`] (le mob est ensuite retiré par `main.rs`).
+pub struct CreeperSwellExecutor {
+    speed: f32,
+    max_sense_range_sq: f64,
+    ignite_range_sq: f64,
+    fuse_max: u32,
+    fuse_tick: u32,
+}
+
+impl CreeperSwellExecutor {
+    pub fn new(speed: f32, max_sense_range: f64, ignite_range: f64, fuse_max: u32) -> Self {
+        Self {
+            speed,
+            max_sense_range_sq: max_sense_range * max_sense_range,
+            ignite_range_sq: ignite_range * ignite_range,
+            fuse_max,
+            fuse_tick: 0,
+        }
+    }
+}
+
+impl Executor for CreeperSwellExecutor {
+    fn on_start(&mut self, memory: &mut Memory, _base: &mut EntityBase) {
+        self.fuse_tick = 0;
+        memory.movement_speed = self.speed;
+    }
+
+    fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
+        let Some(target_id) = ctx.memory.nearest_player else {
+            return false;
+        };
+        let Some(tpos) = player_pos(ctx.players, target_id) else {
+            return false;
+        };
+        let d2 = dist_sq(ctx.base.position, tpos);
+        if d2 > self.max_sense_range_sq {
+            return false;
+        }
+
+        ctx.memory.look_target = Some([tpos[0] as f64, (tpos[1] + 1.62) as f64, tpos[2] as f64]);
+
+        if d2 <= self.ignite_range_sq {
+            // À portée : on s'arrête et on amorce.
+            ctx.memory.move_target = None;
+            ctx.memory.clear_move_direction();
+            self.fuse_tick += 1;
+            if self.fuse_tick >= self.fuse_max {
+                ctx.effects.push(AiEffect::Explode {
+                    attacker_runtime_id: ctx.base.entity_runtime_id,
+                    center: ctx.base.position,
+                });
+                return false; // explose → le mob sera retiré
+            }
+        } else {
+            // Joueur hors de portée : on désamorce et on continue de traquer.
+            self.fuse_tick = 0;
+            ctx.memory.move_target = Some([tpos[0] as f64, tpos[1] as f64, tpos[2] as f64]);
+            ctx.memory.route_update_required = true;
+        }
+
+        true
+    }
+
+    fn on_stop(&mut self, memory: &mut Memory, _base: &mut EntityBase) {
+        self.fuse_tick = 0;
+        memory.move_target = None;
+        memory.look_target = None;
+        memory.clear_move_direction();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Errance aléatoire — port `FlatRandomRoamExecutor`
 // ---------------------------------------------------------------------------
 
@@ -337,10 +414,15 @@ mod tests {
         exec.execute(&mut ctx);
         assert_eq!(effects.len(), 1, "une attaque émise");
         match effects[0] {
-            AiEffect::Attack { damage, target_runtime_id, .. } => {
+            AiEffect::Attack {
+                damage,
+                target_runtime_id,
+                ..
+            } => {
                 assert_eq!(target_runtime_id, 7);
                 assert_eq!(damage, 3.0);
             }
+            _ => panic!("attendu une attaque mêlée"),
         }
     }
 
@@ -358,6 +440,61 @@ mod tests {
             effects: &mut effects,
         };
         assert!(!exec.execute(&mut ctx), "sans cible → behavior terminé");
+    }
+
+    #[test]
+    fn creeper_explodes_after_fuse_in_range() {
+        let mut exec = CreeperSwellExecutor::new(0.25, 16.0, 3.0, 3); // fuse 3 ticks
+        let mut base = zombie_base([0.0, 64.0, 0.0]);
+        let mut memory = Memory::new(0.25);
+        memory.nearest_player = Some(9);
+        let players = vec![PlayerSnapshot {
+            runtime_id: 9,
+            position: [1.0, 64.0, 0.0], // distance 1 < portée d'amorçage 3
+            gamemode: 0,
+            alive: true,
+        }];
+        let mut effects = Vec::new();
+        let mut alive = true;
+        for _ in 0..3 {
+            let mut ctx = ExecCtx {
+                base: &mut base,
+                kind: MobKind::Creeper,
+                memory: &mut memory,
+                players: &players,
+                effects: &mut effects,
+            };
+            alive = exec.execute(&mut ctx);
+        }
+        assert!(!alive, "explose à la fin du fuse → behavior terminé");
+        assert_eq!(effects.len(), 1, "un effet Explode émis");
+        assert!(matches!(effects[0], AiEffect::Explode { .. }));
+    }
+
+    #[test]
+    fn creeper_does_not_explode_out_of_range() {
+        let mut exec = CreeperSwellExecutor::new(0.25, 16.0, 3.0, 3);
+        let mut base = zombie_base([0.0, 64.0, 0.0]);
+        let mut memory = Memory::new(0.25);
+        memory.nearest_player = Some(9);
+        let players = vec![PlayerSnapshot {
+            runtime_id: 9,
+            position: [8.0, 64.0, 0.0], // hors portée d'amorçage → traque, pas de fuse
+            gamemode: 0,
+            alive: true,
+        }];
+        let mut effects = Vec::new();
+        for _ in 0..10 {
+            let mut ctx = ExecCtx {
+                base: &mut base,
+                kind: MobKind::Creeper,
+                memory: &mut memory,
+                players: &players,
+                effects: &mut effects,
+            };
+            assert!(exec.execute(&mut ctx), "continue de traquer hors de portée");
+        }
+        assert!(effects.is_empty(), "pas d'explosion hors de portée d'amorçage");
     }
 
     #[test]

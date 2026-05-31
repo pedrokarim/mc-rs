@@ -64,6 +64,12 @@ pub enum AiEffect {
         target_runtime_id: u64,
         damage: f32,
     },
+    /// Le mob `attacker_runtime_id` explose en `center` (creeper). `main.rs`
+    /// calcule la destruction de blocs + les dégâts radiaux et retire le mob.
+    Explode {
+        attacker_runtime_id: u64,
+        center: [f32; 3],
+    },
 }
 
 /// Contexte passé aux executors : état mutable du mob, monde en lecture seule

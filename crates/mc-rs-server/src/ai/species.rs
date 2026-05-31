@@ -3,7 +3,9 @@
 
 use super::behavior::{AlwaysEvaluator, Behavior, FnEvaluator};
 use super::controller::{LookController, WalkController};
-use super::executor::{FlatRandomRoamExecutor, MeleeAttackExecutor, PanicFleeExecutor};
+use super::executor::{
+    CreeperSwellExecutor, FlatRandomRoamExecutor, MeleeAttackExecutor, PanicFleeExecutor,
+};
 use super::sensor::NearestPlayerSensor;
 use super::{BehaviorGroup, Controller, Sensor};
 use crate::mob_entities::MobKind;
@@ -16,6 +18,9 @@ const PRIO_ROAM: i32 = 1;
 const MELEE_COOLDOWN: u32 = 20;
 /// Rayon d'errance (blocs).
 const ROAM_RANGE: i32 = 8;
+/// Creeper : portée d'amorçage et durée de fuse (ticks 20 TPS → 1.5 s, vanilla).
+const CREEPER_IGNITE_RANGE: f64 = 3.0;
+const CREEPER_FUSE_TICKS: u32 = 30;
 
 /// Construit le groupe de behaviors adapté à l'espèce.
 pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
@@ -33,8 +38,21 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
     };
 
     if kind.is_hostile() {
-        // Hostile : traque + frappe (prio haute), sinon erre. Regarde sa cible.
-        let normal = vec![
+        // Comportement de combat selon l'espèce : le creeper s'amorce et explose,
+        // les autres hostiles frappent en mêlée. (Skeleton-arc = follow-up.)
+        let combat = if matches!(kind, MobKind::Creeper) {
+            Behavior::new(
+                Box::new(FnEvaluator(|m, _, _| m.nearest_player.is_some())),
+                Box::new(CreeperSwellExecutor::new(
+                    speed,
+                    kind.sight_range(),
+                    CREEPER_IGNITE_RANGE,
+                    CREEPER_FUSE_TICKS,
+                )),
+                PRIO_COMBAT,
+                1,
+            )
+        } else {
             Behavior::new(
                 Box::new(FnEvaluator(|m, _, _| m.nearest_player.is_some())),
                 Box::new(MeleeAttackExecutor::new(
@@ -45,9 +63,10 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
                 )),
                 PRIO_COMBAT,
                 1,
-            ),
-            roam(),
-        ];
+            )
+        };
+        // Hostile : combat (prio haute), sinon erre. Regarde sa cible.
+        let normal = vec![combat, roam()];
         let controllers: Vec<Box<dyn Controller>> = vec![
             Box::new(WalkController::new()),
             Box::new(LookController::new(true, true)),

@@ -88,9 +88,10 @@ impl Explosion {
     /// Calcule les blocs à détruire dans un rayon sphérique simplifié.
     /// PMMP fait du raycast ; ici on approxime via itération sphère.
     /// `is_block_breakable` : closure décidant si un bloc résiste (bedrock, etc.).
-    pub fn compute_result<F>(&self, is_block_breakable: F) -> ExplosionResult
+    /// `FnMut` pour autoriser un prédicat qui lit le monde via `&mut ChunkCache`.
+    pub fn compute_result<F>(&self, mut is_block_breakable: F) -> ExplosionResult
     where
-        F: Fn(i32, i32, i32) -> bool,
+        F: FnMut(i32, i32, i32) -> bool,
     {
         let mut result = ExplosionResult::default();
         if !self.break_blocks {
