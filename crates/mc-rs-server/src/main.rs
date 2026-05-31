@@ -10,6 +10,7 @@ pub mod advancement_tree;
 pub mod advancements;
 #[allow(dead_code)]
 pub mod adventure_mode;
+pub mod ai;
 #[allow(dead_code)]
 pub mod ai_goals;
 #[allow(dead_code)]
