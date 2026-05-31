@@ -1392,90 +1392,31 @@ fn decorate_flowers(
     noise: f64,
 ) {
     let biome_at = |lx: usize, lz: usize| -> &str { &biome_names[biome_idx[lx][lz] as usize] };
-    let put = |grid: &mut [u32], lx: i32, lz: i32, id: u32| {
+    // Densité DATA-DRIVEN : Σ (patches × tries) des features `flower_*` du biome.
+    let attempts: i32 = {
+        let sum: i32 = (0..16)
+            .flat_map(|x| (0..16).map(move |z| (x, z)))
+            .map(|(x, z)| super::features::flower_attempts(biome_at(x, z), noise))
+            .sum();
+        sum / 256
+    };
+    for _ in 0..attempts {
+        let lx = rng.next_bounded_int(16);
+        let lz = rng.next_bounded_int(16);
         let ground = surfaces[lx as usize][lz as usize];
-        if ground > SEA_LEVEL
-            && at(grid, lx, ground, lz) == pal.grass_block
-            && at(grid, lx, ground + 1, lz) == pal.air
+        if ground <= SEA_LEVEL
+            || at(grid, lx, ground, lz) != pal.grass_block
+            || at(grid, lx, ground + 1, lz) != pal.air
         {
-            plant(grid, pal, lx, ground + 1, lz, id);
+            continue;
         }
-    };
-    let f = &pal.flowers; // [dandelion, poppy, cornflower, oxeye, allium, azure_bluet]
-    let is_plains = |b: &str| {
-        matches!(
-            b,
-            "minecraft:plains" | "minecraft:sunflower_plains" | "minecraft:meadow"
-        )
-    };
-    let present =
-        |pred: &dyn Fn(&str) -> bool| (0..16).any(|x| (0..16).any(|z| pred(biome_at(x, z))));
-
-    // Plaines : 1/32, count bruit (4 / 15), dandelion par défaut, 1/3 → autre.
-    if present(&is_plains) && rng.next_bounded_int(32) == 0 {
-        let n = if noise >= -0.8 { 4 } else { 15 };
-        for _ in 0..n {
-            let lx = rng.next_bounded_int(16);
-            let lz = rng.next_bounded_int(16);
-            if !is_plains(biome_at(lx as usize, lz as usize)) {
-                continue;
-            }
-            let id = if rng.next_bounded_int(3) == 0 {
-                f[[1usize, 3, 5][rng.next_bounded_int(3) as usize]]
-            } else {
-                f[0]
-            };
-            put(grid, lx, lz, id);
+        // Palette officielle du biome (poids = répétitions), choisie au hasard.
+        let blocks = super::features::flower_blocks(biome_at(lx as usize, lz as usize));
+        if blocks.is_empty() {
+            continue;
         }
-    }
-
-    // Jungle / warm : 1/16, poppy(2)/dandelion(1).
-    if present(&is_jungle) && rng.next_bounded_int(16) == 0 {
-        for _ in 0..(2 + rng.next_bounded_int(5)) {
-            let lx = rng.next_bounded_int(16);
-            let lz = rng.next_bounded_int(16);
-            if !is_jungle(biome_at(lx as usize, lz as usize)) {
-                continue;
-            }
-            let id = if rng.next_bounded_int(3) < 2 {
-                f[1]
-            } else {
-                f[0]
-            };
-            put(grid, lx, lz, id);
-        }
-    }
-
-    // Flower forest : dense et varié (pas de rarity).
-    if present(&|b| b == "minecraft:flower_forest") {
-        for _ in 0..40 {
-            let lx = rng.next_bounded_int(16);
-            let lz = rng.next_bounded_int(16);
-            if biome_at(lx as usize, lz as usize) != "minecraft:flower_forest" {
-                continue;
-            }
-            let id = f[rng.next_bounded_int(f.len() as i32) as usize];
-            put(grid, lx, lz, id);
-        }
-    }
-
-    // Autres forêts / savanes (flower_default) : ~1/8, poppy/dandelion.
-    let is_other =
-        |b: &str| (b.contains("forest") && b != "minecraft:flower_forest") || b.contains("savanna");
-    if present(&is_other) && rng.next_bounded_int(8) == 0 {
-        for _ in 0..(2 + rng.next_bounded_int(4)) {
-            let lx = rng.next_bounded_int(16);
-            let lz = rng.next_bounded_int(16);
-            if !is_other(biome_at(lx as usize, lz as usize)) {
-                continue;
-            }
-            let id = if rng.next_bounded_int(3) < 2 {
-                f[1]
-            } else {
-                f[0]
-            };
-            put(grid, lx, lz, id);
-        }
+        let id = blocks[rng.next_bounded_int(blocks.len() as i32) as usize];
+        plant(grid, pal, lx, ground + 1, lz, id);
     }
 }
 
