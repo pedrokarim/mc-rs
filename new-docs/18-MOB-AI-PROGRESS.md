@@ -48,9 +48,9 @@ IDs autoritatifs (BedrockProtocol) : LevelEvent `PARTICLE_EXPLODE=2025` ; LevelS
 - ✅ C2 — Reproduction : clic-droit avec la nourriture (interaction entité action 0) → mode amour
   (`feed_mob`, consomme l'item en survie) ; 2 adultes en amour proches (≤3) → bébé (`try_breed`),
   cooldown 5 min. Priorité Flee > Tempt > Roam (la reproduction se résout dans le tick manager).
-- 💤 C3 — Mouton qui mange l'herbe (regagne sa laine) : **différé** — dépend de la **tonte**
-  (shearing, interaction item non implémentée). Sans état « tondu », manger l'herbe ne ferait que
-  détruire du terrain sans effet → reporté avec le shearing.
+- ✅ C3 — Tonte + mouton mange l'herbe : clic-droit avec des **shears** → laine + flag `SHEARED` ;
+  un mouton tondu broutant un `grass_block` finit par le manger (→ `dirt`, broadcast UpdateBlock) et
+  **regagne sa laine**. `shear_sheep` + `eat_grass_timer` + `TickResult.block_changes`.
 - ✅ C4 — Bébés mobs : flag `BABY` (bit 11) + échelle 0.5 à la naissance ; croissance → adulte
   après ~20 min (clear flag + échelle 1.0 + SetActorData). Source : reproduction (C2).
 
@@ -68,9 +68,11 @@ IDs autoritatifs (BedrockProtocol) : LevelEvent `PARTICLE_EXPLODE=2025` ; LevelS
   `apply_mob_damage_broadcast` (PvE + feu + chute).
 - **Phase 4** — tempt (suivre la nourriture). C2 reproduction / C3 mouton-herbe / C4 bébés = stretch.
 
-### Reste (chantiers séparés, hors « IA des mobs »)
-- **C3 mouton-herbe** → dépend de la **tonte** (shearing), une interaction item à implémenter d'abord.
-- **Spawn naturel de bébés** (Bedrock : ~5 % des animaux spawnent bébés) — petit ajout au spawner.
-- **Extension du roster** (spider, enderman, slime, …) = chantier « entités » (réseau/loot/spawn/modèles),
-  pas « IA » : le framework `ai/` accueille déjà n'importe quelle espèce, il manque les définitions.
-- Tout le reste de la checklist (A1–A5, B1–B4, C1/C2/C4, D1–D3) est **fait**.
+### Reste — un seul chantier, distinct de « IA des mobs »
+- **Extension du roster** (spider, enderman, slime, zombie variants, …) = chantier « **entités** »
+  (définitions réseau/loot/règles de spawn/modèles par espèce). Le framework `ai/` accueille déjà
+  n'importe quelle espèce ; il manque les *définitions*, pas l'IA.
+
+**Toute la checklist IA est faite** : A1–A5, B1–B4, C1–C4, D1–D3 + tonte/mouton-herbe + spawn naturel
+de bébés. Comportements signature des 3 hostiles + comportements passifs (errance, fuite, tempt,
+reproduction, bébés, tonte/herbe) tous fidèles Bedrock.

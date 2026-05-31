@@ -211,6 +211,10 @@ pub struct MobEntity {
     baby: bool,
     /// Ticks écoulés depuis la naissance (croissance bébé → adulte).
     baby_age: u32,
+    /// Mouton tondu (sans laine) — repousse en mangeant de l'herbe.
+    sheared: bool,
+    /// Ticks cumulés passés sur un bloc d'herbe (mouton tondu qui mange).
+    eat_grass_timer: u32,
 }
 
 impl MobEntity {
@@ -234,6 +238,8 @@ impl MobEntity {
             breed_cooldown: 0,
             baby: false,
             baby_age: 0,
+            sheared: false,
+            eat_grass_timer: 0,
         }
     }
 
@@ -281,6 +287,8 @@ pub struct TickResult {
     pub metadata_updates: Vec<(i64, Vec<u8>)>,
     /// Dégâts environnementaux à appliquer (feu, chute) : (runtime_id, montant).
     pub damage_requests: Vec<(u64, f32)>,
+    /// Changements de blocs (mouton qui mange l'herbe) : (position, runtime_id).
+    pub block_changes: Vec<([i32; 3], u32)>,
 }
 
 /// Distances de despawn des hostiles (port des règles Bedrock).
@@ -338,6 +346,14 @@ impl MobEntityManager {
         entity
     }
 
+    /// Spawn d'un bébé (flag BABY + échelle réduite). Utilisé par le spawner
+    /// naturel (~5 % des animaux) et la reproduction.
+    pub fn spawn_baby(&mut self, kind: MobKind, position: [f32; 3]) -> MobEntity {
+        let entity = MobEntity::spawn_baby(kind, position);
+        self.insert_with_ai(entity.clone());
+        entity
+    }
+
     pub fn remove(&mut self, entity_runtime_id: u64) -> Option<MobEntity> {
         self.ai.remove(&entity_runtime_id);
         self.entities.remove(&entity_runtime_id)
@@ -358,6 +374,24 @@ impl MobEntityManager {
             }
         }
         false
+    }
+
+    /// Tond un mouton non tondu : pose le flag SHEARED et renvoie `(laine,
+    /// SetActorData)` à diffuser/dropper. `None` si pas un mouton tondable.
+    pub fn shear_sheep(&mut self, runtime_id: u64) -> Option<(Vec<ItemStack>, Vec<u8>)> {
+        use mc_rs_proto::packets::player::entity_flags;
+        let e = self.entities.get_mut(&runtime_id)?;
+        if e.kind != MobKind::Sheep || e.sheared || e.baby {
+            return None;
+        }
+        e.sheared = true;
+        e.base.set_entity_flag(entity_flags::SHEARED, true);
+        let wool = ItemStack::new(
+            item_registry::required_item_id("minecraft:white_wool"),
+            1,
+            0,
+        );
+        Some((vec![wool], e.base.actor_data_packet()))
     }
 
     pub fn all(&self) -> impl Iterator<Item = &MobEntity> {
@@ -473,6 +507,7 @@ impl MobEntityManager {
         let mut to_despawn = Vec::new();
         let mut metadata_updates = Vec::new();
         let mut damage_requests = Vec::new();
+        let mut block_changes = Vec::new();
         let ids = self.entities.keys().copied().collect::<Vec<_>>();
 
         for entity_id in ids {
@@ -619,6 +654,29 @@ impl MobEntityManager {
                 }
             }
 
+            // --- Mouton tondu qui mange l'herbe → repousse sa laine (C3) ---
+            if entity.kind == MobKind::Sheep && entity.sheared && !entity.baby {
+                let fx = entity.base.position[0].floor() as i32;
+                let fy = entity.base.position[1].floor() as i32 - 1; // bloc sous les pieds
+                let fz = entity.base.position[2].floor() as i32;
+                if chunk_cache.get_block(fx, fy, fz) == BLOCKS.grass_block {
+                    entity.eat_grass_timer += 1;
+                    if entity.eat_grass_timer >= 100 {
+                        entity.eat_grass_timer = 0;
+                        chunk_cache.set_block(fx, fy, fz, BLOCKS.dirt);
+                        block_changes.push(([fx, fy, fz], BLOCKS.dirt));
+                        // Repousse la laine.
+                        use mc_rs_proto::packets::player::entity_flags;
+                        entity.sheared = false;
+                        entity.base.set_entity_flag(entity_flags::SHEARED, false);
+                        metadata_updates
+                            .push((entity.base.entity_unique_id, entity.base.actor_data_packet()));
+                    }
+                } else {
+                    entity.eat_grass_timer = 0;
+                }
+            }
+
             let position_changed = (0..3).any(|i| {
                 (entity.base.position[i] - old_position[i]).abs() > 0.0001
             });
@@ -657,6 +715,7 @@ impl MobEntityManager {
             despawned,
             metadata_updates,
             damage_requests,
+            block_changes,
         }
     }
 
@@ -877,6 +936,39 @@ mod tests {
         // Nourrir un mob non reproductible (zombie) échoue.
         let z = mobs.spawn(MobKind::Zombie, [50.0, 64.0, 50.0]);
         assert!(!mobs.feed_mob(z.base.entity_runtime_id, wheat), "zombie non reproductible");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sheared_sheep_eats_grass_and_regrows_wool() {
+        let (mut cache, dir) = temp_cache("sheep-grass");
+        cache.set_block(0, 64, 0, BLOCKS.grass_block); // bloc d'herbe sous le mouton
+
+        let mut mobs = MobEntityManager::new();
+        let s = mobs.spawn(MobKind::Sheep, [0.5, 65.0, 0.5]);
+        let id = s.base.entity_runtime_id;
+
+        // Tonte : 1re fois OK, 2e fois refusée (déjà tondu).
+        assert!(mobs.shear_sheep(id).is_some(), "tonte réussie");
+        assert!(mobs.shear_sheep(id).is_none(), "déjà tondu");
+
+        // En broutant l'herbe, il finit par la manger et regagne sa laine.
+        let mut ate = false;
+        for _ in 0..200 {
+            let r = mobs.tick(&mut cache, &[], false);
+            if !r.block_changes.is_empty() {
+                ate = true;
+            }
+        }
+        assert!(ate, "le mouton tondu doit manger l'herbe");
+        assert_eq!(cache.get_block(0, 64, 0), BLOCKS.dirt, "grass_block → dirt");
+        assert!(
+            mobs.all()
+                .find(|e| e.base.entity_runtime_id == id)
+                .map(|e| !e.sheared)
+                .unwrap_or(false),
+            "la laine a repoussé (plus tondu)"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

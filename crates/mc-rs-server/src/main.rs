@@ -2197,6 +2197,22 @@ async fn main() {
                             amount,
                         );
                     }
+                    // Changements de blocs (mouton qui mange l'herbe) → UpdateBlock.
+                    for (pos, runtime_id) in tick_result.block_changes {
+                        let payload = mc_rs_proto::packets::world::UpdateBlock {
+                            position: pos,
+                            runtime_id,
+                            flags: 3,
+                            layer: 0,
+                        }
+                        .encode();
+                        broadcast_packet_all(
+                            &mut connections,
+                            &mut raknet,
+                            packet_id::UPDATE_BLOCK,
+                            &payload,
+                        );
+                    }
                 }
 
                 // Tick des flèches (projectiles de squelette) : mouvement,
@@ -3347,6 +3363,45 @@ fn process_peer_events(
                                                 crate::inventory_manager::InvKey::Main,
                                                 slot,
                                                 new_item,
+                                            );
+                                        }
+                                    }
+                                } else if crate::item_registry::network_id("minecraft:shears")
+                                    == Some(held_id)
+                                {
+                                    // Tonte d'un mouton : laine + flag SHEARED.
+                                    let sheep_pos = mob_entities
+                                        .all()
+                                        .find(|e| e.base.entity_runtime_id == attack.target_runtime_id)
+                                        .map(|e| e.base.position);
+                                    if let (Some(pos), Some((drops, meta_bytes))) =
+                                        (sheep_pos, mob_entities.shear_sheep(attack.target_runtime_id))
+                                    {
+                                        // SetActorData (flag SHEARED) aux viewers.
+                                        let unique = attack.target_runtime_id as i64;
+                                        for (a, c) in connections.iter_mut() {
+                                            if c.is_in_game() && c.visible_entities.contains(&unique) {
+                                                let pkt = c.encode_compressed_packet(
+                                                    packet_id::SET_ACTOR_DATA,
+                                                    &meta_bytes,
+                                                );
+                                                let prep = c.prepare_for_send(pkt);
+                                                raknet.send_to_session(
+                                                    a,
+                                                    prep,
+                                                    Reliability::ReliableOrdered,
+                                                    true,
+                                                );
+                                            }
+                                        }
+                                        // Drop de la laine.
+                                        for drop in drops {
+                                            spawn_and_broadcast_item_entity(
+                                                "sheep-shear",
+                                                connections,
+                                                raknet,
+                                                item_entities,
+                                                PendingItemEntitySpawn::with_scatter(drop, pos),
                                             );
                                         }
                                     }

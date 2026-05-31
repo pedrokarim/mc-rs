@@ -152,9 +152,13 @@ pub fn tick<R: Rng>(
         }
         let Some(sy) = sy else { continue };
 
-        // Spawn.
+        // Spawn. ~5 % des animaux apparaissent en bébé (convention Bedrock).
         let spawn_pos = [sx as f32 + 0.5, sy as f32, sz as f32 + 0.5];
-        let _entity = mobs.spawn(picked, spawn_pos);
+        let _entity = if cat == "animal" && rng.gen_range(0..100) < 5 {
+            mobs.spawn_baby(picked, spawn_pos)
+        } else {
+            mobs.spawn(picked, spawn_pos)
+        };
         match cat {
             "monster" => hostile_count += 1,
             "animal" => passive_count += 1,
