@@ -2172,15 +2172,15 @@ async fn main() {
                             }
                         }
                     }
-                    // Dégâts de feu (sun-burning) : 1 HP/s, mêmes conséquences que PvE.
-                    for id in tick_result.fire_damage {
+                    // Dégâts environnementaux (feu, chute) : mêmes conséquences que PvE.
+                    for (id, amount) in tick_result.damage_requests {
                         apply_mob_damage_broadcast(
                             &mut mob_entities,
                             &mut connections,
                             &mut raknet,
                             &mut item_entities,
                             id,
-                            1.0,
+                            amount,
                         );
                     }
                 }
@@ -3480,6 +3480,8 @@ fn process_peer_events(
                         }
 
                         // Dégâts joueur→mob (épée = 4.0 placeholder) : son + mort + drops.
+                        let attacker_pos =
+                            connections.get(&addr).map(|c| c.position).unwrap_or([0.0; 3]);
                         apply_mob_damage_broadcast(
                             mob_entities,
                             connections,
@@ -3488,6 +3490,8 @@ fn process_peer_events(
                             attack.target_runtime_id,
                             4.0,
                         );
+                        // Knockback du mob (no-op s'il est mort).
+                        mob_entities.apply_knockback(attack.target_runtime_id, attacker_pos, 0.4);
                     }
                 }
                 SessionEvent::Disconnected => {

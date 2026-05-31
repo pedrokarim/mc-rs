@@ -172,6 +172,8 @@ pub struct MobEntity {
     despawn_timer: u32,
     /// Compteur pour les dégâts de feu (sun-burning des zombies/skeletons).
     fire_tick: u32,
+    /// Distance de chute accumulée (dégâts de chute à l'atterrissage).
+    fall_distance: f32,
 }
 
 impl MobEntity {
@@ -190,6 +192,7 @@ impl MobEntity {
             kind,
             despawn_timer: 0,
             fire_tick: 0,
+            fall_distance: 0.0,
         }
     }
 
@@ -225,8 +228,8 @@ pub struct TickResult {
     pub despawned: Vec<MobEntity>,
     /// SetActorData à diffuser (changement de flag, ex ONFIRE) : (unique_id, bytes).
     pub metadata_updates: Vec<(i64, Vec<u8>)>,
-    /// Runtime ids de mobs à blesser par le feu (sun-burning) → `main.rs` applique.
-    pub fire_damage: Vec<u64>,
+    /// Dégâts environnementaux à appliquer (feu, chute) : (runtime_id, montant).
+    pub damage_requests: Vec<(u64, f32)>,
 }
 
 /// Distances de despawn des hostiles (port des règles Bedrock).
@@ -234,6 +237,11 @@ const DESPAWN_INSTANT_DIST_SQ: f64 = 128.0 * 128.0;
 const DESPAWN_FAR_DIST_SQ: f64 = 32.0 * 32.0;
 /// Ticks loin (>32 blocs) avant despawn (~30 s à 20 TPS).
 const DESPAWN_TIMER_MAX: u32 = 600;
+/// Poussée d'Archimède par tick dans l'eau (le mob remonte) + vitesse max de montée.
+const WATER_BUOYANCY: f32 = 0.05;
+const WATER_MAX_RISE: f32 = 0.1;
+/// Hauteur de chute (blocs) sans dégât ; au-delà : 1 dégât par bloc supplémentaire.
+const FALL_DAMAGE_THRESHOLD: f32 = 3.0;
 
 pub struct MobEntityManager {
     entities: HashMap<u64, MobEntity>,
@@ -274,6 +282,22 @@ impl MobEntityManager {
 
     pub fn all(&self) -> impl Iterator<Item = &MobEntity> {
         self.entities.values()
+    }
+
+    /// Applique un knockback à un mob (poussé à l'opposé de `attacker_pos`).
+    /// No-op si le mob n'existe plus (mort). La vélocité est diffusée au tick
+    /// suivant ; le `WalkController` ne l'écrase pas (garde anti-knockback).
+    pub fn apply_knockback(&mut self, runtime_id: u64, attacker_pos: [f32; 3], force: f32) {
+        if let Some(e) = self.entities.get_mut(&runtime_id) {
+            let dx = e.base.position[0] - attacker_pos[0];
+            let dz = e.base.position[2] - attacker_pos[2];
+            let len = (dx * dx + dz * dz).sqrt();
+            if len > 0.0001 {
+                e.base.velocity[0] = dx / len * force;
+                e.base.velocity[2] = dz / len * force;
+                e.base.velocity[1] = 0.4; // composante verticale (comme PMMP)
+            }
+        }
     }
 
     pub fn apply_attack(&mut self, entity_runtime_id: u64, damage: f32) -> Option<DamageResult> {
@@ -368,7 +392,7 @@ impl MobEntityManager {
         let mut attack_requests = Vec::new();
         let mut to_despawn = Vec::new();
         let mut metadata_updates = Vec::new();
-        let mut fire_damage = Vec::new();
+        let mut damage_requests = Vec::new();
         let ids = self.entities.keys().copied().collect::<Vec<_>>();
 
         for entity_id in ids {
@@ -419,11 +443,16 @@ impl MobEntityManager {
             let old_position = entity.base.position;
             let old_velocity = entity.base.velocity;
             let (_width, height) = entity.kind.size();
+            let feet_in_water = in_water(chunk_cache, entity.base.position);
 
             // --- Gravité (vertical) ---
             entity.base.velocity[1] =
                 (entity.base.velocity[1] - GRAVITY_PER_TICK).max(MAX_FALL_SPEED);
             entity.base.velocity[1] *= AIR_DRAG;
+            // Flottaison : dans l'eau, poussée vers le haut → le mob remonte/nage.
+            if feet_in_water {
+                entity.base.velocity[1] = (entity.base.velocity[1] + WATER_BUOYANCY).min(WATER_MAX_RISE);
+            }
 
             // --- Déplacement horizontal avec collision murale + step-up ---
             move_horizontal(&mut entity.base, height, chunk_cache);
@@ -449,6 +478,22 @@ impl MobEntityManager {
             entity.base.position[1] = next_y;
             entity.base.on_ground = on_ground;
 
+            // --- Dégâts de chute : accumule la descente, applique à l'atterrissage ---
+            if feet_in_water {
+                entity.fall_distance = 0.0; // l'eau annule la chute
+            } else if on_ground {
+                if entity.fall_distance > FALL_DAMAGE_THRESHOLD {
+                    let dmg = (entity.fall_distance - FALL_DAMAGE_THRESHOLD).floor();
+                    if dmg > 0.0 {
+                        damage_requests.push((entity_id, dmg));
+                    }
+                }
+                entity.fall_distance = 0.0;
+            } else {
+                let dropped = (old_position[1] - next_y).max(0.0);
+                entity.fall_distance += dropped;
+            }
+
             // --- Friction horizontale (sol vs air) ---
             let friction = if on_ground { GROUND_FRICTION } else { AIR_FRICTION };
             entity.base.velocity[0] *= friction;
@@ -456,10 +501,8 @@ impl MobEntityManager {
 
             // --- Sun-burning : zombies/skeletons brûlent en plein jour à découvert ---
             if matches!(entity.kind, MobKind::Zombie | MobKind::Skeleton) {
-                let p = entity.base.position;
-                let burning = is_day
-                    && !in_water(chunk_cache, p)
-                    && sky_exposed(chunk_cache, p, height);
+                let burning =
+                    is_day && !feet_in_water && sky_exposed(chunk_cache, entity.base.position, height);
                 // Toggle du flag ONFIRE (broadcast SetActorData uniquement si changement).
                 use mc_rs_proto::packets::player::entity_flags;
                 if entity.base.set_entity_flag(entity_flags::ONFIRE, burning) {
@@ -470,7 +513,7 @@ impl MobEntityManager {
                     entity.fire_tick += 1;
                     if entity.fire_tick >= 20 {
                         entity.fire_tick = 0;
-                        fire_damage.push(entity_id); // 1 HP/s appliqué par main.rs
+                        damage_requests.push((entity_id, 1.0)); // 1 HP/s appliqué par main.rs
                     }
                 } else {
                     entity.fire_tick = 0;
@@ -511,7 +554,7 @@ impl MobEntityManager {
             attack_requests,
             despawned,
             metadata_updates,
-            fire_damage,
+            damage_requests,
         }
     }
 }
@@ -646,6 +689,29 @@ mod tests {
         assert!((zombie.base.position[0] - 0.7).abs() < 1e-6, "ne doit pas traverser le mur");
         assert_eq!(zombie.base.velocity[0], 0.0, "vitesse X annulée par la collision");
         assert!((zombie.base.position[1] - 64.0).abs() < 1e-6, "pas de step-up sur mur 2 blocs");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn mob_takes_fall_damage_on_landing() {
+        let (mut cache, dir) = temp_cache("mob-fall");
+        cache.set_block(0, 64, 0, BLOCKS.stone); // bloc isolé en l'air (monde flat)
+
+        let mut mobs = MobEntityManager::new();
+        mobs.spawn(MobKind::Zombie, [0.5, 80.0, 0.5]); // chute de ~15 blocs
+
+        let mut total_fall_dmg = 0.0;
+        for _ in 0..200 {
+            // is_day=false → pas de sun-burning : le seul dégât possible = la chute.
+            let r = mobs.tick(&mut cache, &[], false);
+            for (_, dmg) in r.damage_requests {
+                total_fall_dmg += dmg;
+            }
+        }
+        assert!(
+            total_fall_dmg > 0.0,
+            "le mob doit subir des dégâts de chute (got {total_fall_dmg})"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

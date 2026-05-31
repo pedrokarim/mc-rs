@@ -34,10 +34,12 @@ IDs autoritatifs (BedrockProtocol) : LevelEvent `PARTICLE_EXPLODE=2025` ; LevelS
 - ✅ B4 — Regard vers le joueur à l'arrêt : le roam fixe le joueur proche ; LookController passif
   passé en (cible+route).
 
-## Phase 3 — Physique des mobs (fidélité)
-- ⬜ D1 — Dégâts de chute (fall damage) pour les mobs.
-- ⬜ D2 — Flottaison/nage dans l'eau (le mob remonte au lieu de couler).
-- ⬜ D3 — Knockback du mob quand un joueur le frappe.
+## Phase 3 — Physique des mobs (fidélité) ✅
+- ✅ D1 — Dégâts de chute : accumulation de la descente, dégâts à l'atterrissage
+  (1/bloc au-delà de 3), annulés dans l'eau. Appliqués via `damage_requests`.
+- ✅ D2 — Flottaison : poussée vers le haut dans l'eau (le mob remonte/nage, ne coule plus).
+- ✅ D3 — Knockback du mob frappé par un joueur (`MobEntityManager::apply_knockback`,
+  non écrasé par le WalkController grâce à sa garde anti-knockback).
 
 ## Phase 4 — IA passive (fidélité)
 - ⬜ C1 — Tempt : suivre un joueur tenant la nourriture de reproduction de l'espèce.
