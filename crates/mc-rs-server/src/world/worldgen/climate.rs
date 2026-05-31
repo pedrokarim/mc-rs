@@ -6,9 +6,10 @@
 //! défini par un `ParamPoint` (intervalles) ; le placement retient le biome de
 //! `fittness` minimale au point cible.
 //!
-//! La recherche est linéaire : elle donne exactement le même résultat que le
-//! `RTree` vanilla (qui n'est qu'une structure d'accélération, pas une
-//! approximation).
+//! La recherche utilise un arbre spatial (`RNode`, split médian) en
+//! branch-and-bound : résultat exact (identique à une recherche linéaire), mais
+//! en O(log n) au lieu de O(7593) — indispensable vu le nombre d'échantillons
+//! de biome par chunk.
 //!
 //! Le `Sampler` mappe les fonctions du router comme vanilla : humidity ←
 //! `vegetation`, continentalness ← `continents`, weirdness ← `ridges`. Les
@@ -69,15 +70,17 @@ pub struct ParamPoint {
 }
 
 impl ParamPoint {
-    /// Somme des carrés des distances par dimension (métrique vanilla).
-    fn fittness(&self, t: &TargetPoint) -> f64 {
-        sq(self.temperature.distance_to(t.temperature))
-            + sq(self.humidity.distance_to(t.humidity))
-            + sq(self.continentalness.distance_to(t.continentalness))
-            + sq(self.erosion.distance_to(t.erosion))
-            + sq(self.depth.distance_to(t.depth))
-            + sq(self.weirdness.distance_to(t.weirdness))
-            + sq(self.offset - t.offset)
+    /// Les 7 dimensions (offset en `Param` ponctuel).
+    fn space(&self) -> [Param; 7] {
+        [
+            self.temperature,
+            self.humidity,
+            self.continentalness,
+            self.erosion,
+            self.depth,
+            self.weirdness,
+            Param::point(self.offset),
+        ]
     }
 }
 
@@ -93,9 +96,140 @@ pub struct TargetPoint {
     pub offset: f64,
 }
 
-/// Liste de paramètres biome → identifiant, avec recherche du plus proche.
+impl TargetPoint {
+    #[inline]
+    fn to_array(self) -> [f64; 7] {
+        [
+            self.temperature,
+            self.humidity,
+            self.continentalness,
+            self.erosion,
+            self.depth,
+            self.weirdness,
+            self.offset,
+        ]
+    }
+}
+
+/// Distance (au carré, métrique vanilla) d'un espace 7D à un point.
+#[inline]
+fn space_distance(space: &[Param; 7], v: &[f64; 7]) -> f64 {
+    let mut s = 0.0;
+    for i in 0..7 {
+        s += sq(space[i].distance_to(v[i]));
+    }
+    s
+}
+
+#[inline]
+fn center(space: &[Param; 7], d: usize) -> f64 {
+    (space[d].min + space[d].max) * 0.5
+}
+
+fn union_space<T: Copy>(nodes: &[RNode<T>]) -> [Param; 7] {
+    let mut sp = [Param {
+        min: f64::INFINITY,
+        max: f64::NEG_INFINITY,
+    }; 7];
+    for n in nodes {
+        let ns = n.space();
+        for i in 0..7 {
+            sp[i].min = sp[i].min.min(ns[i].min);
+            sp[i].max = sp[i].max.max(ns[i].max);
+        }
+    }
+    sp
+}
+
+/// Nœud d'un arbre de recherche spatial (équiv. `RTree` vanilla, mais split
+/// médian sur la dimension la plus large). La recherche branch-and-bound donne
+/// exactement le même résultat que la recherche linéaire (borne inférieure
+/// admissible : la distance à la boîte englobante ≤ distance à tout point dedans).
+enum RNode<T: Copy> {
+    Leaf {
+        space: [Param; 7],
+        value: T,
+    },
+    Sub {
+        space: [Param; 7],
+        children: Vec<RNode<T>>,
+    },
+}
+
+impl<T: Copy> RNode<T> {
+    #[inline]
+    fn space(&self) -> &[Param; 7] {
+        match self {
+            RNode::Leaf { space, .. } | RNode::Sub { space, .. } => space,
+        }
+    }
+
+    fn build(mut nodes: Vec<RNode<T>>) -> RNode<T> {
+        if nodes.len() <= 6 {
+            let space = union_space(&nodes);
+            return RNode::Sub {
+                space,
+                children: nodes,
+            };
+        }
+        // Dimension de plus grand étalement des centres.
+        let mut best_dim = 0;
+        let mut best_spread = f64::NEG_INFINITY;
+        for d in 0..7 {
+            let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+            for n in &nodes {
+                let c = center(n.space(), d);
+                lo = lo.min(c);
+                hi = hi.max(c);
+            }
+            if hi - lo > best_spread {
+                best_spread = hi - lo;
+                best_dim = d;
+            }
+        }
+        nodes.sort_by(|a, b| {
+            center(a.space(), best_dim)
+                .partial_cmp(&center(b.space(), best_dim))
+                .unwrap()
+        });
+        let right = nodes.split_off(nodes.len() / 2);
+        let children = vec![RNode::build(nodes), RNode::build(right)];
+        let space = union_space(&children);
+        RNode::Sub { space, children }
+    }
+
+    fn search(&self, v: &[f64; 7], best: &mut f64, best_val: &mut T) {
+        let d = space_distance(self.space(), v);
+        if d >= *best {
+            return;
+        }
+        match self {
+            RNode::Leaf { value, .. } => {
+                *best = d;
+                *best_val = *value;
+            }
+            RNode::Sub { children, .. } => {
+                // Visite les enfants du plus proche au plus lointain (élagage).
+                let mut order: Vec<(f64, &RNode<T>)> = children
+                    .iter()
+                    .map(|c| (space_distance(c.space(), v), c))
+                    .collect();
+                order.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+                for (lb, c) in order {
+                    if lb >= *best {
+                        break;
+                    }
+                    c.search(v, best, best_val);
+                }
+            }
+        }
+    }
+}
+
+/// Liste de paramètres biome → identifiant, indexée par un arbre spatial.
 pub struct BiomeParameters<T: Copy> {
-    entries: Vec<(ParamPoint, T)>,
+    root: RNode<T>,
+    first: T,
 }
 
 impl<T: Copy> BiomeParameters<T> {
@@ -104,21 +238,27 @@ impl<T: Copy> BiomeParameters<T> {
             !entries.is_empty(),
             "au moins un biome requis dans la param list"
         );
-        BiomeParameters { entries }
+        let first = entries[0].1;
+        let leaves: Vec<RNode<T>> = entries
+            .into_iter()
+            .map(|(p, value)| RNode::Leaf {
+                space: p.space(),
+                value,
+            })
+            .collect();
+        BiomeParameters {
+            root: RNode::build(leaves),
+            first,
+        }
     }
 
-    /// Biome de `fittness` minimale au point cible.
+    /// Biome de `fittness` minimale au point cible (recherche exacte).
     pub fn find(&self, t: &TargetPoint) -> T {
-        let mut best = self.entries[0].1;
-        let mut best_f = f64::MAX;
-        for (p, id) in &self.entries {
-            let f = p.fittness(t);
-            if f < best_f {
-                best_f = f;
-                best = *id;
-            }
-        }
-        best
+        let v = t.to_array();
+        let mut best = f64::MAX;
+        let mut best_val = self.first;
+        self.root.search(&v, &mut best, &mut best_val);
+        best_val
     }
 }
 

@@ -18,6 +18,7 @@ use super::density::NoiseRouter;
 use super::rng::{PositionalRandomFactory, XoroshiroRandom};
 
 const SEA_LEVEL: i32 = 63;
+const MIN_Y: i32 = -64;
 const X_SPACING: i32 = 16;
 const Y_SPACING: i32 = 12;
 const Z_SPACING: i32 = 16;
@@ -99,21 +100,13 @@ fn clamped_map(v: f64, a: f64, b: f64, c: f64, d: f64) -> f64 {
 pub struct Aquifer<'a> {
     router: &'a NoiseRouter,
     factory: PositionalRandomFactory,
-    base_x: i32,
-    base_z: i32,
-    surfaces: &'a [[i32; 16]; 16],
     loc_cache: HashMap<(i32, i32, i32), (i32, i32, i32)>,
     status_cache: HashMap<(i32, i32, i32), FluidStatus>,
+    prelim_cache: HashMap<(i32, i32), i32>,
 }
 
 impl<'a> Aquifer<'a> {
-    pub fn new(
-        router: &'a NoiseRouter,
-        seed: u64,
-        base_x: i32,
-        base_z: i32,
-        surfaces: &'a [[i32; 16]; 16],
-    ) -> Self {
+    pub fn new(router: &'a NoiseRouter, seed: u64) -> Self {
         // Factory positionnelle dédiée à l'aquifère (fromHashOf + forkPositional).
         let mut base = XoroshiroRandom::from_seed(seed);
         let dev = base.fork_positional();
@@ -121,19 +114,35 @@ impl<'a> Aquifer<'a> {
         Aquifer {
             router,
             factory,
-            base_x,
-            base_z,
-            surfaces,
             loc_cache: HashMap::new(),
             status_cache: HashMap::new(),
+            prelim_cache: HashMap::new(),
         }
     }
 
-    /// Surface préliminaire approximée (carte du chunk, bornée).
-    fn prelim(&self, x: i32, z: i32) -> i32 {
-        let lx = (x - self.base_x).clamp(0, 15) as usize;
-        let lz = (z - self.base_z).clamp(0, 15) as usize;
-        self.surfaces[lx][lz]
+    /// Surface préliminaire = hauteur de terrain aux **coordonnées monde**
+    /// (scan grossier de `final_density`, mis en cache). Global et cohérent
+    /// entre chunks — c'est ce qui rend les niveaux d'aquifère continus.
+    fn prelim(&mut self, x: i32, z: i32) -> i32 {
+        // Quantifié à une grille de 4 blocs : la surface varie lentement, donc
+        // mutualiser les points proches divise fortement le nombre de scans.
+        let key = (x & !3, z & !3);
+        if let Some(&v) = self.prelim_cache.get(&key) {
+            return v;
+        }
+        // Scan grossier depuis ~140 (au-dessus, c'est de l'air ; les rares pics
+        // plus hauts n'affectent pas les aquifères, sous le niveau de la mer).
+        let mut p = MIN_Y;
+        let mut y = 140;
+        while y > MIN_Y {
+            if self.router.final_density.compute(key.0, y, key.1) > 0.0 {
+                p = y;
+                break;
+            }
+            y -= 8;
+        }
+        self.prelim_cache.insert(key, p);
+        p
     }
 
     /// Décide le fluide d'un bloc de grotte (densité ≤ 0).
@@ -260,7 +269,7 @@ impl<'a> Aquifer<'a> {
         s
     }
 
-    fn compute_status(&self, x: i32, y: i32, z: i32) -> FluidStatus {
+    fn compute_status(&mut self, x: i32, y: i32, z: i32) -> FluidStatus {
         let global = global_status(y);
         let mut min_prelim = i32::MAX;
         let mut is_aquifer = false;
@@ -343,39 +352,48 @@ mod tests {
     use crate::world::worldgen::density;
 
     #[test]
-    fn low_terrain_floods_caves() {
-        // Sous des terres basses (surface 50 → aquifère), une grotte se remplit
-        // d'eau ; sous des terres hautes (surface 90), elle reste sèche.
+    fn aquifer_produces_water_and_air() {
+        // Sur une grande zone de grottes, l'aquifère doit produire à la fois de
+        // l'eau (zones inondées) et de l'air (zones sèches) — pas un seul état.
         let router = density::build_overworld(42);
-        let low = [[50i32; 16]; 16];
-        let high = [[90i32; 16]; 16];
-        let mut aq_low = Aquifer::new(&router, 42, 0, 0, &low);
-        let mut aq_high = Aquifer::new(&router, 42, 0, 0, &high);
-        let mut water_low = 0;
-        let mut air_high = 0;
-        for y in (-40..40).step_by(2) {
-            if aq_low.compute(8, y, 8, -0.5) == Fluid::Water {
-                water_low += 1;
-            }
-            if aq_high.compute(8, y, 8, -0.5) == Fluid::Air {
-                air_high += 1;
+        let mut aq = Aquifer::new(&router, 42);
+        let mut water = 0;
+        let mut air = 0;
+        for x in (-200..200).step_by(11) {
+            for y in (-30..50).step_by(7) {
+                match aq.compute(x, y, 8, -0.5) {
+                    Fluid::Water => water += 1,
+                    Fluid::Air => air += 1,
+                    Fluid::Lava => {}
+                }
             }
         }
-        assert!(
-            water_low > 0,
-            "les grottes en terre basse devraient s'inonder"
-        );
-        assert!(
-            air_high > 0,
-            "les grottes en terre haute devraient rester sèches"
-        );
+        assert!(water > 0, "aucune eau d'aquifère");
+        assert!(air > 0, "aucune grotte sèche");
+    }
+
+    #[test]
+    fn deterministic_between_instances() {
+        // Deux aquifères (ex. deux chunks) doivent renvoyer le MÊME fluide pour
+        // la même position monde → pas de discontinuité aux frontières de chunk.
+        let router = density::build_overworld(42);
+        let mut a = Aquifer::new(&router, 42);
+        let mut b = Aquifer::new(&router, 42);
+        for x in (0..80).step_by(3) {
+            for y in (-40..55).step_by(5) {
+                assert_eq!(
+                    a.compute(x, y, 11, -0.5),
+                    b.compute(x, y, 11, -0.5),
+                    "désaccord en ({x},{y})"
+                );
+            }
+        }
     }
 
     #[test]
     fn deep_is_lava() {
         let router = density::build_overworld(42);
-        let surfaces = [[70i32; 16]; 16];
-        let mut aq = Aquifer::new(&router, 42, 0, 0, &surfaces);
+        let mut aq = Aquifer::new(&router, 42);
         // Très profond → lave (global status).
         assert_eq!(aq.compute(8, -60, 8, -1.0), Fluid::Lava);
     }
@@ -383,9 +401,7 @@ mod tests {
     #[test]
     fn caves_fill_or_stay_air() {
         let router = density::build_overworld(42);
-        let surfaces = [[70i32; 16]; 16];
-        let mut aq = Aquifer::new(&router, 42, 0, 0, &surfaces);
-        // Doit produire un résultat déterministe et valide à divers Y.
+        let mut aq = Aquifer::new(&router, 42);
         for y in [-30, 0, 30, 50] {
             let f = aq.compute(8, y, 8, -0.5);
             assert!(matches!(f, Fluid::Air | Fluid::Water | Fluid::Lava));

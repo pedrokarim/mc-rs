@@ -163,7 +163,7 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
     // de la mer, l'aquifère décide eau/lave/air (grottes sèches ou inondées) ;
     // au-dessus, l'air reste l'air (les aquifères perchés sont négligés).
     let lava = BLOCKS.get("minecraft:lava");
-    let mut aquifer = super::aquifer::Aquifer::new(&router, seed, base_x, base_z, &surfaces);
+    let mut aquifer = super::aquifer::Aquifer::new(&router, seed);
     let mut grid = vec![BLOCKS.air; GRID_LEN].into_boxed_slice();
     for lx in 0..16usize {
         for lz in 0..16usize {

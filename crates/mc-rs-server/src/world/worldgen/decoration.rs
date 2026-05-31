@@ -935,10 +935,14 @@ fn is_rock(pal: &Pal, b: u32) -> bool {
     b == pal.stone || b == pal.deepslate
 }
 
-/// Dripstone : `pointed_dripstone` (192-256, stalactites/stalagmites) +
-/// `dripstone_cluster` (48-96, blocs de dripstone au sol/plafond des grottes).
+/// Dripstone : `pointed_dripstone` (stalactites/stalagmites) +
+/// `dripstone_cluster` (blocs de dripstone au sol/plafond des grottes).
+///
+/// NB : faute de support des états de bloc (`dripstone_thickness`
+/// tip/frustum/base), on pose des **pointes courtes** (1 bloc, parfois 2) plutôt
+/// que de longues colonnes uniformes (qui rendaient mal). Densité réduite.
 fn decorate_dripstone(grid: &mut [u32], pal: &Pal, rng: &mut Random) {
-    let pointed = 192 + rng.next_bounded_int(64);
+    let pointed = 64 + rng.next_bounded_int(64);
     for _ in 0..pointed {
         let lx = rng.next_bounded_int(16);
         let lz = rng.next_bounded_int(16);
@@ -948,26 +952,22 @@ fn decorate_dripstone(grid: &mut [u32], pal: &Pal, rng: &mut Random) {
         }
         let ceiling = is_rock(pal, at(grid, lx, wy + 1, lz));
         let floor = is_rock(pal, at(grid, lx, wy - 1, lz));
-        let len = 1 + rng.next_bounded_int(4);
-        if ceiling {
-            for d in 0..len {
-                let y = wy - d;
-                if at(grid, lx, y, lz) != pal.air {
-                    break;
-                }
-                if let Some(i) = idx_ok(lx, y, lz) {
-                    grid[i] = pal.pointed_dripstone;
-                }
-            }
+        // Pointe courte (surtout 1 bloc).
+        let len = if rng.next_bounded_int(4) == 0 { 2 } else { 1 };
+        let dir = if ceiling {
+            -1
         } else if floor {
-            for d in 0..len {
-                let y = wy + d;
-                if at(grid, lx, y, lz) != pal.air {
-                    break;
-                }
-                if let Some(i) = idx_ok(lx, y, lz) {
-                    grid[i] = pal.pointed_dripstone;
-                }
+            1
+        } else {
+            continue;
+        };
+        for d in 0..len {
+            let y = wy + dir * d;
+            if at(grid, lx, y, lz) != pal.air {
+                break;
+            }
+            if let Some(i) = idx_ok(lx, y, lz) {
+                grid[i] = pal.pointed_dripstone;
             }
         }
     }
@@ -1704,10 +1704,11 @@ fn decorate_aquatic(
                 }
             }
 
-            // Kelp (océans non gelés) : colonne vers la surface.
-            if !b.contains("frozen") && rng.next_bounded_int(6) == 0 {
+            // Kelp (océans non gelés) : colonne, bien plus clairsemée qu'avant.
+            if is_ocean(b) && !b.contains("frozen") && rng.next_bounded_int(20) == 0 {
                 let max = SEA_LEVEL - 1;
-                let height = 3 + rng.next_bounded_int((max - floor).max(1));
+                // Hauteur modérée (ne remplit pas toute la colonne d'eau).
+                let height = 2 + rng.next_bounded_int(((max - floor) / 2).max(1));
                 for dy in 0..height {
                     let y = floor + 1 + dy;
                     if y >= max || at(grid, lx, y, lz) != pal.water {
@@ -1717,7 +1718,7 @@ fn decorate_aquatic(
                         grid[i] = pal.kelp;
                     }
                 }
-            } else if rng.next_bounded_int(4) == 0 {
+            } else if rng.next_bounded_int(10) == 0 {
                 // Seagrass sur le sol.
                 if let Some(i) = idx_ok(lx, floor + 1, lz) {
                     if grid[i] == pal.water {
