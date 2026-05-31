@@ -46,6 +46,10 @@ struct Pal {
     mangrove_log: u32,
     mangrove_leaves: u32,
     mangrove_roots: u32,
+    brown_mushroom: u32,
+    red_mushroom: u32,
+    pumpkin: u32,
+    melon: u32,
 }
 
 // Indices d'espèce dans logs/leaves.
@@ -116,6 +120,10 @@ impl Pal {
             mangrove_log: g("minecraft:mangrove_log"),
             mangrove_leaves: g("minecraft:mangrove_leaves"),
             mangrove_roots: g("minecraft:mangrove_roots"),
+            brown_mushroom: g("minecraft:brown_mushroom"),
+            red_mushroom: g("minecraft:red_mushroom"),
+            pumpkin: g("minecraft:pumpkin"),
+            melon: g("minecraft:melon_block"),
         }
     }
 }
@@ -902,6 +910,53 @@ fn decorate_special(
             plant(grid, pal, lx, SEA_LEVEL + 1, lz, pal.lily_pad);
         }
         let _ = ground;
+    }
+
+    // Place un bloc sur une colonne herbeuse aléatoire (helper local).
+    let on_grass = |grid: &mut [u32], rng: &mut Random, id: u32| {
+        let lx = rng.next_bounded_int(16);
+        let lz = rng.next_bounded_int(16);
+        let ground = surfaces[lx as usize][lz as usize];
+        if ground > SEA_LEVEL
+            && at(grid, lx, ground, lz) == pal.grass_block
+            && at(grid, lx, ground + 1, lz) == pal.air
+        {
+            plant(grid, pal, lx, ground + 1, lz, id);
+        }
+    };
+
+    // Champignons (officiel : brun 1/256, rouge 1/512).
+    if rng.next_bounded_int(256) == 0 {
+        on_grass(grid, rng, pal.brown_mushroom);
+    }
+    if rng.next_bounded_int(512) == 0 {
+        on_grass(grid, rng, pal.red_mushroom);
+    }
+
+    // Citrouilles (officiel : 1/300) — petit patch.
+    if rng.next_bounded_int(300) == 0 {
+        for _ in 0..(1 + rng.next_bounded_int(4)) {
+            on_grass(grid, rng, pal.pumpkin);
+        }
+    }
+
+    // Melons (jungle, officiel : 1/6) — petit patch.
+    let has_jungle = (0..16).any(|x| (0..16).any(|z| is_jungle(biome_at(x, z))));
+    if has_jungle && rng.next_bounded_int(6) == 0 {
+        for _ in 0..(2 + rng.next_bounded_int(5)) {
+            let lx = rng.next_bounded_int(16);
+            let lz = rng.next_bounded_int(16);
+            if !is_jungle(biome_at(lx as usize, lz as usize)) {
+                continue;
+            }
+            let ground = surfaces[lx as usize][lz as usize];
+            if ground > SEA_LEVEL
+                && at(grid, lx, ground, lz) == pal.grass_block
+                && at(grid, lx, ground + 1, lz) == pal.air
+            {
+                plant(grid, pal, lx, ground + 1, lz, pal.melon);
+            }
+        }
     }
 }
 
