@@ -26,14 +26,22 @@ pub enum MobCategory {
     Neutral, // erre, n'attaque pas spontanément (v1)
 }
 
+/// Dimension d'habitat naturel d'un mob (cf `MobKind::habitat`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Habitat {
+    Overworld,
+    Nether,
+    End,
+}
+
 /// Profil d'IA assigné à l'espèce (dispatché par `species::build_behavior_group`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AiProfile {
-    Melee,        // chasse + frappe au corps-à-corps
-    Bow,          // garde ses distances + tire des flèches
-    CreeperSwell, // s'amorce et explose
-    Passive,      // errance + fuite (+ tempt)
-    Neutral,      // errance seule
+    Melee,         // chasse + frappe au corps-à-corps
+    Bow,           // garde ses distances + tire des flèches
+    CreeperSwell,  // s'amorce et explose
+    Passive,       // errance + fuite (+ tempt)
+    Neutral,       // errance seule
     Flying,        // vole et erre en 3D (pas de gravité)
     FlyingShooter, // vole + lance des boules de feu (ghast/blaze)
     FlyingMelee,   // vole et fonce sur le joueur (phantom/vex)
@@ -248,90 +256,826 @@ impl MobKind {
             };
         }
         match self {
-            Self::Zombie => d!("minecraft:zombie", "Zombie", 0.6, 1.9, Hostile, Melee, 3.0, 0.23, &[]),
-            Self::Husk => d!("minecraft:husk", "Husk", 0.6, 1.9, Hostile, Melee, 3.0, 0.23, &[]),
-            Self::Drowned => d!("minecraft:drowned", "Drowned", 0.6, 1.9, Hostile, Melee, 3.0, 0.23, &[]),
-            Self::ZombieVillager => d!("minecraft:zombie_villager_v2", "Zombie Villager", 0.6, 1.9, Hostile, Melee, 3.0, 0.23, &[]),
-            Self::Spider => d!("minecraft:spider", "Spider", 1.4, 0.9, Hostile, Melee, 2.0, 0.3, &[]),
-            Self::CaveSpider => d!("minecraft:cave_spider", "Cave Spider", 0.7, 0.5, Hostile, Melee, 2.0, 0.3, &[]),
-            Self::Silverfish => d!("minecraft:silverfish", "Silverfish", 0.4, 0.3, Hostile, Melee, 1.0, 0.25, &[]),
-            Self::Endermite => d!("minecraft:endermite", "Endermite", 0.4, 0.3, Hostile, Melee, 2.0, 0.25, &[]),
-            Self::WitherSkeleton => d!("minecraft:wither_skeleton", "Wither Skeleton", 0.7, 2.4, Hostile, Melee, 5.0, 0.24, &[]),
-            Self::Vindicator => d!("minecraft:vindicator", "Vindicator", 0.6, 1.95, Hostile, Melee, 9.0, 0.35, &[]),
-            Self::Ravager => d!("minecraft:ravager", "Ravager", 1.95, 2.2, Hostile, Melee, 12.0, 0.3, &[]),
-            Self::Hoglin => d!("minecraft:hoglin", "Hoglin", 1.4, 1.4, Hostile, Melee, 6.0, 0.3, &[]),
-            Self::Zoglin => d!("minecraft:zoglin", "Zoglin", 1.4, 1.4, Hostile, Melee, 6.0, 0.3, &[]),
-            Self::PiglinBrute => d!("minecraft:piglin_brute", "Piglin Brute", 0.6, 1.95, Hostile, Melee, 7.0, 0.35, &[]),
-            Self::Enderman => d!("minecraft:enderman", "Enderman", 0.6, 2.9, Hostile, Melee, 7.0, 0.3, &[]),
-            Self::Warden => d!("minecraft:warden", "Warden", 0.9, 2.9, Hostile, Melee, 16.0, 0.3, &[]),
-            Self::Creaking => d!("minecraft:creaking", "Creaking", 0.9, 2.7, Hostile, Creaking, 4.0, 0.4, &[]),
-            Self::Skeleton => d!("minecraft:skeleton", "Skeleton", 0.6, 1.9, Hostile, Bow, 0.0, 0.25, &[]),
-            Self::Stray => d!("minecraft:stray", "Stray", 0.6, 1.9, Hostile, Bow, 0.0, 0.25, &[]),
-            Self::Bogged => d!("minecraft:bogged", "Bogged", 0.6, 1.9, Hostile, Bow, 0.0, 0.25, &[]),
-            Self::Pillager => d!("minecraft:pillager", "Pillager", 0.6, 1.95, Hostile, Bow, 0.0, 0.35, &[]),
-            Self::Witch => d!("minecraft:witch", "Witch", 0.6, 1.95, Hostile, Bow, 0.0, 0.25, &[]),
-            Self::Breeze => d!("minecraft:breeze", "Breeze", 0.6, 1.77, Hostile, Bow, 0.0, 0.3, &[]),
+            Self::Zombie => d!(
+                "minecraft:zombie",
+                "Zombie",
+                0.6,
+                1.9,
+                Hostile,
+                Melee,
+                3.0,
+                0.23,
+                &[]
+            ),
+            Self::Husk => d!(
+                "minecraft:husk",
+                "Husk",
+                0.6,
+                1.9,
+                Hostile,
+                Melee,
+                3.0,
+                0.23,
+                &[]
+            ),
+            Self::Drowned => d!(
+                "minecraft:drowned",
+                "Drowned",
+                0.6,
+                1.9,
+                Hostile,
+                Melee,
+                3.0,
+                0.23,
+                &[]
+            ),
+            Self::ZombieVillager => d!(
+                "minecraft:zombie_villager_v2",
+                "Zombie Villager",
+                0.6,
+                1.9,
+                Hostile,
+                Melee,
+                3.0,
+                0.23,
+                &[]
+            ),
+            Self::Spider => d!(
+                "minecraft:spider",
+                "Spider",
+                1.4,
+                0.9,
+                Hostile,
+                Melee,
+                2.0,
+                0.3,
+                &[]
+            ),
+            Self::CaveSpider => d!(
+                "minecraft:cave_spider",
+                "Cave Spider",
+                0.7,
+                0.5,
+                Hostile,
+                Melee,
+                2.0,
+                0.3,
+                &[]
+            ),
+            Self::Silverfish => d!(
+                "minecraft:silverfish",
+                "Silverfish",
+                0.4,
+                0.3,
+                Hostile,
+                Melee,
+                1.0,
+                0.25,
+                &[]
+            ),
+            Self::Endermite => d!(
+                "minecraft:endermite",
+                "Endermite",
+                0.4,
+                0.3,
+                Hostile,
+                Melee,
+                2.0,
+                0.25,
+                &[]
+            ),
+            Self::WitherSkeleton => d!(
+                "minecraft:wither_skeleton",
+                "Wither Skeleton",
+                0.7,
+                2.4,
+                Hostile,
+                Melee,
+                5.0,
+                0.24,
+                &[]
+            ),
+            Self::Vindicator => d!(
+                "minecraft:vindicator",
+                "Vindicator",
+                0.6,
+                1.95,
+                Hostile,
+                Melee,
+                9.0,
+                0.35,
+                &[]
+            ),
+            Self::Ravager => d!(
+                "minecraft:ravager",
+                "Ravager",
+                1.95,
+                2.2,
+                Hostile,
+                Melee,
+                12.0,
+                0.3,
+                &[]
+            ),
+            Self::Hoglin => d!(
+                "minecraft:hoglin",
+                "Hoglin",
+                1.4,
+                1.4,
+                Hostile,
+                Melee,
+                6.0,
+                0.3,
+                &[]
+            ),
+            Self::Zoglin => d!(
+                "minecraft:zoglin",
+                "Zoglin",
+                1.4,
+                1.4,
+                Hostile,
+                Melee,
+                6.0,
+                0.3,
+                &[]
+            ),
+            Self::PiglinBrute => d!(
+                "minecraft:piglin_brute",
+                "Piglin Brute",
+                0.6,
+                1.95,
+                Hostile,
+                Melee,
+                7.0,
+                0.35,
+                &[]
+            ),
+            Self::Enderman => d!(
+                "minecraft:enderman",
+                "Enderman",
+                0.6,
+                2.9,
+                Hostile,
+                Melee,
+                7.0,
+                0.3,
+                &[]
+            ),
+            Self::Warden => d!(
+                "minecraft:warden",
+                "Warden",
+                0.9,
+                2.9,
+                Hostile,
+                Melee,
+                16.0,
+                0.3,
+                &[]
+            ),
+            Self::Creaking => d!(
+                "minecraft:creaking",
+                "Creaking",
+                0.9,
+                2.7,
+                Hostile,
+                Creaking,
+                4.0,
+                0.4,
+                &[]
+            ),
+            Self::Skeleton => d!(
+                "minecraft:skeleton",
+                "Skeleton",
+                0.6,
+                1.9,
+                Hostile,
+                Bow,
+                0.0,
+                0.25,
+                &[]
+            ),
+            Self::Stray => d!(
+                "minecraft:stray",
+                "Stray",
+                0.6,
+                1.9,
+                Hostile,
+                Bow,
+                0.0,
+                0.25,
+                &[]
+            ),
+            Self::Bogged => d!(
+                "minecraft:bogged",
+                "Bogged",
+                0.6,
+                1.9,
+                Hostile,
+                Bow,
+                0.0,
+                0.25,
+                &[]
+            ),
+            Self::Pillager => d!(
+                "minecraft:pillager",
+                "Pillager",
+                0.6,
+                1.95,
+                Hostile,
+                Bow,
+                0.0,
+                0.35,
+                &[]
+            ),
+            Self::Witch => d!(
+                "minecraft:witch",
+                "Witch",
+                0.6,
+                1.95,
+                Hostile,
+                Bow,
+                0.0,
+                0.25,
+                &[]
+            ),
+            Self::Breeze => d!(
+                "minecraft:breeze",
+                "Breeze",
+                0.6,
+                1.77,
+                Hostile,
+                Bow,
+                0.0,
+                0.3,
+                &[]
+            ),
             // Shulker : immobile (speed 0) → tire sans bouger.
-            Self::Shulker => d!("minecraft:shulker", "Shulker", 1.0, 1.0, Hostile, Bow, 0.0, 0.0, &[]),
-            Self::Creeper => d!("minecraft:creeper", "Creeper", 0.6, 1.7, Hostile, CreeperSwell, 0.0, 0.25, &[]),
-            Self::Slime => d!("minecraft:slime", "Slime", 1.02, 1.02, Hostile, Melee, 2.0, 0.2, &[]),
-            Self::MagmaCube => d!("minecraft:magma_cube", "Magma Cube", 1.02, 1.02, Hostile, Melee, 4.0, 0.2, &[]),
-            Self::Blaze => d!("minecraft:blaze", "Blaze", 0.6, 1.8, Hostile, FlyingShooter, 0.0, 0.25, &[]),
-            Self::Ghast => d!("minecraft:ghast", "Ghast", 4.0, 4.0, Hostile, FlyingShooter, 0.0, 0.15, &[]),
-            Self::Phantom => d!("minecraft:phantom", "Phantom", 0.9, 0.5, Hostile, FlyingMelee, 6.0, 0.4, &[]),
-            Self::Vex => d!("minecraft:vex", "Vex", 0.4, 0.8, Hostile, FlyingMelee, 9.0, 0.45, &[]),
-            Self::Wither => d!("minecraft:wither", "Wither", 0.9, 3.5, Hostile, FlyingShooter, 0.0, 0.3, &[]),
-            Self::EnderDragon => d!("minecraft:ender_dragon", "Ender Dragon", 6.0, 2.0, Hostile, Dragon, 10.0, 0.6, &[]),
-            Self::Squid => d!("minecraft:squid", "Squid", 0.8, 0.8, Passive, Flying, 0.0, 0.2, &[]),
-            Self::GlowSquid => d!("minecraft:glow_squid", "Glow Squid", 0.8, 0.8, Passive, Flying, 0.0, 0.2, &[]),
-            Self::Dolphin => d!("minecraft:dolphin", "Dolphin", 0.9, 0.6, Neutral, Flying, 0.0, 0.3, &[]),
-            Self::Cod => d!("minecraft:cod", "Cod", 0.5, 0.3, Passive, Flying, 0.0, 0.2, &[]),
-            Self::Salmon => d!("minecraft:salmon", "Salmon", 0.7, 0.4, Passive, Flying, 0.0, 0.2, &[]),
-            Self::Pufferfish => d!("minecraft:pufferfish", "Pufferfish", 0.7, 0.7, Passive, Flying, 0.0, 0.2, &[]),
-            Self::TropicalFish => d!("minecraft:tropicalfish", "Tropical Fish", 0.5, 0.4, Passive, Flying, 0.0, 0.2, &[]),
-            Self::Guardian => d!("minecraft:guardian", "Guardian", 0.85, 0.85, Hostile, GuardianLaser, 6.0, 0.3, &[]),
-            Self::ElderGuardian => d!("minecraft:elder_guardian", "Elder Guardian", 2.0, 2.0, Hostile, GuardianLaser, 8.0, 0.3, &[]),
-            Self::ZombifiedPiglin => d!("minecraft:zombie_pigman", "Zombified Piglin", 0.6, 1.9, Neutral, Neutral, 0.0, 0.23, &[]),
-            Self::Piglin => d!("minecraft:piglin", "Piglin", 0.6, 1.95, Neutral, Neutral, 0.0, 0.35, &[]),
-            Self::IronGolem => d!("minecraft:iron_golem", "Iron Golem", 1.4, 2.7, Neutral, Neutral, 0.0, 0.25, &[]),
-            Self::SnowGolem => d!("minecraft:snow_golem", "Snow Golem", 0.7, 1.9, Neutral, Neutral, 0.0, 0.2, &[]),
-            Self::Wolf => d!("minecraft:wolf", "Wolf", 0.6, 0.85, Neutral, Neutral, 0.0, 0.3, &["minecraft:beef", "minecraft:mutton", "minecraft:chicken", "minecraft:porkchop"]),
-            Self::PolarBear => d!("minecraft:polar_bear", "Polar Bear", 1.4, 1.4, Neutral, Neutral, 0.0, 0.25, &[]),
-            Self::Goat => d!("minecraft:goat", "Goat", 0.9, 1.3, Neutral, Neutral, 0.0, 0.3, WHEAT),
-            Self::Llama => d!("minecraft:llama", "Llama", 0.9, 1.87, Neutral, Neutral, 0.0, 0.2, &["minecraft:hay_block"]),
-            Self::Cow => d!("minecraft:cow", "Cow", 0.9, 1.4, Passive, Passive, 0.0, 0.2, WHEAT),
-            Self::Mooshroom => d!("minecraft:mooshroom", "Mooshroom", 0.9, 1.4, Passive, Passive, 0.0, 0.2, WHEAT),
-            Self::Pig => d!("minecraft:pig", "Pig", 0.9, 0.9, Passive, Passive, 0.0, 0.25, PIG_FOOD),
-            Self::Sheep => d!("minecraft:sheep", "Sheep", 0.9, 1.3, Passive, Passive, 0.0, 0.2, WHEAT),
-            Self::Chicken => d!("minecraft:chicken", "Chicken", 0.4, 0.7, Passive, Passive, 0.0, 0.25, SEEDS),
-            Self::Rabbit => d!("minecraft:rabbit", "Rabbit", 0.4, 0.5, Passive, Passive, 0.0, 0.3, &["minecraft:carrot", "minecraft:dandelion", "minecraft:golden_carrot"]),
-            Self::Horse => d!("minecraft:horse", "Horse", 1.4, 1.6, Passive, Passive, 0.0, 0.3, &["minecraft:golden_apple", "minecraft:golden_carrot"]),
-            Self::Donkey => d!("minecraft:donkey", "Donkey", 1.4, 1.6, Passive, Passive, 0.0, 0.3, &["minecraft:golden_apple", "minecraft:golden_carrot"]),
-            Self::Mule => d!("minecraft:mule", "Mule", 1.4, 1.6, Passive, Passive, 0.0, 0.3, &["minecraft:golden_apple", "minecraft:golden_carrot"]),
-            Self::Cat => d!("minecraft:cat", "Cat", 0.6, 0.7, Passive, Passive, 0.0, 0.3, &["minecraft:raw_cod", "minecraft:raw_salmon"]),
-            Self::Ocelot => d!("minecraft:ocelot", "Ocelot", 0.6, 0.7, Passive, Passive, 0.0, 0.3, &["minecraft:raw_cod", "minecraft:raw_salmon"]),
-            Self::Fox => d!("minecraft:fox", "Fox", 0.6, 0.7, Passive, Passive, 0.0, 0.3, &["minecraft:sweet_berries", "minecraft:glow_berries"]),
-            Self::Panda => d!("minecraft:panda", "Panda", 1.3, 1.25, Passive, Passive, 0.0, 0.2, &["minecraft:bamboo"]),
-            Self::Turtle => d!("minecraft:turtle", "Turtle", 1.2, 0.4, Passive, Passive, 0.0, 0.15, &["minecraft:seagrass"]),
-            Self::Villager => d!("minecraft:villager_v2", "Villager", 0.6, 1.95, Passive, Passive, 0.0, 0.25, &[]),
-            Self::WanderingTrader => d!("minecraft:wandering_trader", "Wandering Trader", 0.6, 1.95, Passive, Passive, 0.0, 0.25, &[]),
-            Self::Bat => d!("minecraft:bat", "Bat", 0.5, 0.9, Passive, Flying, 0.0, 0.2, &[]),
-            Self::Parrot => d!("minecraft:parrot", "Parrot", 0.5, 0.9, Passive, Flying, 0.0, 0.25, SEEDS),
-            Self::Camel => d!("minecraft:camel", "Camel", 1.7, 2.375, Passive, Passive, 0.0, 0.25, &["minecraft:cactus"]),
-            Self::Armadillo => d!("minecraft:armadillo", "Armadillo", 0.7, 0.65, Passive, Passive, 0.0, 0.2, &["minecraft:spider_eye"]),
-            Self::Sniffer => d!("minecraft:sniffer", "Sniffer", 1.9, 1.75, Passive, Passive, 0.0, 0.2, &["minecraft:torchflower_seeds"]),
-            Self::Allay => d!("minecraft:allay", "Allay", 0.35, 0.6, Passive, Flying, 0.0, 0.25, &[]),
-            Self::Bee => d!("minecraft:bee", "Bee", 0.55, 0.5, Passive, Flying, 0.0, 0.25, &["minecraft:dandelion", "minecraft:poppy"]),
+            Self::Shulker => d!(
+                "minecraft:shulker",
+                "Shulker",
+                1.0,
+                1.0,
+                Hostile,
+                Bow,
+                0.0,
+                0.0,
+                &[]
+            ),
+            Self::Creeper => d!(
+                "minecraft:creeper",
+                "Creeper",
+                0.6,
+                1.7,
+                Hostile,
+                CreeperSwell,
+                0.0,
+                0.25,
+                &[]
+            ),
+            Self::Slime => d!(
+                "minecraft:slime",
+                "Slime",
+                1.02,
+                1.02,
+                Hostile,
+                Melee,
+                2.0,
+                0.2,
+                &[]
+            ),
+            Self::MagmaCube => d!(
+                "minecraft:magma_cube",
+                "Magma Cube",
+                1.02,
+                1.02,
+                Hostile,
+                Melee,
+                4.0,
+                0.2,
+                &[]
+            ),
+            Self::Blaze => d!(
+                "minecraft:blaze",
+                "Blaze",
+                0.6,
+                1.8,
+                Hostile,
+                FlyingShooter,
+                0.0,
+                0.25,
+                &[]
+            ),
+            Self::Ghast => d!(
+                "minecraft:ghast",
+                "Ghast",
+                4.0,
+                4.0,
+                Hostile,
+                FlyingShooter,
+                0.0,
+                0.15,
+                &[]
+            ),
+            Self::Phantom => d!(
+                "minecraft:phantom",
+                "Phantom",
+                0.9,
+                0.5,
+                Hostile,
+                FlyingMelee,
+                6.0,
+                0.4,
+                &[]
+            ),
+            Self::Vex => d!(
+                "minecraft:vex",
+                "Vex",
+                0.4,
+                0.8,
+                Hostile,
+                FlyingMelee,
+                9.0,
+                0.45,
+                &[]
+            ),
+            Self::Wither => d!(
+                "minecraft:wither",
+                "Wither",
+                0.9,
+                3.5,
+                Hostile,
+                FlyingShooter,
+                0.0,
+                0.3,
+                &[]
+            ),
+            Self::EnderDragon => d!(
+                "minecraft:ender_dragon",
+                "Ender Dragon",
+                6.0,
+                2.0,
+                Hostile,
+                Dragon,
+                10.0,
+                0.6,
+                &[]
+            ),
+            Self::Squid => d!(
+                "minecraft:squid",
+                "Squid",
+                0.8,
+                0.8,
+                Passive,
+                Flying,
+                0.0,
+                0.2,
+                &[]
+            ),
+            Self::GlowSquid => d!(
+                "minecraft:glow_squid",
+                "Glow Squid",
+                0.8,
+                0.8,
+                Passive,
+                Flying,
+                0.0,
+                0.2,
+                &[]
+            ),
+            Self::Dolphin => d!(
+                "minecraft:dolphin",
+                "Dolphin",
+                0.9,
+                0.6,
+                Neutral,
+                Flying,
+                0.0,
+                0.3,
+                &[]
+            ),
+            Self::Cod => d!(
+                "minecraft:cod",
+                "Cod",
+                0.5,
+                0.3,
+                Passive,
+                Flying,
+                0.0,
+                0.2,
+                &[]
+            ),
+            Self::Salmon => d!(
+                "minecraft:salmon",
+                "Salmon",
+                0.7,
+                0.4,
+                Passive,
+                Flying,
+                0.0,
+                0.2,
+                &[]
+            ),
+            Self::Pufferfish => d!(
+                "minecraft:pufferfish",
+                "Pufferfish",
+                0.7,
+                0.7,
+                Passive,
+                Flying,
+                0.0,
+                0.2,
+                &[]
+            ),
+            Self::TropicalFish => d!(
+                "minecraft:tropicalfish",
+                "Tropical Fish",
+                0.5,
+                0.4,
+                Passive,
+                Flying,
+                0.0,
+                0.2,
+                &[]
+            ),
+            Self::Guardian => d!(
+                "minecraft:guardian",
+                "Guardian",
+                0.85,
+                0.85,
+                Hostile,
+                GuardianLaser,
+                6.0,
+                0.3,
+                &[]
+            ),
+            Self::ElderGuardian => d!(
+                "minecraft:elder_guardian",
+                "Elder Guardian",
+                2.0,
+                2.0,
+                Hostile,
+                GuardianLaser,
+                8.0,
+                0.3,
+                &[]
+            ),
+            Self::ZombifiedPiglin => d!(
+                "minecraft:zombie_pigman",
+                "Zombified Piglin",
+                0.6,
+                1.9,
+                Neutral,
+                Neutral,
+                0.0,
+                0.23,
+                &[]
+            ),
+            Self::Piglin => d!(
+                "minecraft:piglin",
+                "Piglin",
+                0.6,
+                1.95,
+                Neutral,
+                Neutral,
+                0.0,
+                0.35,
+                &[]
+            ),
+            Self::IronGolem => d!(
+                "minecraft:iron_golem",
+                "Iron Golem",
+                1.4,
+                2.7,
+                Neutral,
+                Neutral,
+                0.0,
+                0.25,
+                &[]
+            ),
+            Self::SnowGolem => d!(
+                "minecraft:snow_golem",
+                "Snow Golem",
+                0.7,
+                1.9,
+                Neutral,
+                Neutral,
+                0.0,
+                0.2,
+                &[]
+            ),
+            Self::Wolf => d!(
+                "minecraft:wolf",
+                "Wolf",
+                0.6,
+                0.85,
+                Neutral,
+                Neutral,
+                0.0,
+                0.3,
+                &[
+                    "minecraft:beef",
+                    "minecraft:mutton",
+                    "minecraft:chicken",
+                    "minecraft:porkchop"
+                ]
+            ),
+            Self::PolarBear => d!(
+                "minecraft:polar_bear",
+                "Polar Bear",
+                1.4,
+                1.4,
+                Neutral,
+                Neutral,
+                0.0,
+                0.25,
+                &[]
+            ),
+            Self::Goat => d!(
+                "minecraft:goat",
+                "Goat",
+                0.9,
+                1.3,
+                Neutral,
+                Neutral,
+                0.0,
+                0.3,
+                WHEAT
+            ),
+            Self::Llama => d!(
+                "minecraft:llama",
+                "Llama",
+                0.9,
+                1.87,
+                Neutral,
+                Neutral,
+                0.0,
+                0.2,
+                &["minecraft:hay_block"]
+            ),
+            Self::Cow => d!(
+                "minecraft:cow",
+                "Cow",
+                0.9,
+                1.4,
+                Passive,
+                Passive,
+                0.0,
+                0.2,
+                WHEAT
+            ),
+            Self::Mooshroom => d!(
+                "minecraft:mooshroom",
+                "Mooshroom",
+                0.9,
+                1.4,
+                Passive,
+                Passive,
+                0.0,
+                0.2,
+                WHEAT
+            ),
+            Self::Pig => d!(
+                "minecraft:pig",
+                "Pig",
+                0.9,
+                0.9,
+                Passive,
+                Passive,
+                0.0,
+                0.25,
+                PIG_FOOD
+            ),
+            Self::Sheep => d!(
+                "minecraft:sheep",
+                "Sheep",
+                0.9,
+                1.3,
+                Passive,
+                Passive,
+                0.0,
+                0.2,
+                WHEAT
+            ),
+            Self::Chicken => d!(
+                "minecraft:chicken",
+                "Chicken",
+                0.4,
+                0.7,
+                Passive,
+                Passive,
+                0.0,
+                0.25,
+                SEEDS
+            ),
+            Self::Rabbit => d!(
+                "minecraft:rabbit",
+                "Rabbit",
+                0.4,
+                0.5,
+                Passive,
+                Passive,
+                0.0,
+                0.3,
+                &[
+                    "minecraft:carrot",
+                    "minecraft:dandelion",
+                    "minecraft:golden_carrot"
+                ]
+            ),
+            Self::Horse => d!(
+                "minecraft:horse",
+                "Horse",
+                1.4,
+                1.6,
+                Passive,
+                Passive,
+                0.0,
+                0.3,
+                &["minecraft:golden_apple", "minecraft:golden_carrot"]
+            ),
+            Self::Donkey => d!(
+                "minecraft:donkey",
+                "Donkey",
+                1.4,
+                1.6,
+                Passive,
+                Passive,
+                0.0,
+                0.3,
+                &["minecraft:golden_apple", "minecraft:golden_carrot"]
+            ),
+            Self::Mule => d!(
+                "minecraft:mule",
+                "Mule",
+                1.4,
+                1.6,
+                Passive,
+                Passive,
+                0.0,
+                0.3,
+                &["minecraft:golden_apple", "minecraft:golden_carrot"]
+            ),
+            Self::Cat => d!(
+                "minecraft:cat",
+                "Cat",
+                0.6,
+                0.7,
+                Passive,
+                Passive,
+                0.0,
+                0.3,
+                &["minecraft:raw_cod", "minecraft:raw_salmon"]
+            ),
+            Self::Ocelot => d!(
+                "minecraft:ocelot",
+                "Ocelot",
+                0.6,
+                0.7,
+                Passive,
+                Passive,
+                0.0,
+                0.3,
+                &["minecraft:raw_cod", "minecraft:raw_salmon"]
+            ),
+            Self::Fox => d!(
+                "minecraft:fox",
+                "Fox",
+                0.6,
+                0.7,
+                Passive,
+                Passive,
+                0.0,
+                0.3,
+                &["minecraft:sweet_berries", "minecraft:glow_berries"]
+            ),
+            Self::Panda => d!(
+                "minecraft:panda",
+                "Panda",
+                1.3,
+                1.25,
+                Passive,
+                Passive,
+                0.0,
+                0.2,
+                &["minecraft:bamboo"]
+            ),
+            Self::Turtle => d!(
+                "minecraft:turtle",
+                "Turtle",
+                1.2,
+                0.4,
+                Passive,
+                Passive,
+                0.0,
+                0.15,
+                &["minecraft:seagrass"]
+            ),
+            Self::Villager => d!(
+                "minecraft:villager_v2",
+                "Villager",
+                0.6,
+                1.95,
+                Passive,
+                Passive,
+                0.0,
+                0.25,
+                &[]
+            ),
+            Self::WanderingTrader => d!(
+                "minecraft:wandering_trader",
+                "Wandering Trader",
+                0.6,
+                1.95,
+                Passive,
+                Passive,
+                0.0,
+                0.25,
+                &[]
+            ),
+            Self::Bat => d!(
+                "minecraft:bat",
+                "Bat",
+                0.5,
+                0.9,
+                Passive,
+                Flying,
+                0.0,
+                0.2,
+                &[]
+            ),
+            Self::Parrot => d!(
+                "minecraft:parrot",
+                "Parrot",
+                0.5,
+                0.9,
+                Passive,
+                Flying,
+                0.0,
+                0.25,
+                SEEDS
+            ),
+            Self::Camel => d!(
+                "minecraft:camel",
+                "Camel",
+                1.7,
+                2.375,
+                Passive,
+                Passive,
+                0.0,
+                0.25,
+                &["minecraft:cactus"]
+            ),
+            Self::Armadillo => d!(
+                "minecraft:armadillo",
+                "Armadillo",
+                0.7,
+                0.65,
+                Passive,
+                Passive,
+                0.0,
+                0.2,
+                &["minecraft:spider_eye"]
+            ),
+            Self::Sniffer => d!(
+                "minecraft:sniffer",
+                "Sniffer",
+                1.9,
+                1.75,
+                Passive,
+                Passive,
+                0.0,
+                0.2,
+                &["minecraft:torchflower_seeds"]
+            ),
+            Self::Allay => d!(
+                "minecraft:allay",
+                "Allay",
+                0.35,
+                0.6,
+                Passive,
+                Flying,
+                0.0,
+                0.25,
+                &[]
+            ),
+            Self::Bee => d!(
+                "minecraft:bee",
+                "Bee",
+                0.55,
+                0.5,
+                Passive,
+                Flying,
+                0.0,
+                0.25,
+                &["minecraft:dandelion", "minecraft:poppy"]
+            ),
         }
     }
 
     pub fn parse(name: &str) -> Option<Self> {
         let n = name.trim().to_ascii_lowercase();
         let n = n.strip_prefix("minecraft:").unwrap_or(&n);
-        Self::ALL
-            .iter()
-            .copied()
-            .find(|k| k.selector_type() == n)
+        Self::ALL.iter().copied().find(|k| k.selector_type() == n)
     }
 
     pub fn actor_type(self) -> &'static str {
@@ -339,7 +1083,10 @@ impl MobKind {
     }
 
     pub fn selector_type(self) -> &'static str {
-        self.desc().id.strip_prefix("minecraft:").unwrap_or(self.desc().id)
+        self.desc()
+            .id
+            .strip_prefix("minecraft:")
+            .unwrap_or(self.desc().id)
     }
 
     /// Liste des noms `/summon` — alimente la SoftEnum d'autocomplétion client.
@@ -413,6 +1160,33 @@ impl MobKind {
         matches!(self, Self::Wither | Self::EnderDragon)
     }
 
+    /// Dimension d'habitat naturel du mob. Le spawner naturel ne tourne que
+    /// dans l'overworld (seule dimension implémentée) : les mobs du Nether/End
+    /// ne doivent JAMAIS spawner à la surface de l'overworld, même la nuit.
+    /// Réf : aucun filtre de biome ne couvre certains mobs Nether (blaze,
+    /// wither_skeleton n'ont pas de `biome_filter`), donc le gating par
+    /// dimension est la garde primaire ; le gating par biome (cf
+    /// `spawn_rules_vanilla::biome_allows`) raffine ensuite dans l'overworld.
+    pub fn habitat(self) -> Habitat {
+        match self {
+            // Nether.
+            Self::Blaze
+            | Self::Ghast
+            | Self::MagmaCube
+            | Self::WitherSkeleton
+            | Self::Hoglin
+            | Self::Zoglin
+            | Self::PiglinBrute
+            | Self::ZombifiedPiglin
+            | Self::Piglin => Habitat::Nether,
+            // The End.
+            Self::EnderDragon | Self::Shulker => Habitat::End,
+            // Tout le reste (y compris enderman, qui spawn aussi dans
+            // l'overworld via le tag de biome "monster") = overworld.
+            _ => Habitat::Overworld,
+        }
+    }
+
     /// Projectile lancé par un mob à profil `Bow` au lieu d'une flèche
     /// (`None` = flèche normale).
     pub fn thrown_projectile(self) -> Option<&'static str> {
@@ -427,8 +1201,8 @@ impl MobKind {
     /// Couleur de la barre de boss (cf `combat_packets::boss_event`).
     pub fn boss_bar_color(self) -> u32 {
         match self {
-            Self::Wither => 5,       // violet
-            Self::EnderDragon => 0,  // rose/magenta
+            Self::Wither => 5,      // violet
+            Self::EnderDragon => 0, // rose/magenta
             _ => 0,
         }
     }
@@ -501,13 +1275,20 @@ impl MobKind {
             }
             Self::Pig | Self::Hoglin => vec![item("minecraft:porkchop", 1)],
             Self::Sheep => vec![
-                ItemStack::new(item_registry::required_item_id("minecraft:white_wool"), 1, 0),
+                ItemStack::new(
+                    item_registry::required_item_id("minecraft:white_wool"),
+                    1,
+                    0,
+                ),
                 item("minecraft:mutton", 1),
             ],
             Self::Chicken | Self::Parrot => {
                 vec![item("minecraft:feather", 1)]
             }
-            Self::Rabbit => vec![item("minecraft:rabbit", 1), item("minecraft:rabbit_hide", 1)],
+            Self::Rabbit => vec![
+                item("minecraft:rabbit", 1),
+                item("minecraft:rabbit_hide", 1),
+            ],
             Self::IronGolem => vec![item("minecraft:iron_ingot", 3)],
             Self::SnowGolem => vec![item("minecraft:snowball", 1)],
             _ => Vec::new(),
@@ -697,7 +1478,10 @@ impl MobEntityManager {
         self.entities.insert(id, entity);
         self.ai.insert(
             id,
-            AiComponent::new(crate::ai::species::build_behavior_group(kind), kind.movement_speed()),
+            AiComponent::new(
+                crate::ai::species::build_behavior_group(kind),
+                kind.movement_speed(),
+            ),
         );
     }
 
@@ -941,8 +1725,10 @@ impl MobEntityManager {
                     entity.baby = false;
                     entity.base.set_entity_flag(entity_flags::BABY, false);
                     entity.base.set_scale(1.0);
-                    metadata_updates
-                        .push((entity.base.entity_unique_id, entity.base.actor_data_packet()));
+                    metadata_updates.push((
+                        entity.base.entity_unique_id,
+                        entity.base.actor_data_packet(),
+                    ));
                 }
             }
 
@@ -1015,7 +1801,8 @@ impl MobEntityManager {
                     entity.base.velocity[1] = 0.0;
                 }
                 entity.base.on_ground = false;
-                let moved = (0..3).any(|i| (entity.base.position[i] - old_position[i]).abs() > 0.0001);
+                let moved =
+                    (0..3).any(|i| (entity.base.position[i] - old_position[i]).abs() > 0.0001);
                 if moved {
                     movement_updates.push(MovementUpdate {
                         entity_unique_id: entity.base.entity_unique_id,
@@ -1036,7 +1823,8 @@ impl MobEntityManager {
                     entity.base.velocity[i] *= 0.9; // légère traînée
                 }
                 entity.base.on_ground = false;
-                let moved = (0..3).any(|i| (entity.base.position[i] - old_position[i]).abs() > 0.0001);
+                let moved =
+                    (0..3).any(|i| (entity.base.position[i] - old_position[i]).abs() > 0.0001);
                 if moved {
                     movement_updates.push(MovementUpdate {
                         entity_unique_id: entity.base.entity_unique_id,
@@ -1057,7 +1845,8 @@ impl MobEntityManager {
             entity.base.velocity[1] *= AIR_DRAG;
             // Flottaison : dans l'eau, poussée vers le haut → le mob remonte/nage.
             if feet_in_water {
-                entity.base.velocity[1] = (entity.base.velocity[1] + WATER_BUOYANCY).min(WATER_MAX_RISE);
+                entity.base.velocity[1] =
+                    (entity.base.velocity[1] + WATER_BUOYANCY).min(WATER_MAX_RISE);
             }
 
             // --- Déplacement horizontal avec collision murale + step-up ---
@@ -1101,19 +1890,26 @@ impl MobEntityManager {
             }
 
             // --- Friction horizontale (sol vs air) ---
-            let friction = if on_ground { GROUND_FRICTION } else { AIR_FRICTION };
+            let friction = if on_ground {
+                GROUND_FRICTION
+            } else {
+                AIR_FRICTION
+            };
             entity.base.velocity[0] *= friction;
             entity.base.velocity[2] *= friction;
 
             // --- Sun-burning : zombies/skeletons brûlent en plein jour à découvert ---
             if matches!(entity.kind, MobKind::Zombie | MobKind::Skeleton) {
-                let burning =
-                    is_day && !feet_in_water && sky_exposed(chunk_cache, entity.base.position, height);
+                let burning = is_day
+                    && !feet_in_water
+                    && sky_exposed(chunk_cache, entity.base.position, height);
                 // Toggle du flag ONFIRE (broadcast SetActorData uniquement si changement).
                 use mc_rs_proto::packets::player::entity_flags;
                 if entity.base.set_entity_flag(entity_flags::ONFIRE, burning) {
-                    metadata_updates
-                        .push((entity.base.entity_unique_id, entity.base.actor_data_packet()));
+                    metadata_updates.push((
+                        entity.base.entity_unique_id,
+                        entity.base.actor_data_packet(),
+                    ));
                 }
                 if burning {
                     entity.fire_tick += 1;
@@ -1141,17 +1937,18 @@ impl MobEntityManager {
                         use mc_rs_proto::packets::player::entity_flags;
                         entity.sheared = false;
                         entity.base.set_entity_flag(entity_flags::SHEARED, false);
-                        metadata_updates
-                            .push((entity.base.entity_unique_id, entity.base.actor_data_packet()));
+                        metadata_updates.push((
+                            entity.base.entity_unique_id,
+                            entity.base.actor_data_packet(),
+                        ));
                     }
                 } else {
                     entity.eat_grass_timer = 0;
                 }
             }
 
-            let position_changed = (0..3).any(|i| {
-                (entity.base.position[i] - old_position[i]).abs() > 0.0001
-            });
+            let position_changed =
+                (0..3).any(|i| (entity.base.position[i] - old_position[i]).abs() > 0.0001);
             let velocity_changed =
                 (0..3).any(|i| (entity.base.velocity[i] - old_velocity[i]).abs() > 0.0001);
 
@@ -1235,7 +2032,11 @@ impl MobEntityManager {
 
 /// Le mob a-t-il les pieds dans l'eau ?
 fn in_water(cache: &mut ChunkCache, pos: [f32; 3]) -> bool {
-    let id = cache.get_block(pos[0].floor() as i32, pos[1].floor() as i32, pos[2].floor() as i32);
+    let id = cache.get_block(
+        pos[0].floor() as i32,
+        pos[1].floor() as i32,
+        pos[2].floor() as i32,
+    );
     id == BLOCKS.water
 }
 
@@ -1269,7 +2070,8 @@ fn move_horizontal(base: &mut EntityBase, height: f32, cache: &mut ChunkCache) {
 
         if !column_blocked(cache, cand[0], cand[2], feet_y, head_y) {
             base.position[axis] = cand[axis];
-        } else if base.on_ground && !column_blocked(cache, cand[0], cand[2], feet_y + 1, head_y + 1) {
+        } else if base.on_ground && !column_blocked(cache, cand[0], cand[2], feet_y + 1, head_y + 1)
+        {
             // Obstacle d'1 bloc avec espace libre au-dessus → on grimpe d'1 bloc.
             base.position[1] = (feet_y + 1) as f32;
             base.position[axis] = cand[axis];
@@ -1360,9 +2162,18 @@ mod tests {
         move_horizontal(&mut zombie.base, height, &mut cache);
 
         // Bloqué : ni avance en X, ni step-up (mur trop haut).
-        assert!((zombie.base.position[0] - 0.7).abs() < 1e-6, "ne doit pas traverser le mur");
-        assert_eq!(zombie.base.velocity[0], 0.0, "vitesse X annulée par la collision");
-        assert!((zombie.base.position[1] - 64.0).abs() < 1e-6, "pas de step-up sur mur 2 blocs");
+        assert!(
+            (zombie.base.position[0] - 0.7).abs() < 1e-6,
+            "ne doit pas traverser le mur"
+        );
+        assert_eq!(
+            zombie.base.velocity[0], 0.0,
+            "vitesse X annulée par la collision"
+        );
+        assert!(
+            (zombie.base.position[1] - 64.0).abs() < 1e-6,
+            "pas de step-up sur mur 2 blocs"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1397,8 +2208,14 @@ mod tests {
         let b = mobs.spawn(MobKind::Cow, [1.5, 64.0, 0.5]); // à 1 bloc → à portée
         let wheat = crate::item_registry::network_id("minecraft:wheat").expect("blé existe");
 
-        assert!(mobs.feed_mob(a.base.entity_runtime_id, wheat), "vache A nourrie");
-        assert!(mobs.feed_mob(b.base.entity_runtime_id, wheat), "vache B nourrie");
+        assert!(
+            mobs.feed_mob(a.base.entity_runtime_id, wheat),
+            "vache A nourrie"
+        );
+        assert!(
+            mobs.feed_mob(b.base.entity_runtime_id, wheat),
+            "vache B nourrie"
+        );
 
         let before = mobs.all().count();
         let _ = mobs.tick(&mut cache, &[], false);
@@ -1407,7 +2224,10 @@ mod tests {
 
         // Nourrir un mob non reproductible (zombie) échoue.
         let z = mobs.spawn(MobKind::Zombie, [50.0, 64.0, 50.0]);
-        assert!(!mobs.feed_mob(z.base.entity_runtime_id, wheat), "zombie non reproductible");
+        assert!(
+            !mobs.feed_mob(z.base.entity_runtime_id, wheat),
+            "zombie non reproductible"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1462,7 +2282,11 @@ mod tests {
         let sid = small.base.entity_runtime_id;
         let before = mobs.all().count();
         let _ = mobs.apply_attack(sid, 100.0);
-        assert_eq!(mobs.all().count(), before - 1, "le petit slime ne se divise pas");
+        assert_eq!(
+            mobs.all().count(),
+            before - 1,
+            "le petit slime ne se divise pas"
+        );
     }
 
     #[test]
@@ -1546,8 +2370,14 @@ mod tests {
         move_horizontal(&mut zombie.base, height, &mut cache);
 
         // A grimpé d'1 bloc et avancé en X.
-        assert!((zombie.base.position[1] - 65.0).abs() < 1e-6, "doit grimper d'1 bloc");
-        assert!(zombie.base.position[0] > 1.0, "doit avancer par-dessus la marche");
+        assert!(
+            (zombie.base.position[1] - 65.0).abs() < 1e-6,
+            "doit grimper d'1 bloc"
+        );
+        assert!(
+            zombie.base.position[0] > 1.0,
+            "doit avancer par-dessus la marche"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1565,7 +2395,11 @@ mod tests {
         use super::{AiProfile, MobCategory};
         for &k in MobKind::ALL {
             // parse(selector) round-trip.
-            assert_eq!(MobKind::parse(k.selector_type()), Some(k), "round-trip {k:?}");
+            assert_eq!(
+                MobKind::parse(k.selector_type()),
+                Some(k),
+                "round-trip {k:?}"
+            );
             // actor_type est namespacé.
             assert!(k.actor_type().starts_with("minecraft:"), "id {k:?}");
             // hitbox positive.

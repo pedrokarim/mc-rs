@@ -14,7 +14,7 @@
 
 use rand::Rng;
 
-use crate::mob_entities::{MobEntityManager, MobKind};
+use crate::mob_entities::{Habitat, MobEntityManager, MobKind};
 use crate::player_registry::PlayerRegistry;
 use crate::world::block_registry::BLOCKS;
 use crate::world::chunk_cache::ChunkCache;
@@ -85,7 +85,14 @@ pub fn tick<R: Rng>(
         let weights: Vec<(MobKind, u32)> = all_mobs()
             .iter()
             .filter_map(|&k| {
-                if k.is_aquatic() { return None; } // pas de spawn terrestre pour les aquatiques
+                // Seul l'overworld est implémenté : pas de spawn naturel des
+                // mobs du Nether/End (blaze, ghast, piglin, ender_dragon…).
+                if k.habitat() != Habitat::Overworld {
+                    return None;
+                }
+                if k.is_aquatic() {
+                    return None; // pas de spawn terrestre pour les aquatiques
+                }
                 crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k)).map(|w| (k, w.max(1)))
             })
             .collect();
@@ -125,6 +132,17 @@ pub fn tick<R: Rng>(
         let dz = (angle.sin() * radius) as i32;
         let sx = center[0] as i32 + dx;
         let sz = center[2] as i32 + dz;
+
+        // Filtrage par biome : le mob doit être autorisé par le `biome_filter`
+        // vanilla du biome au point de spawn (ex. husk → "desert", stray →
+        // "frozen", cow → "animal"). Le biome ne dépend pas de Y.
+        let biome_id = cache.biome_at(sx, sz);
+        let biome_tags: &[String] = crate::world::biome::vanilla_data_for(biome_id)
+            .map(|d| d.tags.as_slice())
+            .unwrap_or(&[]);
+        if !crate::spawn_rules_vanilla::biome_allows(entity_id_for(picked), biome_tags) {
+            continue;
+        }
 
         // Trouve un sol valide (top non-air entre Y=320 et Y=-64).
         let mut sy = None;
@@ -187,7 +205,12 @@ mod tests {
         let weights: Vec<_> = all_mobs()
             .iter()
             .filter_map(|&k| {
-                if k.is_aquatic() { return None; } // pas de spawn terrestre pour les aquatiques
+                if k.habitat() != Habitat::Overworld {
+                    return None;
+                }
+                if k.is_aquatic() {
+                    return None; // pas de spawn terrestre pour les aquatiques
+                }
                 crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k)).map(|w| (k, w))
             })
             .collect();
@@ -195,5 +218,35 @@ mod tests {
             !weights.is_empty(),
             "should have weight for at least one mob"
         );
+    }
+
+    #[test]
+    fn nether_and_end_mobs_are_excluded_from_overworld_spawn() {
+        // Le spawner naturel ne tourne que dans l'overworld : aucun mob
+        // Nether/End ne doit figurer dans la table de poids.
+        let candidates: Vec<MobKind> = all_mobs()
+            .iter()
+            .copied()
+            .filter(|&k| {
+                k.habitat() == Habitat::Overworld
+                    && !k.is_aquatic()
+                    && crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k)).is_some()
+            })
+            .collect();
+        for k in &candidates {
+            assert_eq!(
+                k.habitat(),
+                Habitat::Overworld,
+                "{k:?} ne devrait pas spawner naturellement hors overworld"
+            );
+        }
+        // Vérifie explicitement quelques mobs Nether/End connus.
+        assert_eq!(MobKind::Blaze.habitat(), Habitat::Nether);
+        assert_eq!(MobKind::Ghast.habitat(), Habitat::Nether);
+        assert_eq!(MobKind::WitherSkeleton.habitat(), Habitat::Nether);
+        assert_eq!(MobKind::EnderDragon.habitat(), Habitat::End);
+        assert_eq!(MobKind::Shulker.habitat(), Habitat::End);
+        // Enderman reste overworld (spawn via le tag de biome "monster").
+        assert_eq!(MobKind::Enderman.habitat(), Habitat::Overworld);
     }
 }

@@ -129,5 +129,11 @@ Tous les archétypes de comportement sont couverts. Polish :
 - ⬜ Restant : immunité aux potions (witch), détection par vibrations + sonic boom du warden,
   spawn aquatique en eau, séquence de spawn/armure du wither, end crystals qui soignent le dragon,
   hitbox multi-parties. **Plusieurs dépendent de la Phase DIM (dimensions).**
-- ⬜ **Règles de spawn par biome** (le spawner ne filtre pas par biome → husk/drowned/stray
-  peuvent apparaître hors biome ; à raffiner quand le spawner lira le biome au point de spawn).
+- ✅ **Spawn par biome + dimension** : le spawner gate désormais par **habitat** (`MobKind::habitat`
+  → Overworld/Nether/End) — seul l'overworld tourne, donc plus de blaze/ghast/piglin/wither_skeleton
+  ni de dragon/shulker en surface la nuit (garde primaire, robuste même pour les mobs sans
+  `biome_filter`). Puis filtrage par **biome** : `ChunkCache::biome_at` lit le biome au point de
+  spawn, ses tags (`biome::vanilla_data_for`) sont testés contre le `minecraft:biome_filter` vanilla
+  via `spawn_rules_vanilla::biome_allows` (gère test simple / `all_of` / `any_of` / `none_of` /
+  OR-of-AND). Résultat : husk → désert, stray/polar_bear → biomes gelés, cow → biomes "animal" (pas
+  au désert), enderman reste overworld (tag "monster"). Enderman/endermite confirmés overworld.
