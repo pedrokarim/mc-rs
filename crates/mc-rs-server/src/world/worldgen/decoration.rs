@@ -627,7 +627,7 @@ fn mangrove_tree(grid: &mut [u32], pal: &Pal, lx: i32, ground: i32, lz: i32, rng
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(super) enum Species {
     Oak,
     FancyOak,

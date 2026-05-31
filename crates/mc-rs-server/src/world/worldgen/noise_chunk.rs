@@ -228,7 +228,7 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
     // de la mer, l'aquifère décide eau/lave/air (grottes sèches ou inondées) ;
     // au-dessus, l'air reste l'air (les aquifères perchés sont négligés).
     let lava = BLOCKS.get("minecraft:lava");
-    let mut aquifer = super::aquifer::Aquifer::new(&router, seed);
+    let mut aquifer = crate::world::worldgen::aquifer::Aquifer::new(&router, seed);
     let mut grid = vec![BLOCKS.air; GRID_LEN].into_boxed_slice();
     for lx in 0..16usize {
         for lz in 0..16usize {
@@ -240,9 +240,13 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
                     grid[grid_index(lx, wy, lz)] = BLOCKS.stone;
                 } else if wy <= SEA_LEVEL {
                     match aquifer.compute(wx, wy, wz, d) {
-                        super::aquifer::Fluid::Water => grid[grid_index(lx, wy, lz)] = BLOCKS.water,
-                        super::aquifer::Fluid::Lava => grid[grid_index(lx, wy, lz)] = lava,
-                        super::aquifer::Fluid::Air => {}
+                        crate::world::worldgen::aquifer::Fluid::Water => {
+                            grid[grid_index(lx, wy, lz)] = BLOCKS.water
+                        }
+                        crate::world::worldgen::aquifer::Fluid::Lava => {
+                            grid[grid_index(lx, wy, lz)] = lava
+                        }
+                        crate::world::worldgen::aquifer::Fluid::Air => {}
                     }
                 }
             }
@@ -317,7 +321,6 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
     // identique des deux côtés → plus de coupures aux frontières de chunk.
     put_surfaces(seed, chunk_x, chunk_z, &surfaces); // évite de recalculer le centre
     {
-        let pal = super::decoration::Pal::new();
         for dcz in -1..=1i32 {
             for dcx in -1..=1i32 {
                 let ocx = chunk_x + dcx;
@@ -360,14 +363,14 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
                     }
                     let species = super::decoration::pick_tree(default, alts, &mut trng);
                     // Coordonnées locales au chunk CIBLE : hors 0..16 → clippé.
-                    super::decoration::place_tree(
+                    // Formes Bedrock fidèles (port Allay) dans `trees`.
+                    super::trees::place(
                         &mut grid,
-                        &pal,
+                        &mut trng,
                         species,
                         wx - base_x,
                         ground,
                         wz - base_z,
-                        &mut trng,
                     );
                 }
             }
