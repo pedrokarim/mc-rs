@@ -68,11 +68,29 @@ IDs autoritatifs (BedrockProtocol) : LevelEvent `PARTICLE_EXPLODE=2025` ; LevelS
   `apply_mob_damage_broadcast` (PvE + feu + chute).
 - **Phase 4** — tempt (suivre la nourriture). C2 reproduction / C3 mouton-herbe / C4 bébés = stretch.
 
-### Reste — un seul chantier, distinct de « IA des mobs »
-- **Extension du roster** (spider, enderman, slime, zombie variants, …) = chantier « **entités** »
-  (définitions réseau/loot/règles de spawn/modèles par espèce). Le framework `ai/` accueille déjà
-  n'importe quelle espèce ; il manque les *définitions*, pas l'IA.
-
 **Toute la checklist IA est faite** : A1–A5, B1–B4, C1–C4, D1–D3 + tonte/mouton-herbe + spawn naturel
-de bébés. Comportements signature des 3 hostiles + comportements passifs (errance, fuite, tempt,
-reproduction, bébés, tonte/herbe) tous fidèles Bedrock.
+de bébés.
+
+## Extension du roster (chantier « entités », par vagues)
+`MobKind` est devenu une **table de descripteurs** (1 ligne/mob : id, nom, hitbox, catégorie, profil
+IA, dégâts, vitesse). Santé via `mob_hp`, butin via `loot_table`, spawn via `spawn_rules_vanilla`.
+Roster passé de 7 à **~51 mobs**.
+- ✅ **Vague 1** — mêlée (husk, drowned, zombie_villager, spider, cave_spider, silverfish, endermite,
+  wither_skeleton, vindicator, ravager, hoglin, zoglin, piglin_brute), arc (stray, bogged, pillager),
+  neutres (zombified_piglin, piglin, iron_golem, snow_golem, wolf, polar_bear, goat, llama), passifs
+  (rabbit, horse, donkey, mule, cat, ocelot, fox, panda, turtle, villager, wandering_trader, camel,
+  armadillo, sniffer, mooshroom).
+- ✅ **Vague 2** — slime + magma_cube : taille (VARIANT) + **split à la mort**.
+- ✅ **Vague 3** — volants : bat, parrot, allay, bee (vol 3D, pas de gravité).
+
+### Vagues restantes (mécaniques spéciales)
+- ⬜ **Enderman** : neutre + téléportation (quand blessé/coincé). (Aggro-au-regard = besoin du vecteur
+  de visée joueur dans le snapshot.)
+- ⬜ **Tireurs à projectile** : ghast/blaze (boule de feu), witch (potion AoE), shulker (projectile).
+  → besoin d'une entité projectile générique (modèle `arrow_entity`) ; ghast/blaze volent + tirent.
+- ⬜ **Hostiles volants** : phantom (piqué), vex.
+- ⬜ **Aquatiques** : guardian/elder_guardian (laser), + nage dédiée pour squid/dauphin/poissons.
+- ⬜ **Breeze** (wind charge), **warden** (capteur de vibrations), **creaking**.
+- ⬜ **Boss** : wither, ender_dragon (barre de boss, phases, vol).
+- ⬜ **Règles de spawn par biome** (le spawner actuel ne filtre pas par biome → husk/drowned/stray
+  peuvent apparaître hors de leur biome ; à raffiner quand le spawner lira le biome).
