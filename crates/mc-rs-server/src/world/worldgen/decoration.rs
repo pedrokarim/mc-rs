@@ -81,6 +81,14 @@ struct Pal {
     sculk_sensor: u32,
     sculk_shrieker: u32,
     sculk_catalyst: u32,
+    // Structures
+    cobblestone: u32,
+    mossy_cobblestone: u32,
+    mob_spawner: u32,
+    chest: u32,
+    sandstone: u32,
+    cut_sandstone: u32,
+    chiseled_sandstone: u32,
 }
 
 // Indices d'espèce dans logs/leaves.
@@ -184,6 +192,13 @@ impl Pal {
             sculk_sensor: g("minecraft:sculk_sensor"),
             sculk_shrieker: g("minecraft:sculk_shrieker"),
             sculk_catalyst: g("minecraft:sculk_catalyst"),
+            cobblestone: g("minecraft:cobblestone"),
+            mossy_cobblestone: g("minecraft:mossy_cobblestone"),
+            mob_spawner: g("minecraft:mob_spawner"),
+            chest: g("minecraft:chest"),
+            sandstone: g("minecraft:sandstone"),
+            cut_sandstone: g("minecraft:cut_sandstone"),
+            chiseled_sandstone: g("minecraft:chiseled_sandstone"),
         }
     }
 }
@@ -1159,6 +1174,114 @@ fn decorate_deep_dark(
     }
 }
 
+/// Donjon (monster room) : petite salle de cobblestone/mossy avec spawner +
+/// coffres, sous terre. ~1/3 des chunks tentent d'en placer un.
+fn decorate_dungeon(grid: &mut [u32], pal: &Pal, rng: &mut Random) {
+    if rng.next_bounded_int(3) != 0 {
+        return;
+    }
+    for _ in 0..16 {
+        let lx = 3 + rng.next_bounded_int(10);
+        let lz = 3 + rng.next_bounded_int(10);
+        let cy = MIN_Y + 8 + rng.next_bounded_int(50);
+        if !is_rock(pal, at(grid, lx, cy - 1, lz)) {
+            continue;
+        }
+        let half = 1 + rng.next_bounded_int(2); // intérieur 3×3 ou 5×5
+        for dx in -(half + 1)..=(half + 1) {
+            for dz in -(half + 1)..=(half + 1) {
+                for dy in -1..=3 {
+                    let (x, y, z) = (lx + dx, cy + dy, lz + dz);
+                    let edge = dx.abs() == half + 1 || dz.abs() == half + 1 || dy == -1 || dy == 3;
+                    if let Some(i) = idx_ok(x, y, z) {
+                        grid[i] = if edge {
+                            if rng.next_bounded_int(4) == 0 {
+                                pal.mossy_cobblestone
+                            } else {
+                                pal.cobblestone
+                            }
+                        } else {
+                            pal.air
+                        };
+                    }
+                }
+            }
+        }
+        // Spawner au centre.
+        if let Some(i) = idx_ok(lx, cy, lz) {
+            grid[i] = pal.mob_spawner;
+        }
+        // 1-2 coffres au sol (intérieur).
+        for _ in 0..(1 + rng.next_bounded_int(2)) {
+            let px = lx + rng.next_range(-half, half);
+            let pz = lz + rng.next_range(-half, half);
+            if at(grid, px, cy, pz) == pal.air && !(px == lx && pz == lz) {
+                if let Some(i) = idx_ok(px, cy, pz) {
+                    grid[i] = pal.chest;
+                }
+            }
+        }
+        return;
+    }
+}
+
+/// Puits du désert : structure de grès avec bassin d'eau + piliers, en surface
+/// de désert. Très rare (~1/1000).
+fn decorate_desert_well(
+    grid: &mut [u32],
+    pal: &Pal,
+    biome_idx: &[[u16; 16]; 16],
+    biome_names: &[String],
+    surfaces: &[[i32; 16]; 16],
+    rng: &mut Random,
+) {
+    if rng.next_bounded_int(1000) != 0 {
+        return;
+    }
+    for _ in 0..16 {
+        let lx = 3 + rng.next_bounded_int(10);
+        let lz = 3 + rng.next_bounded_int(10);
+        if !biome_names[biome_idx[lx as usize][lz as usize] as usize].contains("desert") {
+            continue;
+        }
+        let g = surfaces[lx as usize][lz as usize];
+        if g <= SEA_LEVEL {
+            continue;
+        }
+        // Plateforme de grès 5×5 + bassin d'eau 3×3.
+        for dx in -2..=2i32 {
+            for dz in -2..=2i32 {
+                if let Some(i) = idx_ok(lx + dx, g, lz + dz) {
+                    grid[i] = pal.sandstone;
+                }
+            }
+        }
+        for dx in -1..=1i32 {
+            for dz in -1..=1i32 {
+                if let Some(i) = idx_ok(lx + dx, g, lz + dz) {
+                    grid[i] = pal.water;
+                }
+            }
+        }
+        // 4 piliers de grès taillé + toit de grès ciselé.
+        for (px, pz) in [(-2, -2), (-2, 2), (2, -2), (2, 2)] {
+            for dy in 1..=3 {
+                if let Some(i) = idx_ok(lx + px, g + dy, lz + pz) {
+                    grid[i] = pal.cut_sandstone;
+                }
+            }
+        }
+        for dx in -2..=2i32 {
+            for dz in -2..=2i32 {
+                if let Some(i) = idx_ok(lx + dx, g + 4, lz + dz) {
+                    grid[i] = pal.chiseled_sandstone;
+                }
+            }
+        }
+        return;
+    }
+}
+
 /// Point d'entrée : décore un chunk déjà terrassé + habillé en surface.
 #[allow(clippy::too_many_arguments)]
 pub fn decorate(
@@ -1277,6 +1400,10 @@ pub fn decorate(
     // ── Biomes 3D de grottes : lush caves (mousse/azalée/lianes) & deep dark (sculk) ──
     decorate_lush(grid, &pal, biome3d, biome_names, &mut rng);
     decorate_deep_dark(grid, &pal, biome3d, biome_names, &mut rng);
+
+    // ── Structures : donjons (spawner + coffres), puits du désert ──
+    decorate_dungeon(grid, &pal, &mut rng);
+    decorate_desert_well(grid, &pal, biome_idx, biome_names, surfaces, &mut rng);
 
     // ── Neige/glace (biomes froids), en dernier (top layer) ──
     decorate_snow(grid, &pal, biome_idx, biome_names, surfaces);
@@ -1759,6 +1886,23 @@ mod tests {
             }
         }
         assert!(found, "aucune géode placée sur 200 essais");
+    }
+
+    #[test]
+    fn dungeon_places_spawner_and_chest() {
+        let pal = Pal::new();
+        let mut found = false;
+        for s in 0..40i64 {
+            let mut g = vec![pal.stone; GRID_LEN].into_boxed_slice();
+            let mut rng = Random::new(s);
+            decorate_dungeon(&mut g, &pal, &mut rng);
+            if g.contains(&pal.mob_spawner) {
+                assert!(g.contains(&pal.cobblestone), "donjon sans murs");
+                found = true;
+                break;
+            }
+        }
+        assert!(found, "aucun donjon placé sur 40 essais");
     }
 
     #[test]

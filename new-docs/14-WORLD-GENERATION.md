@@ -345,7 +345,7 @@ depuis la sémantique vanilla (réf. deepslate pour le bruit/les surfaces).
 | **Lush caves** (mousse, azalée, lianes à baies, spore blossom, racines) | ✅ | placées dans le biome `lush_caves` |
 | **Deep dark / sculk** (sculk + sensor/shrieker/catalyst/vein) | ✅ | placés dans le biome `deep_dark` |
 | Disques sable/gravier/argile (bord de l'eau) | ❌ | |
-| **Structures** (villages, mines, donjons, temples, strongholds, portails en ruine…) | ❌ | aucune pour l'instant |
+| **Structures** | 🟡 | **donjons** (salle cobble + spawner + coffres) & **puits du désert** ✅ ; villages/mines/temples/strongholds/portails ❌ (jigsaw + templates NBT) |
 | Position de spawn | 🟡 | calcul legacy (désync possible) |
 
 > En clair : **terrain + biomes + surfaces + minerais + toute la végétation/déco de
