@@ -1724,6 +1724,8 @@ pub mod entity_flags {
     pub const SPRINTING: i64 = 1 << 3;
     pub const USING_ITEM: i64 = 1 << 4;
     pub const INVISIBLE: i64 = 1 << 5; // PMMP INVISIBLE = 5
+    pub const BABY: i64 = 1 << 11; // PMMP EntityMetadataFlags::BABY = 11
+    pub const SHEARED: i64 = 1 << 31; // PMMP EntityMetadataFlags::SHEARED = 31
     pub const CAN_SHOW_NAMETAG: i64 = 1 << 14; // PMMP = 14 (was wrongly at bit 5!)
     pub const NO_AI: i64 = 1 << 16; // aka IMMOBILE — disables client physics
     pub const SILENT: i64 = 1 << 17; // no footstep/ambient sounds

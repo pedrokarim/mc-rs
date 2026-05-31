@@ -18,6 +18,8 @@ pub struct EntityBase {
     pub yaw: f32,
     pub head_yaw: f32,
     pub body_yaw: f32,
+    /// Au sol au dernier tick de physique (lu par le `WalkController` pour le saut).
+    pub on_ground: bool,
     pub attributes: Vec<AddActorAttribute>,
     pub metadata: Vec<(u32, u32, MetadataValue)>,
 }
@@ -44,6 +46,7 @@ impl EntityBase {
             yaw: 0.0,
             head_yaw: 0.0,
             body_yaw: 0.0,
+            on_ground: false,
             attributes,
             metadata,
         }
@@ -71,6 +74,36 @@ impl EntityBase {
             entity_unique_id: self.entity_unique_id,
         }
         .encode()
+    }
+
+    /// Active/désactive un flag d'entité (ex `entity_flags::ONFIRE`) dans le
+    /// champ de flags (clé 0, type Long) des métadonnées. Renvoie `true` si la
+    /// valeur a changé (→ il faut broadcast un `SetActorData`).
+    pub fn set_entity_flag(&mut self, bit: i64, on: bool) -> bool {
+        for (key, _ty, value) in self.metadata.iter_mut() {
+            if *key == 0 {
+                if let MetadataValue::Long(flags) = value {
+                    let new = if on { *flags | bit } else { *flags & !bit };
+                    if new != *flags {
+                        *flags = new;
+                        return true;
+                    }
+                    return false;
+                }
+            }
+        }
+        false
+    }
+
+    /// Met à l'échelle l'entité (clé métadonnée 38, Float). Pour les bébés (0.5)
+    /// et le retour à l'adulte (1.0).
+    pub fn set_scale(&mut self, scale: f32) {
+        for (key, _ty, value) in self.metadata.iter_mut() {
+            if *key == 38 {
+                *value = MetadataValue::Float(scale);
+                return;
+            }
+        }
     }
 
     pub fn actor_data_packet(&self) -> Vec<u8> {

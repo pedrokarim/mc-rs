@@ -219,6 +219,19 @@ impl ChunkCache {
         chunk.sub_chunks[sub_idx].get_block(local_x, local_y, local_z)
     }
 
+    /// ID de biome (numérique) à une position monde, via le sélecteur du
+    /// générateur de terrain. Pour les biomes vanilla et leurs tags, voir
+    /// `world::biome::vanilla_data_for`. Utilisé par le spawner pour le
+    /// filtrage par biome.
+    pub fn biome_at(&self, world_x: i32, world_z: i32) -> u32 {
+        terrain_generator::get_biome_at(world_x, world_z, self.seed)
+    }
+
+    /// Graine du monde.
+    pub fn seed(&self) -> u64 {
+        self.seed
+    }
+
     /// Set a block's runtime ID at world coordinates.
     /// Marks the chunk as dirty and invalidates the network payload cache.
     pub fn set_block(&mut self, world_x: i32, world_y: i32, world_z: i32, runtime_id: u32) {

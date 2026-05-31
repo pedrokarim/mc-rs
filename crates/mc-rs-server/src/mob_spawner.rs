@@ -3,21 +3,18 @@
 //!
 //! Cycle par game tick (20 TPS) :
 //!   - Pour chaque joueur connecté
-//!   - Pick un mob_kind candidat parmi nos 7 supportés (Zombie/Skeleton/Creeper/
-//!     Cow/Pig/Sheep/Chicken) selon `spawn_rules_vanilla::spawn_weight`
+//!   - Pick un mob_kind candidat parmi tout le roster (`MobKind::ALL`) pondéré
+//!     par `spawn_rules_vanilla::spawn_weight` (les espèces sans règle vanilla
+//!     sont automatiquement ignorées)
 //!   - Pick une position dans un rayon SPAWN_RADIUS_MIN..MAX autour du joueur
 //!   - Vérifie : ground solide, headroom, light level (pour monsters dans le
 //!     range vanilla 0-7 via `spawn_rules_vanilla::brightness_range`)
 //!   - Vérifie le mob cap par catégorie
-//!   - Spawn via `MobEntityManager::spawn`
-//!
-//! Limites actuelles : `MobKind` n'a que 7 mobs ; les 49 autres mobs
-//! vanilla restent dormants. Quand on étendra, ce module récupèrera leurs
-//! règles de spawn automatiquement via `spawn_rules_vanilla`.
+//!   - Spawn via `MobEntityManager::spawn` (~5 % d'animaux en bébé)
 
 use rand::Rng;
 
-use crate::mob_entities::{MobEntityManager, MobKind};
+use crate::mob_entities::{Habitat, MobEntityManager, MobKind};
 use crate::player_registry::PlayerRegistry;
 use crate::world::block_registry::BLOCKS;
 use crate::world::chunk_cache::ChunkCache;
@@ -37,21 +34,18 @@ fn entity_id_for(kind: MobKind) -> &'static str {
 }
 
 fn category_of(kind: MobKind) -> &'static str {
-    match kind {
-        MobKind::Zombie | MobKind::Skeleton | MobKind::Creeper => "monster",
-        MobKind::Cow | MobKind::Pig | MobKind::Sheep | MobKind::Chicken => "animal",
+    match kind.category() {
+        crate::mob_entities::MobCategory::Hostile => "monster",
+        // Passifs + neutres comptent dans le cap « animal » pour le spawn.
+        _ => "animal",
     }
 }
 
-const ALL_MOBS: &[MobKind] = &[
-    MobKind::Zombie,
-    MobKind::Skeleton,
-    MobKind::Creeper,
-    MobKind::Cow,
-    MobKind::Pig,
-    MobKind::Sheep,
-    MobKind::Chicken,
-];
+/// Toutes les espèces candidates au spawn naturel = roster complet. Celles sans
+/// règle de spawn vanilla (`spawn_weight` = None) sont automatiquement ignorées.
+fn all_mobs() -> &'static [MobKind] {
+    MobKind::ALL
+}
 
 /// Tick global — appelé chaque game tick (20 TPS) depuis main.rs.
 /// Spawn 0..N mobs selon les règles vanilla + caps.
@@ -88,9 +82,17 @@ pub fn tick<R: Rng>(
         let center = player_positions[pi];
 
         // Pick mob aléatoire pondéré par `spawn_weight` vanilla.
-        let weights: Vec<(MobKind, u32)> = ALL_MOBS
+        let weights: Vec<(MobKind, u32)> = all_mobs()
             .iter()
             .filter_map(|&k| {
+                // Seul l'overworld est implémenté : pas de spawn naturel des
+                // mobs du Nether/End (blaze, ghast, piglin, ender_dragon…).
+                if k.habitat() != Habitat::Overworld {
+                    return None;
+                }
+                if k.is_aquatic() {
+                    return None; // pas de spawn terrestre pour les aquatiques
+                }
                 crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k)).map(|w| (k, w.max(1)))
             })
             .collect();
@@ -131,6 +133,17 @@ pub fn tick<R: Rng>(
         let sx = center[0] as i32 + dx;
         let sz = center[2] as i32 + dz;
 
+        // Filtrage par biome : le mob doit être autorisé par le `biome_filter`
+        // vanilla du biome au point de spawn (ex. husk → "desert", stray →
+        // "frozen", cow → "animal"). Le biome ne dépend pas de Y.
+        let biome_id = cache.biome_at(sx, sz);
+        let biome_tags: &[String] = crate::world::biome::vanilla_data_for(biome_id)
+            .map(|d| d.tags.as_slice())
+            .unwrap_or(&[]);
+        if !crate::spawn_rules_vanilla::biome_allows(entity_id_for(picked), biome_tags) {
+            continue;
+        }
+
         // Trouve un sol valide (top non-air entre Y=320 et Y=-64).
         let mut sy = None;
         for y in (-64..=320).rev() {
@@ -152,9 +165,16 @@ pub fn tick<R: Rng>(
         }
         let Some(sy) = sy else { continue };
 
-        // Spawn.
+        // Spawn. Slimes : taille aléatoire (1/2/4). Animaux : ~5 % en bébé.
         let spawn_pos = [sx as f32 + 0.5, sy as f32, sz as f32 + 0.5];
-        let _entity = mobs.spawn(picked, spawn_pos);
+        let _entity = if picked.is_slime() {
+            let size = [1u8, 2, 4][rng.gen_range(0..3)];
+            mobs.spawn_slime(picked, spawn_pos, size)
+        } else if cat == "animal" && rng.gen_range(0..100) < 5 {
+            mobs.spawn_baby(picked, spawn_pos)
+        } else {
+            mobs.spawn(picked, spawn_pos)
+        };
         match cat {
             "monster" => hostile_count += 1,
             "animal" => passive_count += 1,
@@ -182,9 +202,15 @@ mod tests {
 
     #[test]
     fn weights_can_be_collected_for_supported_mobs() {
-        let weights: Vec<_> = ALL_MOBS
+        let weights: Vec<_> = all_mobs()
             .iter()
             .filter_map(|&k| {
+                if k.habitat() != Habitat::Overworld {
+                    return None;
+                }
+                if k.is_aquatic() {
+                    return None; // pas de spawn terrestre pour les aquatiques
+                }
                 crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k)).map(|w| (k, w))
             })
             .collect();
@@ -192,5 +218,35 @@ mod tests {
             !weights.is_empty(),
             "should have weight for at least one mob"
         );
+    }
+
+    #[test]
+    fn nether_and_end_mobs_are_excluded_from_overworld_spawn() {
+        // Le spawner naturel ne tourne que dans l'overworld : aucun mob
+        // Nether/End ne doit figurer dans la table de poids.
+        let candidates: Vec<MobKind> = all_mobs()
+            .iter()
+            .copied()
+            .filter(|&k| {
+                k.habitat() == Habitat::Overworld
+                    && !k.is_aquatic()
+                    && crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k)).is_some()
+            })
+            .collect();
+        for k in &candidates {
+            assert_eq!(
+                k.habitat(),
+                Habitat::Overworld,
+                "{k:?} ne devrait pas spawner naturellement hors overworld"
+            );
+        }
+        // Vérifie explicitement quelques mobs Nether/End connus.
+        assert_eq!(MobKind::Blaze.habitat(), Habitat::Nether);
+        assert_eq!(MobKind::Ghast.habitat(), Habitat::Nether);
+        assert_eq!(MobKind::WitherSkeleton.habitat(), Habitat::Nether);
+        assert_eq!(MobKind::EnderDragon.habitat(), Habitat::End);
+        assert_eq!(MobKind::Shulker.habitat(), Habitat::End);
+        // Enderman reste overworld (spawn via le tag de biome "monster").
+        assert_eq!(MobKind::Enderman.habitat(), Habitat::Overworld);
     }
 }

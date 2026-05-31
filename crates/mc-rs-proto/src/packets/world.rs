@@ -1082,6 +1082,8 @@ pub struct LevelEvent {
 impl LevelEvent {
     /// Block destroy particles.
     pub const PARTICLE_DESTROY: i32 = 2001;
+    /// Particules d'explosion (BedrockProtocol `LevelEvent::PARTICLE_EXPLODE`).
+    pub const PARTICLE_EXPLODE: i32 = 2025;
     /// Start block breaking crack animation (data = break speed * 65535).
     pub const BLOCK_START_BREAK: i32 = 3600;
     /// Stop/remove block breaking crack animation.
@@ -1113,9 +1115,16 @@ pub struct LevelSoundEvent {
 }
 
 impl LevelSoundEvent {
+    pub const HIT: u32 = 1;
     pub const BREAK: u32 = 5;
     pub const PLACE: u32 = 6;
-    pub const HIT: u32 = 1;
+    // IDs autoritatifs : BedrockProtocol `types/LevelSoundEvent.php`.
+    pub const AMBIENT: u32 = 10;
+    pub const DEATH: u32 = 14;
+    pub const HURT: u32 = 17;
+    pub const ATTACK: u32 = 41;
+    pub const EXPLODE: u32 = 48;
+    pub const SHOOT: u32 = 54;
 
     /// Create a non-actor block sound event.
     pub fn block_sound(sound: u32, position: [f32; 3], block_runtime_id: i32) -> Self {
@@ -1127,6 +1136,39 @@ impl LevelSoundEvent {
             is_baby_mob: false,
             disable_relative_volume: false,
             actor_unique_id: -1,
+        }
+    }
+
+    /// Son « monde » non lié à une entité ni un bloc (ex explosion).
+    pub fn world_sound(sound: u32, position: [f32; 3]) -> Self {
+        Self {
+            sound,
+            position,
+            extra_data: -1,
+            entity_type: String::new(),
+            is_baby_mob: false,
+            disable_relative_volume: false,
+            actor_unique_id: -1,
+        }
+    }
+
+    /// Son émis par une entité (mob) : `entity_type` = identifiant réseau
+    /// (ex `minecraft:zombie`), nécessaire pour que le client joue le bon son.
+    pub fn actor_sound(
+        sound: u32,
+        position: [f32; 3],
+        entity_type: impl Into<String>,
+        actor_unique_id: i64,
+        is_baby_mob: bool,
+    ) -> Self {
+        Self {
+            sound,
+            position,
+            extra_data: -1,
+            entity_type: entity_type.into(),
+            is_baby_mob,
+            disable_relative_volume: false,
+            actor_unique_id,
         }
     }
 

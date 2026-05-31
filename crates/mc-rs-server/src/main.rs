@@ -10,10 +10,7 @@ pub mod advancement_tree;
 pub mod advancements;
 #[allow(dead_code)]
 pub mod adventure_mode;
-#[allow(dead_code)]
-pub mod ai_goals;
-#[allow(dead_code)]
-pub mod ai_states;
+pub mod ai;
 #[allow(dead_code)]
 pub mod allay;
 #[allow(dead_code)]
@@ -44,6 +41,7 @@ pub mod armor_stand;
 pub mod armor_tier;
 #[allow(dead_code)]
 pub mod arrow;
+pub mod arrow_entity;
 #[allow(dead_code)]
 pub mod arrow_pickup;
 #[allow(dead_code)]
@@ -1167,6 +1165,7 @@ async fn main() {
     let mut registry = PlayerRegistry::new();
     let mut item_entities = ItemEntityManager::new();
     let mut mob_entities = MobEntityManager::new();
+    let mut arrow_manager = crate::arrow_entity::ArrowEntityManager::new();
     let mut furnace_manager = crate::furnace::FurnaceManager::new();
     let mut chest_manager = crate::chest_storage::ChestManager::new();
     let mut sign_manager = crate::sign_storage::SignManager::new();
@@ -1295,6 +1294,8 @@ async fn main() {
     // entrée/sortie de vue des entités stationnaires quand un joueur se
     // déplace. Les entités mobiles sont déjà gérées par leur MovementUpdate.
     let mut entity_visibility_scan_counter: u32 = 0;
+    // Ids (unique) des boss dont la barre est actuellement affichée (pour HIDE).
+    let mut shown_bosses: std::collections::HashSet<i64> = std::collections::HashSet::new();
     let (console_tx, mut console_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
     let console_tx_stdin = console_tx.clone();
     tokio::spawn(async move {
@@ -2053,8 +2054,42 @@ async fn main() {
                 // résultat du tick sous lock, on relâche le guard, PUIS on
                 // émet les paquets. Tenir un std::sync::Mutex pendant un appel
                 // réseau potentiellement bloquant est une cause de gel.
+                // Snapshot des joueurs en jeu pour l'IA des mobs (sensors).
+                let player_snapshots: Vec<crate::ai::PlayerSnapshot> = connections
+                    .values()
+                    .filter(|c| c.is_in_game())
+                    .map(|c| crate::ai::PlayerSnapshot {
+                        runtime_id: c.entity_runtime_id,
+                        position: c.position,
+                        gamemode: c.gamemode,
+                        alive: c
+                            .attributes
+                            .must_get(crate::attribute::ids::HEALTH)
+                            .current_value
+                            > 0.0,
+                        held_item: c
+                            .inventory
+                            .slots
+                            .get(c.inventory.held_slot as usize)
+                            .map(|s| s.item.id)
+                            .unwrap_or(0),
+                        look_dir: {
+                            // Vecteur de visée (convention Bedrock yaw/pitch).
+                            let (sy, cy) = c.yaw.to_radians().sin_cos();
+                            let (sp, cp) = c.pitch.to_radians().sin_cos();
+                            [-sy * cp, -sp, cy * cp]
+                        },
+                    })
+                    .collect();
+                // Dégâts mêlée/flèche des mobs mis à l'échelle selon la difficulté.
+                let dmg_mult = difficulty_damage_multiplier(config.gameplay.difficulty_id());
+                // Jour (sun-burning des zombies/skeletons) : hors plage de nuit Bedrock.
+                let is_day = {
+                    let t = world_state.time.rem_euclid(24000);
+                    !(13000..23000).contains(&t)
+                };
                 let mob_tick_result = if let Ok(mut cache) = chunk_cache.lock() {
-                    Some(mob_entities.tick(&mut cache))
+                    Some(mob_entities.tick(&mut cache, &player_snapshots, is_day))
                 } else {
                     None
                 };
@@ -2071,6 +2106,270 @@ async fn main() {
                             update.entity_position,
                         );
                     }
+                    // Attaques mob→joueur (drainées hors du tick, comme les
+                    // syncedActions d'Allay) : on réutilise le chemin combat PvP.
+                    for effect in tick_result.attack_requests {
+                        match effect {
+                            crate::ai::AiEffect::Attack {
+                                attacker_runtime_id,
+                                attacker_position,
+                                target_runtime_id,
+                                damage,
+                            } => {
+                                // Animation de swing du bras (mêlée uniquement).
+                                let swing = crate::combat_packets::arm_swing(attacker_runtime_id);
+                                broadcast_packet_all(
+                                    &mut connections,
+                                    &mut raknet,
+                                    packet_id::ANIMATE,
+                                    &swing,
+                                );
+                                apply_mob_attack_to_player(
+                                    &mut connections,
+                                    &mut raknet,
+                                    attacker_runtime_id,
+                                    attacker_position,
+                                    target_runtime_id,
+                                    damage * dmg_mult,
+                                );
+                            }
+                            crate::ai::AiEffect::Explode {
+                                attacker_runtime_id,
+                                center,
+                            } => {
+                                apply_mob_explosion(
+                                    &mut connections,
+                                    &mut raknet,
+                                    &mut mob_entities,
+                                    &chunk_cache,
+                                    attacker_runtime_id,
+                                    center,
+                                );
+                            }
+                            crate::ai::AiEffect::ShootArrow {
+                                shooter_runtime_id,
+                                from,
+                                velocity,
+                                damage,
+                            } => {
+                                // Spawn dans le manager : l'AddActor est broadcast
+                                // par la diffusion de mouvement cullée au tick suivant.
+                                arrow_manager.spawn(from, velocity, damage, shooter_runtime_id);
+                                // Son de tir à l'arc.
+                                let shoot = mc_rs_proto::packets::world::LevelSoundEvent::actor_sound(
+                                    mc_rs_proto::packets::world::LevelSoundEvent::SHOOT,
+                                    from,
+                                    "minecraft:skeleton",
+                                    -1,
+                                    false,
+                                )
+                                .encode();
+                                broadcast_packet_all(
+                                    &mut connections,
+                                    &mut raknet,
+                                    packet_id::LEVEL_SOUND_EVENT,
+                                    &shoot,
+                                );
+                            }
+                            crate::ai::AiEffect::ShootFireball {
+                                shooter_runtime_id,
+                                from,
+                                velocity,
+                                damage,
+                                actor_type,
+                                homing_target,
+                            } => {
+                                arrow_manager.spawn_fireball(
+                                    actor_type,
+                                    from,
+                                    velocity,
+                                    damage,
+                                    shooter_runtime_id,
+                                    homing_target,
+                                );
+                            }
+                        }
+                    }
+                    // Mobs despawnés (trop loin) → RemoveEntity.
+                    for mob in tick_result.despawned {
+                        let remove_bytes = mob.remove_packet();
+                        broadcast_entity_remove_culled(
+                            &mut connections,
+                            &mut raknet,
+                            mob.base.entity_unique_id,
+                            &remove_bytes,
+                        );
+                    }
+                    // Changements de flag (ONFIRE du sun-burning) → SetActorData cullé.
+                    for (unique, bytes) in tick_result.metadata_updates {
+                        for (addr, conn) in connections.iter_mut() {
+                            if conn.is_in_game() && conn.visible_entities.contains(&unique) {
+                                let pkt =
+                                    conn.encode_compressed_packet(packet_id::SET_ACTOR_DATA, &bytes);
+                                let prep = conn.prepare_for_send(pkt);
+                                raknet.send_to_session(addr, prep, Reliability::ReliableOrdered, true);
+                            }
+                        }
+                    }
+                    // Dégâts environnementaux (feu, chute) : mêmes conséquences que PvE.
+                    for (id, amount) in tick_result.damage_requests {
+                        apply_mob_damage_broadcast(
+                            &mut mob_entities,
+                            &mut connections,
+                            &mut raknet,
+                            &mut item_entities,
+                            id,
+                            amount,
+                        );
+                    }
+                    // Changements de blocs (mouton qui mange l'herbe) → UpdateBlock.
+                    for (pos, runtime_id) in tick_result.block_changes {
+                        let payload = mc_rs_proto::packets::world::UpdateBlock {
+                            position: pos,
+                            runtime_id,
+                            flags: 3,
+                            layer: 0,
+                        }
+                        .encode();
+                        broadcast_packet_all(
+                            &mut connections,
+                            &mut raknet,
+                            packet_id::UPDATE_BLOCK,
+                            &payload,
+                        );
+                    }
+                }
+
+                // Tick des flèches (projectiles de squelette) : mouvement,
+                // despawn, et dégâts aux joueurs touchés (réutilise le chemin combat).
+                let arrow_players: Vec<(u64, [f32; 3])> = player_snapshots
+                    .iter()
+                    .filter(|p| p.is_attackable())
+                    .map(|p| (p.runtime_id, p.position))
+                    .collect();
+                let arrow_result = if let Ok(mut cache) = chunk_cache.lock() {
+                    Some(arrow_manager.tick(&mut cache, &arrow_players))
+                } else {
+                    None
+                };
+                if let Some(ar) = arrow_result {
+                    for update in ar.movement_updates {
+                        broadcast_entity_movement_culled(
+                            &mut connections,
+                            &mut raknet,
+                            &update.add_packet,
+                            packet_id::ADD_ACTOR,
+                            &update.move_packet,
+                            &update.motion_packet,
+                            update.entity_unique_id,
+                            update.entity_position,
+                        );
+                    }
+                    for arrow in ar.despawned {
+                        let remove_bytes = arrow.remove_packet();
+                        broadcast_entity_remove_culled(
+                            &mut connections,
+                            &mut raknet,
+                            arrow.base.entity_unique_id,
+                            &remove_bytes,
+                        );
+                    }
+                    for hit in ar.hits {
+                        // Son d'impact de flèche.
+                        let thud = mc_rs_proto::packets::world::LevelSoundEvent::world_sound(
+                            mc_rs_proto::packets::world::LevelSoundEvent::HIT,
+                            hit.from_position,
+                        )
+                        .encode();
+                        broadcast_packet_all(
+                            &mut connections,
+                            &mut raknet,
+                            packet_id::LEVEL_SOUND_EVENT,
+                            &thud,
+                        );
+                        apply_mob_attack_to_player(
+                            &mut connections,
+                            &mut raknet,
+                            hit.shooter_runtime_id,
+                            hit.from_position,
+                            hit.target_runtime_id,
+                            hit.damage * dmg_mult,
+                        );
+                    }
+                }
+
+                // Sons d'ambiance des mobs (grognements/meuglements) : faible
+                // probabilité par mob et par tick → ~1 son toutes les ~12 s/mob.
+                let ambient_sounds: Vec<Vec<u8>> = {
+                    let mut rng = rand::thread_rng();
+                    mob_entities
+                        .all()
+                        .filter(|_| rand::Rng::gen_bool(&mut rng, 0.004))
+                        .map(|m| {
+                            mc_rs_proto::packets::world::LevelSoundEvent::actor_sound(
+                                mc_rs_proto::packets::world::LevelSoundEvent::AMBIENT,
+                                m.base.position,
+                                m.kind.actor_type(),
+                                m.base.entity_unique_id,
+                                false,
+                            )
+                            .encode()
+                        })
+                        .collect()
+                };
+                for sound in ambient_sounds {
+                    broadcast_packet_all(
+                        &mut connections,
+                        &mut raknet,
+                        packet_id::LEVEL_SOUND_EVENT,
+                        &sound,
+                    );
+                }
+
+                // Barres de boss : SHOW (porte la santé) pour chaque boss vivant,
+                // HIDE pour ceux disparus depuis le dernier tick.
+                {
+                    let mut current_bosses: std::collections::HashSet<i64> =
+                        std::collections::HashSet::new();
+                    let boss_bars: Vec<Vec<u8>> = mob_entities
+                        .all()
+                        .filter(|m| m.kind.is_boss())
+                        .map(|m| {
+                            current_bosses.insert(m.base.entity_unique_id);
+                            let hp = m
+                                .base
+                                .attributes
+                                .iter()
+                                .find(|a| a.name == "minecraft:health")
+                                .map(|a| (a.current / a.max.max(1.0)).clamp(0.0, 1.0))
+                                .unwrap_or(1.0);
+                            crate::combat_packets::boss_show(
+                                m.base.entity_unique_id,
+                                m.kind.display_name(),
+                                hp,
+                                m.kind.boss_bar_color(),
+                            )
+                        })
+                        .collect();
+                    for bytes in boss_bars {
+                        broadcast_packet_all(
+                            &mut connections,
+                            &mut raknet,
+                            packet_id::BOSS_EVENT,
+                            &bytes,
+                        );
+                    }
+                    // Boss disparus → HIDE.
+                    for old in shown_bosses.difference(&current_bosses) {
+                        let bytes = crate::combat_packets::boss_hide(*old);
+                        broadcast_packet_all(
+                            &mut connections,
+                            &mut raknet,
+                            packet_id::BOSS_EVENT,
+                            &bytes,
+                        );
+                    }
+                    shown_bosses = current_bosses;
                 }
 
                 entity_visibility_scan_counter += 1;
@@ -2231,6 +2530,297 @@ fn spawn_and_broadcast_item_entity(
 /// - StillVisible : envoie Move+Motion
 /// - JustLeft : envoie RemoveActor (entity sortie du rayon de vue)
 ///
+/// Diffuse un paquet (déjà encodé en payload) à tous les joueurs en jeu.
+/// Utilisé pour les événements globaux (sons, particules d'explosion).
+fn broadcast_packet_all(
+    connections: &mut HashMap<SocketAddr, Connection>,
+    raknet: &mut RakNetServer,
+    packet_id: u32,
+    payload: &[u8],
+) {
+    for (addr, conn) in connections.iter_mut() {
+        if conn.is_in_game() {
+            let pkt = conn.encode_compressed_packet(packet_id, payload);
+            let prep = conn.prepare_for_send(pkt);
+            raknet.send_to_session(addr, prep, Reliability::ReliableOrdered, false);
+        }
+    }
+}
+
+/// Multiplicateur de dégâts des mobs selon la difficulté (approximation fidèle
+/// Bedrock : zombie ~2/3/4). peaceful=0, easy≈0.67, normal=1, hard=1.5.
+fn difficulty_damage_multiplier(difficulty_id: i32) -> f32 {
+    match difficulty_id {
+        0 => 0.0,  // peaceful
+        1 => 0.67, // easy
+        3 => 1.5,  // hard
+        _ => 1.0,  // normal
+    }
+}
+
+/// Applique des dégâts à un mob (joueur, feu, …) et diffuse les conséquences :
+/// son hurt/death, UpdateAttributes (cullé), RemoveEntity + drops à la mort.
+/// Factorise le chemin PvE et le sun-burning.
+fn apply_mob_damage_broadcast(
+    mob_entities: &mut crate::mob_entities::MobEntityManager,
+    connections: &mut HashMap<SocketAddr, Connection>,
+    raknet: &mut RakNetServer,
+    item_entities: &mut crate::item_entities::ItemEntityManager,
+    runtime_id: u64,
+    damage: f32,
+) {
+    use mc_rs_proto::packets::world::LevelSoundEvent;
+    // Position/type AVANT (le mob peut être retiré s'il meurt) — pour le son.
+    let info = mob_entities
+        .all()
+        .find(|e| e.base.entity_runtime_id == runtime_id)
+        .map(|e| {
+            (
+                e.base.position,
+                e.kind.actor_type(),
+                e.base.entity_unique_id,
+            )
+        });
+    let Some(result) = mob_entities.apply_attack(runtime_id, damage) else {
+        return;
+    };
+    let unique = runtime_id as i64;
+
+    if let Some((spos, stype, suid)) = info {
+        let sid = if result.remove_packet.is_some() {
+            LevelSoundEvent::DEATH
+        } else {
+            LevelSoundEvent::HURT
+        };
+        let snd = LevelSoundEvent::actor_sound(sid, spos, stype, suid, false).encode();
+        broadcast_packet_all(connections, raknet, packet_id::LEVEL_SOUND_EVENT, &snd);
+    }
+
+    if let Some(update_bytes) = result.update_attributes_packet {
+        // Culling : seuls les joueurs qui voient le mob reçoivent ses attributs.
+        for (addr, conn) in connections.iter_mut() {
+            if conn.is_in_game() && conn.visible_entities.contains(&unique) {
+                let pkt =
+                    conn.encode_compressed_packet(packet_id::UPDATE_ATTRIBUTES, &update_bytes);
+                let prep = conn.prepare_for_send(pkt);
+                raknet.send_to_session(addr, prep, Reliability::ReliableOrdered, true);
+            }
+        }
+    }
+
+    if let Some(remove_bytes) = result.remove_packet {
+        broadcast_entity_remove_culled(connections, raknet, unique, &remove_bytes);
+    }
+
+    if let Some(death_position) = result.death_position {
+        for drop in result.drops {
+            spawn_and_broadcast_item_entity(
+                "mob-death",
+                connections,
+                raknet,
+                item_entities,
+                PendingItemEntitySpawn::with_scatter(drop, death_position),
+            );
+        }
+    }
+}
+
+/// Applique une attaque mob→joueur : réutilise `combat::attack_entity` puis
+/// broadcast hurt/knockback et gère la mort/respawn — calque du chemin PvP.
+fn apply_mob_attack_to_player(
+    connections: &mut HashMap<SocketAddr, Connection>,
+    raknet: &mut RakNetServer,
+    attacker_runtime_id: u64,
+    attacker_position: [f32; 3],
+    target_runtime_id: u64,
+    damage: f32,
+) {
+    let Some(tgt_addr) = connections
+        .iter()
+        .find(|(_, c)| c.entity_runtime_id == target_runtime_id && c.is_in_game())
+        .map(|(a, _)| *a)
+    else {
+        return;
+    };
+
+    let outcome_info = if let Some(tc) = connections.get_mut(&tgt_addr) {
+        let outcome = {
+            let events = tc.events.clone();
+            let mut ev = events.lock().unwrap();
+            crate::combat::attack_entity(
+                &mut ev,
+                tc.entity_runtime_id,
+                tc.position,
+                &mut tc.attributes,
+                &mut tc.combat,
+                crate::event::entity::DamageCause::EntityAttack,
+                damage,
+                Some(attacker_runtime_id),
+                Some(attacker_position),
+                crate::combat::DEFAULT_KNOCKBACK_FORCE,
+            )
+        };
+        Some((
+            tc.entity_runtime_id,
+            outcome.knockback,
+            outcome.died,
+            outcome.applied_damage > 0.0,
+            tc.spawn_position,
+            tc.tick,
+        ))
+    } else {
+        None
+    };
+
+    let Some((target_rid, kb, died, hit, target_spawn, tick)) = outcome_info else {
+        return;
+    };
+
+    // Hurt animation broadcast à tous les viewers en jeu.
+    if hit && !died {
+        let hurt_bytes = crate::combat_packets::hurt_animation(target_rid);
+        for (other_addr, other_conn) in connections.iter_mut() {
+            if other_conn.is_in_game() {
+                let pkt = other_conn.encode_compressed_packet(packet_id::ACTOR_EVENT, &hurt_bytes);
+                let prep = other_conn.prepare_for_send(pkt);
+                raknet.send_to_session(other_addr, prep, Reliability::ReliableOrdered, true);
+            }
+        }
+    }
+
+    // Knockback motion → envoyé à la cible.
+    if let Some((kx, ky, kz)) = kb {
+        if let Some(tc) = connections.get_mut(&tgt_addr) {
+            let bytes =
+                crate::combat_packets::encode_set_actor_motion(target_rid, [kx, ky, kz], tick);
+            let pkt = tc.encode_compressed_packet(packet_id::SET_ACTOR_MOTION, &bytes);
+            let prep = tc.prepare_for_send(pkt);
+            raknet.send_to_session(&tgt_addr, prep, Reliability::ReliableOrdered, false);
+        }
+    }
+
+    // Mort → death animation + respawn (HP/hunger restaurés, position au spawn).
+    if died {
+        let death_bytes = crate::combat_packets::death_animation(target_rid);
+        for (other_addr, other_conn) in connections.iter_mut() {
+            if other_conn.is_in_game() {
+                let pkt = other_conn.encode_compressed_packet(packet_id::ACTOR_EVENT, &death_bytes);
+                let prep = other_conn.prepare_for_send(pkt);
+                raknet.send_to_session(other_addr, prep, Reliability::ReliableOrdered, true);
+            }
+        }
+        if let Some(tc) = connections.get_mut(&tgt_addr) {
+            tc.attributes
+                .must_get_mut(crate::attribute::ids::HEALTH)
+                .set_value(20.0, true);
+            tc.attributes
+                .must_get_mut(crate::attribute::ids::HUNGER)
+                .set_value(20.0, true);
+            tc.combat = crate::combat::CombatState::new();
+            tc.position = target_spawn;
+            let respawn_bytes = crate::combat_packets::encode_respawn(
+                target_spawn,
+                crate::combat_packets::respawn_state::READY_TO_SPAWN,
+                target_rid,
+            );
+            let pkt = tc.encode_compressed_packet(packet_id::RESPAWN, &respawn_bytes);
+            let prep = tc.prepare_for_send(pkt);
+            raknet.send_to_session(&tgt_addr, prep, Reliability::ReliableOrdered, true);
+        }
+    }
+}
+
+/// Applique l'explosion d'un mob (creeper) : détruit les blocs cassables
+/// (broadcast UpdateBlock), inflige les dégâts radiaux aux joueurs (réutilise le
+/// chemin combat) et retire le mob. Réutilise `explosion::Explosion`.
+fn apply_mob_explosion(
+    connections: &mut HashMap<SocketAddr, Connection>,
+    raknet: &mut RakNetServer,
+    mob_entities: &mut crate::mob_entities::MobEntityManager,
+    chunk_cache: &std::sync::Arc<std::sync::Mutex<ChunkCache>>,
+    attacker_runtime_id: u64,
+    center: [f32; 3],
+) {
+    use crate::world::block_registry::BLOCKS;
+    use mc_rs_proto::packets::world::{LevelEvent, LevelSoundEvent};
+    let explosion =
+        crate::explosion::Explosion::new(crate::explosion::ExplosionSource::Creeper, center);
+    let air = BLOCKS.air;
+
+    // Effets audiovisuels : particule + son d'explosion (IDs BedrockProtocol).
+    let particle = LevelEvent {
+        event_id: LevelEvent::PARTICLE_EXPLODE,
+        position: center,
+        event_data: 0,
+    }
+    .encode();
+    broadcast_packet_all(connections, raknet, packet_id::LEVEL_EVENT, &particle);
+    let boom = LevelSoundEvent::world_sound(LevelSoundEvent::EXPLODE, center).encode();
+    broadcast_packet_all(connections, raknet, packet_id::LEVEL_SOUND_EVENT, &boom);
+
+    // 1) Calcul des blocs détruits + mise à air (sous lock, sans I/O réseau).
+    let destroyed: Vec<[i32; 3]> = if let Ok(mut cache) = chunk_cache.lock() {
+        let result = explosion.compute_result(|x, y, z| {
+            let id = cache.get_block(x, y, z);
+            if id == air {
+                return false;
+            }
+            // Bedrock (hardness < 0) indestructible → ne casse pas.
+            let name = BLOCKS.name_for(id).unwrap_or("");
+            crate::block_hardness::hardness(name) >= 0.0
+        });
+        for b in &result.blocks_destroyed {
+            cache.set_block(b[0], b[1], b[2], air);
+        }
+        result.blocks_destroyed
+    } else {
+        Vec::new()
+    };
+
+    // 2) Broadcast UpdateBlock pour chaque bloc détruit.
+    for b in &destroyed {
+        let payload = mc_rs_proto::packets::world::UpdateBlock {
+            position: *b,
+            runtime_id: air,
+            flags: 3, // FLAG_NEIGHBORS | FLAG_NETWORK
+            layer: 0,
+        }
+        .encode();
+        for (addr, conn) in connections.iter_mut() {
+            if conn.is_in_game() {
+                let pkt = conn.encode_compressed_packet(packet_id::UPDATE_BLOCK, &payload);
+                let prep = conn.prepare_for_send(pkt);
+                raknet.send_to_session(addr, prep, Reliability::ReliableOrdered, true);
+            }
+        }
+    }
+
+    // 3) Dégâts radiaux aux joueurs (knockback depuis le centre de l'explosion).
+    let targets: Vec<(u64, f32)> = connections
+        .values()
+        .filter(|c| c.is_in_game())
+        .filter_map(|c| {
+            explosion
+                .entity_damage(c.position)
+                .map(|d| (c.entity_runtime_id, d))
+        })
+        .collect();
+    for (rid, dmg) in targets {
+        apply_mob_attack_to_player(connections, raknet, attacker_runtime_id, center, rid, dmg);
+    }
+
+    // 4) Le creeper meurt dans l'explosion : retrait + broadcast RemoveEntity.
+    if let Some(removed) = mob_entities.remove(attacker_runtime_id) {
+        let remove_bytes = removed.remove_packet();
+        broadcast_entity_remove_culled(
+            connections,
+            raknet,
+            removed.base.entity_unique_id,
+            &remove_bytes,
+        );
+    }
+}
+
 /// Shared batch encoding : les 3 paquets potentiels (Add/Move/Motion) sont
 /// encodés UNE SEULE FOIS via `encode_shared_batch` avec Zlib, puis clonés
 /// par recipient avant `prepare_for_send` (qui applique l'encryption par-conn).
@@ -2828,6 +3418,79 @@ fn process_peer_events(
                     for attack in pending_entity_attacks {
                         const ACTION_ATTACK: u32 = 1;
                         if attack.action_type != ACTION_ATTACK {
+                            // Interaction clic-droit : tentative de nourrissage (reproduction).
+                            let held = connections.get(&addr).map(|c| {
+                                let slot = c.inventory.held_slot as usize;
+                                (c.inventory.slots[slot].item.id, slot, c.gamemode)
+                            });
+                            if let Some((held_id, slot, gm)) = held {
+                                if mob_entities.feed_mob(attack.target_runtime_id, held_id) {
+                                    // Consomme 1 nourriture en survie.
+                                    if gm == 0 {
+                                        if let Some(conn) = connections.get_mut(&addr) {
+                                            let cur = &conn.inventory.slots[slot].item;
+                                            let next = cur.count.saturating_sub(1);
+                                            let new_item = if next == 0 {
+                                                mc_rs_proto::packets::player::ItemStack::AIR
+                                            } else {
+                                                let mut n = cur.clone();
+                                                n.count = next;
+                                                n
+                                            };
+                                            conn.inventory_manager.set_slot(
+                                                &mut conn.inventory,
+                                                crate::inventory_manager::InvKey::Main,
+                                                slot,
+                                                new_item,
+                                            );
+                                        }
+                                    }
+                                } else if crate::item_registry::network_id("minecraft:shears")
+                                    == Some(held_id)
+                                {
+                                    // Tonte d'un mouton : laine + flag SHEARED.
+                                    let sheep_pos = mob_entities
+                                        .all()
+                                        .find(|e| {
+                                            e.base.entity_runtime_id == attack.target_runtime_id
+                                        })
+                                        .map(|e| e.base.position);
+                                    if let (Some(pos), Some((drops, meta_bytes))) = (
+                                        sheep_pos,
+                                        mob_entities.shear_sheep(attack.target_runtime_id),
+                                    ) {
+                                        // SetActorData (flag SHEARED) aux viewers.
+                                        let unique = attack.target_runtime_id as i64;
+                                        for (a, c) in connections.iter_mut() {
+                                            if c.is_in_game()
+                                                && c.visible_entities.contains(&unique)
+                                            {
+                                                let pkt = c.encode_compressed_packet(
+                                                    packet_id::SET_ACTOR_DATA,
+                                                    &meta_bytes,
+                                                );
+                                                let prep = c.prepare_for_send(pkt);
+                                                raknet.send_to_session(
+                                                    a,
+                                                    prep,
+                                                    Reliability::ReliableOrdered,
+                                                    true,
+                                                );
+                                            }
+                                        }
+                                        // Drop de la laine.
+                                        for drop in drops {
+                                            spawn_and_broadcast_item_entity(
+                                                "sheep-shear",
+                                                connections,
+                                                raknet,
+                                                item_entities,
+                                                PendingItemEntitySpawn::with_scatter(drop, pos),
+                                            );
+                                        }
+                                    }
+                                }
+                            }
                             continue;
                         }
 
@@ -2998,56 +3661,21 @@ fn process_peer_events(
                             continue;
                         }
 
-                        if let Some(result) =
-                            mob_entities.apply_attack(attack.target_runtime_id, 4.0)
-                        {
-                            let target_unique_id = attack.target_runtime_id as i64;
-                            if let Some(update_bytes) = result.update_attributes_packet {
-                                // Culling : un joueur qui ne voit pas le mob
-                                // n'a pas besoin de ses UpdateAttributes.
-                                for (other_addr, other_conn) in connections.iter_mut() {
-                                    if !other_conn.is_in_game() {
-                                        continue;
-                                    }
-                                    if !other_conn.visible_entities.contains(&target_unique_id) {
-                                        continue;
-                                    }
-                                    let pkt = other_conn.encode_compressed_packet(
-                                        packet_id::UPDATE_ATTRIBUTES,
-                                        &update_bytes,
-                                    );
-                                    let prepared = other_conn.prepare_for_send(pkt);
-                                    raknet.send_to_session(
-                                        other_addr,
-                                        prepared,
-                                        Reliability::ReliableOrdered,
-                                        true,
-                                    );
-                                }
-                            }
-
-                            if let Some(remove_bytes) = result.remove_packet {
-                                broadcast_entity_remove_culled(
-                                    connections,
-                                    raknet,
-                                    target_unique_id,
-                                    &remove_bytes,
-                                );
-                            }
-
-                            if let Some(death_position) = result.death_position {
-                                let log_context = format!("{addr}:mob-death");
-                                for drop in result.drops {
-                                    spawn_and_broadcast_item_entity(
-                                        &log_context,
-                                        connections,
-                                        raknet,
-                                        item_entities,
-                                        PendingItemEntitySpawn::with_scatter(drop, death_position),
-                                    );
-                                }
-                            }
-                        }
+                        // Dégâts joueur→mob (épée = 4.0 placeholder) : son + mort + drops.
+                        let attacker_pos = connections
+                            .get(&addr)
+                            .map(|c| c.position)
+                            .unwrap_or([0.0; 3]);
+                        apply_mob_damage_broadcast(
+                            mob_entities,
+                            connections,
+                            raknet,
+                            item_entities,
+                            attack.target_runtime_id,
+                            4.0,
+                        );
+                        // Knockback du mob (no-op s'il est mort).
+                        mob_entities.apply_knockback(attack.target_runtime_id, attacker_pos, 0.4);
                     }
                 }
                 SessionEvent::Disconnected => {

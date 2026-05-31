@@ -6,6 +6,43 @@ Avancer **phase par phase**, chaque phase est **testable et fonctionnelle** avan
 
 ---
 
+## Phase DIM : Dimensions (Nether / End) — ⬜ NON COMMENCÉE (chantier futur)
+
+**Contexte** — Le serveur est aujourd'hui **mono-dimension (overworld uniquement)** : `dimension_id`
+est codé en dur à 0, il n'y a ni `ChangeDimensionPacket`, ni génération Nether/End, ni portails
+fonctionnels. Conséquence directe : les mobs du Nether (blaze, ghast, piglin, hoglin, wither
+skeleton, zombified piglin…), de l'**End** (ender dragon, enderman, shulker) et les **guardians**
+(monument océanique) **existent et ont une IA correcte** mais **n'ont pas d'habitat naturel** — on ne
+peut les voir que via `/summon`. Certains pourraient même spawner à tort dans l'overworld (cf.
+« spawn par biome »).
+
+**Objectif** — Implémenter les 3 dimensions vanilla + le voyage entre elles.
+
+**À faire :**
+- [ ] `ChangeDimensionPacket` (proto) + state machine de transfert (dim_id, position, fade).
+- [ ] Mondes séparés par dimension (overworld / nether / end) : `ChunkCache` + LevelDB par dimension
+      (la clé LevelDB inclut déjà un dimension-id, cf. `21-ANALYSER-MC-WORLD.md`).
+- [ ] Génération **Nether** (réf PMMP `Nether.php`, cf. `14-WORLD-GENERATION.md` §89) + biomes nether
+      (brancher le module dormant `nether_biomes`).
+- [ ] Génération **End** : île centrale (obsidian pillars + end crystals + fountain) + îles externes
+      (`end_islands`) + `end_city` (modules dormants).
+- [ ] Portails : **nether portal** (allumage obsidienne + flint&steel, liaison overworld↔nether avec
+      ratio 1:8 via `dimensions::nether_portal_coordinate` déjà présent), **end portal** (cadre +
+      eyes of ender, `end_portal`/`end_features` dormants), **end gateway** (`end_gateway` dormant).
+- [ ] Spawn des mobs **gaté par dimension/biome** (nether mobs uniquement au nether, dragon/enderman/
+      shulker à l'End, guardian dans les `ocean_monument`).
+- [ ] Combat de l'ender dragon « complet » : end crystals qui le soignent + invulnérabilité tant
+      qu'ils existent (les **phases** vol/strafe sont déjà faites côté IA).
+
+**Dépendances / briques dormantes à réutiliser** (catalogue « Phase LIB » plus bas) :
+`nether_biomes`, `ocean_monument`, `nether_fortress`, `bastion_remnant`, `end_islands`, `end_city`,
+`stronghold`, `end_portal`, `end_gateway`, `nether_portal_spawn`, `obsidian_pillar`, `dragon_egg`.
+
+**Note** — Chantier **distinct de l'IA des mobs** (qui est, elle, essentiellement terminée — cf.
+[`18-MOB-AI-PROGRESS.md`](18-MOB-AI-PROGRESS.md)). L'IA est prête à accueillir ces dimensions.
+
+---
+
 ## Phase INV : Port intégral InventoryManager PMMP — ✅ TERMINÉE
 
 **Documents de référence :**
@@ -143,8 +180,20 @@ Tests E2E manuels validés avec client Bedrock 1.26.10 (test playtest 2026-04-21
 ### Modules branchés (utilisés en runtime)
 - [x] `mob_hp` → source autoritaire pour `MobKind::max_health()` (60+ mobs au lieu de 7 hardcodés)
 - [x] `stack_sizes` → max stack dynamique dans `PlayerInventory::add_item` (swords=1, pearls=16, stone=64)
+- [x] **IA des mobs** → framework générique `crate::ai::` branché dans la game loop
+  (sensors → behaviors priorisés → controllers, navigation A\* au sol). Hostiles
+  zombie/skeleton/creeper traquent et combattent le joueur ; passifs errent et fuient.
+  Réf = Allay. **Doc dédiée : [`18-MOB-AI.md`](18-MOB-AI.md)**. Impacts sur ce catalogue :
+  - `ai_states` → **supprimé** (remplacé par `ai/`).
+  - `pathfinder` → **remplacé** par `ai/route.rs` (l'ancien `pathfinder.rs` n'est plus utilisé).
+  - `arrow` → un **nouveau** `arrow_entity.rs` (projectile vivant) a été créé pour le tir du
+    squelette ; le module dormant `arrow.rs` (modèle de données) reste non branché.
+  - Mobs `zombie`/`skeleton`/`creeper` : restent des structs de données, mais leur **IA est
+    désormais active** via le framework générique sur `mob_entities::MobEntity`.
 
 ### Modules dormants (créés mais non branchés) — Catalogue
+> ⚠️ Les entrées **Mobs**, `ai_states`, `pathfinder` et `arrow` ci-dessous sont partiellement
+> périmées : voir la note « IA des mobs » dans *Modules branchés*.
 Le code est présent dans `crates/mc-rs-server/src/`, les tests passent isolément, **mais aucun consommateur runtime** ne les appelle encore. Les brancher demandera pour chacun un travail d'intégration concret (handlers, packets, ticks).
 
 **Combat / santé / effets**

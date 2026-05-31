@@ -36,6 +36,64 @@ pub fn death_animation(runtime_entity_id: u64) -> Vec<u8> {
     encode_actor_event(runtime_entity_id, actor_event::DEATH_ANIMATION, 0)
 }
 
+// ── BossEvent (S→C, 0x4A) ───────────────────────────────────────────────────
+
+/// `BossEventPacket` — barre de boss. Format PMMP `BossEventPacket::encodePayload`.
+pub mod boss_event {
+    pub const TYPE_SHOW: u32 = 0;
+    pub const TYPE_HIDE: u32 = 2;
+    pub const TYPE_HEALTH_PERCENT: u32 = 4;
+    // Couleurs de barre (BossBarColor) : 0=rose, 1=bleu, 2=rouge, 3=vert,
+    // 4=jaune, 5=violet, 6=blanc.
+    pub const COLOR_PINK: u32 = 0;
+    pub const COLOR_PURPLE: u32 = 5;
+}
+
+/// SHOW : crée/montre la barre (titre + santé% + couleur, écran assombri).
+pub fn boss_show(boss_unique_id: i64, title: &str, health_percent: f32, color: u32) -> Vec<u8> {
+    let mut w = ProtoWriter::with_capacity(48);
+    w.write_var_i64(boss_unique_id); // ActorUniqueId (zigzag varlong)
+    w.write_var_u32(boss_event::TYPE_SHOW);
+    w.write_string(title);
+    w.write_string(""); // filteredTitle
+    w.write_f32_le(health_percent);
+    w.write_u16_le(1); // darkenScreen
+    w.write_var_u32(color);
+    w.write_var_u32(0); // overlay
+    w.into_bytes()
+}
+
+/// HEALTH_PERCENT : met à jour la santé de la barre.
+pub fn boss_health(boss_unique_id: i64, health_percent: f32) -> Vec<u8> {
+    let mut w = ProtoWriter::with_capacity(16);
+    w.write_var_i64(boss_unique_id);
+    w.write_var_u32(boss_event::TYPE_HEALTH_PERCENT);
+    w.write_f32_le(health_percent);
+    w.into_bytes()
+}
+
+/// HIDE : retire la barre.
+pub fn boss_hide(boss_unique_id: i64) -> Vec<u8> {
+    let mut w = ProtoWriter::with_capacity(8);
+    w.write_var_i64(boss_unique_id);
+    w.write_var_u32(boss_event::TYPE_HIDE);
+    w.into_bytes()
+}
+
+// ── Animate (S→C, 0x2C) ─────────────────────────────────────────────────────
+
+/// `AnimatePacket` (protocol 975) : u8 action, VarU64 actorRuntimeId, f32 LE
+/// data, optional string swingSource. Réf PMMP `AnimatePacket::encodePayload`.
+pub fn arm_swing(runtime_entity_id: u64) -> Vec<u8> {
+    const ACTION_SWING_ARM: u8 = 1;
+    let mut w = ProtoWriter::with_capacity(16);
+    w.write_u8(ACTION_SWING_ARM);
+    w.write_var_u64(runtime_entity_id);
+    w.write_f32_le(0.0);
+    w.write_bool(false); // pas de swingSource (Optional = false)
+    w.into_bytes()
+}
+
 // ── Respawn (S→C, 0x2D) ─────────────────────────────────────────────────────
 
 /// PMMP `RespawnPacket::STATE_*`.
@@ -86,5 +144,15 @@ mod tests {
         let bytes = encode_respawn([1.0, 64.0, 2.0], respawn_state::READY_TO_SPAWN, 1);
         // 3 f32 (12) + u8 (1) + VarU64(1) (1) = 14
         assert_eq!(bytes.len(), 14);
+    }
+
+    #[test]
+    fn boss_event_encoding() {
+        // HIDE(id=1) = ActorUniqueId zigzag(1)=2 (0x02) + eventType VarU32(2) (0x02).
+        assert_eq!(boss_hide(1), vec![0x02, 0x02]);
+        // HEALTH_PERCENT = id + type(4) + f32 → 2 + 4 = 6 octets.
+        assert_eq!(boss_health(1, 0.5).len(), 6);
+        // SHOW est plus long (titre + santé + couleur + overlay).
+        assert!(boss_show(1, "Wither", 1.0, 5).len() > boss_health(1, 1.0).len());
     }
 }
