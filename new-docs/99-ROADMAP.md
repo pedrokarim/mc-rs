@@ -143,8 +143,20 @@ Tests E2E manuels validés avec client Bedrock 1.26.10 (test playtest 2026-04-21
 ### Modules branchés (utilisés en runtime)
 - [x] `mob_hp` → source autoritaire pour `MobKind::max_health()` (60+ mobs au lieu de 7 hardcodés)
 - [x] `stack_sizes` → max stack dynamique dans `PlayerInventory::add_item` (swords=1, pearls=16, stone=64)
+- [x] **IA des mobs** → framework générique `crate::ai::` branché dans la game loop
+  (sensors → behaviors priorisés → controllers, navigation A\* au sol). Hostiles
+  zombie/skeleton/creeper traquent et combattent le joueur ; passifs errent et fuient.
+  Réf = Allay. **Doc dédiée : [`18-MOB-AI.md`](18-MOB-AI.md)**. Impacts sur ce catalogue :
+  - `ai_states` → **supprimé** (remplacé par `ai/`).
+  - `pathfinder` → **remplacé** par `ai/route.rs` (l'ancien `pathfinder.rs` n'est plus utilisé).
+  - `arrow` → un **nouveau** `arrow_entity.rs` (projectile vivant) a été créé pour le tir du
+    squelette ; le module dormant `arrow.rs` (modèle de données) reste non branché.
+  - Mobs `zombie`/`skeleton`/`creeper` : restent des structs de données, mais leur **IA est
+    désormais active** via le framework générique sur `mob_entities::MobEntity`.
 
 ### Modules dormants (créés mais non branchés) — Catalogue
+> ⚠️ Les entrées **Mobs**, `ai_states`, `pathfinder` et `arrow` ci-dessous sont partiellement
+> périmées : voir la note « IA des mobs » dans *Modules branchés*.
 Le code est présent dans `crates/mc-rs-server/src/`, les tests passent isolément, **mais aucun consommateur runtime** ne les appelle encore. Les brancher demandera pour chacun un travail d'intégration concret (handlers, packets, ticks).
 
 **Combat / santé / effets**

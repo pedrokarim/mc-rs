@@ -92,11 +92,12 @@ powershell -Command "Get-Process mc-rs-server -ErrorAction SilentlyContinue | St
 - SetActorData avec flags (BREATHING, HAS_GRAVITY, HAS_COLLISION)
 - IA des mobs : framework générique inspiré d'Allay dans `crates/mc-rs-server/src/ai/`
   (sensors → behaviors priorisés → controllers, mémoire typée, navigation A\* au sol).
-  Hostiles (zombie/skeleton/creeper) traquent le joueur via A\* (step-up/saut) et
-  l'attaquent en mêlée (dégâts via `combat::attack_entity`) ; passifs errent et fuient
-  quand blessés. Collision horizontale + step-up dans la physique des mobs. Référence =
-  Allay (`.reference/Allay/.../entity/ai/`), car PMMP n'a pas d'IA de mobs.
-  Skeleton-arc / Creeper-explosion = follow-ups non faits.
+  Hostiles traquent le joueur via A\* (step-up/saut) : **zombie** mêlée, **skeleton** tir à
+  l'arc (entité flèche `arrow_entity.rs`, kite + visée balistique), **creeper** explosion
+  (`explosion.rs` : destruction de blocs + dégâts radiaux). Passifs errent et fuient quand
+  blessés. Collision horizontale + step-up dans la physique des mobs. Réf = Allay
+  (`.reference/Allay/.../entity/ai/`), car PMMP n'a pas d'IA de mobs. **Doc : `new-docs/18-MOB-AI.md`**.
+  Follow-ups restants : son/particule (explosion/flèche), dégâts par difficulté, lissage de chemin.
 
 ### Bugs connus
 - **Gel per-connexion** : RÉSOLU (2026-05-19). Cause = fenêtre reliable RakNet
