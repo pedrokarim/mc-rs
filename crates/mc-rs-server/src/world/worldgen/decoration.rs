@@ -50,6 +50,14 @@ struct Pal {
     red_mushroom: u32,
     pumpkin: u32,
     melon: u32,
+    glow_lichen: u32,
+    leaf_litter: u32,
+    bush: u32,
+    berry_bush: u32,
+    snow_layer: u32,
+    ice: u32,
+    stone: u32,
+    deepslate: u32,
 }
 
 // Indices d'espèce dans logs/leaves.
@@ -124,6 +132,14 @@ impl Pal {
             red_mushroom: g("minecraft:red_mushroom"),
             pumpkin: g("minecraft:pumpkin"),
             melon: g("minecraft:melon_block"),
+            glow_lichen: g("minecraft:glow_lichen"),
+            leaf_litter: g("minecraft:leaf_litter"),
+            bush: g("minecraft:bush"),
+            berry_bush: g("minecraft:sweet_berry_bush"),
+            snow_layer: g("minecraft:snow_layer"),
+            ice: g("minecraft:ice"),
+            stone: BLOCKS.stone,
+            deepslate: g("minecraft:deepslate"),
         }
     }
 }
@@ -741,6 +757,88 @@ fn decorate_vines(
     }
 }
 
+/// Biomes froids (neige/glace en surface) — même ensemble que les surface rules.
+fn is_cold(biome: &str) -> bool {
+    matches!(
+        biome,
+        "minecraft:snowy_plains"
+            | "minecraft:ice_spikes"
+            | "minecraft:snowy_taiga"
+            | "minecraft:snowy_beach"
+            | "minecraft:grove"
+            | "minecraft:snowy_slopes"
+            | "minecraft:frozen_peaks"
+            | "minecraft:jagged_peaks"
+            | "minecraft:frozen_ocean"
+            | "minecraft:deep_frozen_ocean"
+            | "minecraft:frozen_river"
+    )
+}
+
+/// Feature vanilla `glow_lichen` : count 104-157, accroché sur une face de
+/// pierre/deepslate exposée (grottes), toute la hauteur.
+fn decorate_glow_lichen(grid: &mut [u32], pal: &Pal, rng: &mut Random) {
+    let count = 104 + rng.next_bounded_int(54);
+    for _ in 0..count {
+        let lx = rng.next_bounded_int(16);
+        let lz = rng.next_bounded_int(16);
+        let wy = MIN_Y + 4 + rng.next_bounded_int(180); // ~ -60..120
+        if at(grid, lx, wy, lz) != pal.air {
+            continue;
+        }
+        for (dx, dy, dz) in [
+            (1, 0, 0),
+            (-1, 0, 0),
+            (0, 1, 0),
+            (0, -1, 0),
+            (0, 0, 1),
+            (0, 0, -1),
+        ] {
+            let nb = at(grid, lx + dx, wy + dy, lz + dz);
+            if nb == pal.stone || nb == pal.deepslate {
+                if let Some(i) = idx_ok(lx, wy, lz) {
+                    grid[i] = pal.glow_lichen;
+                }
+                break;
+            }
+        }
+    }
+}
+
+/// `freeze_top_layer` : neige au sol des biomes froids + glace sur l'eau.
+fn decorate_snow(
+    grid: &mut [u32],
+    pal: &Pal,
+    biome_idx: &[[u16; 16]; 16],
+    biome_names: &[String],
+    surfaces: &[[i32; 16]; 16],
+) {
+    let biome_at = |lx: usize, lz: usize| -> &str { &biome_names[biome_idx[lx][lz] as usize] };
+    for lx in 0..16i32 {
+        for lz in 0..16i32 {
+            if !is_cold(biome_at(lx as usize, lz as usize)) {
+                continue;
+            }
+            let ground = surfaces[lx as usize][lz as usize];
+            if ground > SEA_LEVEL {
+                // Neige sur le sol exposé.
+                if at(grid, lx, ground + 1, lz) == pal.air {
+                    if let Some(i) = idx_ok(lx, ground + 1, lz) {
+                        grid[i] = pal.snow_layer;
+                    }
+                }
+            } else if at(grid, lx, SEA_LEVEL, lz) == pal.water
+                && at(grid, lx, SEA_LEVEL + 1, lz) == pal.air
+            {
+                // Surface d'eau gelée.
+                if let Some(i) = idx_ok(lx, SEA_LEVEL, lz) {
+                    grid[i] = pal.ice;
+                }
+            }
+        }
+    }
+}
+
 /// Point d'entrée : décore un chunk déjà terrassé + habillé en surface.
 pub fn decorate(
     grid: &mut [u32],
@@ -834,6 +932,12 @@ pub fn decorate(
 
     // ── Aquatique : kelp / seagrass / coraux ──
     decorate_aquatic(grid, &pal, biome_idx, biome_names, surfaces, &mut rng);
+
+    // ── Glow lichen (grottes) ──
+    decorate_glow_lichen(grid, &pal, &mut rng);
+
+    // ── Neige/glace (biomes froids), en dernier (top layer) ──
+    decorate_snow(grid, &pal, biome_idx, biome_names, surfaces);
 }
 
 fn decorate_special(
@@ -957,6 +1061,36 @@ fn decorate_special(
                 plant(grid, pal, lx, ground + 1, lz, pal.melon);
             }
         }
+    }
+
+    // Leaf litter au sol des forêts (sous les arbres).
+    let has_forest = (0..16).any(|x| (0..16).any(|z| biome_at(x, z).contains("forest")));
+    if has_forest {
+        for _ in 0..24 {
+            let lx = rng.next_bounded_int(16);
+            let lz = rng.next_bounded_int(16);
+            if !biome_at(lx as usize, lz as usize).contains("forest") {
+                continue;
+            }
+            on_grass(grid, rng, pal.leaf_litter);
+        }
+    }
+
+    // Buissons (`patch_bush`, officiel 1/4) — petit patch sur l'herbe.
+    if rng.next_bounded_int(4) == 0 {
+        for _ in 0..(2 + rng.next_bounded_int(4)) {
+            on_grass(grid, rng, pal.bush);
+        }
+    }
+
+    // Buissons de baies (taïga).
+    for _ in 0..3 {
+        let lx = rng.next_bounded_int(16);
+        let lz = rng.next_bounded_int(16);
+        if !biome_at(lx as usize, lz as usize).contains("taiga") {
+            continue;
+        }
+        on_grass(grid, rng, pal.berry_bush);
     }
 }
 
@@ -1106,6 +1240,18 @@ mod tests {
         let pal = Pal::new();
         let vines = grid.iter().filter(|&&b| b == pal.vine).count();
         assert!(vines > 20, "jungle trop pauvre en lianes: {vines}");
+    }
+
+    #[test]
+    fn cold_biome_gets_snow_layer() {
+        let names = vec!["minecraft:snowy_plains".to_string()];
+        let (mut grid, idx, surf) = flat_chunk(80, 0);
+        decorate(&mut grid, 1, 0, 0, &idx, &names, &surf);
+        let pal = Pal::new();
+        assert!(
+            grid.contains(&pal.snow_layer),
+            "pas de neige en biome froid"
+        );
     }
 
     #[test]
