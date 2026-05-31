@@ -225,6 +225,9 @@ pub struct BowAttackExecutor {
     damage: f32,
     cooldown: u32,
     draw_tick: u32,
+    /// `Some(actor_type)` → lance ce projectile (ex potion de sorcière) au lieu
+    /// d'une flèche.
+    thrown: Option<&'static str>,
 }
 
 impl BowAttackExecutor {
@@ -237,6 +240,30 @@ impl BowAttackExecutor {
         damage: f32,
         cooldown: u32,
     ) -> Self {
+        Self::with_projectile(
+            speed,
+            max_sense_range,
+            min_range,
+            shoot_range,
+            arrow_speed,
+            damage,
+            cooldown,
+            None,
+        )
+    }
+
+    /// Variante lançant un projectile nommé (ex sorcière qui jette des potions).
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_projectile(
+        speed: f32,
+        max_sense_range: f64,
+        min_range: f64,
+        shoot_range: f64,
+        arrow_speed: f32,
+        damage: f32,
+        cooldown: u32,
+        thrown: Option<&'static str>,
+    ) -> Self {
         Self {
             speed,
             max_sense_range_sq: max_sense_range * max_sense_range,
@@ -246,6 +273,7 @@ impl BowAttackExecutor {
             damage,
             cooldown,
             draw_tick: 0,
+            thrown,
         }
     }
 }
@@ -310,12 +338,21 @@ impl Executor for BowAttackExecutor {
                 let vx = dx / dist * self.arrow_speed;
                 let vz = dz / dist * self.arrow_speed;
                 let vy = dy / dist * self.arrow_speed + 0.5 * ARROW_GRAVITY_COMP * flight_ticks;
-                ctx.effects.push(AiEffect::ShootArrow {
-                    shooter_runtime_id: ctx.base.entity_runtime_id,
-                    from,
-                    velocity: [vx, vy, vz],
-                    damage: self.damage,
-                });
+                match self.thrown {
+                    Some(actor_type) => ctx.effects.push(AiEffect::ShootFireball {
+                        shooter_runtime_id: ctx.base.entity_runtime_id,
+                        from,
+                        velocity: [vx, vy, vz],
+                        damage: self.damage,
+                        actor_type,
+                    }),
+                    None => ctx.effects.push(AiEffect::ShootArrow {
+                        shooter_runtime_id: ctx.base.entity_runtime_id,
+                        from,
+                        velocity: [vx, vy, vz],
+                        damage: self.damage,
+                    }),
+                }
             }
         }
 

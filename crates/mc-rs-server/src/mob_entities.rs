@@ -87,6 +87,7 @@ pub enum MobKind {
     Stray,
     Bogged,
     Pillager,
+    Witch,
     // Hostile spécial
     Creeper,
     Slime,
@@ -156,6 +157,7 @@ impl MobKind {
         Self::Stray,
         Self::Bogged,
         Self::Pillager,
+        Self::Witch,
         Self::Creeper,
         Self::Slime,
         Self::MagmaCube,
@@ -235,6 +237,7 @@ impl MobKind {
             Self::Stray => d!("minecraft:stray", "Stray", 0.6, 1.9, Hostile, Bow, 0.0, 0.25, &[]),
             Self::Bogged => d!("minecraft:bogged", "Bogged", 0.6, 1.9, Hostile, Bow, 0.0, 0.25, &[]),
             Self::Pillager => d!("minecraft:pillager", "Pillager", 0.6, 1.95, Hostile, Bow, 0.0, 0.35, &[]),
+            Self::Witch => d!("minecraft:witch", "Witch", 0.6, 1.95, Hostile, Bow, 0.0, 0.25, &[]),
             Self::Creeper => d!("minecraft:creeper", "Creeper", 0.6, 1.7, Hostile, CreeperSwell, 0.0, 0.25, &[]),
             Self::Slime => d!("minecraft:slime", "Slime", 1.02, 1.02, Hostile, Melee, 2.0, 0.2, &[]),
             Self::MagmaCube => d!("minecraft:magma_cube", "Magma Cube", 1.02, 1.02, Hostile, Melee, 4.0, 0.2, &[]),

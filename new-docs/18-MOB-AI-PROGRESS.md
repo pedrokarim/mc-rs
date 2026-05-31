@@ -102,8 +102,10 @@ demandent **chacun une mécanique bespoke** :
   diffuse SHOW (porte la santé) chaque tick + HIDE à la disparition. Follow-ups : séquence de spawn
   du wither + armure, phases/end-crystals du dragon, hitbox multi-parties.
 
+- ✅ **Vague 8 — Witch** : jet de potions (Bow généralisé → `with_projectile` émet un projectile
+  potion au lieu d'une flèche). Immunité aux potions = follow-up.
+
 ### Vagues restantes (mécaniques bespoke)
-- ⬜ **Witch** : jet de potions (projectile arcé) + immunité aux potions.
 - ⬜ **Shulker** : stationnaire, projectile à tête chercheuse.
 - ⬜ **Guardian/Elder Guardian** : rayon laser + nage dédiée (aquatique).
 - ⬜ **Breeze** (wind charge), **warden** (capteur de vibrations + sonic boom), **creaking**.
