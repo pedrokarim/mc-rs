@@ -36,6 +36,20 @@ pub fn death_animation(runtime_entity_id: u64) -> Vec<u8> {
     encode_actor_event(runtime_entity_id, actor_event::DEATH_ANIMATION, 0)
 }
 
+// ── Animate (S→C, 0x2C) ─────────────────────────────────────────────────────
+
+/// `AnimatePacket` (protocol 975) : u8 action, VarU64 actorRuntimeId, f32 LE
+/// data, optional string swingSource. Réf PMMP `AnimatePacket::encodePayload`.
+pub fn arm_swing(runtime_entity_id: u64) -> Vec<u8> {
+    const ACTION_SWING_ARM: u8 = 1;
+    let mut w = ProtoWriter::with_capacity(16);
+    w.write_u8(ACTION_SWING_ARM);
+    w.write_var_u64(runtime_entity_id);
+    w.write_f32_le(0.0);
+    w.write_bool(false); // pas de swingSource (Optional = false)
+    w.into_bytes()
+}
+
 // ── Respawn (S→C, 0x2D) ─────────────────────────────────────────────────────
 
 /// PMMP `RespawnPacket::STATE_*`.

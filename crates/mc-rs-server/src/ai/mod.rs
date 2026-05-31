@@ -103,7 +103,13 @@ pub struct ControlCtx<'a> {
 
 /// Capte l'environnement et écrit dans la mémoire (port `Sensor`).
 pub trait Sensor: Send {
-    fn sense(&mut self, memory: &mut Memory, base: &EntityBase, players: &[PlayerSnapshot]);
+    fn sense(
+        &mut self,
+        memory: &mut Memory,
+        base: &EntityBase,
+        players: &[PlayerSnapshot],
+        chunk_cache: &mut ChunkCache,
+    );
     /// Période d'échantillonnage en ticks (>= 1).
     fn period(&self) -> u32 {
         1
@@ -185,7 +191,7 @@ impl BehaviorGroup {
         chunk_cache: &mut ChunkCache,
         effects: &mut Vec<AiEffect>,
     ) {
-        self.collect_sensors(memory, base, players);
+        self.collect_sensors(memory, base, players, chunk_cache);
         self.evaluate_core(memory, base, players);
         self.evaluate_normal(memory, base, players);
         self.execute_running(base, kind, memory, players, effects);
@@ -193,12 +199,18 @@ impl BehaviorGroup {
         self.apply_controllers(base, kind, memory, chunk_cache);
     }
 
-    fn collect_sensors(&mut self, memory: &mut Memory, base: &EntityBase, players: &[PlayerSnapshot]) {
+    fn collect_sensors(
+        &mut self,
+        memory: &mut Memory,
+        base: &EntityBase,
+        players: &[PlayerSnapshot],
+        chunk_cache: &mut ChunkCache,
+    ) {
         for slot in self.sensors.iter_mut() {
             slot.counter += 1;
             if slot.counter >= slot.sensor.period() {
                 slot.counter = 0;
-                slot.sensor.sense(memory, base, players);
+                slot.sensor.sense(memory, base, players, chunk_cache);
             }
         }
     }

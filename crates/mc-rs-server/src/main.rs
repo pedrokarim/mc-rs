@@ -2108,6 +2108,14 @@ async fn main() {
                                 target_runtime_id,
                                 damage,
                             } => {
+                                // Animation de swing du bras (mêlée uniquement).
+                                let swing = crate::combat_packets::arm_swing(attacker_runtime_id);
+                                broadcast_packet_all(
+                                    &mut connections,
+                                    &mut raknet,
+                                    packet_id::ANIMATE,
+                                    &swing,
+                                );
                                 apply_mob_attack_to_player(
                                     &mut connections,
                                     &mut raknet,
