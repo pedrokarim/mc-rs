@@ -4,7 +4,8 @@
 use super::behavior::{AlwaysEvaluator, Behavior, FnEvaluator};
 use super::controller::{LookController, WalkController};
 use super::executor::{
-    CreeperSwellExecutor, FlatRandomRoamExecutor, MeleeAttackExecutor, PanicFleeExecutor,
+    BowAttackExecutor, CreeperSwellExecutor, FlatRandomRoamExecutor, MeleeAttackExecutor,
+    PanicFleeExecutor,
 };
 use super::sensor::NearestPlayerSensor;
 use super::{BehaviorGroup, Controller, Sensor};
@@ -21,6 +22,13 @@ const ROAM_RANGE: i32 = 8;
 /// Creeper : portée d'amorçage et durée de fuse (ticks 20 TPS → 1.5 s, vanilla).
 const CREEPER_IGNITE_RANGE: f64 = 3.0;
 const CREEPER_FUSE_TICKS: u32 = 30;
+/// Skeleton (arc) : on recule sous `MIN`, on s'approche au-delà de `SHOOT`,
+/// on tire entre les deux. Vitesse de flèche et dégâts/cooldown.
+const BOW_MIN_RANGE: f64 = 4.0;
+const BOW_SHOOT_RANGE: f64 = 12.0;
+const BOW_ARROW_SPEED: f32 = 1.4;
+const BOW_ARROW_DAMAGE: f32 = 3.0;
+const BOW_COOLDOWN: u32 = 30;
 
 /// Construit le groupe de behaviors adapté à l'espèce.
 pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
@@ -48,6 +56,21 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
                     kind.sight_range(),
                     CREEPER_IGNITE_RANGE,
                     CREEPER_FUSE_TICKS,
+                )),
+                PRIO_COMBAT,
+                1,
+            )
+        } else if matches!(kind, MobKind::Skeleton) {
+            Behavior::new(
+                Box::new(FnEvaluator(|m, _, _| m.nearest_player.is_some())),
+                Box::new(BowAttackExecutor::new(
+                    speed,
+                    kind.sight_range(),
+                    BOW_MIN_RANGE,
+                    BOW_SHOOT_RANGE,
+                    BOW_ARROW_SPEED,
+                    BOW_ARROW_DAMAGE,
+                    BOW_COOLDOWN,
                 )),
                 PRIO_COMBAT,
                 1,

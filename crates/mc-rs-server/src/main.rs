@@ -41,6 +41,7 @@ pub mod armor_stand;
 pub mod armor_tier;
 #[allow(dead_code)]
 pub mod arrow;
+pub mod arrow_entity;
 #[allow(dead_code)]
 pub mod arrow_pickup;
 #[allow(dead_code)]
@@ -1164,6 +1165,7 @@ async fn main() {
     let mut registry = PlayerRegistry::new();
     let mut item_entities = ItemEntityManager::new();
     let mut mob_entities = MobEntityManager::new();
+    let mut arrow_manager = crate::arrow_entity::ArrowEntityManager::new();
     let mut furnace_manager = crate::furnace::FurnaceManager::new();
     let mut chest_manager = crate::chest_storage::ChestManager::new();
     let mut sign_manager = crate::sign_storage::SignManager::new();
@@ -2115,7 +2117,63 @@ async fn main() {
                                     center,
                                 );
                             }
+                            crate::ai::AiEffect::ShootArrow {
+                                shooter_runtime_id,
+                                from,
+                                velocity,
+                                damage,
+                            } => {
+                                // Spawn dans le manager : l'AddActor est broadcast
+                                // par la diffusion de mouvement cullée au tick suivant.
+                                arrow_manager.spawn(from, velocity, damage, shooter_runtime_id);
+                            }
                         }
+                    }
+                }
+
+                // Tick des flèches (projectiles de squelette) : mouvement,
+                // despawn, et dégâts aux joueurs touchés (réutilise le chemin combat).
+                let arrow_players: Vec<(u64, [f32; 3])> = player_snapshots
+                    .iter()
+                    .filter(|p| p.is_attackable())
+                    .map(|p| (p.runtime_id, p.position))
+                    .collect();
+                let arrow_result = if let Ok(mut cache) = chunk_cache.lock() {
+                    Some(arrow_manager.tick(&mut cache, &arrow_players))
+                } else {
+                    None
+                };
+                if let Some(ar) = arrow_result {
+                    for update in ar.movement_updates {
+                        broadcast_entity_movement_culled(
+                            &mut connections,
+                            &mut raknet,
+                            &update.add_packet,
+                            packet_id::ADD_ACTOR,
+                            &update.move_packet,
+                            &update.motion_packet,
+                            update.entity_unique_id,
+                            update.entity_position,
+                        );
+                    }
+                    for arrow in ar.despawned {
+                        let remove_bytes = arrow.remove_packet();
+                        broadcast_entity_remove_culled(
+                            &mut connections,
+                            &mut raknet,
+                            arrow.base.entity_unique_id,
+                            &remove_bytes,
+                        );
+                    }
+                    for hit in ar.hits {
+                        apply_mob_attack_to_player(
+                            &mut connections,
+                            &mut raknet,
+                            hit.shooter_runtime_id,
+                            hit.from_position,
+                            hit.target_runtime_id,
+                            hit.damage,
+                        );
                     }
                 }
 

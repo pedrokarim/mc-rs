@@ -70,6 +70,14 @@ pub enum AiEffect {
         attacker_runtime_id: u64,
         center: [f32; 3],
     },
+    /// Le mob `shooter_runtime_id` tire une flèche depuis `from` avec la vélocité
+    /// `velocity` (squelette). `main.rs` spawn l'entité flèche correspondante.
+    ShootArrow {
+        shooter_runtime_id: u64,
+        from: [f32; 3],
+        velocity: [f32; 3],
+        damage: f32,
+    },
 }
 
 /// Contexte passé aux executors : état mutable du mob, monde en lecture seule

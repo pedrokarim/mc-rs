@@ -205,6 +205,132 @@ impl Executor for CreeperSwellExecutor {
 }
 
 // ---------------------------------------------------------------------------
+// Skeleton : tir à l'arc (kite + visée balistique)
+// ---------------------------------------------------------------------------
+
+/// Hauteur des yeux du tireur (≈ skeleton).
+const SHOOTER_EYE: f32 = 1.62;
+/// Gravité d'une flèche (doit correspondre à `arrow_entity::ARROW_GRAVITY`),
+/// utilisée pour compenser la chute lors de la visée.
+const ARROW_GRAVITY_COMP: f32 = 0.05;
+
+/// Le squelette garde ses distances (recule si trop près, s'approche si trop
+/// loin), vise le joueur et tire des flèches via [`AiEffect::ShootArrow`].
+pub struct BowAttackExecutor {
+    speed: f32,
+    max_sense_range_sq: f64,
+    min_range_sq: f64,
+    shoot_range_sq: f64,
+    arrow_speed: f32,
+    damage: f32,
+    cooldown: u32,
+    draw_tick: u32,
+}
+
+impl BowAttackExecutor {
+    pub fn new(
+        speed: f32,
+        max_sense_range: f64,
+        min_range: f64,
+        shoot_range: f64,
+        arrow_speed: f32,
+        damage: f32,
+        cooldown: u32,
+    ) -> Self {
+        Self {
+            speed,
+            max_sense_range_sq: max_sense_range * max_sense_range,
+            min_range_sq: min_range * min_range,
+            shoot_range_sq: shoot_range * shoot_range,
+            arrow_speed,
+            damage,
+            cooldown,
+            draw_tick: 0,
+        }
+    }
+}
+
+impl Executor for BowAttackExecutor {
+    fn on_start(&mut self, memory: &mut Memory, _base: &mut EntityBase) {
+        self.draw_tick = 0;
+        memory.movement_speed = self.speed;
+    }
+
+    fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
+        let Some(target_id) = ctx.memory.nearest_player else {
+            return false;
+        };
+        let Some(tpos) = player_pos(ctx.players, target_id) else {
+            return false;
+        };
+        let d2 = dist_sq(ctx.base.position, tpos);
+        if d2 > self.max_sense_range_sq {
+            return false;
+        }
+
+        ctx.memory.look_target = Some([tpos[0] as f64, (tpos[1] + 1.62) as f64, tpos[2] as f64]);
+
+        if d2 < self.min_range_sq {
+            // Trop près : on recule (kite).
+            let dx = (ctx.base.position[0] - tpos[0]) as f64;
+            let dz = (ctx.base.position[2] - tpos[2]) as f64;
+            let len = (dx * dx + dz * dz).sqrt().max(0.001);
+            ctx.memory.move_target = Some([
+                ctx.base.position[0] as f64 + dx / len * 6.0,
+                ctx.base.position[1] as f64,
+                ctx.base.position[2] as f64 + dz / len * 6.0,
+            ]);
+            ctx.memory.route_update_required = true;
+            self.draw_tick = 0;
+        } else if d2 > self.shoot_range_sq {
+            // Trop loin : on s'approche.
+            ctx.memory.move_target = Some([tpos[0] as f64, tpos[1] as f64, tpos[2] as f64]);
+            ctx.memory.route_update_required = true;
+            self.draw_tick = 0;
+        } else {
+            // À bonne distance : on s'arrête, on bande l'arc, puis on tire.
+            ctx.memory.move_target = None;
+            ctx.memory.clear_move_direction();
+            self.draw_tick += 1;
+            if self.draw_tick >= self.cooldown {
+                self.draw_tick = 0;
+                let from = [
+                    ctx.base.position[0],
+                    ctx.base.position[1] + SHOOTER_EYE,
+                    ctx.base.position[2],
+                ];
+                let target = [tpos[0], tpos[1] + 1.0, tpos[2]];
+                let dx = target[0] - from[0];
+                let dy = target[1] - from[1];
+                let dz = target[2] - from[2];
+                let dist = (dx * dx + dy * dy + dz * dz).sqrt().max(0.001);
+                let horiz = (dx * dx + dz * dz).sqrt();
+                // Visée directe + compensation de la chute sur le temps de vol.
+                let flight_ticks = horiz / self.arrow_speed;
+                let vx = dx / dist * self.arrow_speed;
+                let vz = dz / dist * self.arrow_speed;
+                let vy = dy / dist * self.arrow_speed + 0.5 * ARROW_GRAVITY_COMP * flight_ticks;
+                ctx.effects.push(AiEffect::ShootArrow {
+                    shooter_runtime_id: ctx.base.entity_runtime_id,
+                    from,
+                    velocity: [vx, vy, vz],
+                    damage: self.damage,
+                });
+            }
+        }
+
+        true
+    }
+
+    fn on_stop(&mut self, memory: &mut Memory, _base: &mut EntityBase) {
+        self.draw_tick = 0;
+        memory.move_target = None;
+        memory.look_target = None;
+        memory.clear_move_direction();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Errance aléatoire — port `FlatRandomRoamExecutor`
 // ---------------------------------------------------------------------------
 
