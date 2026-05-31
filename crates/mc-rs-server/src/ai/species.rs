@@ -6,7 +6,7 @@ use super::controller::{FlyController, LookController, WalkController};
 use super::executor::{
     BowAttackExecutor, CreakingExecutor, CreeperSwellExecutor, DragonExecutor,
     FlatRandomRoamExecutor, FlyAttackExecutor, FlyRoamExecutor, FlyShootExecutor,
-    MeleeAttackExecutor, PanicFleeExecutor, TemptExecutor,
+    GuardianLaserExecutor, MeleeAttackExecutor, PanicFleeExecutor, TemptExecutor,
 };
 use super::sensor::NearestPlayerSensor;
 use super::{BehaviorGroup, Controller, Sensor};
@@ -28,6 +28,9 @@ const FLY_ROAM_RANGE: i32 = 10;
 /// Boules de feu : vitesse (blocs/tick) et cooldown de tir (ticks).
 const FIREBALL_SPEED: f32 = 0.8;
 const FIREBALL_COOLDOWN: u32 = 40;
+/// Guardian : distance de tir et durée de charge du rayon (ticks).
+const GUARDIAN_HOLD_RANGE: f64 = 10.0;
+const GUARDIAN_CHARGE_TICKS: u32 = 60;
 /// Creeper : portée d'amorçage et durée de fuse (ticks 20 TPS → 1.5 s, vanilla).
 const CREEPER_IGNITE_RANGE: f64 = 3.0;
 const CREEPER_FUSE_TICKS: u32 = 30;
@@ -86,16 +89,20 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
             // Certains lancent un projectile (potion, wind charge, bullet) au lieu
             // d'une flèche ; ceux-là frappent un peu plus fort, moins vite.
             let combat = match kind.thrown_projectile() {
-                Some(proj) => combat_behavior(Box::new(BowAttackExecutor::with_projectile(
-                    speed,
-                    kind.sight_range(),
-                    BOW_MIN_RANGE,
-                    BOW_SHOOT_RANGE,
-                    BOW_ARROW_SPEED,
-                    6.0,
-                    BOW_COOLDOWN + 20,
-                    Some(proj),
-                ))),
+                Some(proj) => {
+                    // La wind charge du breeze repousse fort mais blesse peu.
+                    let dmg = if matches!(kind, MobKind::Breeze) { 1.0 } else { 6.0 };
+                    combat_behavior(Box::new(BowAttackExecutor::with_projectile(
+                        speed,
+                        kind.sight_range(),
+                        BOW_MIN_RANGE,
+                        BOW_SHOOT_RANGE,
+                        BOW_ARROW_SPEED,
+                        dmg,
+                        BOW_COOLDOWN + 20,
+                        Some(proj),
+                    )))
+                }
                 None => combat_behavior(Box::new(BowAttackExecutor::new(
                     speed,
                     kind.sight_range(),
@@ -236,6 +243,18 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
                 PRIO_COMBAT,
                 1,
             );
+            let controllers: Vec<Box<dyn Controller>> = vec![Box::new(FlyController::new())];
+            BehaviorGroup::new(vec![], vec![combat], sensors, controllers, false)
+        }
+        AiProfile::GuardianLaser => {
+            // Aquatique : se tient à distance, charge un rayon, frappe. Nage 3D.
+            let combat = combat_behavior(Box::new(GuardianLaserExecutor::new(
+                speed,
+                kind.sight_range(),
+                GUARDIAN_HOLD_RANGE,
+                kind.attack_damage(),
+                GUARDIAN_CHARGE_TICKS,
+            )));
             let controllers: Vec<Box<dyn Controller>> = vec![Box::new(FlyController::new())];
             BehaviorGroup::new(vec![], vec![combat], sensors, controllers, false)
         }

@@ -39,6 +39,7 @@ pub enum AiProfile {
     FlyingMelee,   // vole et fonce sur le joueur (phantom/vex)
     Creaking,      // immobile quand un joueur le regarde, sinon fonce
     Dragon,        // ender dragon : cercle ↔ strafe + souffle (phases)
+    GuardianLaser, // guardian : se tient à distance, charge un rayon, frappe
 }
 
 /// Descripteur statique par espèce. Ajouter un mob = ajouter une variante +
@@ -288,8 +289,8 @@ impl MobKind {
             Self::Salmon => d!("minecraft:salmon", "Salmon", 0.7, 0.4, Passive, Flying, 0.0, 0.2, &[]),
             Self::Pufferfish => d!("minecraft:pufferfish", "Pufferfish", 0.7, 0.7, Passive, Flying, 0.0, 0.2, &[]),
             Self::TropicalFish => d!("minecraft:tropicalfish", "Tropical Fish", 0.5, 0.4, Passive, Flying, 0.0, 0.2, &[]),
-            Self::Guardian => d!("minecraft:guardian", "Guardian", 0.85, 0.85, Hostile, FlyingMelee, 6.0, 0.3, &[]),
-            Self::ElderGuardian => d!("minecraft:elder_guardian", "Elder Guardian", 2.0, 2.0, Hostile, FlyingMelee, 8.0, 0.3, &[]),
+            Self::Guardian => d!("minecraft:guardian", "Guardian", 0.85, 0.85, Hostile, GuardianLaser, 6.0, 0.3, &[]),
+            Self::ElderGuardian => d!("minecraft:elder_guardian", "Elder Guardian", 2.0, 2.0, Hostile, GuardianLaser, 8.0, 0.3, &[]),
             Self::ZombifiedPiglin => d!("minecraft:zombie_pigman", "Zombified Piglin", 0.6, 1.9, Neutral, Neutral, 0.0, 0.23, &[]),
             Self::Piglin => d!("minecraft:piglin", "Piglin", 0.6, 1.95, Neutral, Neutral, 0.0, 0.35, &[]),
             Self::IronGolem => d!("minecraft:iron_golem", "Iron Golem", 1.4, 2.7, Neutral, Neutral, 0.0, 0.25, &[]),
@@ -1582,6 +1583,7 @@ mod tests {
                             | AiProfile::FlyingMelee
                             | AiProfile::Creaking
                             | AiProfile::Dragon
+                            | AiProfile::GuardianLaser
                     ),
                     "hostile {k:?} doit avoir un profil de combat"
                 ),

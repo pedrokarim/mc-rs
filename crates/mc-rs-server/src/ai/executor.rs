@@ -1031,6 +1031,86 @@ impl Executor for DragonExecutor {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Guardian : se tient à distance, charge un rayon, puis frappe à distance
+// ---------------------------------------------------------------------------
+
+pub struct GuardianLaserExecutor {
+    speed: f32,
+    max_sense_range_sq: f64,
+    hold_range_sq: f64,
+    damage: f32,
+    charge_ticks: u32,
+    charge: u32,
+}
+
+impl GuardianLaserExecutor {
+    pub fn new(speed: f32, max_sense_range: f64, hold_range: f64, damage: f32, charge_ticks: u32) -> Self {
+        Self {
+            speed,
+            max_sense_range_sq: max_sense_range * max_sense_range,
+            hold_range_sq: hold_range * hold_range,
+            damage,
+            charge_ticks,
+            charge: 0,
+        }
+    }
+}
+
+impl Executor for GuardianLaserExecutor {
+    fn on_start(&mut self, memory: &mut Memory, _base: &mut EntityBase) {
+        self.charge = 0;
+        memory.movement_speed = self.speed;
+    }
+
+    fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
+        let Some(target_id) = ctx.memory.nearest_player else {
+            self.charge = 0;
+            return false;
+        };
+        let Some(tpos) = player_pos(ctx.players, target_id) else {
+            return false;
+        };
+        let d2 = dist_sq(ctx.base.position, tpos);
+        if d2 > self.max_sense_range_sq {
+            return false;
+        }
+        ctx.memory.look_target = Some([tpos[0] as f64, (tpos[1] + 1.0) as f64, tpos[2] as f64]);
+
+        if d2 > self.hold_range_sq {
+            // Trop loin : s'approche à portée de tir (la ligne de vue est déjà
+            // garantie par le sensor, qui n'a posé nearest_player que si LOS OK).
+            ctx.memory.move_target =
+                Some([tpos[0] as f64, tpos[1] as f64, tpos[2] as f64]);
+            self.charge = 0;
+        } else {
+            // À portée : reste en place et charge le rayon, puis frappe.
+            ctx.memory.move_target = Some([
+                ctx.base.position[0] as f64,
+                ctx.base.position[1] as f64,
+                ctx.base.position[2] as f64,
+            ]);
+            self.charge += 1;
+            if self.charge >= self.charge_ticks {
+                self.charge = 0;
+                ctx.effects.push(AiEffect::Attack {
+                    attacker_runtime_id: ctx.base.entity_runtime_id,
+                    attacker_position: ctx.base.position,
+                    target_runtime_id: target_id,
+                    damage: self.damage,
+                });
+            }
+        }
+        true
+    }
+
+    fn on_stop(&mut self, memory: &mut Memory, _base: &mut EntityBase) {
+        self.charge = 0;
+        memory.move_target = None;
+        memory.look_target = None;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1224,6 +1304,37 @@ mod tests {
         };
         exec.execute(&mut ctx);
         assert!(memory.move_target.is_some(), "fonce quand on ne le regarde pas");
+    }
+
+    #[test]
+    fn guardian_fires_laser_after_charge() {
+        let mut exec = GuardianLaserExecutor::new(0.3, 16.0, 10.0, 6.0, 3); // charge 3 ticks
+        let mut base = zombie_base([0.0, 64.0, 0.0]);
+        let mut memory = Memory::new(0.3);
+        memory.nearest_player = Some(5);
+        let players = vec![PlayerSnapshot {
+            runtime_id: 5,
+            position: [3.0, 64.0, 0.0], // distance 3 < portée de tir 10 → charge
+            gamemode: 0,
+            alive: true,
+            held_item: 0,
+            look_dir: [0.0, 0.0, 1.0],
+        }];
+        let mut effects = Vec::new();
+        for _ in 0..4 {
+            let mut ctx = ExecCtx {
+                base: &mut base,
+                kind: MobKind::Guardian,
+                memory: &mut memory,
+                players: &players,
+                effects: &mut effects,
+            };
+            exec.execute(&mut ctx);
+        }
+        assert!(
+            effects.iter().any(|e| matches!(e, AiEffect::Attack { .. })),
+            "le rayon frappe une fois la charge écoulée"
+        );
     }
 
     #[test]
