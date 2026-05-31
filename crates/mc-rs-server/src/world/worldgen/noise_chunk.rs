@@ -131,6 +131,62 @@ fn chunk_surfaces(seed: u64, router: &NoiseRouter, cx: i32, cz: i32) -> SurfaceG
     s
 }
 
+/// Biomes overworld (param list multi-noise + noms + IDs Bedrock), chargé une
+/// fois. Partagé par la génération et la commande `/locate biome`.
+static BIOMES: LazyLock<super::climate::OverworldBiomes> =
+    LazyLock::new(super::climate::load_overworld);
+
+/// Localise l'occurrence la plus proche d'un `biome` depuis `(origin_x,
+/// origin_z)` à l'altitude `y`, par anneaux carrés croissants (pas `STEP`)
+/// échantillonnant le climat — comme `/locate biome` vanilla (qui interroge la
+/// `BiomeSource`, pas le terrain). Retourne `(x, z)` ou `None` si rien dans le
+/// rayon max. Le biome accepte avec ou sans préfixe `minecraft:`.
+pub fn locate_biome(
+    seed: u64,
+    origin_x: i32,
+    origin_z: i32,
+    y: i32,
+    biome: &str,
+) -> Option<(i32, i32)> {
+    let want = biome.strip_prefix("minecraft:").unwrap_or(biome);
+    let target_idx = BIOMES
+        .names
+        .iter()
+        .position(|n| n.strip_prefix("minecraft:").unwrap_or(n) == want)?
+        as u16;
+
+    let router = with_router(seed, |r| r.clone());
+    let climate = super::climate::ClimateSampler::from_router(&router);
+    let qy = y >> 2;
+    let matches =
+        |x: i32, z: i32| BIOMES.params.find(&climate.sample(x >> 2, qy, z >> 2)) == target_idx;
+
+    const STEP: i32 = 16;
+    const MAX_RADIUS: i32 = 6400;
+    if matches(origin_x, origin_z) {
+        return Some((origin_x, origin_z));
+    }
+    let mut r = STEP;
+    while r <= MAX_RADIUS {
+        let mut i = -r;
+        while i <= r {
+            for (x, z) in [
+                (origin_x + i, origin_z - r),
+                (origin_x + i, origin_z + r),
+                (origin_x - r, origin_z + i),
+                (origin_x + r, origin_z + i),
+            ] {
+                if matches(x, z) {
+                    return Some((x, z));
+                }
+            }
+            i += STEP;
+        }
+        r += STEP;
+    }
+    None
+}
+
 /// Seed déterministe d'un chunk pour la passe d'arbres — ne dépend QUE du chunk
 /// d'origine (pas du chunk en cours de génération), pour que le même arbre soit
 /// calculé à l'identique qu'on le voie depuis son chunk ou depuis un voisin.
@@ -258,9 +314,8 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
     }
 
     // 2a) Biome de SURFACE (2D) : échantillonné à la surface de chaque colonne.
-    // Utilisé par les surface rules et la déco de surface.
-    static BIOMES: LazyLock<super::climate::OverworldBiomes> =
-        LazyLock::new(super::climate::load_overworld);
+    // Utilisé par les surface rules et la déco de surface. (`BIOMES` = static
+    // module-level, partagé avec `locate_biome`.)
     let mut biome_idx = [[0u16; 16]; 16];
     for lx in 0..16usize {
         for lz in 0..16usize {
@@ -479,6 +534,20 @@ mod tests {
         let a = generate_noise_chunk(3, -7, 123);
         let b = generate_noise_chunk(3, -7, 123);
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn locate_biome_finds_origin_biome_and_rejects_unknown() {
+        let seed = 42u64;
+        // Le biome présent à l'origine est trouvé immédiatement (distance 0).
+        let here = BIOMES.params.find(&{
+            let r = with_router(seed, |r| r.clone());
+            crate::world::worldgen::climate::ClimateSampler::from_router(&r).sample(0, 63 >> 2, 0)
+        });
+        let name = &BIOMES.names[here as usize];
+        assert_eq!(locate_biome(seed, 0, 0, 63, name), Some((0, 0)));
+        // Nom de biome inconnu → None (pas de boucle infinie).
+        assert_eq!(locate_biome(seed, 0, 0, 63, "minecraft:not_a_biome"), None);
     }
 
     #[test]
