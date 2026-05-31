@@ -166,11 +166,23 @@ fn tree_config_to_species(config: &Value) -> Option<Species> {
     })
 }
 
-/// Une feature de végétation au sol (herbe/fougère) d'un biome : placement (pour
-/// le nombre de patches) + `tries` du `random_patch` (blocs par patch).
-struct VegFeat {
+/// Un `random_patch` de végétation d'un biome : touffe groupée (vanilla pose
+/// `tries` blocs dans un rayon `xz_spread` autour d'un centre, d'où l'aspect en
+/// bouquets). `palette` = couleurs de fleurs (vide pour l'herbe).
+pub(super) struct Patch {
     placement: Value,
-    tries: f64,
+    pub(super) tries: i32,
+    pub(super) xz_spread: i32,
+    pub(super) y_spread: i32,
+    pub(super) palette: Vec<u32>,
+}
+
+impl Patch {
+    /// Nombre de touffes (patches) à poser dans le chunk pour ce biome, selon le
+    /// bruit de végétation (`noise_threshold_count`).
+    pub(super) fn patch_count(&self, noise: f64) -> f64 {
+        placement_count(Some(&self.placement), noise)
+    }
 }
 
 /// Registre : placed + configured features chargés une fois, plus le `TreePlan`
@@ -179,10 +191,8 @@ struct Registry {
     placed: HashMap<String, Value>,
     configured: HashMap<String, Value>,
     biome_tree: HashMap<String, TreePlan>,
-    biome_grass: HashMap<String, Vec<VegFeat>>,
-    biome_flower: HashMap<String, Vec<VegFeat>>,
-    /// Palette de fleurs (IDs runtime) par biome.
-    biome_flower_blocks: HashMap<String, Vec<u32>>,
+    biome_grass: HashMap<String, Vec<Patch>>,
+    biome_flower: HashMap<String, Vec<Patch>>,
 }
 
 static REG: LazyLock<Registry> = LazyLock::new(build_registry);
@@ -206,25 +216,20 @@ fn build_registry() -> Registry {
         biome_tree: HashMap::new(),
         biome_grass: HashMap::new(),
         biome_flower: HashMap::new(),
-        biome_flower_blocks: HashMap::new(),
     };
     let biome_names = data::list_names("biome");
     let mut plans = HashMap::new();
     let mut grass = HashMap::new();
     let mut flower = HashMap::new();
-    let mut flower_blocks = HashMap::new();
     for b in &biome_names {
         let key = format!("minecraft:{b}");
         plans.insert(key.clone(), reg.compute_tree_plan(b));
-        grass.insert(key.clone(), reg.compute_grass(b));
-        let (fd, fb) = reg.compute_flowers(b);
-        flower.insert(key.clone(), fd);
-        flower_blocks.insert(key, fb);
+        grass.insert(key.clone(), reg.compute_patches(b, is_grass_feature, false));
+        flower.insert(key.clone(), reg.compute_patches(b, is_flower_feature, true));
     }
     reg.biome_tree = plans;
     reg.biome_grass = grass;
     reg.biome_flower = flower;
-    reg.biome_flower_blocks = flower_blocks;
     reg
 }
 
@@ -306,16 +311,21 @@ impl Registry {
         }
     }
 
-    /// `tries` du `random_patch` d'une feature configured référencée (défaut 32).
-    fn configured_tries(&self, feat: &Value) -> f64 {
+    /// `(tries, xz_spread, y_spread)` du `random_patch` d'une feature configured
+    /// référencée (défauts vanilla 32 / 7 / 3).
+    fn configured_patch_params(&self, feat: &Value) -> (i32, i32, i32) {
         let cfg = match feat {
             Value::String(s) => self.configured.get(strip(s)).and_then(|c| c.get("config")),
             Value::Object(_) => feat.get("config"),
             _ => None,
         };
-        cfg.and_then(|c| c.get("tries"))
-            .and_then(Value::as_f64)
-            .unwrap_or(32.0)
+        let g = |c: &Value, k: &str, d: i32| {
+            c.get(k).and_then(Value::as_i64).unwrap_or(d as i64) as i32
+        };
+        match cfg {
+            Some(c) => (g(c, "tries", 32), g(c, "xz_spread", 7), g(c, "y_spread", 3)),
+            None => (32, 7, 3),
+        }
     }
 
     /// Parcourt une configured feature et collecte les blocs de ses providers
@@ -350,50 +360,14 @@ impl Registry {
         }
     }
 
-    /// Features de fleurs d'un biome : densité (VegFeat) + palette résolue en IDs.
-    fn compute_flowers(&self, biome: &str) -> (Vec<VegFeat>, Vec<u32>) {
-        let mut feats = Vec::new();
-        let mut names: Vec<String> = Vec::new();
-        let Some(bio) = data::json_value("biome", biome) else {
-            return (feats, Vec::new());
-        };
-        let Some(steps) = bio.get("features").and_then(Value::as_array) else {
-            return (feats, Vec::new());
-        };
-        for step in steps {
-            let Some(ids) = step.as_array() else { continue };
-            for id in ids {
-                let Some(id) = id.as_str() else { continue };
-                if !is_flower_feature(id) {
-                    continue;
-                }
-                let Some(pf) = self.placed.get(strip(id)) else {
-                    continue;
-                };
-                let tries = pf
-                    .get("feature")
-                    .map(|f| self.configured_tries(f))
-                    .unwrap_or(64.0);
-                feats.push(VegFeat {
-                    placement: pf.get("placement").cloned().unwrap_or(Value::Null),
-                    tries,
-                });
-                if let Some(f) = pf.get("feature") {
-                    self.collect_flower_blocks(f, &mut names, 8);
-                }
-            }
-        }
-        // Noms → IDs runtime (dédup en gardant les poids = répétitions).
-        let blocks: Vec<u32> = names
-            .iter()
-            .map(|n| BLOCKS.get(&format!("minecraft:{n}")))
-            .filter(|&id| id != BLOCKS.air)
-            .collect();
-        (feats, blocks)
-    }
-
-    /// Features d'herbe/fougère d'un biome (toutes étapes).
-    fn compute_grass(&self, biome: &str) -> Vec<VegFeat> {
+    /// `random_patch` de végétation d'un biome sélectionnés par `keep` (herbe ou
+    /// fleurs). `with_palette` : extrait la palette de blocs (fleurs).
+    fn compute_patches(
+        &self,
+        biome: &str,
+        keep: fn(&str) -> bool,
+        with_palette: bool,
+    ) -> Vec<Patch> {
         let mut out = Vec::new();
         let Some(bio) = data::json_value("biome", biome) else {
             return out;
@@ -405,19 +379,35 @@ impl Registry {
             let Some(ids) = step.as_array() else { continue };
             for id in ids {
                 let Some(id) = id.as_str() else { continue };
-                if !is_grass_feature(id) {
+                if !keep(id) {
                     continue;
                 }
                 let Some(pf) = self.placed.get(strip(id)) else {
                     continue;
                 };
-                let tries = pf
+                let (tries, xz, y) = pf
                     .get("feature")
-                    .map(|f| self.configured_tries(f))
-                    .unwrap_or(32.0);
-                out.push(VegFeat {
+                    .map(|f| self.configured_patch_params(f))
+                    .unwrap_or((32, 7, 3));
+                let palette = if with_palette {
+                    let mut names = Vec::new();
+                    if let Some(f) = pf.get("feature") {
+                        self.collect_flower_blocks(f, &mut names, 8);
+                    }
+                    names
+                        .iter()
+                        .map(|n| BLOCKS.get(&format!("minecraft:{n}")))
+                        .filter(|&i| i != BLOCKS.air)
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                out.push(Patch {
                     placement: pf.get("placement").cloned().unwrap_or(Value::Null),
                     tries,
+                    xz_spread: xz,
+                    y_spread: y,
+                    palette,
                 });
             }
         }
@@ -576,35 +566,22 @@ pub(super) fn tree_plan(biome: &str) -> &'static TreePlan {
     REG.biome_tree.get(biome).unwrap_or(&EMPTY_PLAN)
 }
 
-/// Nombre d'herbes/fougères à tenter de poser dans un chunk de ce biome, dérivé
-/// des vraies features vanilla (`Σ patches × tries`, `noise` pilotant les
-/// `noise_threshold_count`). Ex. neige ≈ 32 (1 patch clairsemé) ≪ jungle ≈ 800.
-pub(super) fn grass_attempts(biome: &str, noise: f64) -> i32 {
-    veg_attempts(REG.biome_grass.get(biome), noise)
-}
-
-/// Nombre de fleurs à tenter de poser dans un chunk de ce biome (mêmes données
-/// vanilla que l'herbe : `Σ patches × tries`).
-pub(super) fn flower_attempts(biome: &str, noise: f64) -> i32 {
-    veg_attempts(REG.biome_flower.get(biome), noise)
-}
-
-/// Palette de fleurs (IDs runtime) d'un biome — poids = répétitions (ex. cerisaie
-/// = pink_petals ×16, flower_forest = 11 espèces). Vide = pas de fleurs.
-pub(super) fn flower_blocks(biome: &str) -> &'static [u32] {
-    REG.biome_flower_blocks
+/// Touffes d'herbe/fougère (`random_patch`) d'un biome — chacune pose `tries`
+/// brins dans un rayon `xz_spread`, d'où l'aspect en bouquets.
+pub(super) fn grass_patches(biome: &str) -> &'static [Patch] {
+    REG.biome_grass
         .get(biome)
         .map(|v| v.as_slice())
         .unwrap_or(&[])
 }
 
-fn veg_attempts(feats: Option<&Vec<VegFeat>>, noise: f64) -> i32 {
-    let Some(feats) = feats else { return 0 };
-    feats
-        .iter()
-        .map(|f| placement_count(Some(&f.placement), noise) * f.tries)
-        .sum::<f64>()
-        .round() as i32
+/// Touffes de fleurs (`random_patch`) d'un biome. Chaque patch porte sa palette
+/// officielle (poids = répétitions : cerisaie = pink_petals ×16, etc.).
+pub(super) fn flower_patches(biome: &str) -> &'static [Patch] {
+    REG.biome_flower
+        .get(biome)
+        .map(|v| v.as_slice())
+        .unwrap_or(&[])
 }
 
 #[cfg(test)]
@@ -665,41 +642,53 @@ mod tests {
             .any(|(c, s)| *c > 0.6 && matches!(s, Some(Species::DarkOak))));
     }
 
+    // Total de brins d'herbe (patches × tries) — pour valider l'échelle.
+    fn grass_total(b: &str) -> f64 {
+        grass_patches(b)
+            .iter()
+            .map(|p| p.patch_count(0.0) * p.tries as f64)
+            .sum()
+    }
+
     #[test]
     fn grass_density_matches_vanilla_scale() {
         // neige = 1 patch clairsemé (patch_grass_badlands, tries 32) ≈ 32.
-        assert_eq!(grass_attempts("minecraft:snowy_plains", 0.0), 32);
+        assert_eq!(grass_total("minecraft:snowy_plains"), 32.0);
         // forêt = count 2 × 32 = 64.
-        assert_eq!(grass_attempts("minecraft:forest", 0.0), 64);
+        assert_eq!(grass_total("minecraft:forest"), 64.0);
         // jungle = count 25 × 32 = 800 (densément herbeuse).
-        assert_eq!(grass_attempts("minecraft:jungle", 0.0), 800);
+        assert_eq!(grass_total("minecraft:jungle"), 800.0);
         // neige ≪ jungle (le fix : plus de sur-végétation neigeuse).
-        assert!(
-            grass_attempts("minecraft:snowy_plains", 0.0)
-                < grass_attempts("minecraft:jungle", 0.0) / 10
-        );
+        assert!(grass_total("minecraft:snowy_plains") < grass_total("minecraft:jungle") / 10.0);
     }
 
     #[test]
     fn flower_palettes_and_density() {
+        // Palette agrégée de tous les patches de fleurs d'un biome.
+        fn palette(b: &str) -> Vec<u32> {
+            flower_patches(b)
+                .iter()
+                .flat_map(|p| p.palette.clone())
+                .collect()
+        }
         // flower_forest : palette riche (11 espèces), dense.
-        let ff = flower_blocks("minecraft:flower_forest");
+        let ff = palette("minecraft:flower_forest");
         assert!(
             ff.len() >= 8,
             "flower_forest palette trop pauvre: {}",
             ff.len()
         );
-        assert!(flower_attempts("minecraft:flower_forest", 0.0) > 0);
+        assert!(!flower_patches("minecraft:flower_forest").is_empty());
         // cerisaie : pink_petals (palette non vide).
-        assert!(!flower_blocks("minecraft:cherry_grove").is_empty());
-        // marais : blue_orchid.
-        let swamp = flower_blocks("minecraft:swamp");
-        assert_eq!(swamp.len(), 1, "marais = 1 fleur (blue_orchid)");
+        assert!(!palette("minecraft:cherry_grove").is_empty());
+        // marais : blue_orchid (1 espèce).
+        assert_eq!(
+            palette("minecraft:swamp").len(),
+            1,
+            "marais = blue_orchid seul"
+        );
         // forêt : poppy + dandelion (flower_default).
-        assert_eq!(flower_blocks("minecraft:forest").len(), 2);
-        // désert : aucune fleur réelle (flower_default sur sable → palette résolue
-        // mais densité faible) ; au moins ça ne panique pas.
-        let _ = flower_blocks("minecraft:desert");
+        assert_eq!(palette("minecraft:forest").len(), 2);
     }
 
     #[test]

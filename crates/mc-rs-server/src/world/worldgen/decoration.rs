@@ -1302,8 +1302,6 @@ pub fn decorate(
             ^ seed as i64,
     );
 
-    let biome_at = |lx: usize, lz: usize| -> &str { &biome_names[biome_idx[lx][lz] as usize] };
-
     // ── Arbres : déplacés dans `noise_chunk` (passe de population CROSS-CHUNK
     // sur le voisinage 3×3, pour que les canopées débordant d'un chunk à l'autre
     // soient cohérentes et non coupées aux frontières). Ils sont posés AVANT cet
@@ -1312,39 +1310,16 @@ pub fn decorate(
     // ── Lianes (après les arbres) : feature vanilla `vines`, count 127 ──
     decorate_vines(grid, &pal, biome_idx, biome_names, &mut rng);
 
-    // ── Herbe / fougères : densité DATA-DRIVEN (vraies features vanilla
-    // `patch_grass_*`/`patch_*_fern`, cf. `features::grass_attempts`). Corrige la
-    // sur-végétation des biomes clairsemés (neige, etc.). ──
+    // ── Herbe / fougères & fleurs : DATA-DRIVEN + posées en TOUFFES (clumps)
+    // comme vanilla (`random_patch` : `tries` brins autour d'un centre). Densité
+    // et palette lues des vraies features ; corrige la sur-végétation neige et le
+    // rendu « saupoudré » uniforme. ──
     let veg_n = veg_noise(
         seed,
         (chunk_x * 16) as f64 / 200.0,
         (chunk_z * 16) as f64 / 200.0,
     );
-    let grass_attempts: i32 = {
-        let sum: i32 = (0..16)
-            .flat_map(|x| (0..16).map(move |z| (x, z)))
-            .map(|(x, z)| super::features::grass_attempts(biome_at(x, z), veg_n))
-            .sum();
-        sum / 256
-    };
-    for _ in 0..grass_attempts {
-        let lx = rng.next_bounded_int(16);
-        let lz = rng.next_bounded_int(16);
-        let ground = surfaces[lx as usize][lz as usize];
-        if ground <= SEA_LEVEL || at(grid, lx, ground, lz) != pal.grass_block {
-            continue;
-        }
-        let b = biome_at(lx as usize, lz as usize);
-        let id = if b.contains("taiga") || b.contains("grove") {
-            pal.fern
-        } else {
-            pal.short_grass
-        };
-        plant(grid, &pal, lx, ground + 1, lz, id);
-    }
-
-    // ── Fleurs (rarity-gated par biome, set vanilla) ──
-    decorate_flowers(
+    decorate_patches(
         grid,
         &pal,
         biome_idx,
@@ -1352,6 +1327,19 @@ pub fn decorate(
         surfaces,
         &mut rng,
         veg_n,
+        super::features::grass_patches,
+        false,
+    );
+    decorate_patches(
+        grid,
+        &pal,
+        biome_idx,
+        biome_names,
+        surfaces,
+        &mut rng,
+        veg_n,
+        super::features::flower_patches,
+        true,
     );
 
     // ── Spécial : cactus / arbustes morts / canne à sucre / bambou / nénuphars ──
@@ -1378,11 +1366,14 @@ pub fn decorate(
     decorate_snow(grid, &pal, biome_idx, biome_names, surfaces);
 }
 
-/// Fleurs : rarité officielle par biome + set vanilla. Plaines 1/32 (4 ou 15
-/// selon le bruit, dandelion-dominant) ; jungle/warm 1/16 (poppy/dandelion) ;
-/// flower_forest dense et varié ; autres forêts/savanes ~1/8 (poppy/dandelion).
+/// Pose la végétation au sol en **touffes** (clumps), sémantique vanilla
+/// `random_patch` : pour chaque biome présent (au prorata de sa surface dans le
+/// chunk), on tire `patch_count` touffes ; chaque touffe choisit un centre puis
+/// tente `tries` poses dans un rayon `xz_spread`. Les fleurs prennent UNE couleur
+/// par touffe (parterre monochrome) dans la palette officielle du patch ;
+/// l'herbe = fougère en taïga/grove, sinon herbe courte.
 #[allow(clippy::too_many_arguments)]
-fn decorate_flowers(
+fn decorate_patches(
     grid: &mut [u32],
     pal: &Pal,
     biome_idx: &[[u16; 16]; 16],
@@ -1390,33 +1381,63 @@ fn decorate_flowers(
     surfaces: &[[i32; 16]; 16],
     rng: &mut Random,
     noise: f64,
+    patches_of: fn(&str) -> &'static [super::features::Patch],
+    flower: bool,
 ) {
     let biome_at = |lx: usize, lz: usize| -> &str { &biome_names[biome_idx[lx][lz] as usize] };
-    // Densité DATA-DRIVEN : Σ (patches × tries) des features `flower_*` du biome.
-    let attempts: i32 = {
-        let sum: i32 = (0..16)
-            .flat_map(|x| (0..16).map(move |z| (x, z)))
-            .map(|(x, z)| super::features::flower_attempts(biome_at(x, z), noise))
-            .sum();
-        sum / 256
-    };
-    for _ in 0..attempts {
-        let lx = rng.next_bounded_int(16);
-        let lz = rng.next_bounded_int(16);
-        let ground = surfaces[lx as usize][lz as usize];
-        if ground <= SEA_LEVEL
-            || at(grid, lx, ground, lz) != pal.grass_block
-            || at(grid, lx, ground + 1, lz) != pal.air
-        {
-            continue;
+    // Poids = nombre de colonnes par biome dans le chunk.
+    let mut weights: Vec<(&str, i32)> = Vec::new();
+    for x in 0..16usize {
+        for z in 0..16usize {
+            let b = biome_at(x, z);
+            match weights.iter_mut().find(|(n, _)| *n == b) {
+                Some(e) => e.1 += 1,
+                None => weights.push((b, 1)),
+            }
         }
-        // Palette officielle du biome (poids = répétitions), choisie au hasard.
-        let blocks = super::features::flower_blocks(biome_at(lx as usize, lz as usize));
-        if blocks.is_empty() {
-            continue;
+    }
+    for (biome, w) in weights {
+        let frac = w as f64 / 256.0;
+        for patch in patches_of(biome) {
+            let expected = patch.patch_count(noise) * frac;
+            let n = expected.floor() as i32 + i32::from(rng.next_float() < expected.fract());
+            let xz = patch.xz_spread.max(1);
+            for _ in 0..n {
+                let cx = rng.next_bounded_int(16);
+                let cz = rng.next_bounded_int(16);
+                let color = if flower && !patch.palette.is_empty() {
+                    Some(patch.palette[rng.next_bounded_int(patch.palette.len() as i32) as usize])
+                } else {
+                    None
+                };
+                for _ in 0..patch.tries {
+                    let lx = cx + rng.next_bounded_int(2 * xz + 1) - xz;
+                    let lz = cz + rng.next_bounded_int(2 * xz + 1) - xz;
+                    if !(0..16).contains(&lx) || !(0..16).contains(&lz) {
+                        continue;
+                    }
+                    let ground = surfaces[lx as usize][lz as usize];
+                    if ground <= SEA_LEVEL
+                        || at(grid, lx, ground, lz) != pal.grass_block
+                        || at(grid, lx, ground + 1, lz) != pal.air
+                    {
+                        continue;
+                    }
+                    let id = match color {
+                        Some(f) => f,
+                        None => {
+                            let b = biome_at(lx as usize, lz as usize);
+                            if b.contains("taiga") || b.contains("grove") {
+                                pal.fern
+                            } else {
+                                pal.short_grass
+                            }
+                        }
+                    };
+                    plant(grid, pal, lx, ground + 1, lz, id);
+                }
+            }
         }
-        let id = blocks[rng.next_bounded_int(blocks.len() as i32) as usize];
-        plant(grid, pal, lx, ground + 1, lz, id);
     }
 }
 
