@@ -295,7 +295,7 @@ depuis la sémantique vanilla (réf. deepslate pour le bruit/les surfaces).
 | Pierre sur pentes raides (`steep`) | ✅ | |
 | Terracotta badlands | 🟡 | uniforme (pas les bandes colorées) |
 | `min_surface_level` | 🟡 | proxy (plus haut bloc solide) |
-| Biomes **3D** (grottes : lush/dripstone/deep_dark) | ❌ | carte de biomes 2D pour l'instant |
+| Biomes **3D** (grottes : lush/dripstone/deep_dark) | ✅ | biomes échantillonnés par sub-chunk (depth élevé → grottes), sérialisés en 3D |
 
 **Minerais**
 
@@ -342,8 +342,8 @@ depuis la sémantique vanilla (réf. deepslate pour le bruit/les surfaces).
 | Lacs de lave souterrains (`lake_lava`) | ✅ | 1/9 ; lacs d'eau retirés en 1.18 ; sources/springs ❌ |
 | **Géodes d'améthyste** | ✅ | 1/24, coquille smooth_basalt/calcite/amethyst + budding + clusters |
 | **Dripstone** (clusters + pointed) | ✅ | stalactites/stalagmites (192-256) + blocs (48-96) dans les grottes |
-| Lush caves (mousse, azalée, glow berries, spore blossom) | ❌ | dépend des biomes 3D |
-| Deep dark / sculk | ❌ | dépend des biomes 3D |
+| **Lush caves** (mousse, azalée, lianes à baies, spore blossom, racines) | ✅ | placées dans le biome `lush_caves` |
+| **Deep dark / sculk** (sculk + sensor/shrieker/catalyst/vein) | ✅ | placés dans le biome `deep_dark` |
 | Disques sable/gravier/argile (bord de l'eau) | ❌ | |
 | **Structures** (villages, mines, donjons, temples, strongholds, portails en ruine…) | ❌ | aucune pour l'instant |
 | Position de spawn | 🟡 | calcul legacy (désync possible) |

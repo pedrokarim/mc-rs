@@ -184,22 +184,38 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
         }
     }
 
-    // 2) Biomes : placement multi-noise 6D échantillonné à la surface (surfaces
-    // déjà calculées). Index Java (conditions `biome`) + ID Bedrock (sérialisation).
+    // 2a) Biome de SURFACE (2D) : échantillonné à la surface de chaque colonne.
+    // Utilisé par les surface rules et la déco de surface.
     static BIOMES: LazyLock<super::climate::OverworldBiomes> =
         LazyLock::new(super::climate::load_overworld);
     let mut biome_idx = [[0u16; 16]; 16];
-    let mut biome_ids = [[0u32; 16]; 16];
     for lx in 0..16usize {
         for lz in 0..16usize {
             let wx = base_x + lx as i32;
             let wz = base_z + lz as i32;
             let sy = surfaces[lx][lz];
             let target = climate.sample(wx >> 2, sy >> 2, wz >> 2);
-            let idx = BIOMES.params.find(&target);
-            biome_idx[lx][lz] = idx;
-            biome_ids[lx][lz] = BIOMES.bedrock_ids[idx as usize];
+            biome_idx[lx][lz] = BIOMES.params.find(&target);
         }
+    }
+
+    // 2b) Biomes 3D : échantillonnés au centre de chaque sub-chunk (cellule
+    // 4×4×4). En profondeur, `depth` est élevé → biomes de grottes (lush_caves,
+    // dripstone_caves, deep_dark). `biome3d[sub_idx][cx][cz]` = index Java.
+    let mut biome3d: Vec<[[u16; 4]; 4]> = Vec::with_capacity(SUB_CHUNK_COUNT);
+    for sub_idx in 0..SUB_CHUNK_COUNT {
+        let cy = MIN_Y + sub_idx as i32 * 16 + 8;
+        let mut sec = [[0u16; 4]; 4];
+        #[allow(clippy::needless_range_loop)]
+        for cx in 0..4usize {
+            for cz in 0..4usize {
+                let wx = base_x + cx as i32 * 4 + 2;
+                let wz = base_z + cz as i32 * 4 + 2;
+                let target = climate.sample(wx >> 2, cy >> 2, wz >> 2);
+                sec[cx][cz] = BIOMES.params.find(&target);
+            }
+        }
+        biome3d.push(sec);
     }
 
     // 3) Surface rules vanilla (par biome) : grass/dirt/sable/grès/gravier/
@@ -239,6 +255,7 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
         &biome_idx,
         &BIOMES.names,
         &surfaces,
+        &biome3d,
     );
 
     // 5) Sérialisation sub-chunk par sub-chunk.
@@ -272,10 +289,20 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
         }
     }
 
-    // 6) Biomes sérialisés (carte 2D répétée verticalement).
-    let biome_data =
-        chunk_serializer::serialize_biome_sections_from_columns(&biome_ids, SUB_CHUNK_COUNT);
-    payload.extend_from_slice(&biome_data);
+    // 6) Biomes sérialisés en 3D (une section 4×4×4 par sub-chunk).
+    for sec in &biome3d {
+        let mut cells = [0u32; 64];
+        #[allow(clippy::needless_range_loop)]
+        for cx in 0..4usize {
+            for cz in 0..4usize {
+                let id = BIOMES.bedrock_ids[sec[cx][cz] as usize];
+                for cy in 0..4usize {
+                    cells[(cx << 4) | (cz << 2) | cy] = id;
+                }
+            }
+        }
+        payload.extend_from_slice(&chunk_serializer::serialize_biome_section(&cells));
+    }
 
     // Border blocks count.
     payload.push(0);

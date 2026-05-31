@@ -66,6 +66,21 @@ struct Pal {
     amethyst_cluster: u32,
     calcite: u32,
     smooth_basalt: u32,
+    // Lush caves
+    moss_block: u32,
+    moss_carpet: u32,
+    cave_vines: u32,
+    spore_blossom: u32,
+    azalea: u32,
+    flowering_azalea: u32,
+    hanging_roots: u32,
+    clay: u32,
+    // Deep dark
+    sculk: u32,
+    sculk_vein: u32,
+    sculk_sensor: u32,
+    sculk_shrieker: u32,
+    sculk_catalyst: u32,
 }
 
 // Indices d'espèce dans logs/leaves.
@@ -156,6 +171,19 @@ impl Pal {
             amethyst_cluster: g("minecraft:amethyst_cluster"),
             calcite: g("minecraft:calcite"),
             smooth_basalt: g("minecraft:smooth_basalt"),
+            moss_block: g("minecraft:moss_block"),
+            moss_carpet: g("minecraft:moss_carpet"),
+            cave_vines: g("minecraft:cave_vines_body_with_berries"),
+            spore_blossom: g("minecraft:spore_blossom"),
+            azalea: g("minecraft:azalea"),
+            flowering_azalea: g("minecraft:flowering_azalea"),
+            hanging_roots: g("minecraft:hanging_roots"),
+            clay: g("minecraft:clay"),
+            sculk: g("minecraft:sculk"),
+            sculk_vein: g("minecraft:sculk_vein"),
+            sculk_sensor: g("minecraft:sculk_sensor"),
+            sculk_shrieker: g("minecraft:sculk_shrieker"),
+            sculk_catalyst: g("minecraft:sculk_catalyst"),
         }
     }
 }
@@ -1026,7 +1054,113 @@ fn decorate_lava_lake(grid: &mut [u32], pal: &Pal, rng: &mut Random) {
     }
 }
 
+/// Biome 3D (cellule 4×4×4) à une position locale.
+fn cave_biome<'a>(
+    biome3d: &[[[u16; 4]; 4]],
+    names: &'a [String],
+    lx: i32,
+    wy: i32,
+    lz: i32,
+) -> &'a str {
+    let sub = (((wy - MIN_Y) / 16).clamp(0, biome3d.len() as i32 - 1)) as usize;
+    let cx = (lx.clamp(0, 15) / 4) as usize;
+    let cz = (lz.clamp(0, 15) / 4) as usize;
+    &names[biome3d[sub][cx][cz] as usize]
+}
+
+/// Lush caves : mousse, azalées, lianes de grotte (baies), spore blossom,
+/// racines, dans le biome `lush_caves`.
+fn decorate_lush(
+    grid: &mut [u32],
+    pal: &Pal,
+    biome3d: &[[[u16; 4]; 4]],
+    names: &[String],
+    rng: &mut Random,
+) {
+    for _ in 0..140 {
+        let lx = rng.next_bounded_int(16);
+        let lz = rng.next_bounded_int(16);
+        let wy = MIN_Y + 8 + rng.next_bounded_int(110); // ~ -56..62
+        if at(grid, lx, wy, lz) != pal.air
+            || cave_biome(biome3d, names, lx, wy, lz) != "minecraft:lush_caves"
+        {
+            continue;
+        }
+        let floor = is_rock(pal, at(grid, lx, wy - 1, lz));
+        let ceiling = is_rock(pal, at(grid, lx, wy + 1, lz));
+        if floor {
+            if let Some(i) = idx_ok(lx, wy - 1, lz) {
+                grid[i] = pal.moss_block;
+            }
+            match rng.next_bounded_int(6) {
+                0 => plant(grid, pal, lx, wy, lz, pal.azalea),
+                1 => plant(grid, pal, lx, wy, lz, pal.flowering_azalea),
+                2 => plant(grid, pal, lx, wy, lz, pal.moss_carpet),
+                3 => {
+                    if let Some(i) = idx_ok(lx, wy - 1, lz) {
+                        grid[i] = pal.clay;
+                    }
+                }
+                _ => {}
+            }
+        } else if ceiling {
+            if let Some(i) = idx_ok(lx, wy + 1, lz) {
+                grid[i] = pal.moss_block;
+            }
+            match rng.next_bounded_int(4) {
+                0 => {
+                    // Lianes de grotte (baies) pendantes.
+                    let len = 1 + rng.next_bounded_int(8);
+                    for d in 0..len {
+                        if at(grid, lx, wy - d, lz) != pal.air {
+                            break;
+                        }
+                        if let Some(i) = idx_ok(lx, wy - d, lz) {
+                            grid[i] = pal.cave_vines;
+                        }
+                    }
+                }
+                1 => plant(grid, pal, lx, wy, lz, pal.spore_blossom),
+                _ => plant(grid, pal, lx, wy, lz, pal.hanging_roots),
+            }
+        }
+    }
+}
+
+/// Deep dark : sculk au sol + capteurs/hurleurs/catalyseurs, dans `deep_dark`.
+fn decorate_deep_dark(
+    grid: &mut [u32],
+    pal: &Pal,
+    biome3d: &[[[u16; 4]; 4]],
+    names: &[String],
+    rng: &mut Random,
+) {
+    for _ in 0..120 {
+        let lx = rng.next_bounded_int(16);
+        let lz = rng.next_bounded_int(16);
+        let wy = MIN_Y + 6 + rng.next_bounded_int(40); // profond (~ -58..-18)
+        if at(grid, lx, wy, lz) != pal.air
+            || cave_biome(biome3d, names, lx, wy, lz) != "minecraft:deep_dark"
+        {
+            continue;
+        }
+        if is_rock(pal, at(grid, lx, wy - 1, lz)) {
+            if let Some(i) = idx_ok(lx, wy - 1, lz) {
+                grid[i] = pal.sculk;
+            }
+            match rng.next_bounded_int(12) {
+                0 => plant(grid, pal, lx, wy, lz, pal.sculk_sensor),
+                1 => plant(grid, pal, lx, wy, lz, pal.sculk_shrieker),
+                2 => plant(grid, pal, lx, wy, lz, pal.sculk_catalyst),
+                3 => plant(grid, pal, lx, wy, lz, pal.sculk_vein),
+                _ => {}
+            }
+        }
+    }
+}
+
 /// Point d'entrée : décore un chunk déjà terrassé + habillé en surface.
+#[allow(clippy::too_many_arguments)]
 pub fn decorate(
     grid: &mut [u32],
     seed: u64,
@@ -1035,6 +1169,7 @@ pub fn decorate(
     biome_idx: &[[u16; 16]; 16],
     biome_names: &[String],
     surfaces: &[[i32; 16]; 16],
+    biome3d: &[[[u16; 4]; 4]],
 ) {
     let pal = Pal::new();
     let mut rng = Random::new(
@@ -1138,6 +1273,10 @@ pub fn decorate(
     decorate_dripstone(grid, &pal, &mut rng);
     decorate_geode(grid, &pal, &mut rng);
     decorate_lava_lake(grid, &pal, &mut rng);
+
+    // ── Biomes 3D de grottes : lush caves (mousse/azalée/lianes) & deep dark (sculk) ──
+    decorate_lush(grid, &pal, biome3d, biome_names, &mut rng);
+    decorate_deep_dark(grid, &pal, biome3d, biome_names, &mut rng);
 
     // ── Neige/glace (biomes froids), en dernier (top layer) ──
     decorate_snow(grid, &pal, biome_idx, biome_names, surfaces);
@@ -1487,7 +1626,16 @@ mod tests {
     fn forest_places_logs_and_leaves() {
         let names = vec!["minecraft:forest".to_string()];
         let (mut grid, idx, surf) = flat_chunk(70, 0);
-        decorate(&mut grid, 42, 0, 0, &idx, &names, &surf);
+        decorate(
+            &mut grid,
+            42,
+            0,
+            0,
+            &idx,
+            &names,
+            &surf,
+            &[[[0u16; 4]; 4]; 1],
+        );
         let pal = Pal::new();
         let logs = grid.iter().filter(|&&b| pal.logs.contains(&b)).count();
         let leaves = grid.iter().filter(|&&b| pal.leaves.contains(&b)).count();
@@ -1540,7 +1688,16 @@ mod tests {
         // Jungle dense → la feature vines (127) doit couvrir les arbres.
         let names = vec!["minecraft:jungle".to_string()];
         let (mut grid, idx, surf) = flat_chunk(75, 0);
-        decorate(&mut grid, 99, 0, 0, &idx, &names, &surf);
+        decorate(
+            &mut grid,
+            99,
+            0,
+            0,
+            &idx,
+            &names,
+            &surf,
+            &[[[0u16; 4]; 4]; 1],
+        );
         let pal = Pal::new();
         let vines = grid.iter().filter(|&&b| b == pal.vine).count();
         assert!(vines > 20, "jungle trop pauvre en lianes: {vines}");
@@ -1550,7 +1707,16 @@ mod tests {
     fn cold_biome_gets_snow_layer() {
         let names = vec!["minecraft:snowy_plains".to_string()];
         let (mut grid, idx, surf) = flat_chunk(80, 0);
-        decorate(&mut grid, 1, 0, 0, &idx, &names, &surf);
+        decorate(
+            &mut grid,
+            1,
+            0,
+            0,
+            &idx,
+            &names,
+            &surf,
+            &[[[0u16; 4]; 4]; 1],
+        );
         let pal = Pal::new();
         assert!(
             grid.contains(&pal.snow_layer),
@@ -1596,6 +1762,45 @@ mod tests {
     }
 
     #[test]
+    fn lush_and_deep_dark_cave_features() {
+        let pal = Pal::new();
+        let make = || {
+            let mut g = vec![pal.stone; GRID_LEN].into_boxed_slice();
+            for lx in 0..16usize {
+                for lz in 0..16usize {
+                    for y in -40..-36 {
+                        g[grid_index(lx, y, lz)] = pal.air;
+                    }
+                }
+            }
+            g
+        };
+        let b3d = vec![[[0u16; 4]; 4]; 24];
+
+        let mut g = make();
+        let mut rng = Random::new(2);
+        decorate_lush(
+            &mut g,
+            &pal,
+            &b3d,
+            &["minecraft:lush_caves".to_string()],
+            &mut rng,
+        );
+        assert!(g.contains(&pal.moss_block), "pas de mousse en lush caves");
+
+        let mut g2 = make();
+        let mut rng2 = Random::new(2);
+        decorate_deep_dark(
+            &mut g2,
+            &pal,
+            &b3d,
+            &["minecraft:deep_dark".to_string()],
+            &mut rng2,
+        );
+        assert!(g2.contains(&pal.sculk), "pas de sculk en deep dark");
+    }
+
+    #[test]
     fn warm_ocean_places_coral() {
         let names = vec!["minecraft:warm_ocean".to_string()];
         let pal = Pal::new();
@@ -1613,7 +1818,16 @@ mod tests {
         }
         let idx = [[0u16; 16]; 16];
         let surf = [[40i32; 16]; 16];
-        decorate(&mut grid, 7, 0, 0, &idx, &names, &surf);
+        decorate(
+            &mut grid,
+            7,
+            0,
+            0,
+            &idx,
+            &names,
+            &surf,
+            &[[[0u16; 4]; 4]; 1],
+        );
         let coral = grid
             .iter()
             .filter(|&&b| pal.corals.contains(&b) || b == pal.kelp || b == pal.seagrass)
