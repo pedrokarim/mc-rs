@@ -42,7 +42,12 @@ pub struct ArrowEntity {
 
 impl ArrowEntity {
     /// Flèche : trajectoire balistique, se plante dans les blocs.
-    pub fn spawn(position: [f32; 3], velocity: [f32; 3], damage: f32, shooter_runtime_id: u64) -> Self {
+    pub fn spawn(
+        position: [f32; 3],
+        velocity: [f32; 3],
+        damage: f32,
+        shooter_runtime_id: u64,
+    ) -> Self {
         Self::projectile(
             "minecraft:arrow",
             position,
@@ -171,7 +176,11 @@ impl ArrowEntityManager {
 
     /// Avance toutes les flèches : physique, collision bloc, hit joueur.
     /// `players` : (runtime_id, position pieds) des joueurs en jeu.
-    pub fn tick(&mut self, chunk_cache: &mut ChunkCache, players: &[(u64, [f32; 3])]) -> ArrowTickResult {
+    pub fn tick(
+        &mut self,
+        chunk_cache: &mut ChunkCache,
+        players: &[(u64, [f32; 3])],
+    ) -> ArrowTickResult {
         let mut result = ArrowTickResult::default();
         let ids: Vec<u64> = self.arrows.keys().copied().collect();
 
@@ -345,7 +354,14 @@ mod tests {
         let mut mgr = ArrowEntityManager::new();
         // Bullet filant en +X mais joueur décalé en +Z : sans tête chercheuse,
         // il manquerait. Le homing doit l'infléchir jusqu'à toucher.
-        let fb = mgr.spawn_fireball("minecraft:shulker_bullet", [0.0, 65.0, 0.0], [1.2, 0.0, 0.0], 4.0, 999, Some(7));
+        let fb = mgr.spawn_fireball(
+            "minecraft:shulker_bullet",
+            [0.0, 65.0, 0.0],
+            [1.2, 0.0, 0.0],
+            4.0,
+            999,
+            Some(7),
+        );
         assert!(fb.homing_target == Some(7));
         let players = vec![(7u64, [5.0, 64.0, 5.0])];
         let mut hit = false;
@@ -356,7 +372,10 @@ mod tests {
                 break;
             }
         }
-        assert!(hit, "le projectile à tête chercheuse doit toucher le joueur décalé");
+        assert!(
+            hit,
+            "le projectile à tête chercheuse doit toucher le joueur décalé"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -368,7 +387,10 @@ mod tests {
         mgr.spawn([0.0, 65.0, 0.0], [0.1, 0.0, 0.0], 4.0, 7);
         let players = vec![(7u64, [0.0, 64.0, 0.0])];
         let r = mgr.tick(&mut cache, &players);
-        assert!(r.hits.is_empty(), "ne touche pas le tireur juste après le tir");
+        assert!(
+            r.hits.is_empty(),
+            "ne touche pas le tireur juste après le tir"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

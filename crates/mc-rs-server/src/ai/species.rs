@@ -64,8 +64,9 @@ fn combat_behavior(executor: Box<dyn super::behavior::Executor>) -> Behavior {
 pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
     use crate::mob_entities::AiProfile;
     let speed = kind.movement_speed();
-    let sensors: Vec<Box<dyn Sensor>> =
-        vec![Box::new(NearestPlayerSensor::with_range(kind.sight_range()))];
+    let sensors: Vec<Box<dyn Sensor>> = vec![Box::new(NearestPlayerSensor::with_range(
+        kind.sight_range(),
+    ))];
     let roam = || -> Behavior {
         Behavior::new(
             Box::new(AlwaysEvaluator),
@@ -83,7 +84,13 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
                 kind.attack_range(),
                 MELEE_COOLDOWN,
             )));
-            BehaviorGroup::new(vec![], vec![combat, roam()], sensors, standard_controllers(), true)
+            BehaviorGroup::new(
+                vec![],
+                vec![combat, roam()],
+                sensors,
+                standard_controllers(),
+                true,
+            )
         }
         AiProfile::Bow => {
             // Certains lancent un projectile (potion, wind charge, bullet) au lieu
@@ -91,7 +98,11 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
             let combat = match kind.thrown_projectile() {
                 Some(proj) => {
                     // La wind charge du breeze repousse fort mais blesse peu.
-                    let dmg = if matches!(kind, MobKind::Breeze) { 1.0 } else { 6.0 };
+                    let dmg = if matches!(kind, MobKind::Breeze) {
+                        1.0
+                    } else {
+                        6.0
+                    };
                     combat_behavior(Box::new(BowAttackExecutor::with_projectile(
                         speed,
                         kind.sight_range(),
@@ -113,7 +124,13 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
                     BOW_COOLDOWN,
                 ))),
             };
-            BehaviorGroup::new(vec![], vec![combat, roam()], sensors, standard_controllers(), true)
+            BehaviorGroup::new(
+                vec![],
+                vec![combat, roam()],
+                sensors,
+                standard_controllers(),
+                true,
+            )
         }
         AiProfile::CreeperSwell => {
             let combat = combat_behavior(Box::new(CreeperSwellExecutor::new(
@@ -122,7 +139,13 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
                 CREEPER_IGNITE_RANGE,
                 CREEPER_FUSE_TICKS,
             )));
-            BehaviorGroup::new(vec![], vec![combat, roam()], sensors, standard_controllers(), true)
+            BehaviorGroup::new(
+                vec![],
+                vec![combat, roam()],
+                sensors,
+                standard_controllers(),
+                true,
+            )
         }
         AiProfile::Neutral => {
             // Erre uniquement, regarde le joueur proche (n'attaque pas en v1).
@@ -233,7 +256,13 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
                 kind.attack_damage(),
                 MELEE_COOLDOWN,
             )));
-            BehaviorGroup::new(vec![], vec![combat, roam()], sensors, standard_controllers(), true)
+            BehaviorGroup::new(
+                vec![],
+                vec![combat, roam()],
+                sensors,
+                standard_controllers(),
+                true,
+            )
         }
         AiProfile::Dragon => {
             // Phases cercle ↔ strafe (l'executor pilote tout) + vol.

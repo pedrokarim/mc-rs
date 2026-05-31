@@ -2574,7 +2574,13 @@ fn apply_mob_damage_broadcast(
     let info = mob_entities
         .all()
         .find(|e| e.base.entity_runtime_id == runtime_id)
-        .map(|e| (e.base.position, e.kind.actor_type(), e.base.entity_unique_id));
+        .map(|e| {
+            (
+                e.base.position,
+                e.kind.actor_type(),
+                e.base.entity_unique_id,
+            )
+        });
     let Some(result) = mob_entities.apply_attack(runtime_id, damage) else {
         return;
     };
@@ -2594,7 +2600,8 @@ fn apply_mob_damage_broadcast(
         // Culling : seuls les joueurs qui voient le mob reçoivent ses attributs.
         for (addr, conn) in connections.iter_mut() {
             if conn.is_in_game() && conn.visible_entities.contains(&unique) {
-                let pkt = conn.encode_compressed_packet(packet_id::UPDATE_ATTRIBUTES, &update_bytes);
+                let pkt =
+                    conn.encode_compressed_packet(packet_id::UPDATE_ATTRIBUTES, &update_bytes);
                 let prep = conn.prepare_for_send(pkt);
                 raknet.send_to_session(addr, prep, Reliability::ReliableOrdered, true);
             }
@@ -2684,7 +2691,8 @@ fn apply_mob_attack_to_player(
     // Knockback motion → envoyé à la cible.
     if let Some((kx, ky, kz)) = kb {
         if let Some(tc) = connections.get_mut(&tgt_addr) {
-            let bytes = crate::combat_packets::encode_set_actor_motion(target_rid, [kx, ky, kz], tick);
+            let bytes =
+                crate::combat_packets::encode_set_actor_motion(target_rid, [kx, ky, kz], tick);
             let pkt = tc.encode_compressed_packet(packet_id::SET_ACTOR_MOTION, &bytes);
             let prep = tc.prepare_for_send(pkt);
             raknet.send_to_session(&tgt_addr, prep, Reliability::ReliableOrdered, false);
@@ -3443,15 +3451,20 @@ fn process_peer_events(
                                     // Tonte d'un mouton : laine + flag SHEARED.
                                     let sheep_pos = mob_entities
                                         .all()
-                                        .find(|e| e.base.entity_runtime_id == attack.target_runtime_id)
+                                        .find(|e| {
+                                            e.base.entity_runtime_id == attack.target_runtime_id
+                                        })
                                         .map(|e| e.base.position);
-                                    if let (Some(pos), Some((drops, meta_bytes))) =
-                                        (sheep_pos, mob_entities.shear_sheep(attack.target_runtime_id))
-                                    {
+                                    if let (Some(pos), Some((drops, meta_bytes))) = (
+                                        sheep_pos,
+                                        mob_entities.shear_sheep(attack.target_runtime_id),
+                                    ) {
                                         // SetActorData (flag SHEARED) aux viewers.
                                         let unique = attack.target_runtime_id as i64;
                                         for (a, c) in connections.iter_mut() {
-                                            if c.is_in_game() && c.visible_entities.contains(&unique) {
+                                            if c.is_in_game()
+                                                && c.visible_entities.contains(&unique)
+                                            {
                                                 let pkt = c.encode_compressed_packet(
                                                     packet_id::SET_ACTOR_DATA,
                                                     &meta_bytes,
@@ -3649,8 +3662,10 @@ fn process_peer_events(
                         }
 
                         // Dégâts joueur→mob (épée = 4.0 placeholder) : son + mort + drops.
-                        let attacker_pos =
-                            connections.get(&addr).map(|c| c.position).unwrap_or([0.0; 3]);
+                        let attacker_pos = connections
+                            .get(&addr)
+                            .map(|c| c.position)
+                            .unwrap_or([0.0; 3]);
                         apply_mob_damage_broadcast(
                             mob_entities,
                             connections,

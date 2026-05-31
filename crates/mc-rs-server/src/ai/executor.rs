@@ -425,12 +425,17 @@ impl Executor for FlatRandomRoamExecutor {
 
     fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
         // Regard « idle » : on fixe le joueur le plus proche s'il y en a un.
-        match ctx.memory.nearest_player.and_then(|pid| {
-            ctx.players.iter().find(|p| p.runtime_id == pid).copied()
-        }) {
+        match ctx
+            .memory
+            .nearest_player
+            .and_then(|pid| ctx.players.iter().find(|p| p.runtime_id == pid).copied())
+        {
             Some(p) => {
-                ctx.memory.look_target =
-                    Some([p.position[0] as f64, (p.position[1] + 1.62) as f64, p.position[2] as f64]);
+                ctx.memory.look_target = Some([
+                    p.position[0] as f64,
+                    (p.position[1] + 1.62) as f64,
+                    p.position[2] as f64,
+                ]);
             }
             None => ctx.memory.look_target = None,
         }
@@ -500,7 +505,11 @@ impl PanicFleeExecutor {
     }
 
     /// Vrai si le mob est blessé ET un joueur est proche (évaluateur de la fuite).
-    pub fn should_flee(memory: &Memory, base: &EntityBase, _players: &[super::PlayerSnapshot]) -> bool {
+    pub fn should_flee(
+        memory: &Memory,
+        base: &EntityBase,
+        _players: &[super::PlayerSnapshot],
+    ) -> bool {
         memory.nearest_player.is_some() && is_injured(base)
     }
 }
@@ -585,7 +594,8 @@ impl Executor for TemptExecutor {
     }
 
     fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
-        let Some(tpos) = Self::tempting_player(&self.food_ids, self.range_sq, ctx.base, ctx.players)
+        let Some(tpos) =
+            Self::tempting_player(&self.food_ids, self.range_sq, ctx.base, ctx.players)
         else {
             return false;
         };
@@ -719,8 +729,7 @@ impl Executor for FlyShootExecutor {
 
         // Plane : approche si trop loin, sinon reste sur place (vol stationnaire).
         if d2 > self.shoot_range_sq {
-            ctx.memory.move_target =
-                Some([tpos[0] as f64, (tpos[1] + 3.0) as f64, tpos[2] as f64]);
+            ctx.memory.move_target = Some([tpos[0] as f64, (tpos[1] + 3.0) as f64, tpos[2] as f64]);
         } else {
             // Vol stationnaire à hauteur de tir.
             ctx.memory.move_target = Some([
@@ -775,7 +784,13 @@ pub struct FlyAttackExecutor {
 }
 
 impl FlyAttackExecutor {
-    pub fn new(speed: f32, max_sense_range: f64, attack_range: f64, damage: f32, cooldown: u32) -> Self {
+    pub fn new(
+        speed: f32,
+        max_sense_range: f64,
+        attack_range: f64,
+        damage: f32,
+        cooldown: u32,
+    ) -> Self {
         Self {
             speed,
             max_sense_range_sq: max_sense_range * max_sense_range,
@@ -843,7 +858,13 @@ pub struct CreakingExecutor {
 }
 
 impl CreakingExecutor {
-    pub fn new(speed: f32, max_sense_range: f64, attack_range: f64, damage: f32, cooldown: u32) -> Self {
+    pub fn new(
+        speed: f32,
+        max_sense_range: f64,
+        attack_range: f64,
+        damage: f32,
+        cooldown: u32,
+    ) -> Self {
         Self {
             speed,
             max_sense_range_sq: max_sense_range * max_sense_range,
@@ -861,7 +882,11 @@ impl CreakingExecutor {
             if !p.alive {
                 continue;
             }
-            let to = [center[0] - p.position[0], center[1] - (p.position[1] + 1.62), center[2] - p.position[2]];
+            let to = [
+                center[0] - p.position[0],
+                center[1] - (p.position[1] + 1.62),
+                center[2] - p.position[2],
+            ];
             let len = (to[0] * to[0] + to[1] * to[1] + to[2] * to[2]).sqrt();
             if (len * len) as f64 > range_sq || len < 0.001 {
                 continue;
@@ -979,7 +1004,10 @@ impl Executor for DragonExecutor {
     fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
         self.timer += 1;
         let center = self.center.unwrap_or(ctx.base.position);
-        let target = ctx.memory.nearest_player.and_then(|id| player_pos(ctx.players, id));
+        let target = ctx
+            .memory
+            .nearest_player
+            .and_then(|id| player_pos(ctx.players, id));
 
         match self.phase {
             DragonPhase::Circle => {
@@ -997,46 +1025,44 @@ impl Executor for DragonExecutor {
                     }
                 }
             }
-            DragonPhase::Strafe => {
-                match target {
-                    Some(tpos) => {
-                        ctx.memory.move_target =
-                            Some([tpos[0] as f64, (tpos[1] + 3.0) as f64, tpos[2] as f64]);
-                        ctx.memory.look_target =
-                            Some([tpos[0] as f64, (tpos[1] + 1.0) as f64, tpos[2] as f64]);
-                        self.shoot_tick += 1;
-                        if self.shoot_tick >= DRAGON_SHOOT_CD {
-                            self.shoot_tick = 0;
-                            let from = [
-                                ctx.base.position[0],
-                                ctx.base.position[1],
-                                ctx.base.position[2],
-                            ];
-                            let dx = tpos[0] - from[0];
-                            let dy = (tpos[1] + 1.0) - from[1];
-                            let dz = tpos[2] - from[2];
-                            let dist = (dx * dx + dy * dy + dz * dz).sqrt().max(0.001);
-                            let f = DRAGON_FIREBALL_SPEED / dist;
-                            ctx.effects.push(AiEffect::ShootFireball {
-                                shooter_runtime_id: ctx.base.entity_runtime_id,
-                                from,
-                                velocity: [dx * f, dy * f, dz * f],
-                                damage: 6.0,
-                                actor_type: "minecraft:dragon_fireball",
-                                homing_target: None,
-                            });
-                        }
-                        if self.timer >= DRAGON_STRAFE_TICKS {
-                            self.phase = DragonPhase::Circle;
-                            self.timer = 0;
-                        }
+            DragonPhase::Strafe => match target {
+                Some(tpos) => {
+                    ctx.memory.move_target =
+                        Some([tpos[0] as f64, (tpos[1] + 3.0) as f64, tpos[2] as f64]);
+                    ctx.memory.look_target =
+                        Some([tpos[0] as f64, (tpos[1] + 1.0) as f64, tpos[2] as f64]);
+                    self.shoot_tick += 1;
+                    if self.shoot_tick >= DRAGON_SHOOT_CD {
+                        self.shoot_tick = 0;
+                        let from = [
+                            ctx.base.position[0],
+                            ctx.base.position[1],
+                            ctx.base.position[2],
+                        ];
+                        let dx = tpos[0] - from[0];
+                        let dy = (tpos[1] + 1.0) - from[1];
+                        let dz = tpos[2] - from[2];
+                        let dist = (dx * dx + dy * dy + dz * dz).sqrt().max(0.001);
+                        let f = DRAGON_FIREBALL_SPEED / dist;
+                        ctx.effects.push(AiEffect::ShootFireball {
+                            shooter_runtime_id: ctx.base.entity_runtime_id,
+                            from,
+                            velocity: [dx * f, dy * f, dz * f],
+                            damage: 6.0,
+                            actor_type: "minecraft:dragon_fireball",
+                            homing_target: None,
+                        });
                     }
-                    None => {
+                    if self.timer >= DRAGON_STRAFE_TICKS {
                         self.phase = DragonPhase::Circle;
                         self.timer = 0;
                     }
                 }
-            }
+                None => {
+                    self.phase = DragonPhase::Circle;
+                    self.timer = 0;
+                }
+            },
         }
         true
     }
@@ -1056,7 +1082,13 @@ pub struct GuardianLaserExecutor {
 }
 
 impl GuardianLaserExecutor {
-    pub fn new(speed: f32, max_sense_range: f64, hold_range: f64, damage: f32, charge_ticks: u32) -> Self {
+    pub fn new(
+        speed: f32,
+        max_sense_range: f64,
+        hold_range: f64,
+        damage: f32,
+        charge_ticks: u32,
+    ) -> Self {
         Self {
             speed,
             max_sense_range_sq: max_sense_range * max_sense_range,
@@ -1091,8 +1123,7 @@ impl Executor for GuardianLaserExecutor {
         if d2 > self.hold_range_sq {
             // Trop loin : s'approche à portée de tir (la ligne de vue est déjà
             // garantie par le sensor, qui n'a posé nearest_player que si LOS OK).
-            ctx.memory.move_target =
-                Some([tpos[0] as f64, tpos[1] as f64, tpos[2] as f64]);
+            ctx.memory.move_target = Some([tpos[0] as f64, tpos[1] as f64, tpos[2] as f64]);
             self.charge = 0;
         } else {
             // À portée : reste en place et charge le rayon, puis frappe.
@@ -1152,7 +1183,8 @@ mod tests {
             gamemode: 0,
             alive: true,
             held_item: 0,
-            look_dir: [0.0, 0.0, 1.0],        }];
+            look_dir: [0.0, 0.0, 1.0],
+        }];
         let mut effects = Vec::new();
 
         // Avant la fin du cooldown : pas d'attaque.
@@ -1219,7 +1251,8 @@ mod tests {
             gamemode: 0,
             alive: true,
             held_item: 0,
-            look_dir: [0.0, 0.0, 1.0],        }];
+            look_dir: [0.0, 0.0, 1.0],
+        }];
         let mut effects = Vec::new();
         let mut alive = true;
         for _ in 0..3 {
@@ -1249,7 +1282,8 @@ mod tests {
             gamemode: 0,
             alive: true,
             held_item: 0,
-            look_dir: [0.0, 0.0, 1.0],        }];
+            look_dir: [0.0, 0.0, 1.0],
+        }];
         let mut effects = Vec::new();
         for _ in 0..10 {
             let mut ctx = ExecCtx {
@@ -1261,7 +1295,10 @@ mod tests {
             };
             assert!(exec.execute(&mut ctx), "continue de traquer hors de portée");
         }
-        assert!(effects.is_empty(), "pas d'explosion hors de portée d'amorçage");
+        assert!(
+            effects.is_empty(),
+            "pas d'explosion hors de portée d'amorçage"
+        );
     }
 
     #[test]
@@ -1270,7 +1307,10 @@ mod tests {
         let mut base = zombie_base([100.0, 64.0, 100.0]);
         let mut memory = Memory::new(0.2);
         exec.on_start(&mut memory, &mut base);
-        assert!(memory.move_target.is_some(), "le roam pose une cible au démarrage");
+        assert!(
+            memory.move_target.is_some(),
+            "le roam pose une cible au démarrage"
+        );
     }
 
     #[test]
@@ -1299,7 +1339,10 @@ mod tests {
             };
             exec.execute(&mut ctx);
         }
-        assert!(memory.move_target.is_none(), "figé quand un joueur le regarde");
+        assert!(
+            memory.move_target.is_none(),
+            "figé quand un joueur le regarde"
+        );
 
         // Même joueur mais regardant ailleurs (+X) → le creaking fonce.
         let away = vec![PlayerSnapshot {
@@ -1314,7 +1357,10 @@ mod tests {
             effects: &mut Vec::new(),
         };
         exec.execute(&mut ctx);
-        assert!(memory.move_target.is_some(), "fonce quand on ne le regarde pas");
+        assert!(
+            memory.move_target.is_some(),
+            "fonce quand on ne le regarde pas"
+        );
     }
 
     #[test]
@@ -1361,7 +1407,8 @@ mod tests {
             gamemode: 0,
             alive: true,
             held_item: 0,
-            look_dir: [0.0, 0.0, 1.0],        }];
+            look_dir: [0.0, 0.0, 1.0],
+        }];
         let mut effects = Vec::new();
         for _ in 0..4 {
             let mut ctx = ExecCtx {
@@ -1396,7 +1443,8 @@ mod tests {
             gamemode: 0,
             alive: true,
             held_item: wheat,
-            look_dir: [0.0, 0.0, 1.0],        }];
+            look_dir: [0.0, 0.0, 1.0],
+        }];
         {
             let mut ctx = ExecCtx {
                 base: &mut base,
@@ -1405,14 +1453,21 @@ mod tests {
                 players: &holding,
                 effects: &mut effects,
             };
-            assert!(exec.execute(&mut ctx), "suit le joueur tenant la nourriture");
+            assert!(
+                exec.execute(&mut ctx),
+                "suit le joueur tenant la nourriture"
+            );
         }
-        assert!(memory.move_target.is_some(), "cible de déplacement posée vers le joueur");
+        assert!(
+            memory.move_target.is_some(),
+            "cible de déplacement posée vers le joueur"
+        );
 
         // Joueur sans nourriture → le tempt s'arrête.
         let empty = vec![PlayerSnapshot {
             held_item: 0,
-            look_dir: [0.0, 0.0, 1.0],            ..holding[0]
+            look_dir: [0.0, 0.0, 1.0],
+            ..holding[0]
         }];
         let mut ctx = ExecCtx {
             base: &mut base,
@@ -1421,6 +1476,9 @@ mod tests {
             players: &empty,
             effects: &mut effects,
         };
-        assert!(!exec.execute(&mut ctx), "sans nourriture tenue → pas de tempt");
+        assert!(
+            !exec.execute(&mut ctx),
+            "sans nourriture tenue → pas de tempt"
+        );
     }
 }

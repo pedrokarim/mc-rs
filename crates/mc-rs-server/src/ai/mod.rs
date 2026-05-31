@@ -229,7 +229,12 @@ impl BehaviorGroup {
 
     /// Behaviors core : indépendants de la priorité, tout ceux qui évaluent vrai
     /// démarrent en parallèle (port `evaluateCoreBehaviors`).
-    fn evaluate_core(&mut self, memory: &mut Memory, base: &mut EntityBase, players: &[PlayerSnapshot]) {
+    fn evaluate_core(
+        &mut self,
+        memory: &mut Memory,
+        base: &mut EntityBase,
+        players: &[PlayerSnapshot],
+    ) {
         for slot in self.core.iter_mut() {
             if slot.running {
                 continue;
@@ -250,7 +255,12 @@ impl BehaviorGroup {
     /// Seuls les behaviors de plus haute priorité évalués vrai sont retenus ;
     /// un behavior actif n'est interrompu que par une priorité strictement
     /// supérieure.
-    fn evaluate_normal(&mut self, memory: &mut Memory, base: &mut EntityBase, players: &[PlayerSnapshot]) {
+    fn evaluate_normal(
+        &mut self,
+        memory: &mut Memory,
+        base: &mut EntityBase,
+        players: &[PlayerSnapshot],
+    ) {
         // Passe 1 : collecte les candidats échus & non-running de plus haute priorité.
         let mut eval_succeed: Vec<usize> = Vec::new();
         let mut highest = i32::MIN;
@@ -336,7 +346,12 @@ impl BehaviorGroup {
 
     /// Met à jour la route et le segment de direction courant (port
     /// `updateRoute`) : recalcul périodique de l'A\*, puis suivi de waypoints.
-    fn update_route(&mut self, memory: &mut Memory, base: &mut EntityBase, chunk_cache: &mut ChunkCache) {
+    fn update_route(
+        &mut self,
+        memory: &mut Memory,
+        base: &mut EntityBase,
+        chunk_cache: &mut ChunkCache,
+    ) {
         if !self.route_enabled {
             return;
         }
@@ -389,9 +404,11 @@ impl BehaviorGroup {
             if memory.has_next_node() {
                 let next = memory.route[memory.node_index];
                 memory.node_index += 1;
-                let start = memory
-                    .move_dir_end
-                    .unwrap_or([base.position[0] as f64, base.position[1] as f64, base.position[2] as f64]);
+                let start = memory.move_dir_end.unwrap_or([
+                    base.position[0] as f64,
+                    base.position[1] as f64,
+                    base.position[2] as f64,
+                ]);
                 memory.move_dir_start = Some(start);
                 memory.move_dir_end = Some(next);
                 memory.should_update_move_dir = false;
@@ -481,7 +498,14 @@ mod tests {
     }
 
     fn dummy_base() -> EntityBase {
-        EntityBase::new("minecraft:zombie", "zombie", "Zombie", [0.0, 64.0, 0.0], vec![], vec![])
+        EntityBase::new(
+            "minecraft:zombie",
+            "zombie",
+            "Zombie",
+            [0.0, 64.0, 0.0],
+            vec![],
+            vec![],
+        )
     }
 
     fn make_group() -> (BehaviorGroup, Arc<AtomicU32>, Arc<AtomicU32>) {
@@ -521,14 +545,28 @@ mod tests {
         let test_dir = std::env::temp_dir().join(format!("mc-rs-ai-prio-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&test_dir);
         let mut cache = ChunkCache::new(&test_dir, 1, "normal");
-        group.tick(&mut memory, &mut base, MobKind::Zombie, &[], &mut cache, &mut effects);
+        group.tick(
+            &mut memory,
+            &mut base,
+            MobKind::Zombie,
+            &[],
+            &mut cache,
+            &mut effects,
+        );
         assert_eq!(group.running_normal_priorities(), vec![1]);
         assert_eq!(roam_runs.load(Ordering::Relaxed), 1);
         assert_eq!(melee_runs.load(Ordering::Relaxed), 0);
 
         // Cible apparaît → melee (priorité 10) interrompt roam.
         memory.nearest_player = Some(42);
-        group.tick(&mut memory, &mut base, MobKind::Zombie, &[], &mut cache, &mut effects);
+        group.tick(
+            &mut memory,
+            &mut base,
+            MobKind::Zombie,
+            &[],
+            &mut cache,
+            &mut effects,
+        );
         assert_eq!(group.running_normal_priorities(), vec![10]);
         assert_eq!(melee_runs.load(Ordering::Relaxed), 1);
         let _ = std::fs::remove_dir_all(&test_dir);
@@ -542,7 +580,8 @@ mod tests {
             gamemode: 0,
             alive: true,
             held_item: 0,
-            look_dir: [0.0, 0.0, 1.0],        };
+            look_dir: [0.0, 0.0, 1.0],
+        };
         let creative = PlayerSnapshot {
             gamemode: 1,
             ..survival

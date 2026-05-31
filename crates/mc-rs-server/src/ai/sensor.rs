@@ -85,7 +85,11 @@ impl Sensor for NearestPlayerSensor {
                 continue;
             }
             // Ne cible que si la ligne de vue vers les yeux du joueur est dégagée.
-            let target_eye = [player.position[0], player.position[1] + 1.62, player.position[2]];
+            let target_eye = [
+                player.position[0],
+                player.position[1] + 1.62,
+                player.position[2],
+            ];
             if !line_of_sight(chunk_cache, eye, target_eye) {
                 continue;
             }
@@ -117,7 +121,8 @@ mod tests {
             gamemode,
             alive: true,
             held_item: 0,
-            look_dir: [0.0, 0.0, 1.0],        }
+            look_dir: [0.0, 0.0, 1.0],
+        }
     }
 
     /// Cache "flat" : air au-dessus de la surface basse → ligne de vue dégagée.
@@ -169,7 +174,10 @@ mod tests {
             cache.set_block(3, y, 0, BLOCKS.stone);
         }
         sensor.sense(&mut memory, &base, &players, &mut cache);
-        assert_eq!(memory.nearest_player, None, "mur → pas de ligne de vue → pas de cible");
+        assert_eq!(
+            memory.nearest_player, None,
+            "mur → pas de ligne de vue → pas de cible"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -165,8 +165,22 @@ pub fn find_ground_path<F: FnMut(i32, i32, i32) -> bool>(
             // Anti-corner-cutting : pour une diagonale, au moins un cardinal
             // adjacent doit être walkable.
             if dx != 0 && dz != 0 {
-                let card_x = walkable_y(current.x + dx, current.y, current.z, max_fall, &mut walkable).is_some();
-                let card_z = walkable_y(current.x, current.y, current.z + dz, max_fall, &mut walkable).is_some();
+                let card_x = walkable_y(
+                    current.x + dx,
+                    current.y,
+                    current.z,
+                    max_fall,
+                    &mut walkable,
+                )
+                .is_some();
+                let card_z = walkable_y(
+                    current.x,
+                    current.y,
+                    current.z + dz,
+                    max_fall,
+                    &mut walkable,
+                )
+                .is_some();
                 if !card_x && !card_z {
                     continue;
                 }
@@ -175,7 +189,11 @@ pub fn find_ground_path<F: FnMut(i32, i32, i32) -> bool>(
             let Some(ny) = walkable_y(nx, current.y, nz, max_fall, &mut walkable) else {
                 continue;
             };
-            let neighbor = Pos { x: nx, y: ny, z: nz };
+            let neighbor = Pos {
+                x: nx,
+                y: ny,
+                z: nz,
+            };
             if closed.contains(&neighbor) {
                 continue;
             }
@@ -235,7 +253,8 @@ pub fn walkable_ground(cache: &mut ChunkCache, x: i32, y: i32, z: i32) -> bool {
         return false; // pas de sol solide en dessous
     }
     // Pieds + tête doivent être franchissables (non solides).
-    !is_supporting_block(cache.get_block(x, y, z)) && !is_supporting_block(cache.get_block(x, y + 1, z))
+    !is_supporting_block(cache.get_block(x, y, z))
+        && !is_supporting_block(cache.get_block(x, y + 1, z))
 }
 
 #[cfg(test)]
@@ -270,7 +289,10 @@ mod tests {
         assert!(!path.is_empty(), "un chemin doit exister sur terrain plat");
         // Dernier waypoint proche de la cible en X.
         let last = *path.last().unwrap();
-        assert!((last[0] - 4.5).abs() < 1.5, "fin proche de la cible, got {last:?}");
+        assert!(
+            (last[0] - 4.5).abs() < 1.5,
+            "fin proche de la cible, got {last:?}"
+        );
     }
 
     #[test]
