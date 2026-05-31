@@ -32,6 +32,10 @@ pub(super) const HEIGHT: i32 = 384;
 pub(super) const MAX_Y: i32 = MIN_Y + HEIGHT;
 /// Niveau de la mer (`sea_level` de `noise_settings/overworld.json`).
 pub(super) const SEA_LEVEL: i32 = 63;
+/// Espacement minimal (Chebyshev) entre troncs d'arbres d'un même chunk
+/// d'origine — approxime la collision vanilla (les biomes denses comme la jungle
+/// ne posent pas réellement tous leurs ~50 arbres). Réglable : ↑ = plus clairsemé.
+const TREE_MIN_SPACING: i32 = 3;
 /// Colonnes par chunk (16×16).
 pub(super) const COLS: usize = 256;
 /// Taille de la grille de blocs d'un chunk (toute la hauteur).
@@ -346,6 +350,13 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
                 let mean = sum / 16.0;
                 let attempts = mean.floor() as i32 + i32::from(trng.next_float() < mean.fract());
 
+                // Centres de troncs déjà posés CE chunk d'origine → espacement
+                // déterministe. Approxime la collision vanilla : le `count` d'un
+                // biome est un nombre de TENTATIVES, et les arbres denses se
+                // gênent (la jungle ne pose pas réellement ses ~50 arbres). Comme
+                // c'est calculé sur le seul RNG d'origine, ça reste cohérent
+                // cross-chunk.
+                let mut centers: Vec<(i32, i32)> = Vec::new();
                 for _ in 0..attempts {
                     let lx = trng.next_bounded_int(16);
                     let lz = trng.next_bounded_int(16);
@@ -362,7 +373,14 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
                     if plan.density <= 0.0 {
                         continue;
                     }
+                    // Rejette si trop proche d'un tronc déjà posé (Chebyshev).
+                    if centers.iter().any(|&(px, pz)| {
+                        (px - wx).abs() < TREE_MIN_SPACING && (pz - wz).abs() < TREE_MIN_SPACING
+                    }) {
+                        continue;
+                    }
                     if let Some(species) = plan.pick(&mut trng) {
+                        centers.push((wx, wz));
                         // Coords locales au chunk CIBLE (hors 0..16 → clippé) ;
                         // formes Bedrock fidèles (port Allay) dans `trees`.
                         super::trees::place(
