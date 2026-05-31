@@ -272,6 +272,87 @@ depuis la sémantique vanilla (réf. deepslate pour le bruit/les surfaces).
 5. **Décoration** : arbres, lianes, herbe/fleurs, aquatique, etc. par biome.
 6. **Sérialisation** : sub-chunks (paletté) + carte de biomes.
 
+### Vue d'ensemble — couverture (✅ fait · 🟡 partiel/approx · ❌ manquant)
+
+**Terrain & forme**
+
+| Élément | État | Note |
+|---|---|---|
+| Relief 3D (density functions) | ✅ | y-64→320, montagnes/océans |
+| Grottes (cheese/spaghetti/noodle) | ✅ | incluses dans `final_density` |
+| Interpolation cellulaire 4×8 | ✅ | |
+| `vertical_gradient` probabiliste | 🟡 | cutoff déterministe (bedrock/deepslate) |
+| Parité numérique du bruit vs vanilla | 🟡 | non cross-validée |
+
+**Biomes & surfaces**
+
+| Élément | État | Note |
+|---|---|---|
+| Placement multi-noise 6D | ✅ | param list vanilla + mapping Geyser |
+| Surface rules (grass/dirt/sable/gravier) | ✅ | interpréteur `surface_rule` |
+| Neige + glace (biomes froids) | ✅ | `freeze_top_layer` |
+| Pierre sur pentes raides (`steep`) | ✅ | |
+| Terracotta badlands | 🟡 | uniforme (pas les bandes colorées) |
+| `min_surface_level` | 🟡 | proxy (plus haut bloc solide) |
+| Biomes **3D** (grottes : lush/dripstone/deep_dark) | ❌ | carte de biomes 2D pour l'instant |
+
+**Minerais**
+
+| Élément | État | Note |
+|---|---|---|
+| Minerais en clusters (charbon→diamant, redstone, lapis) | ✅ | via `ore.rs` |
+| Veines de minerai par bruit (`vein_toggle/ridged`) | ❌ | gros filons cuivre/fer 1.18 |
+
+**Arbres** (compositions **data-fidèles** par biome)
+
+| Élément | État | Note |
+|---|---|---|
+| Compositions officielles (sélecteurs `random_selector`) | ✅ | forêt = chêne+bouleau+fancy, birch=pur, etc. |
+| **Fancy oak** (gros feuillage à branches) | ✅ | |
+| Espèces : chêne, bouleau, super bouleau, sapin, pin, méga conifère 2×2, jungle, buisson, méga jungle 2×2, chêne noir 2×2, acacia, cerisier, palétuvier | ✅ | |
+| Formes exactes (trunk/foliage placers vanilla) | 🟡 | approximations fidèles |
+
+**Végétation au sol & déco** (densités **officielles**)
+
+| Élément | État | Élément | État |
+|---|---|---|---|
+| Herbe (`noise_threshold_count`) | ✅ | Citrouilles / melons | ✅ |
+| Fleurs (rarités par biome) | ✅ | Champignons brun/rouge | ✅ |
+| Fougères (taïga) | ✅ | Glow lichen | ✅ |
+| Lianes (127, jungle) | ✅ | Leaf litter (forêts) | ✅ |
+| Bambou | ✅ | Buissons (`bush`) | ✅ |
+| Canne à sucre | ✅ | Buissons de baies (taïga) | ✅ |
+| Cactus / arbuste mort | ✅ | Nénuphars (marais) | ✅ |
+| Fleurs hautes 2-blocs (lilas/rosier/pivoine/tournesol) | ❌ | Firefly bush | ❌ |
+| Mushroom fields (mycélium + champignons géants) | ❌ | | |
+
+**Aquatique**
+
+| Élément | État | Note |
+|---|---|---|
+| Kelp / seagrass | ✅ | océans/rivières |
+| Récifs de corail + sea pickles | ✅ | océan chaud |
+| Icebergs (océan gelé) | ❌ | |
+
+**Macro-features & structures** (gros manques restants)
+
+| Élément | État | Note |
+|---|---|---|
+| Aquifères (eau/lave dans les grottes) | ❌ | Phase D — stages dispo dans le router |
+| Lacs (`LAKES`) + sources eau/lave (springs) | ❌ | |
+| Géodes d'améthyste | ❌ | |
+| Dripstone (clusters + pointed) | ❌ | |
+| Lush caves (mousse, azalée, glow berries, spore blossom) | ❌ | dépend des biomes 3D |
+| Deep dark / sculk | ❌ | dépend des biomes 3D |
+| Disques sable/gravier/argile (bord de l'eau) | ❌ | |
+| **Structures** (villages, mines, donjons, temples, strongholds, portails en ruine…) | ❌ | aucune pour l'instant |
+| Position de spawn | 🟡 | calcul legacy (désync possible) |
+
+> En clair : **terrain + biomes + surfaces + minerais + toute la végétation/déco de
+> surface** sont là et fidèles. Ce qui manque relève surtout des **systèmes macro**
+> (aquifères, structures, lacs/springs, features de grottes spécialisées) et des
+> **biomes 3D** de grottes.
+
 ### ✅ Fait
 
 **Terrain (phases A1→A4)**
