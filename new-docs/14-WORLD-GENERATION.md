@@ -339,9 +339,9 @@ depuis la sémantique vanilla (réf. deepslate pour le bruit/les surfaces).
 
 | Élément | État | Note |
 |---|---|---|
-| Lacs (`LAKES`) + sources eau/lave (springs) | ❌ | |
-| Géodes d'améthyste | ❌ | |
-| Dripstone (clusters + pointed) | ❌ | |
+| Lacs de lave souterrains (`lake_lava`) | ✅ | 1/9 ; lacs d'eau retirés en 1.18 ; sources/springs ❌ |
+| **Géodes d'améthyste** | ✅ | 1/24, coquille smooth_basalt/calcite/amethyst + budding + clusters |
+| **Dripstone** (clusters + pointed) | ✅ | stalactites/stalagmites (192-256) + blocs (48-96) dans les grottes |
 | Lush caves (mousse, azalée, glow berries, spore blossom) | ❌ | dépend des biomes 3D |
 | Deep dark / sculk | ❌ | dépend des biomes 3D |
 | Disques sable/gravier/argile (bord de l'eau) | ❌ | |

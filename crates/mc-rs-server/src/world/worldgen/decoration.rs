@@ -58,6 +58,14 @@ struct Pal {
     ice: u32,
     stone: u32,
     deepslate: u32,
+    lava: u32,
+    pointed_dripstone: u32,
+    dripstone_block: u32,
+    amethyst_block: u32,
+    budding_amethyst: u32,
+    amethyst_cluster: u32,
+    calcite: u32,
+    smooth_basalt: u32,
 }
 
 // Indices d'espèce dans logs/leaves.
@@ -140,6 +148,14 @@ impl Pal {
             ice: g("minecraft:ice"),
             stone: BLOCKS.stone,
             deepslate: g("minecraft:deepslate"),
+            lava: g("minecraft:lava"),
+            pointed_dripstone: g("minecraft:pointed_dripstone"),
+            dripstone_block: g("minecraft:dripstone_block"),
+            amethyst_block: g("minecraft:amethyst_block"),
+            budding_amethyst: g("minecraft:budding_amethyst"),
+            amethyst_cluster: g("minecraft:amethyst_cluster"),
+            calcite: g("minecraft:calcite"),
+            smooth_basalt: g("minecraft:smooth_basalt"),
         }
     }
 }
@@ -871,6 +887,145 @@ fn decorate_snow(
     }
 }
 
+#[inline]
+fn is_rock(pal: &Pal, b: u32) -> bool {
+    b == pal.stone || b == pal.deepslate
+}
+
+/// Dripstone : `pointed_dripstone` (192-256, stalactites/stalagmites) +
+/// `dripstone_cluster` (48-96, blocs de dripstone au sol/plafond des grottes).
+fn decorate_dripstone(grid: &mut [u32], pal: &Pal, rng: &mut Random) {
+    let pointed = 192 + rng.next_bounded_int(64);
+    for _ in 0..pointed {
+        let lx = rng.next_bounded_int(16);
+        let lz = rng.next_bounded_int(16);
+        let wy = MIN_Y + 4 + rng.next_bounded_int(160); // ~ -60..100
+        if at(grid, lx, wy, lz) != pal.air {
+            continue;
+        }
+        let ceiling = is_rock(pal, at(grid, lx, wy + 1, lz));
+        let floor = is_rock(pal, at(grid, lx, wy - 1, lz));
+        let len = 1 + rng.next_bounded_int(4);
+        if ceiling {
+            for d in 0..len {
+                let y = wy - d;
+                if at(grid, lx, y, lz) != pal.air {
+                    break;
+                }
+                if let Some(i) = idx_ok(lx, y, lz) {
+                    grid[i] = pal.pointed_dripstone;
+                }
+            }
+        } else if floor {
+            for d in 0..len {
+                let y = wy + d;
+                if at(grid, lx, y, lz) != pal.air {
+                    break;
+                }
+                if let Some(i) = idx_ok(lx, y, lz) {
+                    grid[i] = pal.pointed_dripstone;
+                }
+            }
+        }
+    }
+
+    let clusters = 48 + rng.next_bounded_int(48);
+    for _ in 0..clusters {
+        let lx = rng.next_bounded_int(16);
+        let lz = rng.next_bounded_int(16);
+        let wy = MIN_Y + 4 + rng.next_bounded_int(160);
+        // Sol de grotte : air avec roche dessous → bloc de dripstone.
+        if at(grid, lx, wy, lz) == pal.air && is_rock(pal, at(grid, lx, wy - 1, lz)) {
+            if let Some(i) = idx_ok(lx, wy - 1, lz) {
+                grid[i] = pal.dripstone_block;
+            }
+        }
+    }
+}
+
+/// Géode d'améthyste : `amethyst_geode` (1/24, y ∈ [-58, 30]). Sphère creuse :
+/// coquille `smooth_basalt`, `calcite`, `amethyst_block`, centre creux avec
+/// `budding_amethyst` + `amethyst_cluster`.
+fn decorate_geode(grid: &mut [u32], pal: &Pal, rng: &mut Random) {
+    if rng.next_bounded_int(24) != 0 {
+        return;
+    }
+    let cx = rng.next_bounded_int(16);
+    let cz = rng.next_bounded_int(16);
+    let cy = -58 + rng.next_bounded_int(89); // [-58, 30]
+    for dx in -6..=6i32 {
+        for dy in -6..=6i32 {
+            for dz in -6..=6i32 {
+                let (x, y, z) = (cx + dx, cy + dy, cz + dz);
+                let cur = at(grid, x, y, z);
+                // On ne creuse que la roche (ou l'air déjà présent dans la coquille).
+                if !is_rock(pal, cur) && cur != pal.air {
+                    continue;
+                }
+                let d2 = dx * dx + dy * dy + dz * dz;
+                let block = if d2 <= 9 {
+                    // Centre creux : améthyste bourgeonnante par endroits, sinon air.
+                    if d2 >= 7 && rng.next_bounded_int(3) == 0 {
+                        pal.budding_amethyst
+                    } else if d2 >= 7 && rng.next_bounded_int(4) == 0 {
+                        pal.amethyst_cluster
+                    } else {
+                        pal.air
+                    }
+                } else if d2 <= 16 {
+                    pal.amethyst_block
+                } else if d2 <= 20 {
+                    pal.calcite
+                } else if d2 <= 25 {
+                    pal.smooth_basalt
+                } else {
+                    continue;
+                };
+                if is_rock(pal, cur) || (cur == pal.air && block != pal.air) {
+                    if let Some(i) = idx_ok(x, y, z) {
+                        grid[i] = block;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Lac de lave souterrain (`lake_lava_underground`, 1/9) : petite cuvette de
+/// lave dans une grotte.
+fn decorate_lava_lake(grid: &mut [u32], pal: &Pal, rng: &mut Random) {
+    if rng.next_bounded_int(9) != 0 {
+        return;
+    }
+    // Cherche un sol de grotte souterrain.
+    for _ in 0..32 {
+        let lx = rng.next_bounded_int(16);
+        let lz = rng.next_bounded_int(16);
+        let wy = MIN_Y + 6 + rng.next_bounded_int(60); // profond (~ -58..2)
+        if at(grid, lx, wy, lz) == pal.air && is_rock(pal, at(grid, lx, wy - 1, lz)) {
+            // Cuvette : lave en bas, air au-dessus, dans un petit ellipsoïde.
+            for dx in -4..=4i32 {
+                for dz in -4..=4i32 {
+                    for dy in -2..=2i32 {
+                        if dx * dx + dz * dz + dy * dy * 4 > 16 {
+                            continue;
+                        }
+                        let (x, y, z) = (lx + dx, wy + dy, lz + dz);
+                        let cur = at(grid, x, y, z);
+                        if !is_rock(pal, cur) && cur != pal.air {
+                            continue;
+                        }
+                        if let Some(i) = idx_ok(x, y, z) {
+                            grid[i] = if dy <= 0 { pal.lava } else { pal.air };
+                        }
+                    }
+                }
+            }
+            return;
+        }
+    }
+}
+
 /// Point d'entrée : décore un chunk déjà terrassé + habillé en surface.
 pub fn decorate(
     grid: &mut [u32],
@@ -978,8 +1133,11 @@ pub fn decorate(
     // ── Aquatique : kelp / seagrass / coraux ──
     decorate_aquatic(grid, &pal, biome_idx, biome_names, surfaces, &mut rng);
 
-    // ── Glow lichen (grottes) ──
+    // ── Features de grottes : glow lichen, dripstone, géodes, lacs de lave ──
     decorate_glow_lichen(grid, &pal, &mut rng);
+    decorate_dripstone(grid, &pal, &mut rng);
+    decorate_geode(grid, &pal, &mut rng);
+    decorate_lava_lake(grid, &pal, &mut rng);
 
     // ── Neige/glace (biomes froids), en dernier (top layer) ──
     decorate_snow(grid, &pal, biome_idx, biome_names, surfaces);
@@ -1398,6 +1556,43 @@ mod tests {
             grid.contains(&pal.snow_layer),
             "pas de neige en biome froid"
         );
+    }
+
+    #[test]
+    fn dripstone_in_caves() {
+        let pal = Pal::new();
+        let mut grid = vec![pal.stone; GRID_LEN].into_boxed_slice();
+        // Couche de grotte (air) à y∈[10,14).
+        for lx in 0..16usize {
+            for lz in 0..16usize {
+                for y in 10..14 {
+                    grid[grid_index(lx, y, lz)] = pal.air;
+                }
+            }
+        }
+        let mut rng = Random::new(3);
+        decorate_dripstone(&mut grid, &pal, &mut rng);
+        assert!(
+            grid.contains(&pal.pointed_dripstone) || grid.contains(&pal.dripstone_block),
+            "pas de dripstone dans la grotte"
+        );
+    }
+
+    #[test]
+    fn geode_places_amethyst() {
+        let pal = Pal::new();
+        // La géode est en 1/24 : on essaie plusieurs seeds jusqu'à ce qu'elle tombe.
+        let mut found = false;
+        for s in 0..200i64 {
+            let mut grid = vec![pal.stone; GRID_LEN].into_boxed_slice();
+            let mut rng = Random::new(s);
+            decorate_geode(&mut grid, &pal, &mut rng);
+            if grid.contains(&pal.amethyst_block) {
+                found = true;
+                break;
+            }
+        }
+        assert!(found, "aucune géode placée sur 200 essais");
     }
 
     #[test]
