@@ -38,6 +38,7 @@ pub enum AiProfile {
     FlyingShooter, // vole + lance des boules de feu (ghast/blaze)
     FlyingMelee,   // vole et fonce sur le joueur (phantom/vex)
     Creaking,      // immobile quand un joueur le regarde, sinon fonce
+    Dragon,        // ender dragon : cercle ↔ strafe + souffle (phases)
 }
 
 /// Descripteur statique par espèce. Ajouter un mob = ajouter une variante +
@@ -279,7 +280,7 @@ impl MobKind {
             Self::Phantom => d!("minecraft:phantom", "Phantom", 0.9, 0.5, Hostile, FlyingMelee, 6.0, 0.4, &[]),
             Self::Vex => d!("minecraft:vex", "Vex", 0.4, 0.8, Hostile, FlyingMelee, 9.0, 0.45, &[]),
             Self::Wither => d!("minecraft:wither", "Wither", 0.9, 3.5, Hostile, FlyingShooter, 0.0, 0.3, &[]),
-            Self::EnderDragon => d!("minecraft:ender_dragon", "Ender Dragon", 6.0, 2.0, Hostile, FlyingMelee, 10.0, 0.5, &[]),
+            Self::EnderDragon => d!("minecraft:ender_dragon", "Ender Dragon", 6.0, 2.0, Hostile, Dragon, 10.0, 0.6, &[]),
             Self::Squid => d!("minecraft:squid", "Squid", 0.8, 0.8, Passive, Flying, 0.0, 0.2, &[]),
             Self::GlowSquid => d!("minecraft:glow_squid", "Glow Squid", 0.8, 0.8, Passive, Flying, 0.0, 0.2, &[]),
             Self::Dolphin => d!("minecraft:dolphin", "Dolphin", 0.9, 0.6, Neutral, Flying, 0.0, 0.3, &[]),
@@ -394,7 +395,10 @@ impl MobKind {
         !self.is_aquatic()
             && matches!(
                 self.desc().profile,
-                AiProfile::Flying | AiProfile::FlyingShooter | AiProfile::FlyingMelee
+                AiProfile::Flying
+                    | AiProfile::FlyingShooter
+                    | AiProfile::FlyingMelee
+                    | AiProfile::Dragon
             )
     }
 
@@ -1577,6 +1581,7 @@ mod tests {
                             | AiProfile::FlyingShooter
                             | AiProfile::FlyingMelee
                             | AiProfile::Creaking
+                            | AiProfile::Dragon
                     ),
                     "hostile {k:?} doit avoir un profil de combat"
                 ),

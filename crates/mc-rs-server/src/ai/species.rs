@@ -4,9 +4,9 @@
 use super::behavior::{AlwaysEvaluator, Behavior, ClosureEvaluator, FnEvaluator};
 use super::controller::{FlyController, LookController, WalkController};
 use super::executor::{
-    BowAttackExecutor, CreakingExecutor, CreeperSwellExecutor, FlatRandomRoamExecutor,
-    FlyAttackExecutor, FlyRoamExecutor, FlyShootExecutor, MeleeAttackExecutor, PanicFleeExecutor,
-    TemptExecutor,
+    BowAttackExecutor, CreakingExecutor, CreeperSwellExecutor, DragonExecutor,
+    FlatRandomRoamExecutor, FlyAttackExecutor, FlyRoamExecutor, FlyShootExecutor,
+    MeleeAttackExecutor, PanicFleeExecutor, TemptExecutor,
 };
 use super::sensor::NearestPlayerSensor;
 use super::{BehaviorGroup, Controller, Sensor};
@@ -227,6 +227,17 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
                 MELEE_COOLDOWN,
             )));
             BehaviorGroup::new(vec![], vec![combat, roam()], sensors, standard_controllers(), true)
+        }
+        AiProfile::Dragon => {
+            // Phases cercle ↔ strafe (l'executor pilote tout) + vol.
+            let combat = Behavior::new(
+                Box::new(AlwaysEvaluator),
+                Box::new(DragonExecutor::new(speed)),
+                PRIO_COMBAT,
+                1,
+            );
+            let controllers: Vec<Box<dyn Controller>> = vec![Box::new(FlyController::new())];
+            BehaviorGroup::new(vec![], vec![combat], sensors, controllers, false)
         }
     }
 }

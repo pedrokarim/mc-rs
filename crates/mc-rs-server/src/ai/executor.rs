@@ -914,6 +914,123 @@ impl Executor for CreakingExecutor {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Ender Dragon : machine à états (cercle ↔ strafe + souffle)
+// ---------------------------------------------------------------------------
+
+const DRAGON_RADIUS: f32 = 24.0;
+const DRAGON_HEIGHT: f32 = 12.0;
+const DRAGON_ANGULAR: f32 = 0.04; // rad/tick
+const DRAGON_CIRCLE_TICKS: u32 = 160;
+const DRAGON_STRAFE_TICKS: u32 = 120;
+const DRAGON_SHOOT_CD: u32 = 30;
+const DRAGON_FIREBALL_SPEED: f32 = 1.0;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DragonPhase {
+    Circle,
+    Strafe,
+}
+
+/// Ender dragon : tourne autour de son point d'ancrage (Circle), puis fonce
+/// sur le joueur en crachant un souffle (Strafe), et revient en cercle.
+pub struct DragonExecutor {
+    speed: f32,
+    center: Option<[f32; 3]>,
+    phase: DragonPhase,
+    angle: f32,
+    timer: u32,
+    shoot_tick: u32,
+}
+
+impl DragonExecutor {
+    pub fn new(speed: f32) -> Self {
+        Self {
+            speed,
+            center: None,
+            phase: DragonPhase::Circle,
+            angle: 0.0,
+            timer: 0,
+            shoot_tick: 0,
+        }
+    }
+}
+
+impl Executor for DragonExecutor {
+    fn on_start(&mut self, memory: &mut Memory, base: &mut EntityBase) {
+        self.center = Some(base.position); // ancre = lieu d'apparition
+        self.phase = DragonPhase::Circle;
+        self.angle = 0.0;
+        self.timer = 0;
+        self.shoot_tick = 0;
+        memory.movement_speed = self.speed;
+    }
+
+    fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
+        self.timer += 1;
+        let center = self.center.unwrap_or(ctx.base.position);
+        let target = ctx.memory.nearest_player.and_then(|id| player_pos(ctx.players, id));
+
+        match self.phase {
+            DragonPhase::Circle => {
+                self.angle += DRAGON_ANGULAR;
+                ctx.memory.move_target = Some([
+                    (center[0] + DRAGON_RADIUS * self.angle.cos()) as f64,
+                    (center[1] + DRAGON_HEIGHT) as f64,
+                    (center[2] + DRAGON_RADIUS * self.angle.sin()) as f64,
+                ]);
+                if self.timer >= DRAGON_CIRCLE_TICKS {
+                    self.timer = 0;
+                    if target.is_some() {
+                        self.phase = DragonPhase::Strafe; // fonce sur le joueur
+                        self.shoot_tick = 0;
+                    }
+                }
+            }
+            DragonPhase::Strafe => {
+                match target {
+                    Some(tpos) => {
+                        ctx.memory.move_target =
+                            Some([tpos[0] as f64, (tpos[1] + 3.0) as f64, tpos[2] as f64]);
+                        ctx.memory.look_target =
+                            Some([tpos[0] as f64, (tpos[1] + 1.0) as f64, tpos[2] as f64]);
+                        self.shoot_tick += 1;
+                        if self.shoot_tick >= DRAGON_SHOOT_CD {
+                            self.shoot_tick = 0;
+                            let from = [
+                                ctx.base.position[0],
+                                ctx.base.position[1],
+                                ctx.base.position[2],
+                            ];
+                            let dx = tpos[0] - from[0];
+                            let dy = (tpos[1] + 1.0) - from[1];
+                            let dz = tpos[2] - from[2];
+                            let dist = (dx * dx + dy * dy + dz * dz).sqrt().max(0.001);
+                            let f = DRAGON_FIREBALL_SPEED / dist;
+                            ctx.effects.push(AiEffect::ShootFireball {
+                                shooter_runtime_id: ctx.base.entity_runtime_id,
+                                from,
+                                velocity: [dx * f, dy * f, dz * f],
+                                damage: 6.0,
+                                actor_type: "minecraft:dragon_fireball",
+                            });
+                        }
+                        if self.timer >= DRAGON_STRAFE_TICKS {
+                            self.phase = DragonPhase::Circle;
+                            self.timer = 0;
+                        }
+                    }
+                    None => {
+                        self.phase = DragonPhase::Circle;
+                        self.timer = 0;
+                    }
+                }
+            }
+        }
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
