@@ -18,137 +18,295 @@ const MAX_FALL_SPEED: f32 = -0.784;
 const GROUND_FRICTION: f32 = 0.6;
 const AIR_FRICTION: f32 = 0.91;
 
+/// Catégorie de comportement d'un mob.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MobCategory {
+    Hostile, // traque + attaque le joueur
+    Passive, // erre + fuit si blessé (+ tempt/reproduction si nourriture)
+    Neutral, // erre, n'attaque pas spontanément (v1)
+}
+
+/// Profil d'IA assigné à l'espèce (dispatché par `species::build_behavior_group`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AiProfile {
+    Melee,        // chasse + frappe au corps-à-corps
+    Bow,          // garde ses distances + tire des flèches
+    CreeperSwell, // s'amorce et explose
+    Passive,      // errance + fuite (+ tempt)
+    Neutral,      // errance seule
+}
+
+/// Descripteur statique par espèce. Ajouter un mob = ajouter une variante +
+/// une ligne ici. La santé vient de [`crate::mob_hp`], le butin de
+/// [`crate::loot_table`], et les règles de spawn de `spawn_rules_vanilla`.
+struct MobDesc {
+    id: &'static str,   // identifiant réseau (ex "minecraft:zombie")
+    name: &'static str, // nom d'affichage
+    w: f32,
+    h: f32,
+    category: MobCategory,
+    profile: AiProfile,
+    attack_damage: f32,
+    speed: f32,
+    /// Items de reproduction (vide = non reproductible).
+    breeding_food: &'static [&'static str],
+}
+
+const WHEAT: &[&str] = &["minecraft:wheat"];
+const PIG_FOOD: &[&str] = &["minecraft:carrot", "minecraft:potato", "minecraft:beetroot"];
+const SEEDS: &[&str] = &[
+    "minecraft:wheat_seeds",
+    "minecraft:beetroot_seeds",
+    "minecraft:melon_seeds",
+    "minecraft:pumpkin_seeds",
+];
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MobKind {
+    // Hostiles mêlée
     Zombie,
+    Husk,
+    Drowned,
+    ZombieVillager,
+    Spider,
+    CaveSpider,
+    Silverfish,
+    Endermite,
+    WitherSkeleton,
+    Vindicator,
+    Ravager,
+    Hoglin,
+    Zoglin,
+    PiglinBrute,
+    // Hostiles à distance (arc/arbalète)
     Skeleton,
+    Stray,
+    Bogged,
+    Pillager,
+    // Hostile spécial
     Creeper,
+    // Neutres
+    ZombifiedPiglin,
+    Piglin,
+    IronGolem,
+    SnowGolem,
+    Wolf,
+    PolarBear,
+    Goat,
+    Llama,
+    // Passifs
     Cow,
+    Mooshroom,
     Pig,
     Sheep,
     Chicken,
+    Rabbit,
+    Horse,
+    Donkey,
+    Mule,
+    Cat,
+    Ocelot,
+    Fox,
+    Panda,
+    Turtle,
+    Villager,
+    WanderingTrader,
+    Bat,
+    Parrot,
+    Camel,
+    Armadillo,
+    Sniffer,
 }
 
 impl MobKind {
-    pub fn parse(name: &str) -> Option<Self> {
-        let normalized = name.trim().to_ascii_lowercase();
-        let normalized = normalized.strip_prefix("minecraft:").unwrap_or(&normalized);
-        match normalized {
-            "zombie" => Some(Self::Zombie),
-            "skeleton" => Some(Self::Skeleton),
-            "creeper" => Some(Self::Creeper),
-            "cow" => Some(Self::Cow),
-            "pig" => Some(Self::Pig),
-            "sheep" => Some(Self::Sheep),
-            "chicken" => Some(Self::Chicken),
-            _ => None,
+    /// Toutes les espèces vivantes connues (ordre = ordre de déclaration).
+    pub const ALL: &'static [MobKind] = &[
+        Self::Zombie,
+        Self::Husk,
+        Self::Drowned,
+        Self::ZombieVillager,
+        Self::Spider,
+        Self::CaveSpider,
+        Self::Silverfish,
+        Self::Endermite,
+        Self::WitherSkeleton,
+        Self::Vindicator,
+        Self::Ravager,
+        Self::Hoglin,
+        Self::Zoglin,
+        Self::PiglinBrute,
+        Self::Skeleton,
+        Self::Stray,
+        Self::Bogged,
+        Self::Pillager,
+        Self::Creeper,
+        Self::ZombifiedPiglin,
+        Self::Piglin,
+        Self::IronGolem,
+        Self::SnowGolem,
+        Self::Wolf,
+        Self::PolarBear,
+        Self::Goat,
+        Self::Llama,
+        Self::Cow,
+        Self::Mooshroom,
+        Self::Pig,
+        Self::Sheep,
+        Self::Chicken,
+        Self::Rabbit,
+        Self::Horse,
+        Self::Donkey,
+        Self::Mule,
+        Self::Cat,
+        Self::Ocelot,
+        Self::Fox,
+        Self::Panda,
+        Self::Turtle,
+        Self::Villager,
+        Self::WanderingTrader,
+        Self::Bat,
+        Self::Parrot,
+        Self::Camel,
+        Self::Armadillo,
+        Self::Sniffer,
+    ];
+
+    fn desc(self) -> MobDesc {
+        // (id, name, w, h, Category, Profile, attack_damage, speed, breeding_food)
+        macro_rules! d {
+            ($id:literal, $name:literal, $w:expr, $h:expr, $cat:ident, $prof:ident, $dmg:expr, $spd:expr, $food:expr) => {
+                MobDesc {
+                    id: $id,
+                    name: $name,
+                    w: $w,
+                    h: $h,
+                    category: MobCategory::$cat,
+                    profile: AiProfile::$prof,
+                    attack_damage: $dmg,
+                    speed: $spd,
+                    breeding_food: $food,
+                }
+            };
         }
+        match self {
+            Self::Zombie => d!("minecraft:zombie", "Zombie", 0.6, 1.9, Hostile, Melee, 3.0, 0.23, &[]),
+            Self::Husk => d!("minecraft:husk", "Husk", 0.6, 1.9, Hostile, Melee, 3.0, 0.23, &[]),
+            Self::Drowned => d!("minecraft:drowned", "Drowned", 0.6, 1.9, Hostile, Melee, 3.0, 0.23, &[]),
+            Self::ZombieVillager => d!("minecraft:zombie_villager_v2", "Zombie Villager", 0.6, 1.9, Hostile, Melee, 3.0, 0.23, &[]),
+            Self::Spider => d!("minecraft:spider", "Spider", 1.4, 0.9, Hostile, Melee, 2.0, 0.3, &[]),
+            Self::CaveSpider => d!("minecraft:cave_spider", "Cave Spider", 0.7, 0.5, Hostile, Melee, 2.0, 0.3, &[]),
+            Self::Silverfish => d!("minecraft:silverfish", "Silverfish", 0.4, 0.3, Hostile, Melee, 1.0, 0.25, &[]),
+            Self::Endermite => d!("minecraft:endermite", "Endermite", 0.4, 0.3, Hostile, Melee, 2.0, 0.25, &[]),
+            Self::WitherSkeleton => d!("minecraft:wither_skeleton", "Wither Skeleton", 0.7, 2.4, Hostile, Melee, 5.0, 0.24, &[]),
+            Self::Vindicator => d!("minecraft:vindicator", "Vindicator", 0.6, 1.95, Hostile, Melee, 9.0, 0.35, &[]),
+            Self::Ravager => d!("minecraft:ravager", "Ravager", 1.95, 2.2, Hostile, Melee, 12.0, 0.3, &[]),
+            Self::Hoglin => d!("minecraft:hoglin", "Hoglin", 1.4, 1.4, Hostile, Melee, 6.0, 0.3, &[]),
+            Self::Zoglin => d!("minecraft:zoglin", "Zoglin", 1.4, 1.4, Hostile, Melee, 6.0, 0.3, &[]),
+            Self::PiglinBrute => d!("minecraft:piglin_brute", "Piglin Brute", 0.6, 1.95, Hostile, Melee, 7.0, 0.35, &[]),
+            Self::Skeleton => d!("minecraft:skeleton", "Skeleton", 0.6, 1.9, Hostile, Bow, 0.0, 0.25, &[]),
+            Self::Stray => d!("minecraft:stray", "Stray", 0.6, 1.9, Hostile, Bow, 0.0, 0.25, &[]),
+            Self::Bogged => d!("minecraft:bogged", "Bogged", 0.6, 1.9, Hostile, Bow, 0.0, 0.25, &[]),
+            Self::Pillager => d!("minecraft:pillager", "Pillager", 0.6, 1.95, Hostile, Bow, 0.0, 0.35, &[]),
+            Self::Creeper => d!("minecraft:creeper", "Creeper", 0.6, 1.7, Hostile, CreeperSwell, 0.0, 0.25, &[]),
+            Self::ZombifiedPiglin => d!("minecraft:zombie_pigman", "Zombified Piglin", 0.6, 1.9, Neutral, Neutral, 0.0, 0.23, &[]),
+            Self::Piglin => d!("minecraft:piglin", "Piglin", 0.6, 1.95, Neutral, Neutral, 0.0, 0.35, &[]),
+            Self::IronGolem => d!("minecraft:iron_golem", "Iron Golem", 1.4, 2.7, Neutral, Neutral, 0.0, 0.25, &[]),
+            Self::SnowGolem => d!("minecraft:snow_golem", "Snow Golem", 0.7, 1.9, Neutral, Neutral, 0.0, 0.2, &[]),
+            Self::Wolf => d!("minecraft:wolf", "Wolf", 0.6, 0.85, Neutral, Neutral, 0.0, 0.3, &["minecraft:beef", "minecraft:mutton", "minecraft:chicken", "minecraft:porkchop"]),
+            Self::PolarBear => d!("minecraft:polar_bear", "Polar Bear", 1.4, 1.4, Neutral, Neutral, 0.0, 0.25, &[]),
+            Self::Goat => d!("minecraft:goat", "Goat", 0.9, 1.3, Neutral, Neutral, 0.0, 0.3, WHEAT),
+            Self::Llama => d!("minecraft:llama", "Llama", 0.9, 1.87, Neutral, Neutral, 0.0, 0.2, &["minecraft:hay_block"]),
+            Self::Cow => d!("minecraft:cow", "Cow", 0.9, 1.4, Passive, Passive, 0.0, 0.2, WHEAT),
+            Self::Mooshroom => d!("minecraft:mooshroom", "Mooshroom", 0.9, 1.4, Passive, Passive, 0.0, 0.2, WHEAT),
+            Self::Pig => d!("minecraft:pig", "Pig", 0.9, 0.9, Passive, Passive, 0.0, 0.25, PIG_FOOD),
+            Self::Sheep => d!("minecraft:sheep", "Sheep", 0.9, 1.3, Passive, Passive, 0.0, 0.2, WHEAT),
+            Self::Chicken => d!("minecraft:chicken", "Chicken", 0.4, 0.7, Passive, Passive, 0.0, 0.25, SEEDS),
+            Self::Rabbit => d!("minecraft:rabbit", "Rabbit", 0.4, 0.5, Passive, Passive, 0.0, 0.3, &["minecraft:carrot", "minecraft:dandelion", "minecraft:golden_carrot"]),
+            Self::Horse => d!("minecraft:horse", "Horse", 1.4, 1.6, Passive, Passive, 0.0, 0.3, &["minecraft:golden_apple", "minecraft:golden_carrot"]),
+            Self::Donkey => d!("minecraft:donkey", "Donkey", 1.4, 1.6, Passive, Passive, 0.0, 0.3, &["minecraft:golden_apple", "minecraft:golden_carrot"]),
+            Self::Mule => d!("minecraft:mule", "Mule", 1.4, 1.6, Passive, Passive, 0.0, 0.3, &["minecraft:golden_apple", "minecraft:golden_carrot"]),
+            Self::Cat => d!("minecraft:cat", "Cat", 0.6, 0.7, Passive, Passive, 0.0, 0.3, &["minecraft:raw_cod", "minecraft:raw_salmon"]),
+            Self::Ocelot => d!("minecraft:ocelot", "Ocelot", 0.6, 0.7, Passive, Passive, 0.0, 0.3, &["minecraft:raw_cod", "minecraft:raw_salmon"]),
+            Self::Fox => d!("minecraft:fox", "Fox", 0.6, 0.7, Passive, Passive, 0.0, 0.3, &["minecraft:sweet_berries", "minecraft:glow_berries"]),
+            Self::Panda => d!("minecraft:panda", "Panda", 1.3, 1.25, Passive, Passive, 0.0, 0.2, &["minecraft:bamboo"]),
+            Self::Turtle => d!("minecraft:turtle", "Turtle", 1.2, 0.4, Passive, Passive, 0.0, 0.15, &["minecraft:seagrass"]),
+            Self::Villager => d!("minecraft:villager_v2", "Villager", 0.6, 1.95, Passive, Passive, 0.0, 0.25, &[]),
+            Self::WanderingTrader => d!("minecraft:wandering_trader", "Wandering Trader", 0.6, 1.95, Passive, Passive, 0.0, 0.25, &[]),
+            Self::Bat => d!("minecraft:bat", "Bat", 0.5, 0.9, Passive, Passive, 0.0, 0.2, &[]),
+            Self::Parrot => d!("minecraft:parrot", "Parrot", 0.5, 0.9, Passive, Passive, 0.0, 0.25, SEEDS),
+            Self::Camel => d!("minecraft:camel", "Camel", 1.7, 2.375, Passive, Passive, 0.0, 0.25, &["minecraft:cactus"]),
+            Self::Armadillo => d!("minecraft:armadillo", "Armadillo", 0.7, 0.65, Passive, Passive, 0.0, 0.2, &["minecraft:spider_eye"]),
+            Self::Sniffer => d!("minecraft:sniffer", "Sniffer", 1.9, 1.75, Passive, Passive, 0.0, 0.2, &["minecraft:torchflower_seeds"]),
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<Self> {
+        let n = name.trim().to_ascii_lowercase();
+        let n = n.strip_prefix("minecraft:").unwrap_or(&n);
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|k| k.selector_type() == n)
     }
 
     pub fn actor_type(self) -> &'static str {
-        match self {
-            Self::Zombie => "minecraft:zombie",
-            Self::Skeleton => "minecraft:skeleton",
-            Self::Creeper => "minecraft:creeper",
-            Self::Cow => "minecraft:cow",
-            Self::Pig => "minecraft:pig",
-            Self::Sheep => "minecraft:sheep",
-            Self::Chicken => "minecraft:chicken",
-        }
+        self.desc().id
     }
 
     pub fn selector_type(self) -> &'static str {
-        match self {
-            Self::Zombie => "zombie",
-            Self::Skeleton => "skeleton",
-            Self::Creeper => "creeper",
-            Self::Cow => "cow",
-            Self::Pig => "pig",
-            Self::Sheep => "sheep",
-            Self::Chicken => "chicken",
-        }
+        self.desc().id.strip_prefix("minecraft:").unwrap_or(self.desc().id)
     }
 
-    /// Liste des noms d'entités supportées par `/summon` — alimente la
-    /// SoftEnum d'autocomplétion côté client.
-    pub fn all_names() -> &'static [&'static str] {
-        &[
-            "zombie", "skeleton", "creeper", "cow", "pig", "sheep", "chicken",
-        ]
+    /// Liste des noms `/summon` — alimente la SoftEnum d'autocomplétion client.
+    pub fn all_names() -> Vec<&'static str> {
+        Self::ALL.iter().map(|k| k.selector_type()).collect()
     }
 
     pub fn display_name(self) -> &'static str {
-        match self {
-            Self::Zombie => "Zombie",
-            Self::Skeleton => "Skeleton",
-            Self::Creeper => "Creeper",
-            Self::Cow => "Cow",
-            Self::Pig => "Pig",
-            Self::Sheep => "Sheep",
-            Self::Chicken => "Chicken",
-        }
+        self.desc().name
     }
 
     pub fn size(self) -> (f32, f32) {
-        match self {
-            Self::Zombie | Self::Skeleton | Self::Creeper => (0.6, 1.9),
-            Self::Cow | Self::Pig | Self::Sheep => (0.9, 1.3),
-            Self::Chicken => (0.4, 0.7),
-        }
+        let d = self.desc();
+        (d.w, d.h)
+    }
+
+    pub fn category(self) -> MobCategory {
+        self.desc().category
+    }
+
+    pub fn ai_profile(self) -> AiProfile {
+        self.desc().profile
     }
 
     /// Mob hostile (traque et attaque le joueur) ?
     pub fn is_hostile(self) -> bool {
-        matches!(self, Self::Zombie | Self::Skeleton | Self::Creeper)
+        self.desc().category == MobCategory::Hostile
     }
 
-    /// Distance de détection d'un joueur (blocs). Réf valeurs vanilla.
+    /// Distance de détection d'un joueur (blocs).
     pub fn sight_range(self) -> f64 {
         16.0
     }
 
-    /// Portée d'attaque mêlée (blocs). Squelette/creeper traités en mêlée pour
-    /// la v1 (arc/explosion = follow-ups documentés).
+    /// Portée d'attaque mêlée (blocs).
     pub fn attack_range(self) -> f64 {
         2.0
     }
 
-    /// Dégâts d'attaque mêlée de base (difficulté normale). Réf PMMP/vanilla.
+    /// Dégâts d'attaque mêlée de base (difficulté normale).
     pub fn attack_damage(self) -> f32 {
-        match self {
-            Self::Zombie => 3.0,
-            Self::Skeleton => 2.0,
-            Self::Creeper => 0.0, // dégâts via explosion (non implémentée ici)
-            _ => 0.0,
-        }
+        self.desc().attack_damage
     }
 
-    /// Items qui attirent ce mob passif (tempt — suivre le joueur qui les tient).
-    /// Réf vanilla Bedrock (cf. `breeding_items`).
+    /// Items qui attirent / reproduisent ce mob (vide = non reproductible).
     pub fn tempting_items(self) -> &'static [&'static str] {
-        match self {
-            Self::Cow | Self::Sheep => &["minecraft:wheat"],
-            Self::Pig => &["minecraft:carrot", "minecraft:potato", "minecraft:beetroot"],
-            Self::Chicken => &[
-                "minecraft:wheat_seeds",
-                "minecraft:beetroot_seeds",
-                "minecraft:melon_seeds",
-                "minecraft:pumpkin_seeds",
-            ],
-            _ => &[],
-        }
+        self.desc().breeding_food
     }
 
     /// Vitesse de déplacement (blocs/tick) utilisée par le `WalkController`.
-    /// Valeurs vanilla approximatives (à ajuster en jeu).
     pub fn movement_speed(self) -> f32 {
-        match self {
-            Self::Zombie => 0.23,
-            Self::Skeleton => 0.25,
-            Self::Creeper => 0.25,
-            Self::Cow | Self::Pig | Self::Sheep => 0.2,
-            Self::Chicken => 0.25,
-        }
+        self.desc().speed
     }
 
     pub fn max_health(self) -> f32 {
@@ -156,12 +314,12 @@ impl MobKind {
         crate::mob_hp::mob_max_hp(self.actor_type())
     }
 
-    /// Mob qui peut se reproduire (animaux passifs avec une nourriture).
+    /// Mob qui peut se reproduire (passif avec une nourriture).
     pub fn is_breedable(self) -> bool {
-        matches!(self, Self::Cow | Self::Pig | Self::Sheep | Self::Chicken)
+        self.desc().category == MobCategory::Passive && !self.desc().breeding_food.is_empty()
     }
 
-    /// Cet item (network id) met-il ce mob en mode amour ? (même set que `tempting_items`.)
+    /// Cet item (network id) met-il ce mob en mode amour ?
     pub fn is_breeding_food(self, item_id: i32) -> bool {
         self.tempting_items()
             .iter()
@@ -169,26 +327,36 @@ impl MobKind {
             .any(|id| id == item_id)
     }
 
+    /// Butin de secours quand aucune loot table data-driven n'existe.
     pub fn default_loot(self) -> Vec<ItemStack> {
         fn item(name: &str, count: u16) -> ItemStack {
             ItemStack::new(item_registry::required_item_id(name), count, 0)
         }
-
         match self {
-            Self::Zombie => vec![item("minecraft:rotten_flesh", 1)],
-            Self::Skeleton => vec![item("minecraft:bone", 1), item("minecraft:arrow", 1)],
+            Self::Zombie | Self::Husk | Self::Drowned | Self::ZombieVillager => {
+                vec![item("minecraft:rotten_flesh", 1)]
+            }
+            Self::Skeleton | Self::Stray | Self::Bogged => {
+                vec![item("minecraft:bone", 1), item("minecraft:arrow", 1)]
+            }
+            Self::WitherSkeleton => vec![item("minecraft:bone", 1), item("minecraft:coal", 1)],
             Self::Creeper => vec![item("minecraft:gunpowder", 1)],
-            Self::Cow => vec![item("minecraft:beef", 1), item("minecraft:leather", 1)],
-            Self::Pig => vec![item("minecraft:porkchop", 1)],
+            Self::Spider | Self::CaveSpider => vec![item("minecraft:string", 1)],
+            Self::Cow | Self::Mooshroom => {
+                vec![item("minecraft:beef", 1), item("minecraft:leather", 1)]
+            }
+            Self::Pig | Self::Hoglin => vec![item("minecraft:porkchop", 1)],
             Self::Sheep => vec![
-                ItemStack::new(
-                    item_registry::required_item_id("minecraft:white_wool"),
-                    1,
-                    0,
-                ),
+                ItemStack::new(item_registry::required_item_id("minecraft:white_wool"), 1, 0),
                 item("minecraft:mutton", 1),
             ],
-            Self::Chicken => vec![item("minecraft:chicken", 1), item("minecraft:feather", 1)],
+            Self::Chicken | Self::Parrot => {
+                vec![item("minecraft:feather", 1)]
+            }
+            Self::Rabbit => vec![item("minecraft:rabbit", 1), item("minecraft:rabbit_hide", 1)],
+            Self::IronGolem => vec![item("minecraft:iron_ingot", 3)],
+            Self::SnowGolem => vec![item("minecraft:snowball", 1)],
+            _ => Vec::new(),
         }
     }
 }
@@ -995,7 +1163,40 @@ mod tests {
     fn parses_mob_names() {
         assert_eq!(MobKind::parse("zombie"), Some(MobKind::Zombie));
         assert_eq!(MobKind::parse("minecraft:cow"), Some(MobKind::Cow));
+        assert_eq!(MobKind::parse("husk"), Some(MobKind::Husk));
+        assert_eq!(MobKind::parse("minecraft:stray"), Some(MobKind::Stray));
         assert_eq!(MobKind::parse("unknown"), None);
+    }
+
+    #[test]
+    fn roster_is_consistent() {
+        use super::{AiProfile, MobCategory};
+        for &k in MobKind::ALL {
+            // parse(selector) round-trip.
+            assert_eq!(MobKind::parse(k.selector_type()), Some(k), "round-trip {k:?}");
+            // actor_type est namespacé.
+            assert!(k.actor_type().starts_with("minecraft:"), "id {k:?}");
+            // hitbox positive.
+            let (w, h) = k.size();
+            assert!(w > 0.0 && h > 0.0, "taille {k:?}");
+            // cohérence catégorie ↔ profil.
+            match k.category() {
+                MobCategory::Hostile => assert!(
+                    matches!(
+                        k.ai_profile(),
+                        AiProfile::Melee | AiProfile::Bow | AiProfile::CreeperSwell
+                    ),
+                    "hostile {k:?} doit avoir un profil de combat"
+                ),
+                MobCategory::Passive => {
+                    assert_eq!(k.ai_profile(), AiProfile::Passive, "passif {k:?}")
+                }
+                MobCategory::Neutral => {
+                    assert_eq!(k.ai_profile(), AiProfile::Neutral, "neutre {k:?}")
+                }
+            }
+        }
+        assert!(MobKind::ALL.len() >= 40, "roster conséquent");
     }
 
     #[test]

@@ -33,12 +33,30 @@ const BOW_ARROW_SPEED: f32 = 1.4;
 const BOW_ARROW_DAMAGE: f32 = 3.0;
 const BOW_COOLDOWN: u32 = 30;
 
-/// Construit le groupe de behaviors adapté à l'espèce.
+/// Contrôleurs standard (marche + regard cible/route) communs à tous les profils.
+fn standard_controllers() -> Vec<Box<dyn Controller>> {
+    vec![
+        Box::new(WalkController::new()),
+        Box::new(LookController::new(true, true)),
+    ]
+}
+
+/// Behavior de combat (lançable si une cible est en mémoire).
+fn combat_behavior(executor: Box<dyn super::behavior::Executor>) -> Behavior {
+    Behavior::new(
+        Box::new(FnEvaluator(|m, _, _| m.nearest_player.is_some())),
+        executor,
+        PRIO_COMBAT,
+        1,
+    )
+}
+
+/// Construit le groupe de behaviors adapté à l'espèce, dispatché par profil d'IA.
 pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
+    use crate::mob_entities::AiProfile;
     let speed = kind.movement_speed();
     let sensors: Vec<Box<dyn Sensor>> =
         vec![Box::new(NearestPlayerSensor::with_range(kind.sight_range()))];
-
     let roam = || -> Behavior {
         Behavior::new(
             Box::new(AlwaysEvaluator),
@@ -48,99 +66,76 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
         )
     };
 
-    if kind.is_hostile() {
-        // Comportement de combat selon l'espèce : le creeper s'amorce et explose,
-        // les autres hostiles frappent en mêlée. (Skeleton-arc = follow-up.)
-        let combat = if matches!(kind, MobKind::Creeper) {
-            Behavior::new(
-                Box::new(FnEvaluator(|m, _, _| m.nearest_player.is_some())),
-                Box::new(CreeperSwellExecutor::new(
-                    speed,
-                    kind.sight_range(),
-                    CREEPER_IGNITE_RANGE,
-                    CREEPER_FUSE_TICKS,
-                )),
-                PRIO_COMBAT,
-                1,
-            )
-        } else if matches!(kind, MobKind::Skeleton) {
-            Behavior::new(
-                Box::new(FnEvaluator(|m, _, _| m.nearest_player.is_some())),
-                Box::new(BowAttackExecutor::new(
-                    speed,
-                    kind.sight_range(),
-                    BOW_MIN_RANGE,
-                    BOW_SHOOT_RANGE,
-                    BOW_ARROW_SPEED,
-                    BOW_ARROW_DAMAGE,
-                    BOW_COOLDOWN,
-                )),
-                PRIO_COMBAT,
-                1,
-            )
-        } else {
-            Behavior::new(
-                Box::new(FnEvaluator(|m, _, _| m.nearest_player.is_some())),
-                Box::new(MeleeAttackExecutor::new(
-                    speed,
-                    kind.sight_range(),
-                    kind.attack_range(),
-                    MELEE_COOLDOWN,
-                )),
-                PRIO_COMBAT,
-                1,
-            )
-        };
-        // Hostile : combat (prio haute), sinon erre. Regarde sa cible.
-        let normal = vec![combat, roam()];
-        let controllers: Vec<Box<dyn Controller>> = vec![
-            Box::new(WalkController::new()),
-            Box::new(LookController::new(true, true)),
-        ];
-        BehaviorGroup::new(vec![], normal, sensors, controllers, true)
-    } else {
-        // Passif : fuit s'il est blessé (prio haute), suit la nourriture (tempt),
-        // sinon erre.
-        let mut normal = vec![Behavior::new(
-            Box::new(FnEvaluator(PanicFleeExecutor::should_flee)),
-            Box::new(PanicFleeExecutor::new(speed * 1.25, 8.0)),
-            PRIO_PANIC,
-            1,
-        )];
-
-        // Tempt : suivre un joueur tenant la nourriture de l'espèce.
-        let food_ids: Vec<i32> = kind
-            .tempting_items()
-            .iter()
-            .filter_map(|name| crate::item_registry::network_id(name))
-            .collect();
-        if !food_ids.is_empty() {
-            let range_sq = TEMPT_RANGE * TEMPT_RANGE;
-            let food_eval = food_ids.clone();
-            normal.push(Behavior::new(
-                Box::new(ClosureEvaluator(Box::new(move |_m, base, players| {
-                    players.iter().any(|p| {
-                        if !p.alive || !food_eval.contains(&p.held_item) {
-                            return false;
-                        }
-                        let dx = (p.position[0] - base.position[0]) as f64;
-                        let dy = (p.position[1] - base.position[1]) as f64;
-                        let dz = (p.position[2] - base.position[2]) as f64;
-                        dx * dx + dy * dy + dz * dz <= range_sq
-                    })
-                }))),
-                Box::new(TemptExecutor::new(speed, food_ids, TEMPT_RANGE)),
-                PRIO_TEMPT,
-                1,
-            ));
+    match kind.ai_profile() {
+        AiProfile::Melee => {
+            let combat = combat_behavior(Box::new(MeleeAttackExecutor::new(
+                speed,
+                kind.sight_range(),
+                kind.attack_range(),
+                MELEE_COOLDOWN,
+            )));
+            BehaviorGroup::new(vec![], vec![combat, roam()], sensors, standard_controllers(), true)
         }
-
-        normal.push(roam());
-        let controllers: Vec<Box<dyn Controller>> = vec![
-            Box::new(WalkController::new()),
-            // (cible + route) : fixe le joueur proche à l'arrêt, sinon suit la route.
-            Box::new(LookController::new(true, true)),
-        ];
-        BehaviorGroup::new(vec![], normal, sensors, controllers, true)
+        AiProfile::Bow => {
+            let combat = combat_behavior(Box::new(BowAttackExecutor::new(
+                speed,
+                kind.sight_range(),
+                BOW_MIN_RANGE,
+                BOW_SHOOT_RANGE,
+                BOW_ARROW_SPEED,
+                BOW_ARROW_DAMAGE,
+                BOW_COOLDOWN,
+            )));
+            BehaviorGroup::new(vec![], vec![combat, roam()], sensors, standard_controllers(), true)
+        }
+        AiProfile::CreeperSwell => {
+            let combat = combat_behavior(Box::new(CreeperSwellExecutor::new(
+                speed,
+                kind.sight_range(),
+                CREEPER_IGNITE_RANGE,
+                CREEPER_FUSE_TICKS,
+            )));
+            BehaviorGroup::new(vec![], vec![combat, roam()], sensors, standard_controllers(), true)
+        }
+        AiProfile::Neutral => {
+            // Erre uniquement, regarde le joueur proche (n'attaque pas en v1).
+            BehaviorGroup::new(vec![], vec![roam()], sensors, standard_controllers(), true)
+        }
+        AiProfile::Passive => {
+            // Fuit si blessé (prio haute), suit la nourriture (tempt), sinon erre.
+            let mut normal = vec![Behavior::new(
+                Box::new(FnEvaluator(PanicFleeExecutor::should_flee)),
+                Box::new(PanicFleeExecutor::new(speed * 1.25, 8.0)),
+                PRIO_PANIC,
+                1,
+            )];
+            let food_ids: Vec<i32> = kind
+                .tempting_items()
+                .iter()
+                .filter_map(|name| crate::item_registry::network_id(name))
+                .collect();
+            if !food_ids.is_empty() {
+                let range_sq = TEMPT_RANGE * TEMPT_RANGE;
+                let food_eval = food_ids.clone();
+                normal.push(Behavior::new(
+                    Box::new(ClosureEvaluator(Box::new(move |_m, base, players| {
+                        players.iter().any(|p| {
+                            if !p.alive || !food_eval.contains(&p.held_item) {
+                                return false;
+                            }
+                            let dx = (p.position[0] - base.position[0]) as f64;
+                            let dy = (p.position[1] - base.position[1]) as f64;
+                            let dz = (p.position[2] - base.position[2]) as f64;
+                            dx * dx + dy * dy + dz * dz <= range_sq
+                        })
+                    }))),
+                    Box::new(TemptExecutor::new(speed, food_ids, TEMPT_RANGE)),
+                    PRIO_TEMPT,
+                    1,
+                ));
+            }
+            normal.push(roam());
+            BehaviorGroup::new(vec![], normal, sensors, standard_controllers(), true)
+        }
     }
 }

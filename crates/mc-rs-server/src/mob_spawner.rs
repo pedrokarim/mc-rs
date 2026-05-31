@@ -3,17 +3,14 @@
 //!
 //! Cycle par game tick (20 TPS) :
 //!   - Pour chaque joueur connecté
-//!   - Pick un mob_kind candidat parmi nos 7 supportés (Zombie/Skeleton/Creeper/
-//!     Cow/Pig/Sheep/Chicken) selon `spawn_rules_vanilla::spawn_weight`
+//!   - Pick un mob_kind candidat parmi tout le roster (`MobKind::ALL`) pondéré
+//!     par `spawn_rules_vanilla::spawn_weight` (les espèces sans règle vanilla
+//!     sont automatiquement ignorées)
 //!   - Pick une position dans un rayon SPAWN_RADIUS_MIN..MAX autour du joueur
 //!   - Vérifie : ground solide, headroom, light level (pour monsters dans le
 //!     range vanilla 0-7 via `spawn_rules_vanilla::brightness_range`)
 //!   - Vérifie le mob cap par catégorie
-//!   - Spawn via `MobEntityManager::spawn`
-//!
-//! Limites actuelles : `MobKind` n'a que 7 mobs ; les 49 autres mobs
-//! vanilla restent dormants. Quand on étendra, ce module récupèrera leurs
-//! règles de spawn automatiquement via `spawn_rules_vanilla`.
+//!   - Spawn via `MobEntityManager::spawn` (~5 % d'animaux en bébé)
 
 use rand::Rng;
 
@@ -37,21 +34,18 @@ fn entity_id_for(kind: MobKind) -> &'static str {
 }
 
 fn category_of(kind: MobKind) -> &'static str {
-    match kind {
-        MobKind::Zombie | MobKind::Skeleton | MobKind::Creeper => "monster",
-        MobKind::Cow | MobKind::Pig | MobKind::Sheep | MobKind::Chicken => "animal",
+    match kind.category() {
+        crate::mob_entities::MobCategory::Hostile => "monster",
+        // Passifs + neutres comptent dans le cap « animal » pour le spawn.
+        _ => "animal",
     }
 }
 
-const ALL_MOBS: &[MobKind] = &[
-    MobKind::Zombie,
-    MobKind::Skeleton,
-    MobKind::Creeper,
-    MobKind::Cow,
-    MobKind::Pig,
-    MobKind::Sheep,
-    MobKind::Chicken,
-];
+/// Toutes les espèces candidates au spawn naturel = roster complet. Celles sans
+/// règle de spawn vanilla (`spawn_weight` = None) sont automatiquement ignorées.
+fn all_mobs() -> &'static [MobKind] {
+    MobKind::ALL
+}
 
 /// Tick global — appelé chaque game tick (20 TPS) depuis main.rs.
 /// Spawn 0..N mobs selon les règles vanilla + caps.
@@ -88,7 +82,7 @@ pub fn tick<R: Rng>(
         let center = player_positions[pi];
 
         // Pick mob aléatoire pondéré par `spawn_weight` vanilla.
-        let weights: Vec<(MobKind, u32)> = ALL_MOBS
+        let weights: Vec<(MobKind, u32)> = all_mobs()
             .iter()
             .filter_map(|&k| {
                 crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k)).map(|w| (k, w.max(1)))
@@ -186,7 +180,7 @@ mod tests {
 
     #[test]
     fn weights_can_be_collected_for_supported_mobs() {
-        let weights: Vec<_> = ALL_MOBS
+        let weights: Vec<_> = all_mobs()
             .iter()
             .filter_map(|&k| {
                 crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k)).map(|w| (k, w))
