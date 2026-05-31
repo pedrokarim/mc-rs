@@ -20,7 +20,7 @@ use super::super::random::Random;
 use super::noise_chunk::{grid_index, MAX_Y, MIN_Y, SEA_LEVEL};
 
 /// Palette d'IDs runtime résolus une fois.
-struct Pal {
+pub(super) struct Pal {
     air: u32,
     water: u32,
     grass_block: u32,
@@ -100,7 +100,7 @@ const ACACIA: usize = 4;
 const DARK_OAK: usize = 5;
 
 impl Pal {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let g = |n: &str| BLOCKS.get(n);
         Pal {
             air: BLOCKS.air,
@@ -628,7 +628,7 @@ fn mangrove_tree(grid: &mut [u32], pal: &Pal, lx: i32, ground: i32, lz: i32, rng
 }
 
 #[derive(Clone, Copy)]
-enum Species {
+pub(super) enum Species {
     Oak,
     FancyOak,
     Birch,
@@ -649,7 +649,7 @@ enum Species {
 /// alternatives (chance, espèce))`. **Données officielles vanilla** : densité =
 /// moyenne du `count` des `placed_feature` ; espèces/chances = `random_selector`
 /// des `configured_feature` (`trees_<biome>` → sélecteur `default` + features).
-fn tree_plan(biome: &str) -> (f64, Species, &'static [(f64, Species)]) {
+pub(super) fn tree_plan(biome: &str) -> (f64, Species, &'static [(f64, Species)]) {
     use Species::*;
     match biome {
         // Forêt : chêne (déf.) + 20 % bouleau + 10 % fancy oak.
@@ -703,7 +703,7 @@ fn tree_plan(biome: &str) -> (f64, Species, &'static [(f64, Species)]) {
 
 /// Sélection d'espèce selon la sémantique vanilla `random_selector` : on teste
 /// chaque alternative dans l'ordre (`rng < chance`), sinon l'espèce par défaut.
-fn pick_tree(default: Species, alts: &[(f64, Species)], rng: &mut Random) -> Species {
+pub(super) fn pick_tree(default: Species, alts: &[(f64, Species)], rng: &mut Random) -> Species {
     for (chance, species) in alts {
         if rng.next_float() < *chance {
             return *species;
@@ -712,7 +712,7 @@ fn pick_tree(default: Species, alts: &[(f64, Species)], rng: &mut Random) -> Spe
     default
 }
 
-fn place_tree(
+pub(super) fn place_tree(
     grid: &mut [u32],
     pal: &Pal,
     species: Species,
@@ -1304,43 +1304,10 @@ pub fn decorate(
 
     let biome_at = |lx: usize, lz: usize| -> &str { &biome_names[biome_idx[lx][lz] as usize] };
 
-    // ── Arbres ── (densité moyenne du chunk = moyenne des densités officielles
-    // par colonne ; arrondi probabiliste pour les biomes clairsemés < 1/chunk).
-    let tree_attempts: i32 = {
-        let sum: f64 = (0..16)
-            .flat_map(|x| (0..16).map(move |z| (x, z)))
-            .map(|(x, z)| tree_plan(biome_at(x, z)).0)
-            .sum();
-        let mean = sum / 256.0;
-        mean.floor() as i32
-            + if rng.next_float() < mean.fract() {
-                1
-            } else {
-                0
-            }
-    };
-    for _ in 0..tree_attempts {
-        let lx = rng.next_bounded_int(16);
-        let lz = rng.next_bounded_int(16);
-        let ground = surfaces[lx as usize][lz as usize];
-        if ground <= SEA_LEVEL {
-            continue;
-        }
-        let below = at(grid, lx, ground, lz);
-        if below != pal.grass_block && below != pal.dirt {
-            continue;
-        }
-        if at(grid, lx, ground + 1, lz) != pal.air {
-            continue;
-        }
-        let (density, default, alts) = tree_plan(biome_at(lx as usize, lz as usize));
-        if density <= 0.0 {
-            continue;
-        }
-        // Le palétuvier pousse aussi sur les racines déjà posées.
-        let species = pick_tree(default, alts, &mut rng);
-        place_tree(grid, &pal, species, lx, ground, lz, &mut rng);
-    }
+    // ── Arbres : déplacés dans `noise_chunk` (passe de population CROSS-CHUNK
+    // sur le voisinage 3×3, pour que les canopées débordant d'un chunk à l'autre
+    // soient cohérentes et non coupées aux frontières). Ils sont posés AVANT cet
+    // appel à `decorate`, donc les lianes ci-dessous les voient déjà.
 
     // ── Lianes (après les arbres) : feature vanilla `vines`, count 127 ──
     decorate_vines(grid, &pal, biome_idx, biome_names, &mut rng);
@@ -1752,19 +1719,14 @@ mod tests {
 
     #[test]
     fn forest_places_logs_and_leaves() {
-        let names = vec!["minecraft:forest".to_string()];
-        let (mut grid, idx, surf) = flat_chunk(70, 0);
-        decorate(
-            &mut grid,
-            42,
-            0,
-            0,
-            &idx,
-            &names,
-            &surf,
-            &[[[0u16; 4]; 4]; 1],
-        );
+        // Les arbres sont posés par `noise_chunk` (passe cross-chunk), mais la
+        // composition + le placement vivent ici : on vérifie qu'un arbre de la
+        // forêt produit bien tronc + feuilles.
         let pal = Pal::new();
+        let (_, default, _) = tree_plan("minecraft:forest");
+        let mut grid = vec![pal.air; GRID_LEN].into_boxed_slice();
+        let mut rng = Random::new(42);
+        place_tree(&mut grid, &pal, default, 8, 70, 8, &mut rng);
         let logs = grid.iter().filter(|&&b| pal.logs.contains(&b)).count();
         let leaves = grid.iter().filter(|&&b| pal.leaves.contains(&b)).count();
         assert!(logs > 0, "forêt sans tronc");

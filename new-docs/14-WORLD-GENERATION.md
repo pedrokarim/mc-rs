@@ -269,8 +269,15 @@ depuis la sémantique vanilla (réf. deepslate pour le bruit/les surfaces).
 3. **Surface rules** : grass/dirt/sable/grès/gravier/terracotta + bedrock/deepslate
    selon le biome.
 4. **Minerais** : clusters insérés dans la roche souterraine.
-5. **Décoration** : arbres, lianes, herbe/fleurs, aquatique, etc. par biome.
-6. **Sérialisation** : sub-chunks (paletté) + carte de biomes.
+5. **Arbres — population CROSS-CHUNK** : on rejoue le placement déterministe des
+   arbres du chunk **et de ses 8 voisins**, en n'écrivant que les blocs qui
+   tombent dans ce chunk. Une canopée qui déborde d'un chunk à l'autre est ainsi
+   posée à l'identique des deux côtés → **plus de coupures aux frontières**. Les
+   surfaces des voisins sont calculées de façon déterministe (mêmes coins
+   interpolés) et mises en cache global (`SURF_CACHE`), donc le surcoût est
+   amorti (~79 ms/chunk, inchangé).
+6. **Décoration** : lianes, herbe/fleurs, aquatique, etc. par biome.
+7. **Sérialisation** : sub-chunks (paletté) + carte de biomes.
 
 ### Vue d'ensemble — couverture (✅ fait · 🟡 partiel/approx · ❌ manquant)
 
@@ -392,9 +399,12 @@ lapis + poches dirt/gravel) insérés dans stone/deepslate.
   conifère 2×2**, jungle / **buisson** / **méga jungle 2×2**, chêne noir 2×2,
   acacia, **cerisier** (`cherry_*`), **palétuvier** (`mangrove_*` + racines).
   Sélection par la sémantique vanilla `random_selector` (test ordonné des chances).
+  **Posés en passe CROSS-CHUNK** (voisinage 3×3) → canopées continues, plus de
+  troncs/feuillages coupés aux frontières de chunk.
 - **Lianes** sur les arbres de jungle/palétuvier.
 - **Aquatique** : récifs de **corail** (5 couleurs) + **sea pickles** (océan
-  chaud), **kelp** (colonnes) + **seagrass** (océans/rivières).
+  chaud), **kelp** (colonnes clairsemées, océans seuls) + **seagrass**
+  (océans/rivières).
 - Herbe / fougères (taïga) / fleurs ; cactus & arbustes morts (désert),
   **bambou** (jungle), **canne à sucre** (bord de l'eau), **nénuphars** (marais).
 
@@ -455,6 +465,13 @@ bruit, noise_settings overworld (avec `surface_rule`), param list de biomes
   des providers de fleurs (`noise_threshold_provider`).
 - Formes d'arbres = approximations fidèles des trunk/foliage placers (pas le
   portage exact des placers vanilla).
+- ✅ **Population cross-chunk des arbres** (voisinage 3×3, surfaces voisines
+  mises en cache) → canopées non coupées aux frontières. La validité d'emplacement
+  ne lit plus la grille (déterminisme inter-chunks) : repose sur surface > mer +
+  composition du biome.
+- **Dripstone** : pointes courtes (1-2 blocs) faute de support des **états de
+  bloc** (`dripstone_thickness` tip/frustum/base) ; le vrai effilage demande
+  d'exposer les states dans le registre de blocs.
 - Portage **100 % data-driven** du système `placed_feature`/`configured_feature`
   (l'objectif final : lire les `features` du biome au lieu de les coder en dur).
 

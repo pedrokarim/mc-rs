@@ -17,6 +17,7 @@
 //! seule fois par seed et réutilisé pour tous les chunks, garantissant la
 //! continuité du bruit aux frontières.
 
+use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
 use super::super::block_registry::BLOCKS;
@@ -69,6 +70,70 @@ fn with_router<R>(seed: u64, f: impl FnOnce(&NoiseRouter) -> R) -> R {
         *guard = (seed, Some(density::build_overworld(seed)));
     }
     f(guard.1.as_ref().unwrap())
+}
+
+/// Cache global des hauteurs de surface par chunk (clé `(cx, cz)`), indispensable
+/// à la population CROSS-CHUNK des arbres : pour placer les arbres d'un chunk
+/// voisin (dont la canopée déborde dans le chunk courant), il faut sa surface —
+/// calculée de façon DÉTERMINISTE (mêmes coins interpolés que son propre
+/// terrain) et mise en cache pour ne la calculer qu'une fois par chunk.
+type SurfaceGrid = Box<[[i32; 16]; 16]>;
+/// `(seed courant, surfaces par chunk)`.
+type SurfaceCache = (u64, HashMap<(i32, i32), SurfaceGrid>);
+static SURF_CACHE: LazyLock<Mutex<SurfaceCache>> =
+    LazyLock::new(|| Mutex::new((0, HashMap::new())));
+
+/// Insère/écrase les surfaces d'un chunk déjà calculées (depuis le flux
+/// principal) pour éviter de les recalculer dans la passe d'arbres.
+fn put_surfaces(seed: u64, cx: i32, cz: i32, s: &[[i32; 16]; 16]) {
+    let mut g = SURF_CACHE.lock().unwrap();
+    if g.0 != seed {
+        g.0 = seed;
+        g.1.clear();
+    }
+    // Borne mémoire : vide si trop d'entrées (régénération bursty, sans impact
+    // visuel — c'est un cache de perf, pas une source de vérité).
+    if g.1.len() > 8192 {
+        g.1.clear();
+    }
+    g.1.insert((cx, cz), Box::new(*s));
+}
+
+/// Surfaces d'un chunk (cache ou calcul). Le calcul échantillonne les coins du
+/// chunk puis prend le plus haut bloc de densité > 0 par colonne — identique à
+/// ce que fait le flux principal pour le chunk courant.
+fn chunk_surfaces(seed: u64, router: &NoiseRouter, cx: i32, cz: i32) -> SurfaceGrid {
+    {
+        let g = SURF_CACHE.lock().unwrap();
+        if g.0 == seed {
+            if let Some(s) = g.1.get(&(cx, cz)) {
+                return s.clone();
+            }
+        }
+    }
+    let corners = sample_corners(cx * 16, cz * 16, router);
+    let mut s: SurfaceGrid = Box::new([[MIN_Y; 16]; 16]);
+    for (lx, col) in s.iter_mut().enumerate() {
+        for (lz, sy) in col.iter_mut().enumerate() {
+            for wy in (MIN_Y..MAX_Y).rev() {
+                if density_at(&corners, lx, wy, lz) > 0.0 {
+                    *sy = wy;
+                    break;
+                }
+            }
+        }
+    }
+    put_surfaces(seed, cx, cz, &s);
+    s
+}
+
+/// Seed déterministe d'un chunk pour la passe d'arbres — ne dépend QUE du chunk
+/// d'origine (pas du chunk en cours de génération), pour que le même arbre soit
+/// calculé à l'identique qu'on le voie depuis son chunk ou depuis un voisin.
+fn tree_chunk_seed(cx: i32, cz: i32, seed: u64) -> i64 {
+    (cx as i64).wrapping_mul(0x9e37_79b9_7f4a_7c15u64 as i64)
+        ^ (cz as i64).wrapping_mul(0x6a09_e667_f3bc_c909u64 as i64)
+        ^ seed as i64
 }
 
 #[inline]
@@ -244,9 +309,74 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
         }
     }
 
-    // 5) Décoration riche par biome (arbres variés + lianes, herbe/fleurs,
-    // aquatique : kelp/seagrass/coraux). Pilotée par les noms de biome Java,
-    // opère directement sur la grille.
+    // 4b) Arbres — population CROSS-CHUNK. On parcourt le voisinage 3×3 et, pour
+    // CHAQUE chunk d'origine (le courant + ses 8 voisins), on rejoue son placement
+    // d'arbres déterministe et on écrit dans CE chunk uniquement les blocs qui y
+    // tombent (le reste est clippé par `idx_ok`). Un arbre dont le tronc est dans
+    // un voisin mais dont la canopée déborde ici est ainsi posé de façon
+    // identique des deux côtés → plus de coupures aux frontières de chunk.
+    put_surfaces(seed, chunk_x, chunk_z, &surfaces); // évite de recalculer le centre
+    {
+        let pal = super::decoration::Pal::new();
+        for dcz in -1..=1i32 {
+            for dcx in -1..=1i32 {
+                let ocx = chunk_x + dcx;
+                let ocz = chunk_z + dcz;
+                let osurf = chunk_surfaces(seed, &router, ocx, ocz);
+                let ob_x = ocx * 16;
+                let ob_z = ocz * 16;
+                let mut trng = super::super::random::Random::new(tree_chunk_seed(ocx, ocz, seed));
+
+                // Densité moyenne d'arbres du chunk d'origine (échantillon 4×4,
+                // déterministe : ne consomme pas le RNG d'arbres).
+                let mut sum = 0.0f64;
+                for sx in 0..4i32 {
+                    for sz in 0..4i32 {
+                        let lx = sx * 4 + 2;
+                        let lz = sz * 4 + 2;
+                        let sy = osurf[lx as usize][lz as usize];
+                        let target = climate.sample((ob_x + lx) >> 2, sy >> 2, (ob_z + lz) >> 2);
+                        let name = &BIOMES.names[BIOMES.params.find(&target) as usize];
+                        sum += super::decoration::tree_plan(name).0;
+                    }
+                }
+                let mean = sum / 16.0;
+                let attempts = mean.floor() as i32 + i32::from(trng.next_float() < mean.fract());
+
+                for _ in 0..attempts {
+                    let lx = trng.next_bounded_int(16);
+                    let lz = trng.next_bounded_int(16);
+                    let wx = ob_x + lx;
+                    let wz = ob_z + lz;
+                    let ground = osurf[lx as usize][lz as usize];
+                    if ground <= SEA_LEVEL {
+                        continue;
+                    }
+                    let target = climate.sample(wx >> 2, ground >> 2, wz >> 2);
+                    let name = &BIOMES.names[BIOMES.params.find(&target) as usize];
+                    let (density, default, alts) = super::decoration::tree_plan(name);
+                    if density <= 0.0 {
+                        continue;
+                    }
+                    let species = super::decoration::pick_tree(default, alts, &mut trng);
+                    // Coordonnées locales au chunk CIBLE : hors 0..16 → clippé.
+                    super::decoration::place_tree(
+                        &mut grid,
+                        &pal,
+                        species,
+                        wx - base_x,
+                        ground,
+                        wz - base_z,
+                        &mut trng,
+                    );
+                }
+            }
+        }
+    }
+
+    // 5) Décoration riche par biome (lianes, herbe/fleurs, aquatique :
+    // kelp/seagrass/coraux). Pilotée par les noms de biome Java, opère
+    // directement sur la grille. (Les arbres sont posés en 4b ci-dessus.)
     super::decoration::decorate(
         &mut grid,
         seed,
@@ -326,6 +456,41 @@ mod tests {
         let a = generate_noise_chunk(3, -7, 123);
         let b = generate_noise_chunk(3, -7, 123);
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn neighbor_generation_does_not_change_chunk() {
+        // La passe d'arbres cross-chunk lit/écrit un cache global de surfaces
+        // partagé entre chunks. Générer les voisins (qui mutent ce cache) ne doit
+        // PAS changer la sortie d'un chunk donné → population déterministe.
+        let a = generate_noise_chunk(5, 5, 777);
+        let _ = generate_noise_chunk(6, 5, 777);
+        let _ = generate_noise_chunk(5, 6, 777);
+        let _ = generate_noise_chunk(4, 5, 777);
+        let a2 = generate_noise_chunk(5, 5, 777);
+        assert_eq!(a, a2, "la génération d'un chunk dépend de ses voisins");
+    }
+
+    #[test]
+    fn chunk_surfaces_consistent_with_main_flow() {
+        // La surface qu'un voisin calcule pour un chunk doit être identique à
+        // celle que ce chunk calcule pour lui-même (sinon canopées décalées).
+        let router = with_router(42, |r| r.clone());
+        let s = chunk_surfaces(42, &router, 2, -3);
+        // Recalcul direct (sans cache) via les coins, comme le flux principal.
+        let corners = sample_corners(2 * 16, -3 * 16, &router);
+        for lx in 0..16usize {
+            for lz in 0..16usize {
+                let mut expect = MIN_Y;
+                for wy in (MIN_Y..MAX_Y).rev() {
+                    if density_at(&corners, lx, wy, lz) > 0.0 {
+                        expect = wy;
+                        break;
+                    }
+                }
+                assert_eq!(s[lx][lz], expect, "surface incohérente en ({lx},{lz})");
+            }
+        }
     }
 
     #[test]
