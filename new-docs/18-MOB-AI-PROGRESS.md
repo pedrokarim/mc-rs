@@ -92,10 +92,17 @@ Roster passé de 7 à **~51 mobs**.
 - ✅ **Vague 6** — volants hostiles : phantom + vex (`FlyingMelee` : vole vers le joueur via
   `FlyAttackExecutor` + frappe au contact).
 
-### Vagues restantes (mécaniques spéciales)
-- ⬜ **Witch (potion), shulker (projectile)** — réutilisent l'entité projectile.
-- ⬜ **Aquatiques** : guardian/elder_guardian (laser), + nage dédiée pour squid/dauphin/poissons.
-- ⬜ **Breeze** (wind charge), **warden** (capteur de vibrations), **creaking**.
-- ⬜ **Boss** : wither, ender_dragon (barre de boss, phases, vol).
-- ⬜ **Règles de spawn par biome** (le spawner actuel ne filtre pas par biome → husk/drowned/stray
-  peuvent apparaître hors de leur biome ; à raffiner quand le spawner lira le biome).
+**Profils couverts (57 mobs)** : tous les mobs réutilisant un profil existant (Melee, Bow,
+CreeperSwell, Passive, Neutral, Flying, FlyingShooter, FlyingMelee) sont faits. Les restants
+demandent **chacun une mécanique bespoke** :
+
+### Vagues restantes (mécaniques bespoke)
+- ⬜ **Witch** : jet de potions (projectile arcé) + immunité aux potions.
+- ⬜ **Shulker** : stationnaire, projectile à tête chercheuse.
+- ⬜ **Guardian/Elder Guardian** : rayon laser + nage dédiée (aquatique).
+- ⬜ **Breeze** (wind charge), **warden** (capteur de vibrations + sonic boom), **creaking**.
+- ⬜ **Bosses** : wither (vol, 3 têtes, wither skulls, barre de boss), ender_dragon (phases, vol
+  autour des end crystals, barre de boss).
+- ⬜ **Nage dédiée** pour squid/dauphin/poissons (profil passif terrestre pour l'instant).
+- ⬜ **Règles de spawn par biome** (le spawner ne filtre pas par biome → husk/drowned/stray
+  peuvent apparaître hors biome ; à raffiner quand le spawner lira le biome au point de spawn).
