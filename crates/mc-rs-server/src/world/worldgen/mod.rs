@@ -6,6 +6,7 @@
 //! `super::terrain_generator` (heightmap PMMP), qui reste en place le temps de
 //! la migration.
 
+pub mod aquifer;
 pub mod blended_noise;
 pub mod climate;
 pub mod data;

@@ -142,6 +142,25 @@ impl PositionalRandomFactory {
         let m = u64::from_be_bytes(digest[8..16].try_into().unwrap());
         XoroshiroRandom::from_parts(l ^ self.lo, m ^ self.hi)
     }
+
+    /// Dérive une source depuis une position (vanilla
+    /// `XoroshiroPositionalRandomFactory.at` = `Mth.getSeed(x,y,z) ^ seedLo`).
+    pub fn at(&self, x: i32, y: i32, z: i32) -> XoroshiroRandom {
+        let seed = mth_get_seed(x, y, z) as u64 ^ self.lo;
+        XoroshiroRandom::from_parts(seed, self.hi)
+    }
+}
+
+/// `Mth.getSeed(x, y, z)` vanilla.
+#[inline]
+fn mth_get_seed(x: i32, y: i32, z: i32) -> i64 {
+    let mut l =
+        (x.wrapping_mul(3_129_871)) as i64 ^ (z as i64).wrapping_mul(116_129_781) ^ (y as i64);
+    l = l
+        .wrapping_mul(l)
+        .wrapping_mul(42_317_861)
+        .wrapping_add(l.wrapping_mul(11));
+    l >> 16
 }
 
 #[cfg(test)]

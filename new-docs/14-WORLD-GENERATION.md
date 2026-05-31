@@ -279,7 +279,8 @@ depuis la sémantique vanilla (réf. deepslate pour le bruit/les surfaces).
 | Élément | État | Note |
 |---|---|---|
 | Relief 3D (density functions) | ✅ | y-64→320, montagnes/océans |
-| Grottes (cheese/spaghetti/noodle) | ✅ | incluses dans `final_density` — vérifié : ~70 % des colonnes traversent une grotte. Mais **sèches** (pas d'eau/lave, cf. aquifères) ; les grottes fines partiellement lissées par l'interpolation 4×8 (~-23 % de volume) |
+| Grottes (cheese/spaghetti/noodle) | ✅ | incluses dans `final_density` — ~70 % des colonnes en traversent une ; fines partiellement lissées par l'interpolation 4×8 (~-23 %) |
+| **Aquifères** (eau/lave dans les grottes) | ✅ | port `NoiseAquifer` — grottes inondées sous terres basses/océans, sèches sous terres hautes, lave en profondeur |
 | Interpolation cellulaire 4×8 | ✅ | |
 | `vertical_gradient` probabiliste | 🟡 | cutoff déterministe (bedrock/deepslate) |
 | Parité numérique du bruit vs vanilla | 🟡 | non cross-validée |
@@ -338,7 +339,6 @@ depuis la sémantique vanilla (réf. deepslate pour le bruit/les surfaces).
 
 | Élément | État | Note |
 |---|---|---|
-| Aquifères (eau/lave dans les grottes) | ❌ | Phase D — stages dispo dans le router |
 | Lacs (`LAKES`) + sources eau/lave (springs) | ❌ | |
 | Géodes d'améthyste | ❌ | |
 | Dripstone (clusters + pointed) | ❌ | |

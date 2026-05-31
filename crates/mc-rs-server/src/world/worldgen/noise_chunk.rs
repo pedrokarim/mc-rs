@@ -140,50 +140,61 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
     let base_x = chunk_x * 16;
     let base_z = chunk_z * 16;
 
-    let (corners, climate) = with_router(seed, |router| {
-        (
-            sample_corners(base_x, base_z, router),
-            super::climate::ClimateSampler::from_router(router),
-        )
-    });
+    // Router cloné hors du Mutex (partage d'`Arc<Df>`, peu coûteux).
+    let router = with_router(seed, |r| r.clone());
+    let corners = sample_corners(base_x, base_z, &router);
+    let climate = super::climate::ClimateSampler::from_router(&router);
 
-    // 1) Forme du terrain : grille pleine hauteur (stone / water / air).
-    let mut grid = vec![BLOCKS.air; GRID_LEN].into_boxed_slice();
-    for lx in 0..16usize {
-        for lz in 0..16usize {
-            for wy in MIN_Y..MAX_Y {
-                let d = density_at(&corners, lx, wy, lz);
-                if d > 0.0 {
-                    grid[grid_index(lx, wy, lz)] = BLOCKS.stone;
-                } else if wy <= SEA_LEVEL {
-                    grid[grid_index(lx, wy, lz)] = BLOCKS.water;
+    // Surfaces (plus haut bloc solide = densité > 0), calculées AVANT le
+    // remplissage : nécessaires à l'aquifère et au placement des biomes.
+    let mut surfaces = [[MIN_Y; 16]; 16];
+    for (lx, col) in surfaces.iter_mut().enumerate() {
+        for (lz, sy) in col.iter_mut().enumerate() {
+            for wy in (MIN_Y..MAX_Y).rev() {
+                if density_at(&corners, lx, wy, lz) > 0.0 {
+                    *sy = wy;
+                    break;
                 }
             }
         }
     }
 
-    // 2) Biomes : placement multi-noise 6D échantillonné à la surface de chaque
-    // colonne (depuis la grille stone/water, avant surface). On garde l'index
-    // Java (pour les conditions `biome` des surface rules) et l'ID Bedrock (pour
-    // la sérialisation). Carte 2D pour l'instant.
-    static BIOMES: LazyLock<super::climate::OverworldBiomes> =
-        LazyLock::new(super::climate::load_overworld);
-    let mut biome_idx = [[0u16; 16]; 16];
-    let mut biome_ids = [[0u32; 16]; 16];
-    let mut surfaces = [[MIN_Y; 16]; 16];
+    // 1) Forme du terrain + aquifères : stone / eau / lave / air. Sous le niveau
+    // de la mer, l'aquifère décide eau/lave/air (grottes sèches ou inondées) ;
+    // au-dessus, l'air reste l'air (les aquifères perchés sont négligés).
+    let lava = BLOCKS.get("minecraft:lava");
+    let mut aquifer = super::aquifer::Aquifer::new(&router, seed, base_x, base_z, &surfaces);
+    let mut grid = vec![BLOCKS.air; GRID_LEN].into_boxed_slice();
     for lx in 0..16usize {
         for lz in 0..16usize {
             let wx = base_x + lx as i32;
             let wz = base_z + lz as i32;
-            let mut sy = SEA_LEVEL;
-            for wy in (MIN_Y..MAX_Y).rev() {
-                let b = grid[grid_index(lx, wy, lz)];
-                if b != BLOCKS.air && b != BLOCKS.water {
-                    sy = wy;
-                    break;
+            for wy in MIN_Y..MAX_Y {
+                let d = density_at(&corners, lx, wy, lz);
+                if d > 0.0 {
+                    grid[grid_index(lx, wy, lz)] = BLOCKS.stone;
+                } else if wy <= SEA_LEVEL {
+                    match aquifer.compute(wx, wy, wz, d) {
+                        super::aquifer::Fluid::Water => grid[grid_index(lx, wy, lz)] = BLOCKS.water,
+                        super::aquifer::Fluid::Lava => grid[grid_index(lx, wy, lz)] = lava,
+                        super::aquifer::Fluid::Air => {}
+                    }
                 }
             }
-            surfaces[lx][lz] = sy;
+        }
+    }
+
+    // 2) Biomes : placement multi-noise 6D échantillonné à la surface (surfaces
+    // déjà calculées). Index Java (conditions `biome`) + ID Bedrock (sérialisation).
+    static BIOMES: LazyLock<super::climate::OverworldBiomes> =
+        LazyLock::new(super::climate::load_overworld);
+    let mut biome_idx = [[0u16; 16]; 16];
+    let mut biome_ids = [[0u32; 16]; 16];
+    for lx in 0..16usize {
+        for lz in 0..16usize {
+            let wx = base_x + lx as i32;
+            let wz = base_z + lz as i32;
+            let sy = surfaces[lx][lz];
             let target = climate.sample(wx >> 2, sy >> 2, wz >> 2);
             let idx = BIOMES.params.find(&target);
             biome_idx[lx][lz] = idx;

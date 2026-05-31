@@ -430,7 +430,8 @@ impl Builder {
 }
 
 /// Router de bruit overworld : terrain + les 6 fonctions climat utilisées par
-/// le placement des biomes multi-noise (Phase B).
+/// le placement des biomes multi-noise (Phase B). Cloner partage les `Arc<Df>`.
+#[derive(Clone)]
 pub struct NoiseRouter {
     pub final_density: Arc<Df>,
     pub temperature: Arc<Df>,
@@ -439,6 +440,11 @@ pub struct NoiseRouter {
     pub erosion: Arc<Df>,
     pub depth: Arc<Df>,
     pub ridges: Arc<Df>,
+    // Stages aquifère (Phase D).
+    pub barrier: Arc<Df>,
+    pub fluid_level_floodedness: Arc<Df>,
+    pub fluid_level_spread: Arc<Df>,
+    pub lava: Arc<Df>,
 }
 
 /// Construit le router overworld pour une seed donnée (équiv. `RandomState`).
@@ -466,6 +472,10 @@ pub fn build_overworld(seed: u64) -> NoiseRouter {
         erosion: stage("erosion"),
         depth: stage("depth"),
         ridges: stage("ridges"),
+        barrier: stage("barrier"),
+        fluid_level_floodedness: stage("fluid_level_floodedness"),
+        fluid_level_spread: stage("fluid_level_spread"),
+        lava: stage("lava"),
     }
 }
 
