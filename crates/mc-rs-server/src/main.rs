@@ -2067,6 +2067,8 @@ async fn main() {
                             > 0.0,
                     })
                     .collect();
+                // Dégâts mêlée/flèche des mobs mis à l'échelle selon la difficulté.
+                let dmg_mult = difficulty_damage_multiplier(config.gameplay.difficulty_id());
                 let mob_tick_result = if let Ok(mut cache) = chunk_cache.lock() {
                     Some(mob_entities.tick(&mut cache, &player_snapshots))
                 } else {
@@ -2101,7 +2103,7 @@ async fn main() {
                                     attacker_runtime_id,
                                     attacker_position,
                                     target_runtime_id,
-                                    damage,
+                                    damage * dmg_mult,
                                 );
                             }
                             crate::ai::AiEffect::Explode {
@@ -2126,6 +2128,21 @@ async fn main() {
                                 // Spawn dans le manager : l'AddActor est broadcast
                                 // par la diffusion de mouvement cullée au tick suivant.
                                 arrow_manager.spawn(from, velocity, damage, shooter_runtime_id);
+                                // Son de tir à l'arc.
+                                let shoot = mc_rs_proto::packets::world::LevelSoundEvent::actor_sound(
+                                    mc_rs_proto::packets::world::LevelSoundEvent::SHOOT,
+                                    from,
+                                    "minecraft:skeleton",
+                                    -1,
+                                    false,
+                                )
+                                .encode();
+                                broadcast_packet_all(
+                                    &mut connections,
+                                    &mut raknet,
+                                    packet_id::LEVEL_SOUND_EVENT,
+                                    &shoot,
+                                );
                             }
                         }
                     }
@@ -2166,15 +2183,55 @@ async fn main() {
                         );
                     }
                     for hit in ar.hits {
+                        // Son d'impact de flèche.
+                        let thud = mc_rs_proto::packets::world::LevelSoundEvent::world_sound(
+                            mc_rs_proto::packets::world::LevelSoundEvent::HIT,
+                            hit.from_position,
+                        )
+                        .encode();
+                        broadcast_packet_all(
+                            &mut connections,
+                            &mut raknet,
+                            packet_id::LEVEL_SOUND_EVENT,
+                            &thud,
+                        );
                         apply_mob_attack_to_player(
                             &mut connections,
                             &mut raknet,
                             hit.shooter_runtime_id,
                             hit.from_position,
                             hit.target_runtime_id,
-                            hit.damage,
+                            hit.damage * dmg_mult,
                         );
                     }
+                }
+
+                // Sons d'ambiance des mobs (grognements/meuglements) : faible
+                // probabilité par mob et par tick → ~1 son toutes les ~12 s/mob.
+                let ambient_sounds: Vec<Vec<u8>> = {
+                    let mut rng = rand::thread_rng();
+                    mob_entities
+                        .all()
+                        .filter(|_| rand::Rng::gen_bool(&mut rng, 0.004))
+                        .map(|m| {
+                            mc_rs_proto::packets::world::LevelSoundEvent::actor_sound(
+                                mc_rs_proto::packets::world::LevelSoundEvent::AMBIENT,
+                                m.base.position,
+                                m.kind.actor_type(),
+                                m.base.entity_unique_id,
+                                false,
+                            )
+                            .encode()
+                        })
+                        .collect()
+                };
+                for sound in ambient_sounds {
+                    broadcast_packet_all(
+                        &mut connections,
+                        &mut raknet,
+                        packet_id::LEVEL_SOUND_EVENT,
+                        &sound,
+                    );
                 }
 
                 entity_visibility_scan_counter += 1;
@@ -2335,6 +2392,34 @@ fn spawn_and_broadcast_item_entity(
 /// - StillVisible : envoie Move+Motion
 /// - JustLeft : envoie RemoveActor (entity sortie du rayon de vue)
 ///
+/// Diffuse un paquet (déjà encodé en payload) à tous les joueurs en jeu.
+/// Utilisé pour les événements globaux (sons, particules d'explosion).
+fn broadcast_packet_all(
+    connections: &mut HashMap<SocketAddr, Connection>,
+    raknet: &mut RakNetServer,
+    packet_id: u32,
+    payload: &[u8],
+) {
+    for (addr, conn) in connections.iter_mut() {
+        if conn.is_in_game() {
+            let pkt = conn.encode_compressed_packet(packet_id, payload);
+            let prep = conn.prepare_for_send(pkt);
+            raknet.send_to_session(addr, prep, Reliability::ReliableOrdered, false);
+        }
+    }
+}
+
+/// Multiplicateur de dégâts des mobs selon la difficulté (approximation fidèle
+/// Bedrock : zombie ~2/3/4). peaceful=0, easy≈0.67, normal=1, hard=1.5.
+fn difficulty_damage_multiplier(difficulty_id: i32) -> f32 {
+    match difficulty_id {
+        0 => 0.0,  // peaceful
+        1 => 0.67, // easy
+        3 => 1.5,  // hard
+        _ => 1.0,  // normal
+    }
+}
+
 /// Applique une attaque mob→joueur : réutilise `combat::attack_entity` puis
 /// broadcast hurt/knockback et gère la mort/respawn — calque du chemin PvP.
 fn apply_mob_attack_to_player(
@@ -2451,9 +2536,21 @@ fn apply_mob_explosion(
     center: [f32; 3],
 ) {
     use crate::world::block_registry::BLOCKS;
+    use mc_rs_proto::packets::world::{LevelEvent, LevelSoundEvent};
     let explosion =
         crate::explosion::Explosion::new(crate::explosion::ExplosionSource::Creeper, center);
     let air = BLOCKS.air;
+
+    // Effets audiovisuels : particule + son d'explosion (IDs BedrockProtocol).
+    let particle = LevelEvent {
+        event_id: LevelEvent::PARTICLE_EXPLODE,
+        position: center,
+        event_data: 0,
+    }
+    .encode();
+    broadcast_packet_all(connections, raknet, packet_id::LEVEL_EVENT, &particle);
+    let boom = LevelSoundEvent::world_sound(LevelSoundEvent::EXPLODE, center).encode();
+    broadcast_packet_all(connections, raknet, packet_id::LEVEL_SOUND_EVENT, &boom);
 
     // 1) Calcul des blocs détruits + mise à air (sous lock, sans I/O réseau).
     let destroyed: Vec<[i32; 3]> = if let Ok(mut cache) = chunk_cache.lock() {
@@ -3285,10 +3382,35 @@ fn process_peer_events(
                             continue;
                         }
 
+                        // Position/type du mob AVANT l'attaque (il peut être retiré
+                        // s'il meurt) — pour le son hurt/death.
+                        let mob_sound_info = mob_entities
+                            .all()
+                            .find(|e| e.base.entity_runtime_id == attack.target_runtime_id)
+                            .map(|e| (e.base.position, e.kind.actor_type(), e.base.entity_unique_id));
+
                         if let Some(result) =
                             mob_entities.apply_attack(attack.target_runtime_id, 4.0)
                         {
                             let target_unique_id = attack.target_runtime_id as i64;
+                            // Son de blessure / de mort du mob.
+                            if let Some((spos, stype, suid)) = mob_sound_info {
+                                let sid = if result.remove_packet.is_some() {
+                                    mc_rs_proto::packets::world::LevelSoundEvent::DEATH
+                                } else {
+                                    mc_rs_proto::packets::world::LevelSoundEvent::HURT
+                                };
+                                let snd = mc_rs_proto::packets::world::LevelSoundEvent::actor_sound(
+                                    sid, spos, stype, suid, false,
+                                )
+                                .encode();
+                                broadcast_packet_all(
+                                    connections,
+                                    raknet,
+                                    packet_id::LEVEL_SOUND_EVENT,
+                                    &snd,
+                                );
+                            }
                             if let Some(update_bytes) = result.update_attributes_packet {
                                 // Culling : un joueur qui ne voit pas le mob
                                 // n'a pas besoin de ses UpdateAttributes.

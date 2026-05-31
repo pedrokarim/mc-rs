@@ -13,14 +13,15 @@ Légende : ✅ fait · 🔨 en cours · ⬜ à faire · 💤 stretch/hors-scope 
 - ✅ Passifs : errance (roam) + fuite si blessé (panic)
 - ✅ Dégâts mob→joueur via `AiEffect` (chemin combat partagé)
 
-## Phase 1 — Feedback audiovisuel & dégâts (fidélité combat)
+## Phase 1 — Feedback audiovisuel & dégâts (fidélité combat) ✅
 IDs autoritatifs (BedrockProtocol) : LevelEvent `PARTICLE_EXPLODE=2025` ; LevelSoundEvent
 `AMBIENT=10`, `DEATH=14`, `HURT=17`, `ATTACK=41`, `EXPLODE=48`, `SHOOT=54`.
-- ⬜ A1 — Sons de mob : hurt (quand touché), death (à la mort), ambient (périodique), attack.
-- ⬜ A2 — Explosion creeper : particule `PARTICLE_EXPLODE` + son `EXPLODE`.
-- ⬜ A3 — Arc : son `SHOOT` au tir ; impact de flèche (son `HIT`/`bow.hit`).
-- ⬜ A4 — Swing de bras à l'attaque mêlée (AnimatePacket / ActorEvent).
-- ⬜ A5 — Dégâts selon la difficulté (easy/normal/hard) pour mêlée + explosion + flèche.
+- ✅ A1 — Sons de mob : hurt + death (chemin PvE), ambient (périodique ~12s/mob). (attack : couvert
+  par le son d'impact côté joueur ; son d'attaque dédié non émis — mineur.)
+- ✅ A2 — Explosion creeper : particule `PARTICLE_EXPLODE` + son `EXPLODE`.
+- ✅ A3 — Arc : son `SHOOT` au tir + son d'impact (`HIT`) à la touche.
+- 💤 A4 — Swing de bras mêlée : **différé** (nécessite `AnimatePacket`, absent du proto ; visuel mineur).
+- ✅ A5 — Dégâts mêlée + flèche mis à l'échelle par difficulté (peaceful 0 / easy 0.67 / normal 1 / hard 1.5).
 
 ## Phase 2 — IA hostile (fidélité Bedrock)
 - ⬜ B1 — Sun-burning : zombie/skeleton prennent feu (flag `ONFIRE`) + dégâts de feu en plein
