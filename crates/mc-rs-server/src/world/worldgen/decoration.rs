@@ -1,15 +1,19 @@
 //! Décoration riche du générateur noise — objectif : proche de Bedrock Edition.
 //!
 //! Placement par biome (noms Java) directement sur la grille de blocs :
-//! - arbres variés par espèce et taille (chêne petit/géant, bouleau, sapin,
-//!   jungle petite/géante 2×2, chêne noir 2×2, acacia) + **lianes**,
-//! - herbe haute / fougères / fleurs,
+//! - **arbres** : chaque biome reçoit sa **composition vanilla officielle**
+//!   (sélecteur `random_selector` : espèce par défaut + alternatives à chances
+//!   exactes, extraites des `configured_feature` Java). Espèces : chêne, **fancy
+//!   oak** (gros chêne touffu à branches), bouleau / super bouleau, sapin, pin,
+//!   méga conifère 2×2, jungle / buisson / méga jungle 2×2, chêne noir 2×2,
+//!   acacia, cerisier, palétuvier. + **lianes** (jungle/palétuvier),
+//! - herbe haute / fougères / fleurs (densités basées sur les `patch_*`),
 //! - **aquatique** : kelp, seagrass, récifs de **corail** + sea pickles.
 //!
-//! Remplace l'usage du module `vegetation` (legacy) pour ce générateur. Les
-//! formes d'arbres sont des approximations fidèles des features vanilla ; le
-//! portage 100 % data-driven (`placed_feature`/`configured_feature`) viendra
-//! ensuite. Les arbres en bord de chunk sont rognés (pas de débordement).
+//! Densités d'arbres = moyenne du modificateur `count` des `placed_feature`
+//! vanilla (ex. plaines 0.05, jungle 50, mangrove 25). Remplace `vegetation`
+//! (legacy). Les formes d'arbres restent des approximations fidèles des trunk/
+//! foliage placers vanilla. Arbres en bord de chunk rognés (pas de débordement).
 
 use super::super::block_registry::BLOCKS;
 use super::super::random::Random;
@@ -37,6 +41,11 @@ struct Pal {
     bamboo: u32,
     sugar_cane: u32,
     lily_pad: u32,
+    cherry_log: u32,
+    cherry_leaves: u32,
+    mangrove_log: u32,
+    mangrove_leaves: u32,
+    mangrove_roots: u32,
 }
 
 // Indices d'espèce dans logs/leaves.
@@ -102,6 +111,11 @@ impl Pal {
             bamboo: g("minecraft:bamboo"),
             sugar_cane: g("minecraft:reeds"),
             lily_pad: g("minecraft:waterlily"),
+            cherry_log: g("minecraft:cherry_log"),
+            cherry_leaves: g("minecraft:cherry_leaves"),
+            mangrove_log: g("minecraft:mangrove_log"),
+            mangrove_leaves: g("minecraft:mangrove_leaves"),
+            mangrove_roots: g("minecraft:mangrove_roots"),
         }
     }
 }
@@ -335,70 +349,264 @@ fn mega_tree(
     }
 }
 
+/// Grappe sphérique de feuilles (centrée), un peu aplatie verticalement.
+fn foliage_cluster(grid: &mut [u32], pal: &Pal, cx: i32, cy: i32, cz: i32, r: i32, leaf_id: u32) {
+    for ox in -r..=r {
+        for oy in -r..=r {
+            for oz in -r..=r {
+                // Sphère légèrement aplatie (le Y compte double).
+                if ox * ox + oy * oy * 2 + oz * oz <= r * r + 1 {
+                    leaf(grid, pal, cx + ox, cy + oy, cz + oz, leaf_id);
+                }
+            }
+        }
+    }
+}
+
+/// **Fancy oak / grand chêne** : tronc haut + branches obliques, chacune
+/// terminée par une grappe de feuillage → grosse couronne touffue multi-lobes.
+fn fancy_oak_tree(grid: &mut [u32], pal: &Pal, lx: i32, ground: i32, lz: i32, rng: &mut Random) {
+    let log_id = pal.logs[OAK];
+    let leaf_id = pal.leaves[OAK];
+    let h = 8 + rng.next_bounded_int(5); // 8..12
+    for dy in 0..=h {
+        log(grid, pal, lx, ground + 1 + dy, lz, log_id, leaf_id);
+    }
+    // Couronne sommitale.
+    foliage_cluster(grid, pal, lx, ground + 1 + h, lz, 2, leaf_id);
+    // Branches dans la moitié haute, chacune avec sa grappe.
+    let branches = 3 + rng.next_bounded_int(3); // 3..5
+    for _ in 0..branches {
+        let start = ground + 1 + h / 2 + rng.next_bounded_int((h / 2).max(1));
+        let (dx, dz) = loop {
+            let dx = rng.next_range(-1, 1);
+            let dz = rng.next_range(-1, 1);
+            if dx != 0 || dz != 0 {
+                break (dx, dz);
+            }
+        };
+        let len = 2 + rng.next_bounded_int(2); // 2..3
+        let (mut bx, mut by, mut bz) = (lx, start, lz);
+        for _ in 0..len {
+            bx += dx;
+            bz += dz;
+            by += 1;
+            log(grid, pal, bx, by, bz, log_id, leaf_id);
+        }
+        foliage_cluster(grid, pal, bx, by, bz, 2, leaf_id);
+    }
+}
+
+/// **Pin** : grand tronc nu, petite touffe pointue au sommet.
+fn pine_tree(grid: &mut [u32], pal: &Pal, lx: i32, ground: i32, lz: i32, rng: &mut Random) {
+    let log_id = pal.logs[SPRUCE];
+    let leaf_id = pal.leaves[SPRUCE];
+    let h = 7 + rng.next_bounded_int(6); // 7..12
+    for dy in 0..=h {
+        log(grid, pal, lx, ground + 1 + dy, lz, log_id, leaf_id);
+    }
+    // Touffe sur les ~4 derniers blocs : rayon 2,2,1,1 puis pointe.
+    let top = ground + 1 + h;
+    for (i, &r) in [2i32, 2, 1, 1].iter().enumerate() {
+        let y = top - 3 + i as i32;
+        for ox in -r..=r {
+            for oz in -r..=r {
+                if ox.abs() + oz.abs() <= r {
+                    leaf(grid, pal, lx + ox, y, lz + oz, leaf_id);
+                }
+            }
+        }
+    }
+    leaf(grid, pal, lx, top + 1, lz, leaf_id);
+}
+
+/// **Buisson de jungle** : 1 bûche + petite grappe de feuilles.
+fn jungle_bush(grid: &mut [u32], pal: &Pal, lx: i32, ground: i32, lz: i32) {
+    log(
+        grid,
+        pal,
+        lx,
+        ground + 1,
+        lz,
+        pal.logs[JUNGLE],
+        pal.leaves[JUNGLE],
+    );
+    foliage_cluster(grid, pal, lx, ground + 2, lz, 2, pal.leaves[JUNGLE]);
+}
+
+/// **Méga conifère 2×2** (méga sapin/pin) : tronc épais très haut + feuillage
+/// conique en paliers.
+fn mega_conifer(grid: &mut [u32], pal: &Pal, lx: i32, ground: i32, lz: i32, rng: &mut Random) {
+    let log_id = pal.logs[SPRUCE];
+    let leaf_id = pal.leaves[SPRUCE];
+    let h = 13 + rng.next_bounded_int(8); // 13..20
+    for dy in 0..h {
+        for (ox, oz) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+            log(
+                grid,
+                pal,
+                lx + ox,
+                ground + 1 + dy,
+                lz + oz,
+                log_id,
+                leaf_id,
+            );
+        }
+    }
+    // Feuillage conique : large en bas, pointe en haut.
+    let leaf_bottom = ground + 1 + h / 3;
+    let top = ground + 1 + h + 1;
+    let mut r = 1i32;
+    let mut step = 0;
+    for y in (leaf_bottom..=top).rev() {
+        for ox in -r..=(r + 1) {
+            for oz in -r..=(r + 1) {
+                if ox * ox + oz * oz <= (r + 1) * (r + 1) {
+                    leaf(grid, pal, lx + ox, y, lz + oz, leaf_id);
+                }
+            }
+        }
+        step += 1;
+        if step % 2 == 0 {
+            r += 1;
+        }
+        if r > 3 {
+            r = 1;
+        }
+    }
+}
+
+/// **Cerisier** : petit tronc + branches + grappes de feuilles roses.
+fn cherry_tree(grid: &mut [u32], pal: &Pal, lx: i32, ground: i32, lz: i32, rng: &mut Random) {
+    let log_id = pal.cherry_log;
+    let leaf_id = pal.cherry_leaves;
+    let h = 5 + rng.next_bounded_int(3);
+    for dy in 0..=h {
+        log(grid, pal, lx, ground + 1 + dy, lz, log_id, leaf_id);
+    }
+    foliage_cluster(grid, pal, lx, ground + 1 + h, lz, 3, leaf_id);
+    for _ in 0..2 {
+        let (dx, dz) = [(1, 0), (-1, 0), (0, 1), (0, -1)][rng.next_bounded_int(4) as usize];
+        let by = ground + 1 + h - 1 - rng.next_bounded_int(2);
+        foliage_cluster(grid, pal, lx + dx * 2, by + 1, lz + dz * 2, 2, leaf_id);
+        log(grid, pal, lx + dx, by, lz + dz, log_id, leaf_id);
+    }
+}
+
+/// **Palétuvier** : racines au sol, tronc, feuillage + lianes.
+fn mangrove_tree(grid: &mut [u32], pal: &Pal, lx: i32, ground: i32, lz: i32, rng: &mut Random) {
+    // Racines.
+    for (ox, oz) in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)] {
+        if let Some(i) = idx_ok(lx + ox, ground, lz + oz) {
+            if grid[i] == pal.dirt || grid[i] == pal.grass_block {
+                grid[i] = pal.mangrove_roots;
+            }
+        }
+    }
+    let h = 4 + rng.next_bounded_int(4);
+    for dy in 0..=h {
+        log(
+            grid,
+            pal,
+            lx,
+            ground + 1 + dy,
+            lz,
+            pal.mangrove_log,
+            pal.mangrove_leaves,
+        );
+    }
+    let top = ground + 1 + h;
+    foliage_cluster(grid, pal, lx, top, lz, 3, pal.mangrove_leaves);
+    for dy in -2i32..=0 {
+        hang_vines(grid, pal, lx + 2, top + dy, lz, rng);
+        hang_vines(grid, pal, lx - 2, top + dy, lz, rng);
+        hang_vines(grid, pal, lx, top + dy, lz + 2, rng);
+    }
+}
+
 #[derive(Clone, Copy)]
 enum Species {
-    OakSmall,
-    OakLarge,
+    Oak,
+    FancyOak,
     Birch,
+    SuperBirch,
     Spruce,
-    JungleSmall,
-    JungleGiant,
+    Pine,
+    MegaSpruce,
+    JungleTree,
+    JungleBush,
+    MegaJungle,
     DarkOak,
     Acacia,
+    Cherry,
+    Mangrove,
 }
 
-/// (densité = arbres/chunk, espèces pondérées) par biome Java.
-///
-/// Densités = valeurs **officielles vanilla** (moyenne du modificateur `count`
-/// des `placed_feature` Java : `trees_<biome>`, etc.). Ex. plaines `{0:19,1:1}`
-/// → 0.05 ; jungle `{50:9,51:1}` → 50.1 ; mangrove `count 25`.
-fn tree_plan(biome: &str) -> (f64, &'static [(Species, i32)]) {
+/// Composition d'arbres d'un biome : `(densité arbres/chunk, espèce par défaut,
+/// alternatives (chance, espèce))`. **Données officielles vanilla** : densité =
+/// moyenne du `count` des `placed_feature` ; espèces/chances = `random_selector`
+/// des `configured_feature` (`trees_<biome>` → sélecteur `default` + features).
+fn tree_plan(biome: &str) -> (f64, Species, &'static [(f64, Species)]) {
     use Species::*;
     match biome {
-        "minecraft:forest" => (10.0, &[(OakSmall, 6), (Birch, 4), (OakLarge, 1)]),
-        "minecraft:flower_forest" => (6.0, &[(OakSmall, 6), (Birch, 4), (OakLarge, 1)]),
-        "minecraft:birch_forest" => (10.0, &[(Birch, 1)]),
-        "minecraft:old_growth_birch_forest" => (10.0, &[(Birch, 1)]),
-        "minecraft:dark_forest" => (16.0, &[(DarkOak, 6), (OakSmall, 3), (Birch, 1)]),
-        "minecraft:taiga" | "minecraft:snowy_taiga" => (10.0, &[(Spruce, 1)]),
-        "minecraft:old_growth_pine_taiga" | "minecraft:old_growth_spruce_taiga" => {
-            (10.0, &[(Spruce, 1)])
+        // Forêt : chêne (déf.) + 20 % bouleau + 10 % fancy oak.
+        "minecraft:forest" => (10.0, Oak, &[(0.20, Birch), (0.10, FancyOak)]),
+        "minecraft:flower_forest" => (6.0, Oak, &[(0.20, Birch), (0.10, FancyOak)]),
+        "minecraft:birch_forest" => (10.0, Birch, &[]),
+        "minecraft:old_growth_birch_forest" => (10.0, SuperBirch, &[]),
+        "minecraft:dark_forest" => (16.0, DarkOak, &[(0.05, Birch), (0.05, Oak)]),
+        // Taïga : sapin (déf.) + 33 % pin.
+        "minecraft:taiga" | "minecraft:snowy_taiga" => (10.0, Spruce, &[(0.333, Pine)]),
+        "minecraft:old_growth_pine_taiga" => (
+            10.0,
+            Spruce,
+            &[(0.026, MegaSpruce), (0.308, MegaSpruce), (0.333, Pine)],
+        ),
+        "minecraft:old_growth_spruce_taiga" => {
+            (10.0, Spruce, &[(0.333, MegaSpruce), (0.333, Pine)])
         }
-        "minecraft:grove" => (10.0, &[(Spruce, 1)]),
-        "minecraft:snowy_slopes" => (0.1, &[(Spruce, 1)]),
-        "minecraft:jungle" => (50.0, &[(JungleSmall, 10), (JungleGiant, 2), (OakLarge, 1)]),
-        "minecraft:bamboo_jungle" => (30.0, &[(JungleSmall, 4), (JungleGiant, 1)]),
-        "minecraft:sparse_jungle" => (2.0, &[(JungleSmall, 2), (OakSmall, 1)]),
+        "minecraft:grove" => (10.0, Spruce, &[(0.333, Pine)]),
+        "minecraft:snowy_slopes" => (0.1, Spruce, &[(0.333, Pine)]),
+        // Jungle : arbre (déf.) + 10 % fancy oak + 50 % buisson + 33 % méga.
+        "minecraft:jungle" => (
+            50.0,
+            JungleTree,
+            &[(0.10, FancyOak), (0.50, JungleBush), (0.333, MegaJungle)],
+        ),
+        "minecraft:bamboo_jungle" => (
+            30.0,
+            JungleTree,
+            &[(0.10, FancyOak), (0.50, JungleBush), (0.333, MegaJungle)],
+        ),
+        "minecraft:sparse_jungle" => (2.0, JungleTree, &[(0.10, FancyOak), (0.50, JungleBush)]),
+        // Savane : chêne (déf.) + 80 % acacia.
         "minecraft:savanna" | "minecraft:savanna_plateau" | "minecraft:windswept_savanna" => {
-            (1.1, &[(Acacia, 4), (OakSmall, 1)])
+            (1.1, Oak, &[(0.80, Acacia)])
         }
-        "minecraft:swamp" => (0.1, &[(OakSmall, 1)]),
-        // Mangrove : dense (count 25). Approximé en chêne + lianes faute de
-        // blocs de palétuvier dédiés.
-        "minecraft:mangrove_swamp" => (25.0, &[(OakSmall, 1)]),
-        "minecraft:plains" | "minecraft:sunflower_plains" => {
-            (0.05, &[(OakSmall, 4), (OakLarge, 1)])
-        }
-        "minecraft:meadow" => (0.05, &[(OakSmall, 1)]),
-        "minecraft:windswept_forest" => (3.0, &[(Spruce, 2), (OakSmall, 1)]),
+        "minecraft:swamp" => (0.1, Oak, &[(0.10, FancyOak)]),
+        "minecraft:mangrove_swamp" => (25.0, Mangrove, &[]),
+        // Plaines : chêne (déf.) + 1/3 fancy oak (parmi ses très rares arbres).
+        "minecraft:plains" | "minecraft:sunflower_plains" => (0.05, Oak, &[(0.333, FancyOak)]),
+        "minecraft:meadow" => (0.05, SuperBirch, &[(0.50, FancyOak)]),
+        // Windswept : chêne (déf.) + 66 % sapin + 10 % fancy oak.
+        "minecraft:windswept_forest" => (8.0, Oak, &[(0.666, Spruce), (0.10, FancyOak)]),
         "minecraft:windswept_hills" | "minecraft:windswept_gravelly_hills" => {
-            (0.1, &[(Spruce, 2), (OakSmall, 1)])
+            (0.1, Oak, &[(0.666, Spruce), (0.10, FancyOak)])
         }
-        "minecraft:cherry_grove" => (10.0, &[(OakSmall, 1)]),
-        _ => (0.0, &[]),
+        "minecraft:cherry_grove" => (10.0, Cherry, &[]),
+        _ => (0.0, Oak, &[]),
     }
 }
 
-fn pick_species(plan: &[(Species, i32)], rng: &mut Random) -> Species {
-    let total: i32 = plan.iter().map(|(_, w)| *w).sum();
-    let mut r = rng.next_bounded_int(total.max(1));
-    for (s, w) in plan {
-        r -= *w;
-        if r < 0 {
-            return *s;
+/// Sélection d'espèce selon la sémantique vanilla `random_selector` : on teste
+/// chaque alternative dans l'ordre (`rng < chance`), sinon l'espèce par défaut.
+fn pick_tree(default: Species, alts: &[(f64, Species)], rng: &mut Random) -> Species {
+    for (chance, species) in alts {
+        if rng.next_float() < *chance {
+            return *species;
         }
     }
-    plan[0].0
+    default
 }
 
 fn place_tree(
@@ -411,14 +619,20 @@ fn place_tree(
     rng: &mut Random,
 ) {
     match species {
-        Species::OakSmall => straight_tree(grid, pal, lx, ground, lz, OAK, 4, 3, false, rng),
-        Species::OakLarge => straight_tree(grid, pal, lx, ground, lz, OAK, 7, 5, false, rng),
+        Species::Oak => straight_tree(grid, pal, lx, ground, lz, OAK, 4, 3, false, rng),
+        Species::FancyOak => fancy_oak_tree(grid, pal, lx, ground, lz, rng),
         Species::Birch => straight_tree(grid, pal, lx, ground, lz, BIRCH, 5, 3, false, rng),
+        Species::SuperBirch => straight_tree(grid, pal, lx, ground, lz, BIRCH, 8, 4, false, rng),
         Species::Spruce => spruce_tree(grid, pal, lx, ground, lz, rng),
-        Species::JungleSmall => straight_tree(grid, pal, lx, ground, lz, JUNGLE, 5, 6, true, rng),
-        Species::JungleGiant => mega_tree(grid, pal, lx, ground, lz, JUNGLE, 11, 9, true, rng),
+        Species::Pine => pine_tree(grid, pal, lx, ground, lz, rng),
+        Species::MegaSpruce => mega_conifer(grid, pal, lx, ground, lz, rng),
+        Species::JungleTree => straight_tree(grid, pal, lx, ground, lz, JUNGLE, 4, 8, true, rng),
+        Species::JungleBush => jungle_bush(grid, pal, lx, ground, lz),
+        Species::MegaJungle => mega_tree(grid, pal, lx, ground, lz, JUNGLE, 10, 11, true, rng),
         Species::DarkOak => mega_tree(grid, pal, lx, ground, lz, DARK_OAK, 6, 3, false, rng),
         Species::Acacia => acacia_tree(grid, pal, lx, ground, lz, rng),
+        Species::Cherry => cherry_tree(grid, pal, lx, ground, lz, rng),
+        Species::Mangrove => mangrove_tree(grid, pal, lx, ground, lz, rng),
     }
 }
 
@@ -506,11 +720,12 @@ pub fn decorate(
         if at(grid, lx, ground + 1, lz) != pal.air {
             continue;
         }
-        let (_, plan) = tree_plan(biome_at(lx as usize, lz as usize));
-        if plan.is_empty() {
+        let (density, default, alts) = tree_plan(biome_at(lx as usize, lz as usize));
+        if density <= 0.0 {
             continue;
         }
-        let species = pick_species(plan, &mut rng);
+        // Le palétuvier pousse aussi sur les racines déjà posées.
+        let species = pick_tree(default, alts, &mut rng);
         place_tree(grid, &pal, species, lx, ground, lz, &mut rng);
     }
 
@@ -720,6 +935,46 @@ mod tests {
         let leaves = grid.iter().filter(|&&b| pal.leaves.contains(&b)).count();
         assert!(logs > 0, "forêt sans tronc");
         assert!(leaves > 0, "forêt sans feuilles");
+    }
+
+    #[test]
+    fn fancy_oak_has_more_foliage_than_oak() {
+        let pal = Pal::new();
+        let count_leaves = |species: Species| -> usize {
+            let mut grid = vec![pal.air; GRID_LEN].into_boxed_slice();
+            let mut rng = Random::new(123);
+            place_tree(&mut grid, &pal, species, 8, 70, 8, &mut rng);
+            grid.iter().filter(|&&b| b == pal.leaves[OAK]).count()
+        };
+        let oak = count_leaves(Species::Oak);
+        let fancy = count_leaves(Species::FancyOak);
+        assert!(
+            fancy > oak * 2,
+            "le fancy oak doit avoir bien plus de feuillage (oak={oak}, fancy={fancy})"
+        );
+    }
+
+    #[test]
+    fn cherry_and_mangrove_use_own_blocks() {
+        let pal = Pal::new();
+        let mut grid = vec![pal.air; GRID_LEN].into_boxed_slice();
+        for lx in 0..16usize {
+            for lz in 0..16usize {
+                grid[grid_index(lx, 69, lz)] = pal.dirt;
+                grid[grid_index(lx, 70, lz)] = pal.grass_block;
+            }
+        }
+        let mut rng = Random::new(5);
+        place_tree(&mut grid, &pal, Species::Cherry, 4, 70, 4, &mut rng);
+        place_tree(&mut grid, &pal, Species::Mangrove, 11, 70, 11, &mut rng);
+        assert!(
+            grid.contains(&pal.cherry_leaves),
+            "pas de feuilles de cerisier"
+        );
+        assert!(
+            grid.contains(&pal.mangrove_log),
+            "pas de bûche de palétuvier"
+        );
     }
 
     #[test]
