@@ -82,9 +82,10 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
             BehaviorGroup::new(vec![], vec![combat, roam()], sensors, standard_controllers(), true)
         }
         AiProfile::Bow => {
-            // La sorcière jette des potions ; les autres tirent des flèches.
-            let exec: Box<dyn super::behavior::Executor> = if matches!(kind, MobKind::Witch) {
-                Box::new(BowAttackExecutor::with_projectile(
+            // Certains lancent un projectile (potion, wind charge, bullet) au lieu
+            // d'une flèche ; ceux-là frappent un peu plus fort, moins vite.
+            let combat = match kind.thrown_projectile() {
+                Some(proj) => combat_behavior(Box::new(BowAttackExecutor::with_projectile(
                     speed,
                     kind.sight_range(),
                     BOW_MIN_RANGE,
@@ -92,10 +93,9 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
                     BOW_ARROW_SPEED,
                     6.0,
                     BOW_COOLDOWN + 20,
-                    Some("minecraft:splash_potion"),
-                ))
-            } else {
-                Box::new(BowAttackExecutor::new(
+                    Some(proj),
+                ))),
+                None => combat_behavior(Box::new(BowAttackExecutor::new(
                     speed,
                     kind.sight_range(),
                     BOW_MIN_RANGE,
@@ -103,9 +103,8 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
                     BOW_ARROW_SPEED,
                     BOW_ARROW_DAMAGE,
                     BOW_COOLDOWN,
-                ))
+                ))),
             };
-            let combat = combat_behavior(exec);
             BehaviorGroup::new(vec![], vec![combat, roam()], sensors, standard_controllers(), true)
         }
         AiProfile::CreeperSwell => {

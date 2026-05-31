@@ -88,6 +88,8 @@ pub enum MobKind {
     Bogged,
     Pillager,
     Witch,
+    Breeze,
+    Shulker,
     // Hostile spécial
     Creeper,
     Slime,
@@ -158,6 +160,8 @@ impl MobKind {
         Self::Bogged,
         Self::Pillager,
         Self::Witch,
+        Self::Breeze,
+        Self::Shulker,
         Self::Creeper,
         Self::Slime,
         Self::MagmaCube,
@@ -238,6 +242,9 @@ impl MobKind {
             Self::Bogged => d!("minecraft:bogged", "Bogged", 0.6, 1.9, Hostile, Bow, 0.0, 0.25, &[]),
             Self::Pillager => d!("minecraft:pillager", "Pillager", 0.6, 1.95, Hostile, Bow, 0.0, 0.35, &[]),
             Self::Witch => d!("minecraft:witch", "Witch", 0.6, 1.95, Hostile, Bow, 0.0, 0.25, &[]),
+            Self::Breeze => d!("minecraft:breeze", "Breeze", 0.6, 1.77, Hostile, Bow, 0.0, 0.3, &[]),
+            // Shulker : immobile (speed 0) → tire sans bouger.
+            Self::Shulker => d!("minecraft:shulker", "Shulker", 1.0, 1.0, Hostile, Bow, 0.0, 0.0, &[]),
             Self::Creeper => d!("minecraft:creeper", "Creeper", 0.6, 1.7, Hostile, CreeperSwell, 0.0, 0.25, &[]),
             Self::Slime => d!("minecraft:slime", "Slime", 1.02, 1.02, Hostile, Melee, 2.0, 0.2, &[]),
             Self::MagmaCube => d!("minecraft:magma_cube", "Magma Cube", 1.02, 1.02, Hostile, Melee, 4.0, 0.2, &[]),
@@ -346,6 +353,17 @@ impl MobKind {
     /// Boss (affiche une barre de boss).
     pub fn is_boss(self) -> bool {
         matches!(self, Self::Wither | Self::EnderDragon)
+    }
+
+    /// Projectile lancé par un mob à profil `Bow` au lieu d'une flèche
+    /// (`None` = flèche normale).
+    pub fn thrown_projectile(self) -> Option<&'static str> {
+        match self {
+            Self::Witch => Some("minecraft:splash_potion"),
+            Self::Breeze => Some("minecraft:breeze_wind_charge_projectile"),
+            Self::Shulker => Some("minecraft:shulker_bullet"),
+            _ => None,
+        }
     }
 
     /// Couleur de la barre de boss (cf `combat_packets::boss_event`).

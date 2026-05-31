@@ -105,10 +105,14 @@ demandent **chacun une mécanique bespoke** :
 - ✅ **Vague 8 — Witch** : jet de potions (Bow généralisé → `with_projectile` émet un projectile
   potion au lieu d'une flèche). Immunité aux potions = follow-up.
 
-### Vagues restantes (mécaniques bespoke)
-- ⬜ **Shulker** : stationnaire, projectile à tête chercheuse.
-- ⬜ **Guardian/Elder Guardian** : rayon laser + nage dédiée (aquatique).
-- ⬜ **Breeze** (wind charge), **warden** (capteur de vibrations + sonic boom), **creaking**.
-- ⬜ **Nage dédiée** pour squid/dauphin/poissons (profil passif terrestre pour l'instant).
+- ✅ **Vague 9 — Breeze + Shulker** : lanceurs de projectile (wind charge / shulker bullet) via le
+  Bow généralisé. Shulker immobile (vitesse 0). `thrown_projectile()` data-driven. (Wind charge à
+  knockback pur & bullet à tête chercheuse = follow-ups.)
+
+### Vagues restantes (chacune un nouveau sous-système sensoriel/mouvement)
+- ⬜ **Guardian/Elder Guardian** : rayon laser (canalisé) + **nage** (mouvement contraint à l'eau).
+- ⬜ **Warden** : détection par **vibrations** (bruit, pas vue) + sonic boom à distance.
+- ⬜ **Creaking** : immobile **quand un joueur le regarde** (besoin du vecteur de visée joueur).
+- ⬜ **Nage dédiée** squid/dauphin/poissons (mouvement 3D borné à l'eau).
 - ⬜ **Règles de spawn par biome** (le spawner ne filtre pas par biome → husk/drowned/stray
   peuvent apparaître hors biome ; à raffiner quand le spawner lira le biome au point de spawn).
