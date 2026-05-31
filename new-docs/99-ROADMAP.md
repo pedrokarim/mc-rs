@@ -6,6 +6,43 @@ Avancer **phase par phase**, chaque phase est **testable et fonctionnelle** avan
 
 ---
 
+## Phase DIM : Dimensions (Nether / End) — ⬜ NON COMMENCÉE (chantier futur)
+
+**Contexte** — Le serveur est aujourd'hui **mono-dimension (overworld uniquement)** : `dimension_id`
+est codé en dur à 0, il n'y a ni `ChangeDimensionPacket`, ni génération Nether/End, ni portails
+fonctionnels. Conséquence directe : les mobs du Nether (blaze, ghast, piglin, hoglin, wither
+skeleton, zombified piglin…), de l'**End** (ender dragon, enderman, shulker) et les **guardians**
+(monument océanique) **existent et ont une IA correcte** mais **n'ont pas d'habitat naturel** — on ne
+peut les voir que via `/summon`. Certains pourraient même spawner à tort dans l'overworld (cf.
+« spawn par biome »).
+
+**Objectif** — Implémenter les 3 dimensions vanilla + le voyage entre elles.
+
+**À faire :**
+- [ ] `ChangeDimensionPacket` (proto) + state machine de transfert (dim_id, position, fade).
+- [ ] Mondes séparés par dimension (overworld / nether / end) : `ChunkCache` + LevelDB par dimension
+      (la clé LevelDB inclut déjà un dimension-id, cf. `21-ANALYSER-MC-WORLD.md`).
+- [ ] Génération **Nether** (réf PMMP `Nether.php`, cf. `14-WORLD-GENERATION.md` §89) + biomes nether
+      (brancher le module dormant `nether_biomes`).
+- [ ] Génération **End** : île centrale (obsidian pillars + end crystals + fountain) + îles externes
+      (`end_islands`) + `end_city` (modules dormants).
+- [ ] Portails : **nether portal** (allumage obsidienne + flint&steel, liaison overworld↔nether avec
+      ratio 1:8 via `dimensions::nether_portal_coordinate` déjà présent), **end portal** (cadre +
+      eyes of ender, `end_portal`/`end_features` dormants), **end gateway** (`end_gateway` dormant).
+- [ ] Spawn des mobs **gaté par dimension/biome** (nether mobs uniquement au nether, dragon/enderman/
+      shulker à l'End, guardian dans les `ocean_monument`).
+- [ ] Combat de l'ender dragon « complet » : end crystals qui le soignent + invulnérabilité tant
+      qu'ils existent (les **phases** vol/strafe sont déjà faites côté IA).
+
+**Dépendances / briques dormantes à réutiliser** (catalogue « Phase LIB » plus bas) :
+`nether_biomes`, `ocean_monument`, `nether_fortress`, `bastion_remnant`, `end_islands`, `end_city`,
+`stronghold`, `end_portal`, `end_gateway`, `nether_portal_spawn`, `obsidian_pillar`, `dragon_egg`.
+
+**Note** — Chantier **distinct de l'IA des mobs** (qui est, elle, essentiellement terminée — cf.
+[`18-MOB-AI-PROGRESS.md`](18-MOB-AI-PROGRESS.md)). L'IA est prête à accueillir ces dimensions.
+
+---
+
 ## Phase INV : Port intégral InventoryManager PMMP — ✅ TERMINÉE
 
 **Documents de référence :**
