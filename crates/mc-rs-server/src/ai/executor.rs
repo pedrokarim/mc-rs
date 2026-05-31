@@ -613,6 +613,107 @@ impl Executor for FlyRoamExecutor {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Tireur volant (ghast / blaze) : plane à distance et lance des boules de feu
+// ---------------------------------------------------------------------------
+
+pub struct FlyShootExecutor {
+    speed: f32,
+    max_sense_range_sq: f64,
+    shoot_range_sq: f64,
+    fireball_speed: f32,
+    damage: f32,
+    cooldown: u32,
+    fireball_type: &'static str,
+    tick: u32,
+}
+
+impl FlyShootExecutor {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        speed: f32,
+        max_sense_range: f64,
+        shoot_range: f64,
+        fireball_speed: f32,
+        damage: f32,
+        cooldown: u32,
+        fireball_type: &'static str,
+    ) -> Self {
+        Self {
+            speed,
+            max_sense_range_sq: max_sense_range * max_sense_range,
+            shoot_range_sq: shoot_range * shoot_range,
+            fireball_speed,
+            damage,
+            cooldown,
+            fireball_type,
+            tick: 0,
+        }
+    }
+}
+
+impl Executor for FlyShootExecutor {
+    fn on_start(&mut self, memory: &mut Memory, _base: &mut EntityBase) {
+        self.tick = 0;
+        memory.movement_speed = self.speed;
+    }
+
+    fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
+        self.tick += 1;
+        let Some(target_id) = ctx.memory.nearest_player else {
+            return false;
+        };
+        let Some(tpos) = player_pos(ctx.players, target_id) else {
+            return false;
+        };
+        let d2 = dist_sq(ctx.base.position, tpos);
+        if d2 > self.max_sense_range_sq {
+            return false;
+        }
+
+        // Plane : approche si trop loin, sinon reste sur place (vol stationnaire).
+        if d2 > self.shoot_range_sq {
+            ctx.memory.move_target =
+                Some([tpos[0] as f64, (tpos[1] + 3.0) as f64, tpos[2] as f64]);
+        } else {
+            // Vol stationnaire à hauteur de tir.
+            ctx.memory.move_target = Some([
+                ctx.base.position[0] as f64,
+                ctx.base.position[1] as f64,
+                ctx.base.position[2] as f64,
+            ]);
+            // Tir périodique vers les yeux du joueur.
+            if self.tick >= self.cooldown {
+                self.tick = 0;
+                let from = [
+                    ctx.base.position[0],
+                    ctx.base.position[1] + 0.5,
+                    ctx.base.position[2],
+                ];
+                let target = [tpos[0], tpos[1] + 1.0, tpos[2]];
+                let dx = target[0] - from[0];
+                let dy = target[1] - from[1];
+                let dz = target[2] - from[2];
+                let dist = (dx * dx + dy * dy + dz * dz).sqrt().max(0.001);
+                let f = self.fireball_speed / dist;
+                ctx.effects.push(AiEffect::ShootFireball {
+                    shooter_runtime_id: ctx.base.entity_runtime_id,
+                    from,
+                    velocity: [dx * f, dy * f, dz * f],
+                    damage: self.damage,
+                    actor_type: self.fireball_type,
+                });
+            }
+        }
+        true
+    }
+
+    fn on_stop(&mut self, memory: &mut Memory, _base: &mut EntityBase) {
+        self.tick = 0;
+        memory.move_target = None;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -762,6 +863,39 @@ mod tests {
         let mut memory = Memory::new(0.2);
         exec.on_start(&mut memory, &mut base);
         assert!(memory.move_target.is_some(), "le roam pose une cible au démarrage");
+    }
+
+    #[test]
+    fn fly_shooter_emits_fireball_in_range() {
+        let mut exec =
+            FlyShootExecutor::new(0.25, 20.0, 14.0, 0.8, 5.0, 3, "minecraft:small_fireball");
+        let mut base = zombie_base([0.0, 64.0, 0.0]);
+        let mut memory = Memory::new(0.25);
+        memory.nearest_player = Some(2);
+        let players = vec![PlayerSnapshot {
+            runtime_id: 2,
+            position: [5.0, 64.0, 0.0], // distance 5 < portée 14
+            gamemode: 0,
+            alive: true,
+            held_item: 0,
+        }];
+        let mut effects = Vec::new();
+        for _ in 0..4 {
+            let mut ctx = ExecCtx {
+                base: &mut base,
+                kind: MobKind::Blaze,
+                memory: &mut memory,
+                players: &players,
+                effects: &mut effects,
+            };
+            exec.execute(&mut ctx);
+        }
+        assert!(
+            effects
+                .iter()
+                .any(|e| matches!(e, AiEffect::ShootFireball { .. })),
+            "tire une boule de feu une fois en portée + cooldown écoulé"
+        );
     }
 
     #[test]

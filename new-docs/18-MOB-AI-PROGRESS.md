@@ -84,9 +84,13 @@ Roster passé de 7 à **~51 mobs**.
 - ✅ **Vague 3** — volants : bat, parrot, allay, bee (vol 3D, pas de gravité).
 - ✅ **Vague 4** — enderman : mêlée + **téléportation quand blessé** (vers un sol proche, flag teleport).
 
+- ✅ **Vague 5** — tireurs volants : ghast + blaze. Entité projectile généralisée (`arrow_entity`
+  porte aussi les boules de feu : gravité/collage configurables) ; `FlyShootExecutor` (vol
+  stationnaire + tir périodique) ; `AiEffect::ShootFireball`. Dégâts directs à l'impact (explosion
+  de la fireball = follow-up).
+
 ### Vagues restantes (mécaniques spéciales)
-- ⬜ **Tireurs à projectile** : ghast/blaze (boule de feu), witch (potion AoE), shulker (projectile).
-  → besoin d'une entité projectile générique (modèle `arrow_entity`) ; ghast/blaze volent + tirent.
+- ⬜ **Witch (potion AoE), shulker (projectile)** — réutilisent l'entité projectile.
 - ⬜ **Hostiles volants** : phantom (piqué), vex.
 - ⬜ **Aquatiques** : guardian/elder_guardian (laser), + nage dédiée pour squid/dauphin/poissons.
 - ⬜ **Breeze** (wind charge), **warden** (capteur de vibrations), **creaking**.

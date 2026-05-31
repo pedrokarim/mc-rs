@@ -5,7 +5,7 @@ use super::behavior::{AlwaysEvaluator, Behavior, ClosureEvaluator, FnEvaluator};
 use super::controller::{FlyController, LookController, WalkController};
 use super::executor::{
     BowAttackExecutor, CreeperSwellExecutor, FlatRandomRoamExecutor, FlyRoamExecutor,
-    MeleeAttackExecutor, PanicFleeExecutor, TemptExecutor,
+    FlyShootExecutor, MeleeAttackExecutor, PanicFleeExecutor, TemptExecutor,
 };
 use super::sensor::NearestPlayerSensor;
 use super::{BehaviorGroup, Controller, Sensor};
@@ -24,6 +24,9 @@ const MELEE_COOLDOWN: u32 = 20;
 const ROAM_RANGE: i32 = 8;
 /// Rayon d'errance des volants (blocs).
 const FLY_ROAM_RANGE: i32 = 10;
+/// Boules de feu : vitesse (blocs/tick) et cooldown de tir (ticks).
+const FIREBALL_SPEED: f32 = 0.8;
+const FIREBALL_COOLDOWN: u32 = 40;
 /// Creeper : portée d'amorçage et durée de fuse (ticks 20 TPS → 1.5 s, vanilla).
 const CREEPER_IGNITE_RANGE: f64 = 3.0;
 const CREEPER_FUSE_TICKS: u32 = 30;
@@ -111,6 +114,34 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
                 PRIO_ROAM,
                 1,
             )];
+            let controllers: Vec<Box<dyn Controller>> = vec![Box::new(FlyController::new())];
+            BehaviorGroup::new(vec![], normal, sensors, controllers, false)
+        }
+        AiProfile::FlyingShooter => {
+            // Vol + tir de boules de feu (ghast = grosse portée, blaze = courte).
+            let (fireball, dmg, range) = if matches!(kind, MobKind::Ghast) {
+                ("minecraft:fireball", 6.0, 32.0)
+            } else {
+                ("minecraft:small_fireball", 5.0, 14.0)
+            };
+            let combat = combat_behavior(Box::new(FlyShootExecutor::new(
+                speed,
+                kind.sight_range().max(range + 4.0),
+                range,
+                FIREBALL_SPEED,
+                dmg,
+                FIREBALL_COOLDOWN,
+                fireball,
+            )));
+            let normal = vec![
+                combat,
+                Behavior::new(
+                    Box::new(AlwaysEvaluator),
+                    Box::new(FlyRoamExecutor::new(speed, FLY_ROAM_RANGE)),
+                    PRIO_ROAM,
+                    1,
+                ),
+            ];
             let controllers: Vec<Box<dyn Controller>> = vec![Box::new(FlyController::new())];
             BehaviorGroup::new(vec![], normal, sensors, controllers, false)
         }

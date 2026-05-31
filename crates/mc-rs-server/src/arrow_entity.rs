@@ -30,15 +30,41 @@ pub struct ArrowEntity {
     /// Runtime id du tireur (pour le knockback / l'attribution des dégâts).
     pub shooter_runtime_id: u64,
     life: u32,
-    /// La flèche est plantée (a touché un bloc) → plus de mouvement.
+    /// Le projectile est planté (a touché un bloc) → plus de mouvement.
     grounded: bool,
+    /// Gravité par tick (0 = trajectoire rectiligne, ex boule de feu).
+    gravity: f32,
+    /// Se plante dans les blocs (flèche) ou disparaît à l'impact (boule de feu).
+    sticky: bool,
 }
 
 impl ArrowEntity {
+    /// Flèche : trajectoire balistique, se plante dans les blocs.
     pub fn spawn(position: [f32; 3], velocity: [f32; 3], damage: f32, shooter_runtime_id: u64) -> Self {
-        let mut base = EntityBase::new(
+        Self::projectile(
             "minecraft:arrow",
-            "arrow",
+            position,
+            velocity,
+            damage,
+            shooter_runtime_id,
+            ARROW_GRAVITY,
+            true,
+        )
+    }
+
+    /// Projectile générique (flèche, boule de feu, …).
+    pub fn projectile(
+        actor_type: &'static str,
+        position: [f32; 3],
+        velocity: [f32; 3],
+        damage: f32,
+        shooter_runtime_id: u64,
+        gravity: f32,
+        sticky: bool,
+    ) -> Self {
+        let mut base = EntityBase::new(
+            actor_type,
+            "",
             "",
             position,
             vec![],
@@ -51,6 +77,8 @@ impl ArrowEntity {
             shooter_runtime_id,
             life: 0,
             grounded: false,
+            gravity,
+            sticky,
         }
     }
 
@@ -109,6 +137,28 @@ impl ArrowEntityManager {
         arrow
     }
 
+    /// Spawn d'une boule de feu (trajectoire rectiligne, disparaît à l'impact).
+    pub fn spawn_fireball(
+        &mut self,
+        actor_type: &'static str,
+        position: [f32; 3],
+        velocity: [f32; 3],
+        damage: f32,
+        shooter_runtime_id: u64,
+    ) -> ArrowEntity {
+        let fb = ArrowEntity::projectile(
+            actor_type,
+            position,
+            velocity,
+            damage,
+            shooter_runtime_id,
+            0.0,
+            false,
+        );
+        self.arrows.insert(fb.base.entity_runtime_id, fb.clone());
+        fb
+    }
+
     pub fn all(&self) -> impl Iterator<Item = &ArrowEntity> {
         self.arrows.values()
     }
@@ -137,8 +187,8 @@ impl ArrowEntityManager {
 
             let start = arrow.base.position;
 
-            // Physique balistique.
-            arrow.base.velocity[1] -= ARROW_GRAVITY;
+            // Physique : gravité par-projectile (0 pour une boule de feu) + traînée.
+            arrow.base.velocity[1] -= arrow.gravity;
             for c in arrow.base.velocity.iter_mut() {
                 *c *= ARROW_DRAG;
             }
@@ -174,14 +224,20 @@ impl ArrowEntityManager {
                 continue;
             }
 
-            // Collision bloc : si la cellule de destination est solide → plante.
+            // Collision bloc : la flèche se plante, la boule de feu disparaît.
             let bx = end[0].floor() as i32;
             let by = end[1].floor() as i32;
             let bz = end[2].floor() as i32;
             if is_supporting_block(chunk_cache.get_block(bx, by, bz)) {
-                arrow.base.velocity = [0.0, 0.0, 0.0];
-                arrow.grounded = true;
-                // On garde la flèche plantée brièvement (jusqu'au despawn par vie).
+                if arrow.sticky {
+                    arrow.base.velocity = [0.0, 0.0, 0.0];
+                    arrow.grounded = true; // plantée jusqu'au despawn par vie
+                    continue;
+                }
+                // Non collante (boule de feu) : disparaît à l'impact.
+                if let Some(a) = self.arrows.remove(&id) {
+                    result.despawned.push(a);
+                }
                 continue;
             }
 

@@ -2163,6 +2163,21 @@ async fn main() {
                                     &shoot,
                                 );
                             }
+                            crate::ai::AiEffect::ShootFireball {
+                                shooter_runtime_id,
+                                from,
+                                velocity,
+                                damage,
+                                actor_type,
+                            } => {
+                                arrow_manager.spawn_fireball(
+                                    actor_type,
+                                    from,
+                                    velocity,
+                                    damage,
+                                    shooter_runtime_id,
+                                );
+                            }
                         }
                     }
                     // Mobs despawnés (trop loin) → RemoveEntity.

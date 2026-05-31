@@ -35,6 +35,7 @@ pub enum AiProfile {
     Passive,      // errance + fuite (+ tempt)
     Neutral,      // errance seule
     Flying,       // vole et erre en 3D (pas de gravité)
+    FlyingShooter, // vole + lance des boules de feu (ghast/blaze)
 }
 
 /// Descripteur statique par espèce. Ajouter un mob = ajouter une variante +
@@ -89,6 +90,8 @@ pub enum MobKind {
     Creeper,
     Slime,
     MagmaCube,
+    Blaze,
+    Ghast,
     // Neutres
     ZombifiedPiglin,
     Piglin,
@@ -150,6 +153,8 @@ impl MobKind {
         Self::Creeper,
         Self::Slime,
         Self::MagmaCube,
+        Self::Blaze,
+        Self::Ghast,
         Self::ZombifiedPiglin,
         Self::Piglin,
         Self::IronGolem,
@@ -223,6 +228,8 @@ impl MobKind {
             Self::Creeper => d!("minecraft:creeper", "Creeper", 0.6, 1.7, Hostile, CreeperSwell, 0.0, 0.25, &[]),
             Self::Slime => d!("minecraft:slime", "Slime", 1.02, 1.02, Hostile, Melee, 2.0, 0.2, &[]),
             Self::MagmaCube => d!("minecraft:magma_cube", "Magma Cube", 1.02, 1.02, Hostile, Melee, 4.0, 0.2, &[]),
+            Self::Blaze => d!("minecraft:blaze", "Blaze", 0.6, 1.8, Hostile, FlyingShooter, 0.0, 0.25, &[]),
+            Self::Ghast => d!("minecraft:ghast", "Ghast", 4.0, 4.0, Hostile, FlyingShooter, 0.0, 0.15, &[]),
             Self::ZombifiedPiglin => d!("minecraft:zombie_pigman", "Zombified Piglin", 0.6, 1.9, Neutral, Neutral, 0.0, 0.23, &[]),
             Self::Piglin => d!("minecraft:piglin", "Piglin", 0.6, 1.95, Neutral, Neutral, 0.0, 0.35, &[]),
             Self::IronGolem => d!("minecraft:iron_golem", "Iron Golem", 1.4, 2.7, Neutral, Neutral, 0.0, 0.25, &[]),
@@ -306,9 +313,12 @@ impl MobKind {
         matches!(self, Self::Slime | Self::MagmaCube)
     }
 
-    /// Mob volant (vol 3D, pas de gravité).
+    /// Mob volant (vol 3D, pas de gravité) — errant ou tireur.
     pub fn is_flying(self) -> bool {
-        self.desc().profile == AiProfile::Flying
+        matches!(
+            self.desc().profile,
+            AiProfile::Flying | AiProfile::FlyingShooter
+        )
     }
 
     /// Mob qui se téléporte quand il est blessé (enderman).
@@ -318,7 +328,11 @@ impl MobKind {
 
     /// Distance de détection d'un joueur (blocs).
     pub fn sight_range(self) -> f64 {
-        16.0
+        match self {
+            Self::Ghast => 48.0, // tire de loin
+            Self::Enderman => 32.0,
+            _ => 16.0,
+        }
     }
 
     /// Portée d'attaque mêlée (blocs).
@@ -1392,7 +1406,10 @@ mod tests {
                 MobCategory::Hostile => assert!(
                     matches!(
                         k.ai_profile(),
-                        AiProfile::Melee | AiProfile::Bow | AiProfile::CreeperSwell
+                        AiProfile::Melee
+                            | AiProfile::Bow
+                            | AiProfile::CreeperSwell
+                            | AiProfile::FlyingShooter
                     ),
                     "hostile {k:?} doit avoir un profil de combat"
                 ),
