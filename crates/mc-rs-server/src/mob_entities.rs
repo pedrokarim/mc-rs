@@ -34,8 +34,9 @@ pub enum AiProfile {
     CreeperSwell, // s'amorce et explose
     Passive,      // errance + fuite (+ tempt)
     Neutral,      // errance seule
-    Flying,       // vole et erre en 3D (pas de gravité)
+    Flying,        // vole et erre en 3D (pas de gravité)
     FlyingShooter, // vole + lance des boules de feu (ghast/blaze)
+    FlyingMelee,   // vole et fonce sur le joueur (phantom/vex)
 }
 
 /// Descripteur statique par espèce. Ajouter un mob = ajouter une variante +
@@ -92,6 +93,8 @@ pub enum MobKind {
     MagmaCube,
     Blaze,
     Ghast,
+    Phantom,
+    Vex,
     // Neutres
     ZombifiedPiglin,
     Piglin,
@@ -155,6 +158,8 @@ impl MobKind {
         Self::MagmaCube,
         Self::Blaze,
         Self::Ghast,
+        Self::Phantom,
+        Self::Vex,
         Self::ZombifiedPiglin,
         Self::Piglin,
         Self::IronGolem,
@@ -230,6 +235,8 @@ impl MobKind {
             Self::MagmaCube => d!("minecraft:magma_cube", "Magma Cube", 1.02, 1.02, Hostile, Melee, 4.0, 0.2, &[]),
             Self::Blaze => d!("minecraft:blaze", "Blaze", 0.6, 1.8, Hostile, FlyingShooter, 0.0, 0.25, &[]),
             Self::Ghast => d!("minecraft:ghast", "Ghast", 4.0, 4.0, Hostile, FlyingShooter, 0.0, 0.15, &[]),
+            Self::Phantom => d!("minecraft:phantom", "Phantom", 0.9, 0.5, Hostile, FlyingMelee, 6.0, 0.4, &[]),
+            Self::Vex => d!("minecraft:vex", "Vex", 0.4, 0.8, Hostile, FlyingMelee, 9.0, 0.45, &[]),
             Self::ZombifiedPiglin => d!("minecraft:zombie_pigman", "Zombified Piglin", 0.6, 1.9, Neutral, Neutral, 0.0, 0.23, &[]),
             Self::Piglin => d!("minecraft:piglin", "Piglin", 0.6, 1.95, Neutral, Neutral, 0.0, 0.35, &[]),
             Self::IronGolem => d!("minecraft:iron_golem", "Iron Golem", 1.4, 2.7, Neutral, Neutral, 0.0, 0.25, &[]),
@@ -313,11 +320,11 @@ impl MobKind {
         matches!(self, Self::Slime | Self::MagmaCube)
     }
 
-    /// Mob volant (vol 3D, pas de gravité) — errant ou tireur.
+    /// Mob volant (vol 3D, pas de gravité) — errant, tireur ou fonceur.
     pub fn is_flying(self) -> bool {
         matches!(
             self.desc().profile,
-            AiProfile::Flying | AiProfile::FlyingShooter
+            AiProfile::Flying | AiProfile::FlyingShooter | AiProfile::FlyingMelee
         )
     }
 
@@ -1410,6 +1417,7 @@ mod tests {
                             | AiProfile::Bow
                             | AiProfile::CreeperSwell
                             | AiProfile::FlyingShooter
+                            | AiProfile::FlyingMelee
                     ),
                     "hostile {k:?} doit avoir un profil de combat"
                 ),

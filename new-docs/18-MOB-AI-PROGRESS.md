@@ -89,9 +89,11 @@ Roster passé de 7 à **~51 mobs**.
   stationnaire + tir périodique) ; `AiEffect::ShootFireball`. Dégâts directs à l'impact (explosion
   de la fireball = follow-up).
 
+- ✅ **Vague 6** — volants hostiles : phantom + vex (`FlyingMelee` : vole vers le joueur via
+  `FlyAttackExecutor` + frappe au contact).
+
 ### Vagues restantes (mécaniques spéciales)
-- ⬜ **Witch (potion AoE), shulker (projectile)** — réutilisent l'entité projectile.
-- ⬜ **Hostiles volants** : phantom (piqué), vex.
+- ⬜ **Witch (potion), shulker (projectile)** — réutilisent l'entité projectile.
 - ⬜ **Aquatiques** : guardian/elder_guardian (laser), + nage dédiée pour squid/dauphin/poissons.
 - ⬜ **Breeze** (wind charge), **warden** (capteur de vibrations), **creaking**.
 - ⬜ **Boss** : wither, ender_dragon (barre de boss, phases, vol).

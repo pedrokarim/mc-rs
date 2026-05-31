@@ -714,6 +714,71 @@ impl Executor for FlyShootExecutor {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Fonceur volant (phantom / vex) : vole vers le joueur et frappe au contact
+// ---------------------------------------------------------------------------
+
+pub struct FlyAttackExecutor {
+    speed: f32,
+    max_sense_range_sq: f64,
+    attack_range_sq: f64,
+    damage: f32,
+    cooldown: u32,
+    attack_tick: u32,
+}
+
+impl FlyAttackExecutor {
+    pub fn new(speed: f32, max_sense_range: f64, attack_range: f64, damage: f32, cooldown: u32) -> Self {
+        Self {
+            speed,
+            max_sense_range_sq: max_sense_range * max_sense_range,
+            attack_range_sq: attack_range * attack_range,
+            damage,
+            cooldown,
+            attack_tick: 0,
+        }
+    }
+}
+
+impl Executor for FlyAttackExecutor {
+    fn on_start(&mut self, memory: &mut Memory, _base: &mut EntityBase) {
+        self.attack_tick = 0;
+        memory.movement_speed = self.speed;
+    }
+
+    fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
+        self.attack_tick += 1;
+        let Some(target_id) = ctx.memory.nearest_player else {
+            return false;
+        };
+        let Some(tpos) = player_pos(ctx.players, target_id) else {
+            return false;
+        };
+        let d2 = dist_sq(ctx.base.position, tpos);
+        if d2 > self.max_sense_range_sq {
+            return false;
+        }
+        // Fonce en 3D vers le centre de masse du joueur (le FlyController y va).
+        ctx.memory.move_target = Some([tpos[0] as f64, (tpos[1] + 1.0) as f64, tpos[2] as f64]);
+        // Frappe au contact.
+        if d2 <= self.attack_range_sq && self.attack_tick > self.cooldown {
+            self.attack_tick = 0;
+            ctx.effects.push(AiEffect::Attack {
+                attacker_runtime_id: ctx.base.entity_runtime_id,
+                attacker_position: ctx.base.position,
+                target_runtime_id: target_id,
+                damage: self.damage,
+            });
+        }
+        true
+    }
+
+    fn on_stop(&mut self, memory: &mut Memory, _base: &mut EntityBase) {
+        self.attack_tick = 0;
+        memory.move_target = None;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -4,8 +4,8 @@
 use super::behavior::{AlwaysEvaluator, Behavior, ClosureEvaluator, FnEvaluator};
 use super::controller::{FlyController, LookController, WalkController};
 use super::executor::{
-    BowAttackExecutor, CreeperSwellExecutor, FlatRandomRoamExecutor, FlyRoamExecutor,
-    FlyShootExecutor, MeleeAttackExecutor, PanicFleeExecutor, TemptExecutor,
+    BowAttackExecutor, CreeperSwellExecutor, FlatRandomRoamExecutor, FlyAttackExecutor,
+    FlyRoamExecutor, FlyShootExecutor, MeleeAttackExecutor, PanicFleeExecutor, TemptExecutor,
 };
 use super::sensor::NearestPlayerSensor;
 use super::{BehaviorGroup, Controller, Sensor};
@@ -180,6 +180,27 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
             }
             normal.push(roam());
             BehaviorGroup::new(vec![], normal, sensors, standard_controllers(), true)
+        }
+        AiProfile::FlyingMelee => {
+            // Vol + fonce sur le joueur (frappe au contact), sinon erre en vol.
+            let combat = combat_behavior(Box::new(FlyAttackExecutor::new(
+                speed,
+                kind.sight_range(),
+                kind.attack_range(),
+                kind.attack_damage(),
+                MELEE_COOLDOWN,
+            )));
+            let normal = vec![
+                combat,
+                Behavior::new(
+                    Box::new(AlwaysEvaluator),
+                    Box::new(FlyRoamExecutor::new(speed, FLY_ROAM_RANGE)),
+                    PRIO_ROAM,
+                    1,
+                ),
+            ];
+            let controllers: Vec<Box<dyn Controller>> = vec![Box::new(FlyController::new())];
+            BehaviorGroup::new(vec![], normal, sensors, controllers, false)
         }
     }
 }
