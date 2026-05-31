@@ -17,9 +17,11 @@
 
 pub mod behavior;
 pub mod controller;
+pub mod executor;
 pub mod memory;
 pub mod route;
 pub mod sensor;
+pub mod species;
 
 use crate::entity::EntityBase;
 use crate::mob_entities::MobKind;

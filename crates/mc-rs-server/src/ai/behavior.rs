@@ -86,3 +86,13 @@ impl Evaluator for MemoryEvaluator {
         (self.check)(m)
     }
 }
+
+/// Évaluateur générique par pointeur de fonction sur le contexte complet
+/// `(mémoire, entité, joueurs)` — pour les conditions qui dépendent de l'état
+/// de l'entité (ex : « blessé ET joueur proche »).
+pub struct FnEvaluator(pub fn(&Memory, &EntityBase, &[PlayerSnapshot]) -> bool);
+impl Evaluator for FnEvaluator {
+    fn evaluate(&self, m: &Memory, b: &EntityBase, p: &[PlayerSnapshot]) -> bool {
+        (self.0)(m, b, p)
+    }
+}

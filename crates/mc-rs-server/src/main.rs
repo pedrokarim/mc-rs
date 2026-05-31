@@ -2054,8 +2054,23 @@ async fn main() {
                 // résultat du tick sous lock, on relâche le guard, PUIS on
                 // émet les paquets. Tenir un std::sync::Mutex pendant un appel
                 // réseau potentiellement bloquant est une cause de gel.
+                // Snapshot des joueurs en jeu pour l'IA des mobs (sensors).
+                let player_snapshots: Vec<crate::ai::PlayerSnapshot> = connections
+                    .values()
+                    .filter(|c| c.is_in_game())
+                    .map(|c| crate::ai::PlayerSnapshot {
+                        runtime_id: c.entity_runtime_id,
+                        position: c.position,
+                        gamemode: c.gamemode,
+                        alive: c
+                            .attributes
+                            .must_get(crate::attribute::ids::HEALTH)
+                            .current_value
+                            > 0.0,
+                    })
+                    .collect();
                 let mob_tick_result = if let Ok(mut cache) = chunk_cache.lock() {
-                    Some(mob_entities.tick(&mut cache))
+                    Some(mob_entities.tick(&mut cache, &player_snapshots))
                 } else {
                     None
                 };
@@ -2070,6 +2085,24 @@ async fn main() {
                             &update.motion_packet,
                             update.entity_unique_id,
                             update.entity_position,
+                        );
+                    }
+                    // Attaques mob→joueur (drainées hors du tick, comme les
+                    // syncedActions d'Allay) : on réutilise le chemin combat PvP.
+                    for effect in tick_result.attack_requests {
+                        let crate::ai::AiEffect::Attack {
+                            attacker_runtime_id,
+                            attacker_position,
+                            target_runtime_id,
+                            damage,
+                        } = effect;
+                        apply_mob_attack_to_player(
+                            &mut connections,
+                            &mut raknet,
+                            attacker_runtime_id,
+                            attacker_position,
+                            target_runtime_id,
+                            damage,
                         );
                     }
                 }
@@ -2232,6 +2265,110 @@ fn spawn_and_broadcast_item_entity(
 /// - StillVisible : envoie Move+Motion
 /// - JustLeft : envoie RemoveActor (entity sortie du rayon de vue)
 ///
+/// Applique une attaque mob→joueur : réutilise `combat::attack_entity` puis
+/// broadcast hurt/knockback et gère la mort/respawn — calque du chemin PvP.
+fn apply_mob_attack_to_player(
+    connections: &mut HashMap<SocketAddr, Connection>,
+    raknet: &mut RakNetServer,
+    attacker_runtime_id: u64,
+    attacker_position: [f32; 3],
+    target_runtime_id: u64,
+    damage: f32,
+) {
+    let Some(tgt_addr) = connections
+        .iter()
+        .find(|(_, c)| c.entity_runtime_id == target_runtime_id && c.is_in_game())
+        .map(|(a, _)| *a)
+    else {
+        return;
+    };
+
+    let outcome_info = if let Some(tc) = connections.get_mut(&tgt_addr) {
+        let outcome = {
+            let events = tc.events.clone();
+            let mut ev = events.lock().unwrap();
+            crate::combat::attack_entity(
+                &mut ev,
+                tc.entity_runtime_id,
+                tc.position,
+                &mut tc.attributes,
+                &mut tc.combat,
+                crate::event::entity::DamageCause::EntityAttack,
+                damage,
+                Some(attacker_runtime_id),
+                Some(attacker_position),
+                crate::combat::DEFAULT_KNOCKBACK_FORCE,
+            )
+        };
+        Some((
+            tc.entity_runtime_id,
+            outcome.knockback,
+            outcome.died,
+            outcome.applied_damage > 0.0,
+            tc.spawn_position,
+            tc.tick,
+        ))
+    } else {
+        None
+    };
+
+    let Some((target_rid, kb, died, hit, target_spawn, tick)) = outcome_info else {
+        return;
+    };
+
+    // Hurt animation broadcast à tous les viewers en jeu.
+    if hit && !died {
+        let hurt_bytes = crate::combat_packets::hurt_animation(target_rid);
+        for (other_addr, other_conn) in connections.iter_mut() {
+            if other_conn.is_in_game() {
+                let pkt = other_conn.encode_compressed_packet(packet_id::ACTOR_EVENT, &hurt_bytes);
+                let prep = other_conn.prepare_for_send(pkt);
+                raknet.send_to_session(other_addr, prep, Reliability::ReliableOrdered, true);
+            }
+        }
+    }
+
+    // Knockback motion → envoyé à la cible.
+    if let Some((kx, ky, kz)) = kb {
+        if let Some(tc) = connections.get_mut(&tgt_addr) {
+            let bytes = crate::combat_packets::encode_set_actor_motion(target_rid, [kx, ky, kz], tick);
+            let pkt = tc.encode_compressed_packet(packet_id::SET_ACTOR_MOTION, &bytes);
+            let prep = tc.prepare_for_send(pkt);
+            raknet.send_to_session(&tgt_addr, prep, Reliability::ReliableOrdered, false);
+        }
+    }
+
+    // Mort → death animation + respawn (HP/hunger restaurés, position au spawn).
+    if died {
+        let death_bytes = crate::combat_packets::death_animation(target_rid);
+        for (other_addr, other_conn) in connections.iter_mut() {
+            if other_conn.is_in_game() {
+                let pkt = other_conn.encode_compressed_packet(packet_id::ACTOR_EVENT, &death_bytes);
+                let prep = other_conn.prepare_for_send(pkt);
+                raknet.send_to_session(other_addr, prep, Reliability::ReliableOrdered, true);
+            }
+        }
+        if let Some(tc) = connections.get_mut(&tgt_addr) {
+            tc.attributes
+                .must_get_mut(crate::attribute::ids::HEALTH)
+                .set_value(20.0, true);
+            tc.attributes
+                .must_get_mut(crate::attribute::ids::HUNGER)
+                .set_value(20.0, true);
+            tc.combat = crate::combat::CombatState::new();
+            tc.position = target_spawn;
+            let respawn_bytes = crate::combat_packets::encode_respawn(
+                target_spawn,
+                crate::combat_packets::respawn_state::READY_TO_SPAWN,
+                target_rid,
+            );
+            let pkt = tc.encode_compressed_packet(packet_id::RESPAWN, &respawn_bytes);
+            let prep = tc.prepare_for_send(pkt);
+            raknet.send_to_session(&tgt_addr, prep, Reliability::ReliableOrdered, true);
+        }
+    }
+}
+
 /// Shared batch encoding : les 3 paquets potentiels (Add/Move/Motion) sont
 /// encodés UNE SEULE FOIS via `encode_shared_batch` avec Zlib, puis clonés
 /// par recipient avant `prepare_for_send` (qui applique l'encryption par-conn).

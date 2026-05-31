@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use mc_rs_proto::packets::player::{ItemStack, PlayerAttribute, UpdateAttributes};
 
+use crate::ai::{AiComponent, AiEffect, PlayerSnapshot};
 use crate::entity::{health_attributes, living_metadata, EntityBase};
 use crate::item_registry;
 use crate::world::block_registry::BLOCKS;
@@ -96,6 +97,44 @@ impl MobKind {
         }
     }
 
+    /// Mob hostile (traque et attaque le joueur) ?
+    pub fn is_hostile(self) -> bool {
+        matches!(self, Self::Zombie | Self::Skeleton | Self::Creeper)
+    }
+
+    /// Distance de détection d'un joueur (blocs). Réf valeurs vanilla.
+    pub fn sight_range(self) -> f64 {
+        16.0
+    }
+
+    /// Portée d'attaque mêlée (blocs). Squelette/creeper traités en mêlée pour
+    /// la v1 (arc/explosion = follow-ups documentés).
+    pub fn attack_range(self) -> f64 {
+        2.0
+    }
+
+    /// Dégâts d'attaque mêlée de base (difficulté normale). Réf PMMP/vanilla.
+    pub fn attack_damage(self) -> f32 {
+        match self {
+            Self::Zombie => 3.0,
+            Self::Skeleton => 2.0,
+            Self::Creeper => 0.0, // dégâts via explosion (non implémentée ici)
+            _ => 0.0,
+        }
+    }
+
+    /// Vitesse de déplacement (blocs/tick) utilisée par le `WalkController`.
+    /// Valeurs vanilla approximatives (à ajuster en jeu).
+    pub fn movement_speed(self) -> f32 {
+        match self {
+            Self::Zombie => 0.23,
+            Self::Skeleton => 0.25,
+            Self::Creeper => 0.25,
+            Self::Cow | Self::Pig | Self::Sheep => 0.2,
+            Self::Chicken => 0.25,
+        }
+    }
+
     pub fn max_health(self) -> f32 {
         // Source autoritaire : `mob_hp::mob_max_hp` (couvre ~60 entités vanilla).
         crate::mob_hp::mob_max_hp(self.actor_type())
@@ -171,10 +210,15 @@ pub struct DamageResult {
 
 pub struct TickResult {
     pub movement_updates: Vec<MovementUpdate>,
+    /// Attaques mob→joueur à appliquer par `main.rs` (= `syncedActions` Allay).
+    pub attack_requests: Vec<AiEffect>,
 }
 
 pub struct MobEntityManager {
     entities: HashMap<u64, MobEntity>,
+    /// Composant IA par mob (runtime id) — stocké en parallèle pour garder
+    /// `MobEntity` `Clone` (les behaviors sont des trait objects non-clonables).
+    ai: HashMap<u64, AiComponent>,
 }
 
 impl Default for MobEntityManager {
@@ -187,17 +231,23 @@ impl MobEntityManager {
     pub fn new() -> Self {
         Self {
             entities: HashMap::new(),
+            ai: HashMap::new(),
         }
     }
 
     pub fn spawn(&mut self, kind: MobKind, position: [f32; 3]) -> MobEntity {
         let entity = MobEntity::spawn(kind, position);
-        self.entities
-            .insert(entity.base.entity_runtime_id, entity.clone());
+        let id = entity.base.entity_runtime_id;
+        self.entities.insert(id, entity.clone());
+        self.ai.insert(
+            id,
+            AiComponent::new(crate::ai::species::build_behavior_group(kind), kind.movement_speed()),
+        );
         entity
     }
 
     pub fn remove(&mut self, entity_runtime_id: u64) -> Option<MobEntity> {
+        self.ai.remove(&entity_runtime_id);
         self.entities.remove(&entity_runtime_id)
     }
 
@@ -229,6 +279,7 @@ impl MobEntityManager {
         let runtime_entity_id = entity.base.entity_runtime_id;
         let actor_type = entity.kind.actor_type();
         let (remove_packet, death_position, drops) = if new_health <= 0.0 {
+            self.ai.remove(&runtime_entity_id);
             let entity = self.entities.remove(&runtime_entity_id)?;
             // Loot tables vanilla via bedrock-samples (data-driven). Si la
             // table existe → utilisée ; sinon fallback sur default_loot()
@@ -286,14 +337,29 @@ impl MobEntityManager {
         })
     }
 
-    pub fn tick(&mut self, chunk_cache: &mut ChunkCache) -> TickResult {
+    pub fn tick(&mut self, chunk_cache: &mut ChunkCache, players: &[PlayerSnapshot]) -> TickResult {
         let mut movement_updates = Vec::new();
+        let mut attack_requests = Vec::new();
         let ids = self.entities.keys().copied().collect::<Vec<_>>();
 
         for entity_id in ids {
             let Some(entity) = self.entities.get_mut(&entity_id) else {
                 continue;
             };
+
+            // --- IA : sensors → behaviors → controllers (pose vélocité/yaw) ---
+            // Tournée AVANT la physique pour que le WalkController fixe la
+            // vélocité que la physique intègre ensuite. `self.ai` et
+            // `self.entities` sont des champs disjoints → emprunts mut OK.
+            if let Some(ai) = self.ai.get_mut(&entity_id) {
+                ai.tick(
+                    &mut entity.base,
+                    entity.kind,
+                    players,
+                    chunk_cache,
+                    &mut attack_requests,
+                );
+            }
 
             let old_position = entity.base.position;
             let old_velocity = entity.base.velocity;
@@ -352,7 +418,10 @@ impl MobEntityManager {
             }
         }
 
-        TickResult { movement_updates }
+        TickResult {
+            movement_updates,
+            attack_requests,
+        }
     }
 }
 
@@ -508,7 +577,10 @@ mod tests {
         let test_dir =
             std::env::temp_dir().join(format!("mc-rs-mob-physics-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&test_dir);
-        let mut cache = ChunkCache::new(&test_dir, 42, "normal");
+        // Monde "flat" : air au-dessus de la surface basse, donc le bloc de pierre
+        // posé à (0,64,0) est isolé en l'air → l'IA de roam ne trouve aucun sol
+        // alentour (pas de chemin) et le mob tombe en ligne droite, sans errer.
+        let mut cache = ChunkCache::new(&test_dir, 42, "flat");
         cache.set_block(0, 64, 0, BLOCKS.stone);
 
         let mut mobs = MobEntityManager::new();
@@ -516,7 +588,7 @@ mod tests {
         let entity_id = entity.base.entity_runtime_id;
 
         for _ in 0..200 {
-            let _ = mobs.tick(&mut cache);
+            let _ = mobs.tick(&mut cache, &[]);
         }
 
         let settled = mobs
@@ -530,8 +602,12 @@ mod tests {
         );
         assert_eq!(settled.base.velocity[1], 0.0);
         let support_y = (settled.base.position[1] - 0.01).floor() as i32;
+        let (mob_x, mob_z) = (
+            settled.base.position[0].floor() as i32,
+            settled.base.position[2].floor() as i32,
+        );
         assert!(
-            is_supporting_block(cache.get_block(0, support_y, 0)),
+            is_supporting_block(cache.get_block(mob_x, support_y, mob_z)),
             "expected zombie to settle on a supporting block"
         );
         let _ = std::fs::remove_dir_all(&test_dir);
