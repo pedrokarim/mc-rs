@@ -2065,6 +2065,12 @@ async fn main() {
                             .must_get(crate::attribute::ids::HEALTH)
                             .current_value
                             > 0.0,
+                        held_item: c
+                            .inventory
+                            .slots
+                            .get(c.inventory.held_slot as usize)
+                            .map(|s| s.item.id)
+                            .unwrap_or(0),
                     })
                     .collect();
                 // Dégâts mêlée/flèche des mobs mis à l'échelle selon la difficulté.

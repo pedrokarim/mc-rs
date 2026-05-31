@@ -96,3 +96,14 @@ impl Evaluator for FnEvaluator {
         (self.0)(m, b, p)
     }
 }
+
+/// Closure d'évaluation (capture d'état) — alias pour la lisibilité.
+pub type EvalFn = Box<dyn Fn(&Memory, &EntityBase, &[PlayerSnapshot]) -> bool + Send>;
+
+/// Évaluateur par closure (capture d'état, ex liste d'items qui tentent le mob).
+pub struct ClosureEvaluator(pub EvalFn);
+impl Evaluator for ClosureEvaluator {
+    fn evaluate(&self, m: &Memory, b: &EntityBase, p: &[PlayerSnapshot]) -> bool {
+        (self.0)(m, b, p)
+    }
+}

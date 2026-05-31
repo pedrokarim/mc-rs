@@ -42,10 +42,12 @@ IDs autoritatifs (BedrockProtocol) : LevelEvent `PARTICLE_EXPLODE=2025` ; LevelS
   non écrasé par le WalkController grâce à sa garde anti-knockback).
 
 ## Phase 4 — IA passive (fidélité)
-- ⬜ C1 — Tempt : suivre un joueur tenant la nourriture de reproduction de l'espèce.
-- 💤 C2 — Reproduction (feed 2 adultes → bébé) — nécessite l'interaction clic-droit sur entité.
-- 💤 C3 — Mouton qui mange l'herbe (regagne sa laine).
-- ⬜ C4 — Bébés mobs (flag baby + échelle + vitesse) via spawn.
+- ✅ C1 — Tempt : le mob passif suit le joueur (≤10 blocs) tenant sa nourriture (blé/carotte/graines).
+  `PlayerSnapshot.held_item` + `TemptExecutor` + `ClosureEvaluator`. Priorité Flee(4) > Tempt(3) > Roam(1).
+- 💤 C2 — Reproduction (feed 2 adultes → bébé) — nécessite l'interaction clic-droit sur entité (non câblée).
+- 💤 C3 — Mouton qui mange l'herbe (regagne sa laine) — nécessite l'état laine + changement de bloc.
+- 💤 C4 — Bébés mobs : **différé** — flag `BABY` non défini dans le proto + pas de source de bébés
+  sans reproduction (C2). À traiter avec C2.
 
 ## Hors-scope de cette passe (chantiers séparés)
 - 💤 Extension du roster de mobs (spider, enderman, slime, …) — ~60 types : réseau, modèles,
@@ -53,4 +55,14 @@ IDs autoritatifs (BedrockProtocol) : LevelEvent `PARTICLE_EXPLODE=2025` ; LevelS
 - 💤 Redstone, fluides (autres follow-ups projet, non liés aux mobs).
 
 ## Journal
-- (rempli au fil de l'eau ci-dessous : commit + ce qui a été fait)
+- **Phase 1** — feedback AV (sons hurt/death/ambient, explosion particule+son, arc shoot+impact)
+  + dégâts mêlée/flèche par difficulté. A4 (swing-bras) différé (AnimatePacket absent).
+- **Phase 2** — sun-burning zombie/skeleton (ONFIRE + 1 HP/s en plein jour exposé), despawn des
+  hostiles (>128 / >32 pendant 30 s), regard joueur à l'arrêt. B2 (LOS) différé.
+- **Phase 3** — fall damage, flottaison dans l'eau, knockback du mob frappé. Refactor
+  `apply_mob_damage_broadcast` (PvE + feu + chute).
+- **Phase 4** — tempt (suivre la nourriture). C2 reproduction / C3 mouton-herbe / C4 bébés = stretch.
+
+### Reste (stretch / chantiers séparés)
+- A4 swing-bras (AnimatePacket), B2 LOS (raycast), C2 reproduction + C4 bébés, C3 mouton-herbe.
+- Extension du roster de mobs (spider, enderman, slime, …) = chantier « entités », pas « IA ».

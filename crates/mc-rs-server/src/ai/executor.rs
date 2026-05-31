@@ -495,6 +495,67 @@ impl Executor for PanicFleeExecutor {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Tempt : suivre un joueur tenant la nourriture du mob (passifs)
+// ---------------------------------------------------------------------------
+
+/// Le mob suit le joueur le plus proche (dans `range`) tenant un item tentant
+/// (network id dans `food_ids`). Comportement passif vanilla.
+pub struct TemptExecutor {
+    speed: f32,
+    food_ids: Vec<i32>,
+    range_sq: f64,
+}
+
+impl TemptExecutor {
+    pub fn new(speed: f32, food_ids: Vec<i32>, range: f64) -> Self {
+        Self {
+            speed,
+            food_ids,
+            range_sq: range * range,
+        }
+    }
+
+    /// Position du joueur tentant le plus proche (vivant, item tentant, en portée).
+    fn tempting_player(
+        food_ids: &[i32],
+        range_sq: f64,
+        base: &EntityBase,
+        players: &[super::PlayerSnapshot],
+    ) -> Option<[f32; 3]> {
+        players
+            .iter()
+            .filter(|p| p.alive && food_ids.contains(&p.held_item))
+            .map(|p| (p.position, dist_sq(base.position, p.position)))
+            .filter(|(_, d)| *d <= range_sq)
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(pos, _)| pos)
+    }
+}
+
+impl Executor for TemptExecutor {
+    fn on_start(&mut self, memory: &mut Memory, _base: &mut EntityBase) {
+        memory.movement_speed = self.speed;
+    }
+
+    fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
+        let Some(tpos) = Self::tempting_player(&self.food_ids, self.range_sq, ctx.base, ctx.players)
+        else {
+            return false;
+        };
+        ctx.memory.move_target = Some([tpos[0] as f64, tpos[1] as f64, tpos[2] as f64]);
+        ctx.memory.look_target = Some([tpos[0] as f64, (tpos[1] + 1.62) as f64, tpos[2] as f64]);
+        ctx.memory.route_update_required = true;
+        true
+    }
+
+    fn on_stop(&mut self, memory: &mut Memory, _base: &mut EntityBase) {
+        memory.move_target = None;
+        memory.look_target = None;
+        memory.clear_move_direction();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -524,6 +585,7 @@ mod tests {
             position: [1.0, 64.0, 0.0], // distance 1 < portée 2
             gamemode: 0,
             alive: true,
+            held_item: 0,
         }];
         let mut effects = Vec::new();
 
@@ -590,6 +652,7 @@ mod tests {
             position: [1.0, 64.0, 0.0], // distance 1 < portée d'amorçage 3
             gamemode: 0,
             alive: true,
+            held_item: 0,
         }];
         let mut effects = Vec::new();
         let mut alive = true;
@@ -619,6 +682,7 @@ mod tests {
             position: [8.0, 64.0, 0.0], // hors portée d'amorçage → traque, pas de fuse
             gamemode: 0,
             alive: true,
+            held_item: 0,
         }];
         let mut effects = Vec::new();
         for _ in 0..10 {
@@ -641,5 +705,48 @@ mod tests {
         let mut memory = Memory::new(0.2);
         exec.on_start(&mut memory, &mut base);
         assert!(memory.move_target.is_some(), "le roam pose une cible au démarrage");
+    }
+
+    #[test]
+    fn tempt_follows_player_holding_food() {
+        let wheat = crate::item_registry::network_id("minecraft:wheat").expect("wheat existe");
+        let mut exec = TemptExecutor::new(0.2, vec![wheat], 10.0);
+        let mut base = zombie_base([0.0, 64.0, 0.0]);
+        let mut memory = Memory::new(0.2);
+        let mut effects = Vec::new();
+
+        // Joueur tenant du blé à 4 blocs → le mob le suit.
+        let holding = vec![PlayerSnapshot {
+            runtime_id: 3,
+            position: [4.0, 64.0, 0.0],
+            gamemode: 0,
+            alive: true,
+            held_item: wheat,
+        }];
+        {
+            let mut ctx = ExecCtx {
+                base: &mut base,
+                kind: MobKind::Cow,
+                memory: &mut memory,
+                players: &holding,
+                effects: &mut effects,
+            };
+            assert!(exec.execute(&mut ctx), "suit le joueur tenant la nourriture");
+        }
+        assert!(memory.move_target.is_some(), "cible de déplacement posée vers le joueur");
+
+        // Joueur sans nourriture → le tempt s'arrête.
+        let empty = vec![PlayerSnapshot {
+            held_item: 0,
+            ..holding[0]
+        }];
+        let mut ctx = ExecCtx {
+            base: &mut base,
+            kind: MobKind::Cow,
+            memory: &mut memory,
+            players: &empty,
+            effects: &mut effects,
+        };
+        assert!(!exec.execute(&mut ctx), "sans nourriture tenue → pas de tempt");
     }
 }

@@ -1,11 +1,11 @@
 //! Assemblage du [`BehaviorGroup`] par espèce — équivalent des définitions
 //! d'entités d'Allay qui listent sensors + behaviors + controllers.
 
-use super::behavior::{AlwaysEvaluator, Behavior, FnEvaluator};
+use super::behavior::{AlwaysEvaluator, Behavior, ClosureEvaluator, FnEvaluator};
 use super::controller::{LookController, WalkController};
 use super::executor::{
     BowAttackExecutor, CreeperSwellExecutor, FlatRandomRoamExecutor, MeleeAttackExecutor,
-    PanicFleeExecutor,
+    PanicFleeExecutor, TemptExecutor,
 };
 use super::sensor::NearestPlayerSensor;
 use super::{BehaviorGroup, Controller, Sensor};
@@ -14,7 +14,10 @@ use crate::mob_entities::MobKind;
 /// Priorités (plus grand = plus prioritaire).
 const PRIO_COMBAT: i32 = 4;
 const PRIO_PANIC: i32 = 4;
+const PRIO_TEMPT: i32 = 3;
 const PRIO_ROAM: i32 = 1;
+/// Portée à laquelle un mob passif remarque la nourriture tenue (blocs).
+const TEMPT_RANGE: f64 = 10.0;
 /// Cooldown d'attaque mêlée (ticks à 20 TPS → ~1 s, comme vanilla).
 const MELEE_COOLDOWN: u32 = 20;
 /// Rayon d'errance (blocs).
@@ -96,16 +99,43 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
         ];
         BehaviorGroup::new(vec![], normal, sensors, controllers, true)
     } else {
-        // Passif : fuit s'il est blessé près d'un joueur (prio haute), sinon erre.
-        let normal = vec![
-            Behavior::new(
-                Box::new(FnEvaluator(PanicFleeExecutor::should_flee)),
-                Box::new(PanicFleeExecutor::new(speed * 1.25, 8.0)),
-                PRIO_PANIC,
+        // Passif : fuit s'il est blessé (prio haute), suit la nourriture (tempt),
+        // sinon erre.
+        let mut normal = vec![Behavior::new(
+            Box::new(FnEvaluator(PanicFleeExecutor::should_flee)),
+            Box::new(PanicFleeExecutor::new(speed * 1.25, 8.0)),
+            PRIO_PANIC,
+            1,
+        )];
+
+        // Tempt : suivre un joueur tenant la nourriture de l'espèce.
+        let food_ids: Vec<i32> = kind
+            .tempting_items()
+            .iter()
+            .filter_map(|name| crate::item_registry::network_id(name))
+            .collect();
+        if !food_ids.is_empty() {
+            let range_sq = TEMPT_RANGE * TEMPT_RANGE;
+            let food_eval = food_ids.clone();
+            normal.push(Behavior::new(
+                Box::new(ClosureEvaluator(Box::new(move |_m, base, players| {
+                    players.iter().any(|p| {
+                        if !p.alive || !food_eval.contains(&p.held_item) {
+                            return false;
+                        }
+                        let dx = (p.position[0] - base.position[0]) as f64;
+                        let dy = (p.position[1] - base.position[1]) as f64;
+                        let dz = (p.position[2] - base.position[2]) as f64;
+                        dx * dx + dy * dy + dz * dz <= range_sq
+                    })
+                }))),
+                Box::new(TemptExecutor::new(speed, food_ids, TEMPT_RANGE)),
+                PRIO_TEMPT,
                 1,
-            ),
-            roam(),
-        ];
+            ));
+        }
+
+        normal.push(roam());
         let controllers: Vec<Box<dyn Controller>> = vec![
             Box::new(WalkController::new()),
             // (cible + route) : fixe le joueur proche à l'arrêt, sinon suit la route.

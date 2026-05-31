@@ -41,6 +41,8 @@ pub struct PlayerSnapshot {
     /// 0=survival, 1=creative, 2=adventure, 3=spectator (`Connection::gamemode`).
     pub gamemode: i32,
     pub alive: bool,
+    /// Network id de l'item tenu en main (pour le comportement de tempt).
+    pub held_item: i32,
 }
 
 impl PlayerSnapshot {
@@ -515,6 +517,7 @@ mod tests {
             position: [0.0; 3],
             gamemode: 0,
             alive: true,
+            held_item: 0,
         };
         let creative = PlayerSnapshot {
             gamemode: 1,

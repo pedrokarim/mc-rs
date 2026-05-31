@@ -123,6 +123,22 @@ impl MobKind {
         }
     }
 
+    /// Items qui attirent ce mob passif (tempt — suivre le joueur qui les tient).
+    /// Réf vanilla Bedrock (cf. `breeding_items`).
+    pub fn tempting_items(self) -> &'static [&'static str] {
+        match self {
+            Self::Cow | Self::Sheep => &["minecraft:wheat"],
+            Self::Pig => &["minecraft:carrot", "minecraft:potato", "minecraft:beetroot"],
+            Self::Chicken => &[
+                "minecraft:wheat_seeds",
+                "minecraft:beetroot_seeds",
+                "minecraft:melon_seeds",
+                "minecraft:pumpkin_seeds",
+            ],
+            _ => &[],
+        }
+    }
+
     /// Vitesse de déplacement (blocs/tick) utilisée par le `WalkController`.
     /// Valeurs vanilla approximatives (à ajuster en jeu).
     pub fn movement_speed(self) -> f32 {

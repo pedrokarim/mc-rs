@@ -78,6 +78,7 @@ mod tests {
             position: pos,
             gamemode,
             alive: true,
+            held_item: 0,
         }
     }
 
