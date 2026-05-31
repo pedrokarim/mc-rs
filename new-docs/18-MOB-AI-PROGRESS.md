@@ -82,10 +82,9 @@ Roster passé de 7 à **~51 mobs**.
   armadillo, sniffer, mooshroom).
 - ✅ **Vague 2** — slime + magma_cube : taille (VARIANT) + **split à la mort**.
 - ✅ **Vague 3** — volants : bat, parrot, allay, bee (vol 3D, pas de gravité).
+- ✅ **Vague 4** — enderman : mêlée + **téléportation quand blessé** (vers un sol proche, flag teleport).
 
 ### Vagues restantes (mécaniques spéciales)
-- ⬜ **Enderman** : neutre + téléportation (quand blessé/coincé). (Aggro-au-regard = besoin du vecteur
-  de visée joueur dans le snapshot.)
 - ⬜ **Tireurs à projectile** : ghast/blaze (boule de feu), witch (potion AoE), shulker (projectile).
   → besoin d'une entité projectile générique (modèle `arrow_entity`) ; ghast/blaze volent + tirent.
 - ⬜ **Hostiles volants** : phantom (piqué), vex.

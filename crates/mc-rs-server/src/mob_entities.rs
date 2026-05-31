@@ -79,6 +79,7 @@ pub enum MobKind {
     Hoglin,
     Zoglin,
     PiglinBrute,
+    Enderman,
     // Hostiles à distance (arc/arbalète)
     Skeleton,
     Stray,
@@ -141,6 +142,7 @@ impl MobKind {
         Self::Hoglin,
         Self::Zoglin,
         Self::PiglinBrute,
+        Self::Enderman,
         Self::Skeleton,
         Self::Stray,
         Self::Bogged,
@@ -213,6 +215,7 @@ impl MobKind {
             Self::Hoglin => d!("minecraft:hoglin", "Hoglin", 1.4, 1.4, Hostile, Melee, 6.0, 0.3, &[]),
             Self::Zoglin => d!("minecraft:zoglin", "Zoglin", 1.4, 1.4, Hostile, Melee, 6.0, 0.3, &[]),
             Self::PiglinBrute => d!("minecraft:piglin_brute", "Piglin Brute", 0.6, 1.95, Hostile, Melee, 7.0, 0.35, &[]),
+            Self::Enderman => d!("minecraft:enderman", "Enderman", 0.6, 2.9, Hostile, Melee, 7.0, 0.3, &[]),
             Self::Skeleton => d!("minecraft:skeleton", "Skeleton", 0.6, 1.9, Hostile, Bow, 0.0, 0.25, &[]),
             Self::Stray => d!("minecraft:stray", "Stray", 0.6, 1.9, Hostile, Bow, 0.0, 0.25, &[]),
             Self::Bogged => d!("minecraft:bogged", "Bogged", 0.6, 1.9, Hostile, Bow, 0.0, 0.25, &[]),
@@ -306,6 +309,11 @@ impl MobKind {
     /// Mob volant (vol 3D, pas de gravité).
     pub fn is_flying(self) -> bool {
         self.desc().profile == AiProfile::Flying
+    }
+
+    /// Mob qui se téléporte quand il est blessé (enderman).
+    pub fn teleports(self) -> bool {
+        matches!(self, Self::Enderman)
     }
 
     /// Distance de détection d'un joueur (blocs).
@@ -409,6 +417,8 @@ pub struct MobEntity {
     eat_grass_timer: u32,
     /// Taille du slime/magma cube (1/2/4) ; 0 si ce n'est pas un slime.
     slime_size: u8,
+    /// Téléportation demandée au prochain tick (enderman blessé).
+    teleport_pending: bool,
 }
 
 impl MobEntity {
@@ -435,6 +445,7 @@ impl MobEntity {
             sheared: false,
             eat_grass_timer: 0,
             slime_size: 0,
+            teleport_pending: false,
         };
         if kind.is_slime() {
             mob.apply_slime_size(2); // taille moyenne par défaut (/summon)
@@ -671,6 +682,11 @@ impl MobEntityManager {
             attribute.current = new_health;
         }
 
+        // Enderman blessé (mais vivant) → téléportation au prochain tick.
+        if new_health > 0.0 && entity.kind.teleports() {
+            entity.teleport_pending = true;
+        }
+
         let runtime_entity_id = entity.base.entity_runtime_id;
         let actor_type = entity.kind.actor_type();
         let mut slime_split: Option<(MobKind, [f32; 3], u8)> = None;
@@ -805,6 +821,38 @@ impl MobEntityManager {
                     entity.base.set_scale(1.0);
                     metadata_updates
                         .push((entity.base.entity_unique_id, entity.base.actor_data_packet()));
+                }
+            }
+
+            // --- Téléportation de l'enderman blessé vers un sol proche ---
+            if entity.teleport_pending {
+                entity.teleport_pending = false;
+                let mut rng = rand::thread_rng();
+                let tx = entity.base.position[0] as i32 + rand::Rng::gen_range(&mut rng, -16..=16);
+                let tz = entity.base.position[2] as i32 + rand::Rng::gen_range(&mut rng, -16..=16);
+                let start_y = entity.base.position[1] as i32 + 3;
+                let mut dest = None;
+                for y in ((start_y - 32)..=start_y).rev() {
+                    if is_supporting_block(chunk_cache.get_block(tx, y, tz))
+                        && !is_supporting_block(chunk_cache.get_block(tx, y + 1, tz))
+                        && !is_supporting_block(chunk_cache.get_block(tx, y + 2, tz))
+                    {
+                        dest = Some(y + 1);
+                        break;
+                    }
+                }
+                if let Some(y) = dest {
+                    entity.base.position = [tx as f32 + 0.5, y as f32, tz as f32 + 0.5];
+                    entity.base.velocity = [0.0, 0.0, 0.0];
+                    movement_updates.push(MovementUpdate {
+                        entity_unique_id: entity.base.entity_unique_id,
+                        entity_position: entity.base.position,
+                        add_packet: entity.base.add_actor_packet(),
+                        // flag teleport pour un saut net côté client.
+                        move_packet: entity.base.move_absolute_packet(true, true),
+                        motion_packet: entity.base.motion_packet(),
+                    });
+                    continue; // physique reprend au tick suivant
                 }
             }
 
@@ -1261,6 +1309,43 @@ mod tests {
         let before = mobs.all().count();
         let _ = mobs.apply_attack(sid, 100.0);
         assert_eq!(mobs.all().count(), before - 1, "le petit slime ne se divise pas");
+    }
+
+    #[test]
+    fn enderman_teleports_when_hurt() {
+        let (mut cache, dir) = temp_cache("enderman-tp");
+        // Plateau de pierre autour de l'origine (cibles de téléportation valides).
+        for x in -16..=16 {
+            for z in -16..=16 {
+                cache.set_block(x, 64, z, BLOCKS.stone);
+            }
+        }
+        let mut mobs = MobEntityManager::new();
+        let e = mobs.spawn(MobKind::Enderman, [0.5, 65.0, 0.5]);
+        let id = e.base.entity_runtime_id;
+
+        // Un saut > 3 blocs en un seul tick ne peut venir que de la téléportation
+        // (l'errance déplace < 1 bloc/tick).
+        let mut prev = e.base.position;
+        let mut teleported = false;
+        for _ in 0..8 {
+            let _ = mobs.apply_attack(id, 1.0); // PV 40 → survit
+            let _ = mobs.tick(&mut cache, &[], false);
+            let p = mobs
+                .all()
+                .find(|m| m.base.entity_runtime_id == id)
+                .unwrap()
+                .base
+                .position;
+            let d = ((p[0] - prev[0]).powi(2) + (p[2] - prev[2]).powi(2)).sqrt();
+            if d > 3.0 {
+                teleported = true;
+                break;
+            }
+            prev = p;
+        }
+        assert!(teleported, "l'enderman blessé doit se téléporter");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
