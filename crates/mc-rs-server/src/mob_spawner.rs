@@ -146,9 +146,12 @@ pub fn tick<R: Rng>(
         }
         let Some(sy) = sy else { continue };
 
-        // Spawn. ~5 % des animaux apparaissent en bébé (convention Bedrock).
+        // Spawn. Slimes : taille aléatoire (1/2/4). Animaux : ~5 % en bébé.
         let spawn_pos = [sx as f32 + 0.5, sy as f32, sz as f32 + 0.5];
-        let _entity = if cat == "animal" && rng.gen_range(0..100) < 5 {
+        let _entity = if picked.is_slime() {
+            let size = [1u8, 2, 4][rng.gen_range(0..3)];
+            mobs.spawn_slime(picked, spawn_pos, size)
+        } else if cat == "animal" && rng.gen_range(0..100) < 5 {
             mobs.spawn_baby(picked, spawn_pos)
         } else {
             mobs.spawn(picked, spawn_pos)

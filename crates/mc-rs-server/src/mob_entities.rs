@@ -85,6 +85,8 @@ pub enum MobKind {
     Pillager,
     // Hostile spécial
     Creeper,
+    Slime,
+    MagmaCube,
     // Neutres
     ZombifiedPiglin,
     Piglin,
@@ -140,6 +142,8 @@ impl MobKind {
         Self::Bogged,
         Self::Pillager,
         Self::Creeper,
+        Self::Slime,
+        Self::MagmaCube,
         Self::ZombifiedPiglin,
         Self::Piglin,
         Self::IronGolem,
@@ -208,6 +212,8 @@ impl MobKind {
             Self::Bogged => d!("minecraft:bogged", "Bogged", 0.6, 1.9, Hostile, Bow, 0.0, 0.25, &[]),
             Self::Pillager => d!("minecraft:pillager", "Pillager", 0.6, 1.95, Hostile, Bow, 0.0, 0.35, &[]),
             Self::Creeper => d!("minecraft:creeper", "Creeper", 0.6, 1.7, Hostile, CreeperSwell, 0.0, 0.25, &[]),
+            Self::Slime => d!("minecraft:slime", "Slime", 1.02, 1.02, Hostile, Melee, 2.0, 0.2, &[]),
+            Self::MagmaCube => d!("minecraft:magma_cube", "Magma Cube", 1.02, 1.02, Hostile, Melee, 4.0, 0.2, &[]),
             Self::ZombifiedPiglin => d!("minecraft:zombie_pigman", "Zombified Piglin", 0.6, 1.9, Neutral, Neutral, 0.0, 0.23, &[]),
             Self::Piglin => d!("minecraft:piglin", "Piglin", 0.6, 1.95, Neutral, Neutral, 0.0, 0.35, &[]),
             Self::IronGolem => d!("minecraft:iron_golem", "Iron Golem", 1.4, 2.7, Neutral, Neutral, 0.0, 0.25, &[]),
@@ -282,6 +288,11 @@ impl MobKind {
     /// Mob hostile (traque et attaque le joueur) ?
     pub fn is_hostile(self) -> bool {
         self.desc().category == MobCategory::Hostile
+    }
+
+    /// Slime / magma cube (taille variable + split à la mort).
+    pub fn is_slime(self) -> bool {
+        matches!(self, Self::Slime | Self::MagmaCube)
     }
 
     /// Distance de détection d'un joueur (blocs).
@@ -383,6 +394,8 @@ pub struct MobEntity {
     sheared: bool,
     /// Ticks cumulés passés sur un bloc d'herbe (mouton tondu qui mange).
     eat_grass_timer: u32,
+    /// Taille du slime/magma cube (1/2/4) ; 0 si ce n'est pas un slime.
+    slime_size: u8,
 }
 
 impl MobEntity {
@@ -396,7 +409,7 @@ impl MobEntity {
             health_attributes(kind.max_health()),
             living_metadata(width, height, None),
         );
-        Self {
+        let mut mob = Self {
             base,
             kind,
             despawn_timer: 0,
@@ -408,6 +421,35 @@ impl MobEntity {
             baby_age: 0,
             sheared: false,
             eat_grass_timer: 0,
+            slime_size: 0,
+        };
+        if kind.is_slime() {
+            mob.apply_slime_size(2); // taille moyenne par défaut (/summon)
+        }
+        mob
+    }
+
+    /// Applique la taille d'un slime : metadata VARIANT (clé 2), échelle, et PV
+    /// (= taille²). Idempotent (met à jour l'entrée VARIANT existante).
+    fn apply_slime_size(&mut self, size: u8) {
+        use mc_rs_proto::packets::player::MetadataValue;
+        self.slime_size = size;
+        // VARIANT (clé 2, Int) = taille → le client rend le slime à la bonne taille.
+        if let Some((_, _, v)) = self.base.metadata.iter_mut().find(|(k, _, _)| *k == 2) {
+            *v = MetadataValue::Int(size as i32);
+        } else {
+            self.base
+                .metadata
+                .push((2, 2, MetadataValue::Int(size as i32)));
+        }
+        self.base.set_scale(0.5 * size as f32);
+        // PV = taille² (slime vanilla).
+        let hp = (size as f32) * (size as f32);
+        for a in self.base.attributes.iter_mut() {
+            if a.name == "minecraft:health" {
+                a.current = hp;
+                a.max = hp;
+            }
         }
     }
 
@@ -522,6 +564,14 @@ impl MobEntityManager {
         entity
     }
 
+    /// Spawn d'un slime/magma cube de taille donnée (1/2/4).
+    pub fn spawn_slime(&mut self, kind: MobKind, position: [f32; 3], size: u8) -> MobEntity {
+        let mut entity = MobEntity::spawn(kind, position);
+        entity.apply_slime_size(size);
+        self.insert_with_ai(entity.clone());
+        entity
+    }
+
     pub fn remove(&mut self, entity_runtime_id: u64) -> Option<MobEntity> {
         self.ai.remove(&entity_runtime_id);
         self.entities.remove(&entity_runtime_id)
@@ -605,9 +655,14 @@ impl MobEntityManager {
 
         let runtime_entity_id = entity.base.entity_runtime_id;
         let actor_type = entity.kind.actor_type();
+        let mut slime_split: Option<(MobKind, [f32; 3], u8)> = None;
         let (remove_packet, death_position, drops) = if new_health <= 0.0 {
             self.ai.remove(&runtime_entity_id);
             let entity = self.entities.remove(&runtime_entity_id)?;
+            // Split du slime/magma cube : un enfant de taille moitié si > 1.
+            if entity.kind.is_slime() && entity.slime_size > 1 {
+                slime_split = Some((entity.kind, entity.base.position, entity.slime_size / 2));
+            }
             // Loot tables vanilla via bedrock-samples (data-driven). Si la
             // table existe → utilisée ; sinon fallback sur default_loot()
             // hardcodé pour rester rétro-compatible.
@@ -636,6 +691,13 @@ impl MobEntityManager {
         } else {
             (None, None, Vec::new())
         };
+
+        // Naissance des slimes enfants (2 de taille moitié) à la mort.
+        if let Some((kind, pos, child_size)) = slime_split {
+            for &off in &[0.4_f32, -0.4] {
+                self.spawn_slime(kind, [pos[0] + off, pos[1], pos[2] + off], child_size);
+            }
+        }
 
         let update_attributes_packet = if remove_packet.is_none() {
             Some(
@@ -1138,6 +1200,27 @@ mod tests {
             "la laine a repoussé (plus tondu)"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn slime_splits_into_children_on_death() {
+        let mut mobs = MobEntityManager::new();
+        let big = mobs.spawn_slime(MobKind::Slime, [0.0, 64.0, 0.0], 4);
+        let id = big.base.entity_runtime_id;
+        // Le gros slime (PV 16) meurt → 2 enfants de taille 2.
+        let _ = mobs.apply_attack(id, 100.0);
+        assert_eq!(mobs.all().count(), 2, "le slime se divise en 2 enfants");
+        assert!(
+            mobs.all().all(|e| e.slime_size == 2),
+            "les enfants ont la taille moitié"
+        );
+
+        // Un petit slime (taille 1) ne se divise pas.
+        let small = mobs.spawn_slime(MobKind::Slime, [50.0, 64.0, 50.0], 1);
+        let sid = small.base.entity_runtime_id;
+        let before = mobs.all().count();
+        let _ = mobs.apply_attack(sid, 100.0);
+        assert_eq!(mobs.all().count(), before - 1, "le petit slime ne se divise pas");
     }
 
     #[test]
