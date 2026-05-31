@@ -85,6 +85,7 @@ pub fn tick<R: Rng>(
         let weights: Vec<(MobKind, u32)> = all_mobs()
             .iter()
             .filter_map(|&k| {
+                if k.is_aquatic() { return None; } // pas de spawn terrestre pour les aquatiques
                 crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k)).map(|w| (k, w.max(1)))
             })
             .collect();
@@ -186,6 +187,7 @@ mod tests {
         let weights: Vec<_> = all_mobs()
             .iter()
             .filter_map(|&k| {
+                if k.is_aquatic() { return None; } // pas de spawn terrestre pour les aquatiques
                 crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k)).map(|w| (k, w))
             })
             .collect();

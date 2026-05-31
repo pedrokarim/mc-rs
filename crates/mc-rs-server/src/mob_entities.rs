@@ -101,6 +101,16 @@ pub enum MobKind {
     // Boss
     Wither,
     EnderDragon,
+    // Aquatiques
+    Squid,
+    GlowSquid,
+    Dolphin,
+    Cod,
+    Salmon,
+    Pufferfish,
+    TropicalFish,
+    Guardian,
+    ElderGuardian,
     // Neutres
     ZombifiedPiglin,
     Piglin,
@@ -171,6 +181,15 @@ impl MobKind {
         Self::Vex,
         Self::Wither,
         Self::EnderDragon,
+        Self::Squid,
+        Self::GlowSquid,
+        Self::Dolphin,
+        Self::Cod,
+        Self::Salmon,
+        Self::Pufferfish,
+        Self::TropicalFish,
+        Self::Guardian,
+        Self::ElderGuardian,
         Self::ZombifiedPiglin,
         Self::Piglin,
         Self::IronGolem,
@@ -254,6 +273,15 @@ impl MobKind {
             Self::Vex => d!("minecraft:vex", "Vex", 0.4, 0.8, Hostile, FlyingMelee, 9.0, 0.45, &[]),
             Self::Wither => d!("minecraft:wither", "Wither", 0.9, 3.5, Hostile, FlyingShooter, 0.0, 0.3, &[]),
             Self::EnderDragon => d!("minecraft:ender_dragon", "Ender Dragon", 6.0, 2.0, Hostile, FlyingMelee, 10.0, 0.5, &[]),
+            Self::Squid => d!("minecraft:squid", "Squid", 0.8, 0.8, Passive, Flying, 0.0, 0.2, &[]),
+            Self::GlowSquid => d!("minecraft:glow_squid", "Glow Squid", 0.8, 0.8, Passive, Flying, 0.0, 0.2, &[]),
+            Self::Dolphin => d!("minecraft:dolphin", "Dolphin", 0.9, 0.6, Neutral, Flying, 0.0, 0.3, &[]),
+            Self::Cod => d!("minecraft:cod", "Cod", 0.5, 0.3, Passive, Flying, 0.0, 0.2, &[]),
+            Self::Salmon => d!("minecraft:salmon", "Salmon", 0.7, 0.4, Passive, Flying, 0.0, 0.2, &[]),
+            Self::Pufferfish => d!("minecraft:pufferfish", "Pufferfish", 0.7, 0.7, Passive, Flying, 0.0, 0.2, &[]),
+            Self::TropicalFish => d!("minecraft:tropicalfish", "Tropical Fish", 0.5, 0.4, Passive, Flying, 0.0, 0.2, &[]),
+            Self::Guardian => d!("minecraft:guardian", "Guardian", 0.85, 0.85, Hostile, FlyingMelee, 6.0, 0.3, &[]),
+            Self::ElderGuardian => d!("minecraft:elder_guardian", "Elder Guardian", 2.0, 2.0, Hostile, FlyingMelee, 8.0, 0.3, &[]),
             Self::ZombifiedPiglin => d!("minecraft:zombie_pigman", "Zombified Piglin", 0.6, 1.9, Neutral, Neutral, 0.0, 0.23, &[]),
             Self::Piglin => d!("minecraft:piglin", "Piglin", 0.6, 1.95, Neutral, Neutral, 0.0, 0.35, &[]),
             Self::IronGolem => d!("minecraft:iron_golem", "Iron Golem", 1.4, 2.7, Neutral, Neutral, 0.0, 0.25, &[]),
@@ -337,12 +365,30 @@ impl MobKind {
         matches!(self, Self::Slime | Self::MagmaCube)
     }
 
-    /// Mob volant (vol 3D, pas de gravité) — errant, tireur ou fonceur.
-    pub fn is_flying(self) -> bool {
+    /// Mob aquatique (nage en 3D dans l'eau, gravité hors de l'eau).
+    pub fn is_aquatic(self) -> bool {
         matches!(
-            self.desc().profile,
-            AiProfile::Flying | AiProfile::FlyingShooter | AiProfile::FlyingMelee
+            self,
+            Self::Squid
+                | Self::GlowSquid
+                | Self::Dolphin
+                | Self::Cod
+                | Self::Salmon
+                | Self::Pufferfish
+                | Self::TropicalFish
+                | Self::Guardian
+                | Self::ElderGuardian
         )
+    }
+
+    /// Mob volant (vol 3D, pas de gravité) — errant, tireur ou fonceur.
+    /// Les aquatiques sont exclus (ils utilisent la physique de nage).
+    pub fn is_flying(self) -> bool {
+        !self.is_aquatic()
+            && matches!(
+                self.desc().profile,
+                AiProfile::Flying | AiProfile::FlyingShooter | AiProfile::FlyingMelee
+            )
     }
 
     /// Mob qui se téléporte quand il est blessé (enderman).
@@ -938,6 +984,38 @@ impl MobEntityManager {
             let old_velocity = entity.base.velocity;
             let (_width, height) = entity.kind.size();
 
+            // --- Nage : aquatique DANS l'eau → mouvement 3D sans gravité, sans
+            // sortir de l'eau (la montée est stoppée à la surface). Hors de
+            // l'eau, on tombe à travers la physique de sol normale (échoué). ---
+            if entity.kind.is_aquatic() && in_water(chunk_cache, entity.base.position) {
+                for i in 0..3 {
+                    entity.base.position[i] += entity.base.velocity[i];
+                    entity.base.velocity[i] *= 0.9;
+                }
+                // Reste immergé : si la tête sortait de l'eau, on annule la montée.
+                let head = [
+                    entity.base.position[0],
+                    entity.base.position[1] + height,
+                    entity.base.position[2],
+                ];
+                if entity.base.velocity[1] > 0.0 && !in_water(chunk_cache, head) {
+                    entity.base.position[1] = old_position[1];
+                    entity.base.velocity[1] = 0.0;
+                }
+                entity.base.on_ground = false;
+                let moved = (0..3).any(|i| (entity.base.position[i] - old_position[i]).abs() > 0.0001);
+                if moved {
+                    movement_updates.push(MovementUpdate {
+                        entity_unique_id: entity.base.entity_unique_id,
+                        entity_position: entity.base.position,
+                        add_packet: entity.base.add_actor_packet(),
+                        move_packet: entity.base.move_absolute_packet(false, false),
+                        motion_packet: entity.base.motion_packet(),
+                    });
+                }
+                continue;
+            }
+
             // --- Vol : intégration 3D directe (vélocité posée par FlyController),
             // pas de gravité ni de collision sol. ---
             if entity.kind.is_flying() {
@@ -1413,6 +1491,36 @@ mod tests {
     }
 
     #[test]
+    fn aquatic_mob_swims_without_sinking() {
+        let (mut cache, dir) = temp_cache("squid-swim");
+        // Grande poche d'eau pour que le squid y reste pendant le test.
+        for x in -6..=6 {
+            for z in -6..=6 {
+                for y in 54..=70 {
+                    cache.set_block(x, y, z, BLOCKS.water);
+                }
+            }
+        }
+        let mut mobs = MobEntityManager::new();
+        let s = mobs.spawn(MobKind::Squid, [0.5, 65.0, 0.5]);
+        let id = s.base.entity_runtime_id;
+
+        for _ in 0..20 {
+            let _ = mobs.tick(&mut cache, &[], false);
+        }
+        let y = mobs
+            .all()
+            .find(|m| m.base.entity_runtime_id == id)
+            .unwrap()
+            .base
+            .position[1];
+        // Nage : ne coule pas hors de l'eau (gravité désactivée dans l'eau) et ne
+        // sort pas par la surface.
+        assert!(y > 54.0 && y <= 71.0, "le squid reste dans l'eau (y={y})");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn steps_up_a_single_block() {
         let (mut cache, dir) = temp_cache("mob-step");
         // Marche d'1 bloc en x=1 (rien au-dessus).
@@ -1468,9 +1576,10 @@ mod tests {
                     matches!(k.ai_profile(), AiProfile::Passive | AiProfile::Flying),
                     "passif {k:?}"
                 ),
-                MobCategory::Neutral => {
-                    assert_eq!(k.ai_profile(), AiProfile::Neutral, "neutre {k:?}")
-                }
+                MobCategory::Neutral => assert!(
+                    matches!(k.ai_profile(), AiProfile::Neutral | AiProfile::Flying),
+                    "neutre {k:?}"
+                ),
             }
         }
         assert!(MobKind::ALL.len() >= 40, "roster conséquent");

@@ -109,10 +109,16 @@ demandent **chacun une mécanique bespoke** :
   Bow généralisé. Shulker immobile (vitesse 0). `thrown_projectile()` data-driven. (Wind charge à
   knockback pur & bullet à tête chercheuse = follow-ups.)
 
-### Vagues restantes (chacune un nouveau sous-système sensoriel/mouvement)
-- ⬜ **Guardian/Elder Guardian** : rayon laser (canalisé) + **nage** (mouvement contraint à l'eau).
+- ✅ **Vague 10 — Nage + aquatiques** : système de nage (`is_aquatic()` pilote la physique : mouvement
+  3D sans gravité **dans l'eau**, sans franchir la surface ; gravité hors de l'eau). Ajout de squid,
+  glow_squid, dolphin, cod, salmon, pufferfish, tropical_fish (errance aquatique) + **guardian /
+  elder_guardian** (foncent sur le joueur en nageant). Exclus du spawn terrestre. (Rayon laser du
+  guardian = follow-up.)
+
+### Vagues restantes (sous-systèmes sensoriels)
 - ⬜ **Warden** : détection par **vibrations** (bruit, pas vue) + sonic boom à distance.
 - ⬜ **Creaking** : immobile **quand un joueur le regarde** (besoin du vecteur de visée joueur).
-- ⬜ **Nage dédiée** squid/dauphin/poissons (mouvement 3D borné à l'eau).
+- ⬜ Polish : rayon laser du guardian, wind charge à knockback, bullet à tête chercheuse,
+  spawn aquatique en eau, séquence de spawn du wither, phases de l'ender dragon.
 - ⬜ **Règles de spawn par biome** (le spawner ne filtre pas par biome → husk/drowned/stray
   peuvent apparaître hors biome ; à raffiner quand le spawner lira le biome au point de spawn).
