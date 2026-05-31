@@ -1173,15 +1173,30 @@ async fn main() {
     let mut crafting_manager = crate::crafting::CraftingManager::default();
     let (sh, sl, fu) = crate::recipes_vanilla::register_all(&mut crafting_manager);
     tracing::info!(
-        "Loaded vanilla recipes: {} shaped + {} shapeless + {} furnace",
+        "Loaded vanilla recipes: {} shaped + {} shapeless + {} furnace ({} blast, {} smoker)",
         sh,
         sl,
-        fu
+        fu,
+        crafting_manager.blast_furnace.len(),
+        crafting_manager.smoker.len()
     );
     let crafting_manager = crafting_manager;
     // Static recipe DB — utilisé par InventoryManager::try_match_recipe
     // sans avoir besoin de passer la référence à chaque appel.
     let _ = crate::crafting::RECIPE_DB.set(crafting_manager.clone());
+    // Payload CraftingData (S→C) encodé une fois, envoyé à chaque PreSpawn.
+    let crafting_data_payload = crafting_manager.encode_crafting_data();
+    let total_recipes = crafting_manager.shaped.len()
+        + crafting_manager.shapeless.len()
+        + crafting_manager.furnace.len()
+        + crafting_manager.blast_furnace.len()
+        + crafting_manager.smoker.len();
+    tracing::info!(
+        "Encoded CraftingData packet: {} recipes, {} bytes",
+        total_recipes,
+        crafting_data_payload.len()
+    );
+    let _ = crate::crafting::CRAFTING_DATA_PAYLOAD.set(crafting_data_payload);
     // Passive entities (TNT / FallingBlock / XPOrb) — spawned via commands or events.
     let _passive_entities = crate::passive_entities::PassiveEntityManager::new();
     // Event manager partagé (tous les Connection le clonent).

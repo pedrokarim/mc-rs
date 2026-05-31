@@ -233,10 +233,14 @@ impl Connection {
             &CreativeContent::encode(&creative_groups, &creative_items),
         ));
 
-        // 13. CraftingData
-        responses.push(
-            self.encode_compressed_packet(packet_id::CRAFTING_DATA, &CraftingData::encode_empty()),
-        );
+        // 13. CraftingData — vraies recettes vanilla (1601+) encodées au boot.
+        //     Fallback sur un paquet vide si le payload n'a pas été initialisé.
+        let crafting_data = match crate::crafting::CRAFTING_DATA_PAYLOAD.get() {
+            Some(payload) => self.encode_compressed_packet(packet_id::CRAFTING_DATA, payload),
+            None => self
+                .encode_compressed_packet(packet_id::CRAFTING_DATA, &CraftingData::encode_empty()),
+        };
+        responses.push(crafting_data);
 
         // 14. PlayerList (PMMP syncPlayerList — self-entry + autres joueurs).
         //     Protocol 944 ajoute un champ `color` u32 LE ARGB par entry (fix

@@ -78,6 +78,10 @@ struct RawShapeless {
 struct RawFurnace {
     input: serde_json::Value, // string ou { "item": "..." }
     output: serde_json::Value,
+    /// Blocs autorisés (`furnace`, `blast_furnace`, `smoker`, `campfire`,
+    /// `soul_campfire`, `deprecated`). Détermine le routage de la recette.
+    #[serde(default)]
+    tags: Vec<String>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -197,15 +201,22 @@ fn build_ingredient(raw: &RawItemOrTag) -> Option<RecipeIngredient> {
         return Some(RecipeIngredient::AnyMeta { item_id: id, count });
     }
     if let Some(tag) = &raw.tag {
-        // Pour un match tag, prend le premier membre qui existe dans le registry
-        // en AnyMeta. (Approx : on ne supporte pas vraiment "matcher N'IMPORTE
-        // QUEL plank" sans boucler ; on prend le plus courant.)
-        for name in resolve_tag(tag) {
-            if let Some(id) = item_registry::network_id(name) {
-                return Some(RecipeIngredient::AnyMeta { item_id: id, count });
-            }
+        // Résout tous les membres du tag présents dans le registry. Le tag est
+        // conservé end-to-end : `members` sert au matching serveur (n'importe
+        // quel membre matche), `tag` est renvoyé tel quel au client via
+        // `TagItemDescriptor` dans le CraftingData (fidèle à Bedrock officiel).
+        let members: Vec<i32> = resolve_tag(tag)
+            .into_iter()
+            .filter_map(item_registry::network_id)
+            .collect();
+        if members.is_empty() {
+            return None;
         }
-        return None;
+        return Some(RecipeIngredient::Tag {
+            tag: tag.clone(),
+            members,
+            count,
+        });
     }
     None
 }
@@ -295,7 +306,19 @@ fn register_furnace_recipe(mgr: &mut CraftingManager, raw: &RawFurnace) -> bool 
     let Some(out_id) = item_registry::network_id(output_name) else {
         return false;
     };
-    mgr.register_furnace(FurnaceRecipe {
+
+    // Routage par tags (cf. données Mojang). Une recette taguée `blast_furnace`
+    // ET `furnace` est enregistrée dans les deux vecs : elle fond dans les deux
+    // blocs. Les recettes uniquement `deprecated` (items legacy) sont ignorées.
+    let to_furnace = raw.tags.iter().any(|t| t == "furnace");
+    let to_blast = raw.tags.iter().any(|t| t == "blast_furnace");
+    let to_smoker = raw.tags.iter().any(|t| t == "smoker");
+    if !to_furnace && !to_blast && !to_smoker {
+        return false;
+    }
+
+    // Fabrique une recette fraîche (les vecs ne partagent pas l'instance).
+    let make = || FurnaceRecipe {
         input: RecipeIngredient::AnyMeta {
             item_id: in_id,
             count: 1,
@@ -303,7 +326,16 @@ fn register_furnace_recipe(mgr: &mut CraftingManager, raw: &RawFurnace) -> bool 
         output: ItemStack::new(out_id, 1, 0),
         cook_time_ticks: 200,
         xp: 0.1,
-    });
+    };
+    if to_furnace {
+        mgr.register_furnace(make());
+    }
+    if to_blast {
+        mgr.register_blast(make());
+    }
+    if to_smoker {
+        mgr.register_smoker(make());
+    }
     true
 }
 
