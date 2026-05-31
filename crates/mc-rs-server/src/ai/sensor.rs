@@ -117,7 +117,7 @@ mod tests {
             gamemode,
             alive: true,
             held_item: 0,
-        }
+            look_dir: [0.0, 0.0, 1.0],        }
     }
 
     /// Cache "flat" : air au-dessus de la surface basse → ligne de vue dégagée.

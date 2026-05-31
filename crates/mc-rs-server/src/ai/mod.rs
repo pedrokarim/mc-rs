@@ -43,6 +43,8 @@ pub struct PlayerSnapshot {
     pub alive: bool,
     /// Network id de l'item tenu en main (pour le comportement de tempt).
     pub held_item: i32,
+    /// Vecteur de visée du joueur (normalisé) — pour le creaking (figé au regard).
+    pub look_dir: [f32; 3],
 }
 
 impl PlayerSnapshot {
@@ -538,7 +540,7 @@ mod tests {
             gamemode: 0,
             alive: true,
             held_item: 0,
-        };
+            look_dir: [0.0, 0.0, 1.0],        };
         let creative = PlayerSnapshot {
             gamemode: 1,
             ..survival

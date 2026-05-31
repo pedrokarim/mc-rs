@@ -37,6 +37,7 @@ pub enum AiProfile {
     Flying,        // vole et erre en 3D (pas de gravité)
     FlyingShooter, // vole + lance des boules de feu (ghast/blaze)
     FlyingMelee,   // vole et fonce sur le joueur (phantom/vex)
+    Creaking,      // immobile quand un joueur le regarde, sinon fonce
 }
 
 /// Descripteur statique par espèce. Ajouter un mob = ajouter une variante +
@@ -82,6 +83,8 @@ pub enum MobKind {
     Zoglin,
     PiglinBrute,
     Enderman,
+    Warden,
+    Creaking,
     // Hostiles à distance (arc/arbalète)
     Skeleton,
     Stray,
@@ -165,6 +168,8 @@ impl MobKind {
         Self::Zoglin,
         Self::PiglinBrute,
         Self::Enderman,
+        Self::Warden,
+        Self::Creaking,
         Self::Skeleton,
         Self::Stray,
         Self::Bogged,
@@ -256,6 +261,8 @@ impl MobKind {
             Self::Zoglin => d!("minecraft:zoglin", "Zoglin", 1.4, 1.4, Hostile, Melee, 6.0, 0.3, &[]),
             Self::PiglinBrute => d!("minecraft:piglin_brute", "Piglin Brute", 0.6, 1.95, Hostile, Melee, 7.0, 0.35, &[]),
             Self::Enderman => d!("minecraft:enderman", "Enderman", 0.6, 2.9, Hostile, Melee, 7.0, 0.3, &[]),
+            Self::Warden => d!("minecraft:warden", "Warden", 0.9, 2.9, Hostile, Melee, 16.0, 0.3, &[]),
+            Self::Creaking => d!("minecraft:creaking", "Creaking", 0.9, 2.7, Hostile, Creaking, 4.0, 0.4, &[]),
             Self::Skeleton => d!("minecraft:skeleton", "Skeleton", 0.6, 1.9, Hostile, Bow, 0.0, 0.25, &[]),
             Self::Stray => d!("minecraft:stray", "Stray", 0.6, 1.9, Hostile, Bow, 0.0, 0.25, &[]),
             Self::Bogged => d!("minecraft:bogged", "Bogged", 0.6, 1.9, Hostile, Bow, 0.0, 0.25, &[]),
@@ -1569,6 +1576,7 @@ mod tests {
                             | AiProfile::CreeperSwell
                             | AiProfile::FlyingShooter
                             | AiProfile::FlyingMelee
+                            | AiProfile::Creaking
                     ),
                     "hostile {k:?} doit avoir un profil de combat"
                 ),

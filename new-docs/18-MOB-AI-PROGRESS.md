@@ -115,10 +115,16 @@ demandent **chacun une mécanique bespoke** :
   elder_guardian** (foncent sur le joueur en nageant). Exclus du spawn terrestre. (Rayon laser du
   guardian = follow-up.)
 
-### Vagues restantes (sous-systèmes sensoriels)
-- ⬜ **Warden** : détection par **vibrations** (bruit, pas vue) + sonic boom à distance.
-- ⬜ **Creaking** : immobile **quand un joueur le regarde** (besoin du vecteur de visée joueur).
-- ⬜ Polish : rayon laser du guardian, wind charge à knockback, bullet à tête chercheuse,
-  spawn aquatique en eau, séquence de spawn du wither, phases de l'ender dragon.
+- ✅ **Vague 11 — Warden + Creaking** : warden (mêlée très puissante, 500 PV via mob_hp ;
+  détection par vibrations = follow-up). **Creaking** : `look_dir` ajouté au `PlayerSnapshot`
+  (calculé depuis yaw/pitch) ; `CreakingExecutor` fige le mob tant qu'un joueur le regarde (cône
+  de produit scalaire), sinon il fonce et frappe.
+
+## Roster : **73 mobs** — essentiellement complet (overworld + nether + end + bosses)
+Tous les archétypes de comportement sont couverts. Restent uniquement des **polish** par mob :
+- ⬜ Rayon laser canalisé du guardian (actuellement mêlée en nageant).
+- ⬜ Wind charge à knockback pur (breeze), bullet à tête chercheuse (shulker), immunité aux potions (witch).
+- ⬜ Détection par vibrations + sonic boom du warden ; spawn aquatique en eau (vs exclusion actuelle).
+- ⬜ Séquence de spawn + armure du wither ; phases + end crystals de l'ender dragon ; hitbox multi-parties.
 - ⬜ **Règles de spawn par biome** (le spawner ne filtre pas par biome → husk/drowned/stray
   peuvent apparaître hors biome ; à raffiner quand le spawner lira le biome au point de spawn).

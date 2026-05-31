@@ -816,6 +816,104 @@ impl Executor for FlyAttackExecutor {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Creaking : immobile tant qu'un joueur le regarde, sinon fonce et frappe
+// ---------------------------------------------------------------------------
+
+/// Seuil de produit scalaire pour « le joueur me regarde » (~30° de demi-angle).
+const CREAKING_LOOK_DOT: f32 = 0.86;
+
+pub struct CreakingExecutor {
+    speed: f32,
+    max_sense_range_sq: f64,
+    attack_range_sq: f64,
+    damage: f32,
+    cooldown: u32,
+    attack_tick: u32,
+}
+
+impl CreakingExecutor {
+    pub fn new(speed: f32, max_sense_range: f64, attack_range: f64, damage: f32, cooldown: u32) -> Self {
+        Self {
+            speed,
+            max_sense_range_sq: max_sense_range * max_sense_range,
+            attack_range_sq: attack_range * attack_range,
+            damage,
+            cooldown,
+            attack_tick: 0,
+        }
+    }
+
+    /// Un joueur (en portée) regarde-t-il le creaking ?
+    fn is_watched(base: &EntityBase, players: &[super::PlayerSnapshot], range_sq: f64) -> bool {
+        let center = [base.position[0], base.position[1] + 1.3, base.position[2]];
+        for p in players {
+            if !p.alive {
+                continue;
+            }
+            let to = [center[0] - p.position[0], center[1] - (p.position[1] + 1.62), center[2] - p.position[2]];
+            let len = (to[0] * to[0] + to[1] * to[1] + to[2] * to[2]).sqrt();
+            if (len * len) as f64 > range_sq || len < 0.001 {
+                continue;
+            }
+            let dot = (to[0] * p.look_dir[0] + to[1] * p.look_dir[1] + to[2] * p.look_dir[2]) / len;
+            if dot > CREAKING_LOOK_DOT {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+impl Executor for CreakingExecutor {
+    fn on_start(&mut self, memory: &mut Memory, _base: &mut EntityBase) {
+        self.attack_tick = 0;
+        memory.movement_speed = self.speed;
+    }
+
+    fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
+        self.attack_tick += 1;
+        let Some(target_id) = ctx.memory.nearest_player else {
+            return false;
+        };
+        let Some(tpos) = player_pos(ctx.players, target_id) else {
+            return false;
+        };
+        let d2 = dist_sq(ctx.base.position, tpos);
+        if d2 > self.max_sense_range_sq {
+            return false;
+        }
+
+        // Figé tant qu'un joueur le regarde (mécanique signature du creaking).
+        if Self::is_watched(ctx.base, ctx.players, self.max_sense_range_sq) {
+            ctx.memory.move_target = None;
+            ctx.memory.clear_move_direction();
+            return true;
+        }
+
+        // Sinon : fonce et frappe au contact.
+        ctx.memory.move_target = Some([tpos[0] as f64, tpos[1] as f64, tpos[2] as f64]);
+        ctx.memory.look_target = Some([tpos[0] as f64, (tpos[1] + 1.62) as f64, tpos[2] as f64]);
+        ctx.memory.route_update_required = true;
+        if d2 <= self.attack_range_sq && self.attack_tick > self.cooldown {
+            self.attack_tick = 0;
+            ctx.effects.push(AiEffect::Attack {
+                attacker_runtime_id: ctx.base.entity_runtime_id,
+                attacker_position: ctx.base.position,
+                target_runtime_id: target_id,
+                damage: self.damage,
+            });
+        }
+        true
+    }
+
+    fn on_stop(&mut self, memory: &mut Memory, _base: &mut EntityBase) {
+        memory.move_target = None;
+        memory.look_target = None;
+        memory.clear_move_direction();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -846,7 +944,7 @@ mod tests {
             gamemode: 0,
             alive: true,
             held_item: 0,
-        }];
+            look_dir: [0.0, 0.0, 1.0],        }];
         let mut effects = Vec::new();
 
         // Avant la fin du cooldown : pas d'attaque.
@@ -913,7 +1011,7 @@ mod tests {
             gamemode: 0,
             alive: true,
             held_item: 0,
-        }];
+            look_dir: [0.0, 0.0, 1.0],        }];
         let mut effects = Vec::new();
         let mut alive = true;
         for _ in 0..3 {
@@ -943,7 +1041,7 @@ mod tests {
             gamemode: 0,
             alive: true,
             held_item: 0,
-        }];
+            look_dir: [0.0, 0.0, 1.0],        }];
         let mut effects = Vec::new();
         for _ in 0..10 {
             let mut ctx = ExecCtx {
@@ -968,6 +1066,50 @@ mod tests {
     }
 
     #[test]
+    fn creaking_freezes_when_watched_else_chases() {
+        let mut exec = CreakingExecutor::new(0.4, 16.0, 2.0, 4.0, 20);
+        let mut base = zombie_base([0.0, 64.0, 0.0]);
+        let mut memory = Memory::new(0.4);
+        memory.nearest_player = Some(1);
+
+        // Joueur en x=5 regardant vers -X (donc vers le creaking) → figé.
+        let watching = vec![PlayerSnapshot {
+            runtime_id: 1,
+            position: [5.0, 64.0, 0.0],
+            gamemode: 0,
+            alive: true,
+            held_item: 0,
+            look_dir: [-1.0, 0.0, 0.0],
+        }];
+        {
+            let mut ctx = ExecCtx {
+                base: &mut base,
+                kind: MobKind::Creaking,
+                memory: &mut memory,
+                players: &watching,
+                effects: &mut Vec::new(),
+            };
+            exec.execute(&mut ctx);
+        }
+        assert!(memory.move_target.is_none(), "figé quand un joueur le regarde");
+
+        // Même joueur mais regardant ailleurs (+X) → le creaking fonce.
+        let away = vec![PlayerSnapshot {
+            look_dir: [1.0, 0.0, 0.0],
+            ..watching[0]
+        }];
+        let mut ctx = ExecCtx {
+            base: &mut base,
+            kind: MobKind::Creaking,
+            memory: &mut memory,
+            players: &away,
+            effects: &mut Vec::new(),
+        };
+        exec.execute(&mut ctx);
+        assert!(memory.move_target.is_some(), "fonce quand on ne le regarde pas");
+    }
+
+    #[test]
     fn fly_shooter_emits_fireball_in_range() {
         let mut exec =
             FlyShootExecutor::new(0.25, 20.0, 14.0, 0.8, 5.0, 3, "minecraft:small_fireball");
@@ -980,7 +1122,7 @@ mod tests {
             gamemode: 0,
             alive: true,
             held_item: 0,
-        }];
+            look_dir: [0.0, 0.0, 1.0],        }];
         let mut effects = Vec::new();
         for _ in 0..4 {
             let mut ctx = ExecCtx {
@@ -1015,7 +1157,7 @@ mod tests {
             gamemode: 0,
             alive: true,
             held_item: wheat,
-        }];
+            look_dir: [0.0, 0.0, 1.0],        }];
         {
             let mut ctx = ExecCtx {
                 base: &mut base,
@@ -1031,7 +1173,7 @@ mod tests {
         // Joueur sans nourriture → le tempt s'arrête.
         let empty = vec![PlayerSnapshot {
             held_item: 0,
-            ..holding[0]
+            look_dir: [0.0, 0.0, 1.0],            ..holding[0]
         }];
         let mut ctx = ExecCtx {
             base: &mut base,

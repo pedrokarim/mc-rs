@@ -4,8 +4,9 @@
 use super::behavior::{AlwaysEvaluator, Behavior, ClosureEvaluator, FnEvaluator};
 use super::controller::{FlyController, LookController, WalkController};
 use super::executor::{
-    BowAttackExecutor, CreeperSwellExecutor, FlatRandomRoamExecutor, FlyAttackExecutor,
-    FlyRoamExecutor, FlyShootExecutor, MeleeAttackExecutor, PanicFleeExecutor, TemptExecutor,
+    BowAttackExecutor, CreakingExecutor, CreeperSwellExecutor, FlatRandomRoamExecutor,
+    FlyAttackExecutor, FlyRoamExecutor, FlyShootExecutor, MeleeAttackExecutor, PanicFleeExecutor,
+    TemptExecutor,
 };
 use super::sensor::NearestPlayerSensor;
 use super::{BehaviorGroup, Controller, Sensor};
@@ -215,6 +216,17 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
             ];
             let controllers: Vec<Box<dyn Controller>> = vec![Box::new(FlyController::new())];
             BehaviorGroup::new(vec![], normal, sensors, controllers, false)
+        }
+        AiProfile::Creaking => {
+            // Figé quand regardé, sinon fonce + frappe.
+            let combat = combat_behavior(Box::new(CreakingExecutor::new(
+                speed,
+                kind.sight_range(),
+                kind.attack_range(),
+                kind.attack_damage(),
+                MELEE_COOLDOWN,
+            )));
+            BehaviorGroup::new(vec![], vec![combat, roam()], sensors, standard_controllers(), true)
         }
     }
 }

@@ -2073,6 +2073,12 @@ async fn main() {
                             .get(c.inventory.held_slot as usize)
                             .map(|s| s.item.id)
                             .unwrap_or(0),
+                        look_dir: {
+                            // Vecteur de visée (convention Bedrock yaw/pitch).
+                            let (sy, cy) = c.yaw.to_radians().sin_cos();
+                            let (sp, cp) = c.pitch.to_radians().sin_cos();
+                            [-sy * cp, -sp, cy * cp]
+                        },
                     })
                     .collect();
                 // Dégâts mêlée/flèche des mobs mis à l'échelle selon la difficulté.
