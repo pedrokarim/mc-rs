@@ -1312,7 +1312,9 @@ pub fn decorate(
     // ── Lianes (après les arbres) : feature vanilla `vines`, count 127 ──
     decorate_vines(grid, &pal, biome_idx, biome_names, &mut rng);
 
-    // ── Herbe / fougères (densité pilotée par bruit, `noise_threshold_count`) ──
+    // ── Herbe / fougères : densité DATA-DRIVEN (vraies features vanilla
+    // `patch_grass_*`/`patch_*_fern`, cf. `features::grass_attempts`). Corrige la
+    // sur-végétation des biomes clairsemés (neige, etc.). ──
     let veg_n = veg_noise(
         seed,
         (chunk_x * 16) as f64 / 200.0,
@@ -1321,9 +1323,9 @@ pub fn decorate(
     let grass_attempts: i32 = {
         let sum: i32 = (0..16)
             .flat_map(|x| (0..16).map(move |z| (x, z)))
-            .map(|(x, z)| grass_count(biome_at(x, z), veg_n))
+            .map(|(x, z)| super::features::grass_attempts(biome_at(x, z), veg_n))
             .sum();
-        sum / 16
+        sum / 256
     };
     for _ in 0..grass_attempts {
         let lx = rng.next_bounded_int(16);

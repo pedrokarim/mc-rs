@@ -165,12 +165,20 @@ fn tree_config_to_species(config: &Value) -> Option<Species> {
     })
 }
 
+/// Une feature de végétation au sol (herbe/fougère) d'un biome : placement (pour
+/// le nombre de patches) + `tries` du `random_patch` (blocs par patch).
+struct VegFeat {
+    placement: Value,
+    tries: f64,
+}
+
 /// Registre : placed + configured features chargés une fois, plus le `TreePlan`
-/// précalculé par biome.
+/// et la liste des features d'herbe précalculés par biome.
 struct Registry {
     placed: HashMap<String, Value>,
     configured: HashMap<String, Value>,
     biome_tree: HashMap<String, TreePlan>,
+    biome_grass: HashMap<String, Vec<VegFeat>>,
 }
 
 static REG: LazyLock<Registry> = LazyLock::new(build_registry);
@@ -192,14 +200,24 @@ fn build_registry() -> Registry {
         placed,
         configured,
         biome_tree: HashMap::new(),
+        biome_grass: HashMap::new(),
     };
     let biome_names = data::list_names("biome");
     let mut plans = HashMap::new();
+    let mut grass = HashMap::new();
     for b in &biome_names {
         plans.insert(format!("minecraft:{b}"), reg.compute_tree_plan(b));
+        grass.insert(format!("minecraft:{b}"), reg.compute_grass(b));
     }
     reg.biome_tree = plans;
+    reg.biome_grass = grass;
     reg
+}
+
+/// Vrai si une feature place de l'herbe/fougère au sol (pas d'algues).
+fn is_grass_feature(name: &str) -> bool {
+    let n = strip(name);
+    (n.contains("grass") || n.contains("fern")) && !n.contains("seagrass")
 }
 
 impl Registry {
@@ -249,6 +267,50 @@ impl Registry {
         }
     }
 
+    /// `tries` du `random_patch` d'une feature configured référencée (défaut 32).
+    fn configured_tries(&self, feat: &Value) -> f64 {
+        let cfg = match feat {
+            Value::String(s) => self.configured.get(strip(s)).and_then(|c| c.get("config")),
+            Value::Object(_) => feat.get("config"),
+            _ => None,
+        };
+        cfg.and_then(|c| c.get("tries"))
+            .and_then(Value::as_f64)
+            .unwrap_or(32.0)
+    }
+
+    /// Features d'herbe/fougère d'un biome (toutes étapes).
+    fn compute_grass(&self, biome: &str) -> Vec<VegFeat> {
+        let mut out = Vec::new();
+        let Some(bio) = data::json_value("biome", biome) else {
+            return out;
+        };
+        let Some(steps) = bio.get("features").and_then(Value::as_array) else {
+            return out;
+        };
+        for step in steps {
+            let Some(ids) = step.as_array() else { continue };
+            for id in ids {
+                let Some(id) = id.as_str() else { continue };
+                if !is_grass_feature(id) {
+                    continue;
+                }
+                let Some(pf) = self.placed.get(strip(id)) else {
+                    continue;
+                };
+                let tries = pf
+                    .get("feature")
+                    .map(|f| self.configured_tries(f))
+                    .unwrap_or(32.0);
+                out.push(VegFeat {
+                    placement: pf.get("placement").cloned().unwrap_or(Value::Null),
+                    tries,
+                });
+            }
+        }
+        out
+    }
+
     fn compute_tree_plan(&self, biome: &str) -> TreePlan {
         let Some(bio) = data::json_value("biome", biome) else {
             return TreePlan::EMPTY;
@@ -270,7 +332,7 @@ impl Registry {
                     Some("random_selector") | Some("tree") => {}
                     _ => continue,
                 }
-                let density = density_from_placement(pf.get("placement"));
+                let density = placement_count(pf.get("placement"), 0.0);
                 // random_selector : default + entrées.
                 let cfg = match feat {
                     Value::String(s) => self.configured.get(strip(s)).map(|c| c.get("config")),
@@ -352,9 +414,10 @@ fn count_mean(v: &Value) -> f64 {
     }
 }
 
-/// Densité (placements/chunk) à partir des modificateurs de placement :
-/// `count` (ou 1 placement par défaut) × `1/rarity_filter.chance`.
-fn density_from_placement(placement: Option<&Value>) -> f64 {
+/// Nombre de placements/chunk à partir des modificateurs de placement :
+/// `count` (ou `noise_threshold_count` piloté par `noise`, ou 1 par défaut) ×
+/// `1/rarity_filter.chance`.
+fn placement_count(placement: Option<&Value>, noise: f64) -> f64 {
     let Some(mods) = placement.and_then(Value::as_array) else {
         return 1.0;
     };
@@ -366,6 +429,15 @@ fn density_from_placement(placement: Option<&Value>) -> f64 {
                 if let Some(c) = m.get("count") {
                     base = Some(count_mean(c));
                 }
+            }
+            Some("noise_threshold_count") => {
+                let level = m.get("noise_level").and_then(Value::as_f64).unwrap_or(0.0);
+                let key = if noise > level {
+                    "above_noise"
+                } else {
+                    "below_noise"
+                };
+                base = Some(m.get(key).and_then(Value::as_f64).unwrap_or(0.0));
             }
             Some("rarity_filter") => {
                 if let Some(ch) = m.get("chance").and_then(Value::as_f64) {
@@ -389,6 +461,20 @@ static EMPTY_PLAN: TreePlan = TreePlan {
 /// Plan d'arbres data-driven d'un biome (`minecraft:plains`, …). Précalculé.
 pub(super) fn tree_plan(biome: &str) -> &'static TreePlan {
     REG.biome_tree.get(biome).unwrap_or(&EMPTY_PLAN)
+}
+
+/// Nombre d'herbes/fougères à tenter de poser dans un chunk de ce biome, dérivé
+/// des vraies features vanilla (`Σ patches × tries`, `noise` pilotant les
+/// `noise_threshold_count`). Ex. neige ≈ 32 (1 patch clairsemé) ≪ jungle ≈ 800.
+pub(super) fn grass_attempts(biome: &str, noise: f64) -> i32 {
+    let Some(feats) = REG.biome_grass.get(biome) else {
+        return 0;
+    };
+    let total: f64 = feats
+        .iter()
+        .map(|f| placement_count(Some(&f.placement), noise) * f.tries)
+        .sum();
+    total.round() as i32
 }
 
 #[cfg(test)]
@@ -447,6 +533,21 @@ mod tests {
             .entries
             .iter()
             .any(|(c, s)| *c > 0.6 && matches!(s, Some(Species::DarkOak))));
+    }
+
+    #[test]
+    fn grass_density_matches_vanilla_scale() {
+        // neige = 1 patch clairsemé (patch_grass_badlands, tries 32) ≈ 32.
+        assert_eq!(grass_attempts("minecraft:snowy_plains", 0.0), 32);
+        // forêt = count 2 × 32 = 64.
+        assert_eq!(grass_attempts("minecraft:forest", 0.0), 64);
+        // jungle = count 25 × 32 = 800 (densément herbeuse).
+        assert_eq!(grass_attempts("minecraft:jungle", 0.0), 800);
+        // neige ≪ jungle (le fix : plus de sur-végétation neigeuse).
+        assert!(
+            grass_attempts("minecraft:snowy_plains", 0.0)
+                < grass_attempts("minecraft:jungle", 0.0) / 10
+        );
     }
 
     #[test]
