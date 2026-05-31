@@ -158,6 +158,26 @@ fn at(grid: &[u32], lx: i32, wy: i32, lz: i32) -> u32 {
     idx_ok(lx, wy, lz).map(|i| grid[i]).unwrap_or(0)
 }
 
+/// Petit bruit de valeur lisse (bilinéaire) ∈ [-1, 1] — tient lieu du bruit
+/// basse fréquence vanilla qui pilote la densité d'herbe/fleurs
+/// (`noise_threshold_count`, échantillonné à ~1/200 bloc).
+fn veg_noise(seed: u64, fx: f64, fz: f64) -> f64 {
+    let corner = |a: i64, b: i64| -> f64 {
+        let h = (a.wrapping_mul(0x1f1f_1f1f))
+            .wrapping_add(b.wrapping_mul(0x27d4_eb2f))
+            .wrapping_add(seed as i64) as u64;
+        let h = h.wrapping_mul(0x2545_f491_4f6c_dd1d);
+        ((h >> 40) as f64 / (1u64 << 24) as f64) * 2.0 - 1.0
+    };
+    let smooth = |t: f64| t * t * (3.0 - 2.0 * t);
+    let lerp = |a: f64, b: f64, t: f64| a + (b - a) * t;
+    let (x0, z0) = (fx.floor() as i64, fz.floor() as i64);
+    let (tx, tz) = (smooth(fx - x0 as f64), smooth(fz - z0 as f64));
+    let a = lerp(corner(x0, z0), corner(x0 + 1, z0), tx);
+    let b = lerp(corner(x0, z0 + 1), corner(x0 + 1, z0 + 1), tx);
+    lerp(a, b, tz)
+}
+
 /// Pose une feuille (ne remplace que l'air).
 fn leaf(grid: &mut [u32], pal: &Pal, lx: i32, wy: i32, lz: i32, id: u32) {
     if let Some(i) = idx_ok(lx, wy, lz) {
@@ -661,17 +681,29 @@ fn place_tree(
     }
 }
 
-/// Densité d'herbe/fleurs (tentatives par chunk).
-///
-/// Basée sur les `patch_grass_*` vanilla (jungle `count 25`, forêt `count 2`).
-/// En vanilla les plaines/savanes utilisent `noise_threshold_count` (densité
-/// variable selon un bruit) — approximé ici par une valeur fixe modérée.
-fn grass_density(biome: &str) -> i32 {
+/// Nombre de tentatives d'herbe pour un biome, selon les `patch_grass_*`
+/// vanilla. Les biomes en `noise_threshold_count` (plaines, savanes…) varient
+/// selon `noise` (≥ -0.8 → `above_noise`, sinon `below_noise`) ; les autres ont
+/// un `count` fixe (jungle 25, forêt 2…).
+fn grass_count(biome: &str, noise: f64) -> i32 {
     match biome {
         "minecraft:jungle" | "minecraft:bamboo_jungle" => 25,
         "minecraft:sparse_jungle" => 12,
-        "minecraft:plains" | "minecraft:sunflower_plains" | "minecraft:meadow" => 10,
-        "minecraft:savanna" | "minecraft:savanna_plateau" | "minecraft:windswept_savanna" => 8,
+        // noise_threshold_count : above 10 / below 5.
+        "minecraft:plains" | "minecraft:sunflower_plains" | "minecraft:meadow" => {
+            if noise >= -0.8 {
+                10
+            } else {
+                5
+            }
+        }
+        "minecraft:savanna" | "minecraft:savanna_plateau" | "minecraft:windswept_savanna" => {
+            if noise >= -0.8 {
+                8
+            } else {
+                4
+            }
+        }
         "minecraft:forest" | "minecraft:flower_forest" => 2,
         "minecraft:taiga" | "minecraft:snowy_taiga" | "minecraft:grove" => 4,
         "minecraft:swamp" | "minecraft:mangrove_swamp" => 5,
@@ -900,11 +932,16 @@ pub fn decorate(
     // ── Lianes (après les arbres) : feature vanilla `vines`, count 127 ──
     decorate_vines(grid, &pal, biome_idx, biome_names, &mut rng);
 
-    // ── Herbe / fougères / fleurs ──
+    // ── Herbe / fougères (densité pilotée par bruit, `noise_threshold_count`) ──
+    let veg_n = veg_noise(
+        seed,
+        (chunk_x * 16) as f64 / 200.0,
+        (chunk_z * 16) as f64 / 200.0,
+    );
     let grass_attempts: i32 = {
         let sum: i32 = (0..16)
             .flat_map(|x| (0..16).map(move |z| (x, z)))
-            .map(|(x, z)| grass_density(biome_at(x, z)))
+            .map(|(x, z)| grass_count(biome_at(x, z), veg_n))
             .sum();
         sum / 16
     };
@@ -916,16 +953,24 @@ pub fn decorate(
             continue;
         }
         let b = biome_at(lx as usize, lz as usize);
-        let roll = rng.next_bounded_int(10);
-        let id = if roll == 0 && !pal.flowers.is_empty() {
-            pal.flowers[rng.next_bounded_int(pal.flowers.len() as i32) as usize]
-        } else if b.contains("taiga") || b.contains("grove") {
+        let id = if b.contains("taiga") || b.contains("grove") {
             pal.fern
         } else {
             pal.short_grass
         };
         plant(grid, &pal, lx, ground + 1, lz, id);
     }
+
+    // ── Fleurs (rarity-gated par biome, set vanilla) ──
+    decorate_flowers(
+        grid,
+        &pal,
+        biome_idx,
+        biome_names,
+        surfaces,
+        &mut rng,
+        veg_n,
+    );
 
     // ── Spécial : cactus / arbustes morts / canne à sucre / bambou / nénuphars ──
     decorate_special(grid, &pal, biome_idx, biome_names, surfaces, &mut rng);
@@ -938,6 +983,107 @@ pub fn decorate(
 
     // ── Neige/glace (biomes froids), en dernier (top layer) ──
     decorate_snow(grid, &pal, biome_idx, biome_names, surfaces);
+}
+
+/// Fleurs : rarité officielle par biome + set vanilla. Plaines 1/32 (4 ou 15
+/// selon le bruit, dandelion-dominant) ; jungle/warm 1/16 (poppy/dandelion) ;
+/// flower_forest dense et varié ; autres forêts/savanes ~1/8 (poppy/dandelion).
+#[allow(clippy::too_many_arguments)]
+fn decorate_flowers(
+    grid: &mut [u32],
+    pal: &Pal,
+    biome_idx: &[[u16; 16]; 16],
+    biome_names: &[String],
+    surfaces: &[[i32; 16]; 16],
+    rng: &mut Random,
+    noise: f64,
+) {
+    let biome_at = |lx: usize, lz: usize| -> &str { &biome_names[biome_idx[lx][lz] as usize] };
+    let put = |grid: &mut [u32], lx: i32, lz: i32, id: u32| {
+        let ground = surfaces[lx as usize][lz as usize];
+        if ground > SEA_LEVEL
+            && at(grid, lx, ground, lz) == pal.grass_block
+            && at(grid, lx, ground + 1, lz) == pal.air
+        {
+            plant(grid, pal, lx, ground + 1, lz, id);
+        }
+    };
+    let f = &pal.flowers; // [dandelion, poppy, cornflower, oxeye, allium, azure_bluet]
+    let is_plains = |b: &str| {
+        matches!(
+            b,
+            "minecraft:plains" | "minecraft:sunflower_plains" | "minecraft:meadow"
+        )
+    };
+    let present =
+        |pred: &dyn Fn(&str) -> bool| (0..16).any(|x| (0..16).any(|z| pred(biome_at(x, z))));
+
+    // Plaines : 1/32, count bruit (4 / 15), dandelion par défaut, 1/3 → autre.
+    if present(&is_plains) && rng.next_bounded_int(32) == 0 {
+        let n = if noise >= -0.8 { 4 } else { 15 };
+        for _ in 0..n {
+            let lx = rng.next_bounded_int(16);
+            let lz = rng.next_bounded_int(16);
+            if !is_plains(biome_at(lx as usize, lz as usize)) {
+                continue;
+            }
+            let id = if rng.next_bounded_int(3) == 0 {
+                f[[1usize, 3, 5][rng.next_bounded_int(3) as usize]]
+            } else {
+                f[0]
+            };
+            put(grid, lx, lz, id);
+        }
+    }
+
+    // Jungle / warm : 1/16, poppy(2)/dandelion(1).
+    if present(&is_jungle) && rng.next_bounded_int(16) == 0 {
+        for _ in 0..(2 + rng.next_bounded_int(5)) {
+            let lx = rng.next_bounded_int(16);
+            let lz = rng.next_bounded_int(16);
+            if !is_jungle(biome_at(lx as usize, lz as usize)) {
+                continue;
+            }
+            let id = if rng.next_bounded_int(3) < 2 {
+                f[1]
+            } else {
+                f[0]
+            };
+            put(grid, lx, lz, id);
+        }
+    }
+
+    // Flower forest : dense et varié (pas de rarity).
+    if present(&|b| b == "minecraft:flower_forest") {
+        for _ in 0..40 {
+            let lx = rng.next_bounded_int(16);
+            let lz = rng.next_bounded_int(16);
+            if biome_at(lx as usize, lz as usize) != "minecraft:flower_forest" {
+                continue;
+            }
+            let id = f[rng.next_bounded_int(f.len() as i32) as usize];
+            put(grid, lx, lz, id);
+        }
+    }
+
+    // Autres forêts / savanes (flower_default) : ~1/8, poppy/dandelion.
+    let is_other =
+        |b: &str| (b.contains("forest") && b != "minecraft:flower_forest") || b.contains("savanna");
+    if present(&is_other) && rng.next_bounded_int(8) == 0 {
+        for _ in 0..(2 + rng.next_bounded_int(4)) {
+            let lx = rng.next_bounded_int(16);
+            let lz = rng.next_bounded_int(16);
+            if !is_other(biome_at(lx as usize, lz as usize)) {
+                continue;
+            }
+            let id = if rng.next_bounded_int(3) < 2 {
+                f[1]
+            } else {
+                f[0]
+            };
+            put(grid, lx, lz, id);
+        }
+    }
 }
 
 fn decorate_special(

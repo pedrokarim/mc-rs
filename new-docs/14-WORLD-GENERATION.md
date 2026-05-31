@@ -363,14 +363,15 @@ bruit, noise_settings overworld (avec `surface_rule`), param list de biomes
 - Carte de biomes **2D** (répétée verticalement) → passer en **3D** (biomes de
   grottes : lush_caves, dripstone_caves, deep_dark).
 
-**Décoration — densités à aligner sur l'officiel + features manquantes**
-- Aligner sur le `count`/`rarity` exact : **lianes jungle = 127** (actuellement
-  une poignée), citrouilles 1/300, melons 1/6, champignons 1/256·1/512, fleurs
-  1/16·1/32, canne 1/6.
-- Features pas encore générées : `glow_lichen`, **bushes** (buissons), **firefly
-  bush**, **mushroom fields** (mycélium + champignons géants), **leaf litter**
-  (sous les arbres de forêt), buissons de baies (taïga), variété de fleurs par
-  biome (flower_forest), `snow_layer` au sol des biomes froids.
+**Décoration — alignée sur l'officiel (✅) + reste**
+- ✅ Densités officielles appliquées : **lianes jungle 127** (y64-100),
+  champignons 1/256·1/512, citrouilles 1/300, melons 1/6, **glow_lichen** 104-157,
+  **leaf litter** (forêts), **bushes** 1/4, buissons de baies (taïga),
+  **neige/glace** (freeze_top_layer), **fleurs** (plaines 1/32, jungle 1/16,
+  flower_forest dense) et **herbe par bruit** (`noise_threshold_count`, 10/5).
+- Reste : **mushroom fields** (mycélium + champignons géants), **firefly bush**,
+  fleurs hautes 2-blocs (lilas/rosier/pivoine de flower_forest), nuances exactes
+  des providers de fleurs (`noise_threshold_provider`).
 - Formes d'arbres = approximations fidèles des trunk/foliage placers (pas le
   portage exact des placers vanilla).
 - Portage **100 % data-driven** du système `placed_feature`/`configured_feature`
