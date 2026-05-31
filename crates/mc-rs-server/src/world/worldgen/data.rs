@@ -40,6 +40,25 @@ pub fn biome_parameters_json(id: &str) -> Option<&'static str> {
     WORLDGEN.get_file(&path)?.contents_utf8()
 }
 
+/// Valeur JSON d'un fichier `data/worldgen/<kind>/<id>.json` (générique).
+/// `kind` ∈ {`biome`, `placed_feature`, `configured_feature`, …}.
+pub fn json_value(kind: &str, id: &str) -> Option<serde_json::Value> {
+    let path = format!("{}/{}.json", kind, strip(id));
+    serde_json::from_slice(WORLDGEN.get_file(&path)?.contents()).ok()
+}
+
+/// Noms (file stems) de tous les fichiers d'un sous-dossier de `data/worldgen/`.
+pub fn list_names(kind: &str) -> Vec<String> {
+    WORLDGEN
+        .get_dir(kind)
+        .map(|d| {
+            d.files()
+                .filter_map(|f| f.path().file_stem()?.to_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

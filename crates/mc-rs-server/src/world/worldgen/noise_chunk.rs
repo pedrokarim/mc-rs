@@ -340,7 +340,7 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
                         let sy = osurf[lx as usize][lz as usize];
                         let target = climate.sample((ob_x + lx) >> 2, sy >> 2, (ob_z + lz) >> 2);
                         let name = &BIOMES.names[BIOMES.params.find(&target) as usize];
-                        sum += super::decoration::tree_plan(name).0;
+                        sum += super::features::tree_plan(name).density;
                     }
                 }
                 let mean = sum / 16.0;
@@ -357,21 +357,23 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
                     }
                     let target = climate.sample(wx >> 2, ground >> 2, wz >> 2);
                     let name = &BIOMES.names[BIOMES.params.find(&target) as usize];
-                    let (density, default, alts) = super::decoration::tree_plan(name);
-                    if density <= 0.0 {
+                    // Composition data-driven (vraies données vanilla, cf. `features`).
+                    let plan = super::features::tree_plan(name);
+                    if plan.density <= 0.0 {
                         continue;
                     }
-                    let species = super::decoration::pick_tree(default, alts, &mut trng);
-                    // Coordonnées locales au chunk CIBLE : hors 0..16 → clippé.
-                    // Formes Bedrock fidèles (port Allay) dans `trees`.
-                    super::trees::place(
-                        &mut grid,
-                        &mut trng,
-                        species,
-                        wx - base_x,
-                        ground,
-                        wz - base_z,
-                    );
+                    if let Some(species) = plan.pick(&mut trng) {
+                        // Coords locales au chunk CIBLE (hors 0..16 → clippé) ;
+                        // formes Bedrock fidèles (port Allay) dans `trees`.
+                        super::trees::place(
+                            &mut grid,
+                            &mut trng,
+                            species,
+                            wx - base_x,
+                            ground,
+                            wz - base_z,
+                        );
+                    }
                 }
             }
         }
