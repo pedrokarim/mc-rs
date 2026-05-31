@@ -339,13 +339,22 @@ impl Executor for BowAttackExecutor {
                 let vz = dz / dist * self.arrow_speed;
                 let vy = dy / dist * self.arrow_speed + 0.5 * ARROW_GRAVITY_COMP * flight_ticks;
                 match self.thrown {
-                    Some(actor_type) => ctx.effects.push(AiEffect::ShootFireball {
-                        shooter_runtime_id: ctx.base.entity_runtime_id,
-                        from,
-                        velocity: [vx, vy, vz],
-                        damage: self.damage,
-                        actor_type,
-                    }),
+                    Some(actor_type) => {
+                        // Le bullet du shulker poursuit sa cible (tête chercheuse).
+                        let homing_target = if actor_type == "minecraft:shulker_bullet" {
+                            ctx.memory.nearest_player
+                        } else {
+                            None
+                        };
+                        ctx.effects.push(AiEffect::ShootFireball {
+                            shooter_runtime_id: ctx.base.entity_runtime_id,
+                            from,
+                            velocity: [vx, vy, vz],
+                            damage: self.damage,
+                            actor_type,
+                            homing_target,
+                        });
+                    }
                     None => ctx.effects.push(AiEffect::ShootArrow {
                         shooter_runtime_id: ctx.base.entity_runtime_id,
                         from,
@@ -739,6 +748,7 @@ impl Executor for FlyShootExecutor {
                     velocity: [dx * f, dy * f, dz * f],
                     damage: self.damage,
                     actor_type: self.fireball_type,
+                    homing_target: None,
                 });
             }
         }
@@ -1013,6 +1023,7 @@ impl Executor for DragonExecutor {
                                 velocity: [dx * f, dy * f, dz * f],
                                 damage: 6.0,
                                 actor_type: "minecraft:dragon_fireball",
+                                homing_target: None,
                             });
                         }
                         if self.timer >= DRAGON_STRAFE_TICKS {

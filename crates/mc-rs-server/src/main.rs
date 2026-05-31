@@ -2177,6 +2177,7 @@ async fn main() {
                                 velocity,
                                 damage,
                                 actor_type,
+                                homing_target,
                             } => {
                                 arrow_manager.spawn_fireball(
                                     actor_type,
@@ -2184,6 +2185,7 @@ async fn main() {
                                     velocity,
                                     damage,
                                     shooter_runtime_id,
+                                    homing_target,
                                 );
                             }
                         }

@@ -121,10 +121,13 @@ demandent **chacun une mécanique bespoke** :
   de produit scalaire), sinon il fonce et frappe.
 
 ## Roster : **73 mobs** — essentiellement complet (overworld + nether + end + bosses)
-Tous les archétypes de comportement sont couverts. Restent uniquement des **polish** par mob :
-- ⬜ Rayon laser canalisé du guardian (actuellement mêlée en nageant).
-- ⬜ Wind charge à knockback pur (breeze), bullet à tête chercheuse (shulker), immunité aux potions (witch).
-- ⬜ Détection par vibrations + sonic boom du warden ; spawn aquatique en eau (vs exclusion actuelle).
-- ⬜ Séquence de spawn + armure du wither ; phases + end crystals de l'ender dragon ; hitbox multi-parties.
+Tous les archétypes de comportement sont couverts. Polish :
+- ✅ Phases de l'ender dragon (cercle ↔ strafe + souffle).
+- ✅ Rayon du guardian (`GuardianLaserExecutor` : se tient à distance, charge, frappe).
+- ✅ Wind charge du breeze (1 dégât + knockback) ; **bullet à tête chercheuse du shulker**
+  (`ArrowEntity.homing_target` → la boule poursuit le joueur).
+- ⬜ Restant : immunité aux potions (witch), détection par vibrations + sonic boom du warden,
+  spawn aquatique en eau, séquence de spawn/armure du wither, end crystals qui soignent le dragon,
+  hitbox multi-parties. **Plusieurs dépendent de la Phase DIM (dimensions).**
 - ⬜ **Règles de spawn par biome** (le spawner ne filtre pas par biome → husk/drowned/stray
   peuvent apparaître hors biome ; à raffiner quand le spawner lira le biome au point de spawn).

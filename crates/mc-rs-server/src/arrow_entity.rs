@@ -36,6 +36,8 @@ pub struct ArrowEntity {
     gravity: f32,
     /// Se plante dans les blocs (flèche) ou disparaît à l'impact (boule de feu).
     sticky: bool,
+    /// Joueur poursuivi (tête chercheuse, ex bullet du shulker).
+    homing_target: Option<u64>,
 }
 
 impl ArrowEntity {
@@ -79,6 +81,7 @@ impl ArrowEntity {
             grounded: false,
             gravity,
             sticky,
+            homing_target: None,
         }
     }
 
@@ -138,6 +141,7 @@ impl ArrowEntityManager {
     }
 
     /// Spawn d'une boule de feu (trajectoire rectiligne, disparaît à l'impact).
+    /// `homing_target` = `Some(player)` pour un projectile à tête chercheuse.
     pub fn spawn_fireball(
         &mut self,
         actor_type: &'static str,
@@ -145,8 +149,9 @@ impl ArrowEntityManager {
         velocity: [f32; 3],
         damage: f32,
         shooter_runtime_id: u64,
+        homing_target: Option<u64>,
     ) -> ArrowEntity {
-        let fb = ArrowEntity::projectile(
+        let mut fb = ArrowEntity::projectile(
             actor_type,
             position,
             velocity,
@@ -155,6 +160,7 @@ impl ArrowEntityManager {
             0.0,
             false,
         );
+        fb.homing_target = homing_target;
         self.arrows.insert(fb.base.entity_runtime_id, fb.clone());
         fb
     }
@@ -191,6 +197,28 @@ impl ArrowEntityManager {
             arrow.base.velocity[1] -= arrow.gravity;
             for c in arrow.base.velocity.iter_mut() {
                 *c *= ARROW_DRAG;
+            }
+            // Tête chercheuse : on infléchit la vélocité vers la cible (à vitesse
+            // constante) — le projectile poursuit le joueur (bullet du shulker).
+            if let Some(tid) = arrow.homing_target {
+                if let Some((_, tpos)) = players.iter().find(|(pid, _)| *pid == tid) {
+                    let target = [tpos[0], tpos[1] + 1.0, tpos[2]];
+                    let to = [
+                        target[0] - arrow.base.position[0],
+                        target[1] - arrow.base.position[1],
+                        target[2] - arrow.base.position[2],
+                    ];
+                    let to_len = (to[0] * to[0] + to[1] * to[1] + to[2] * to[2]).sqrt();
+                    let v = arrow.base.velocity;
+                    let speed = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+                    if to_len > 0.1 && speed > 0.001 {
+                        const STEER: f32 = 0.25; // agilité du virage
+                        for i in 0..3 {
+                            let desired = to[i] / to_len * speed;
+                            arrow.base.velocity[i] = v[i] * (1.0 - STEER) + desired * STEER;
+                        }
+                    }
+                }
             }
             let end = [
                 start[0] + arrow.base.velocity[0],
@@ -308,6 +336,27 @@ mod tests {
             }
         }
         assert!(hit, "la flèche doit toucher le joueur sur sa trajectoire");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn homing_bullet_curves_to_hit_offset_player() {
+        let (mut cache, dir) = temp_cache("homing-bullet");
+        let mut mgr = ArrowEntityManager::new();
+        // Bullet filant en +X mais joueur décalé en +Z : sans tête chercheuse,
+        // il manquerait. Le homing doit l'infléchir jusqu'à toucher.
+        let fb = mgr.spawn_fireball("minecraft:shulker_bullet", [0.0, 65.0, 0.0], [1.2, 0.0, 0.0], 4.0, 999, Some(7));
+        assert!(fb.homing_target == Some(7));
+        let players = vec![(7u64, [5.0, 64.0, 5.0])];
+        let mut hit = false;
+        for _ in 0..40 {
+            let r = mgr.tick(&mut cache, &players);
+            if r.hits.iter().any(|h| h.target_runtime_id == 7) {
+                hit = true;
+                break;
+            }
+        }
+        assert!(hit, "le projectile à tête chercheuse doit toucher le joueur décalé");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

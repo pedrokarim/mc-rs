@@ -82,13 +82,15 @@ pub enum AiEffect {
         velocity: [f32; 3],
         damage: f32,
     },
-    /// Le mob tire une boule de feu (ghast/blaze) — trajectoire rectiligne.
+    /// Le mob tire une boule de feu (ghast/blaze) — trajectoire rectiligne, ou
+    /// un projectile à tête chercheuse si `homing_target` est défini (shulker).
     ShootFireball {
         shooter_runtime_id: u64,
         from: [f32; 3],
         velocity: [f32; 3],
         damage: f32,
         actor_type: &'static str,
+        homing_target: Option<u64>,
     },
 }
 
