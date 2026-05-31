@@ -626,7 +626,8 @@ fn place_tree(
         Species::Spruce => spruce_tree(grid, pal, lx, ground, lz, rng),
         Species::Pine => pine_tree(grid, pal, lx, ground, lz, rng),
         Species::MegaSpruce => mega_conifer(grid, pal, lx, ground, lz, rng),
-        Species::JungleTree => straight_tree(grid, pal, lx, ground, lz, JUNGLE, 4, 8, true, rng),
+        // Lianes gérées par la feature `vines` (decorate_vines), pas ici.
+        Species::JungleTree => straight_tree(grid, pal, lx, ground, lz, JUNGLE, 4, 8, false, rng),
         Species::JungleBush => jungle_bush(grid, pal, lx, ground, lz),
         Species::MegaJungle => mega_tree(grid, pal, lx, ground, lz, JUNGLE, 10, 11, true, rng),
         Species::DarkOak => mega_tree(grid, pal, lx, ground, lz, DARK_OAK, 6, 3, false, rng),
@@ -669,6 +670,67 @@ fn is_ocean(biome: &str) -> bool {
             | "minecraft:frozen_ocean"
             | "minecraft:deep_frozen_ocean"
     )
+}
+
+fn is_jungle(biome: &str) -> bool {
+    matches!(
+        biome,
+        "minecraft:jungle" | "minecraft:bamboo_jungle" | "minecraft:sparse_jungle"
+    )
+}
+
+#[inline]
+fn is_vine_anchor(pal: &Pal, block: u32) -> bool {
+    // Face solide d'accroche pour une liane (pas air/eau/liane/plante fine).
+    block != pal.air
+        && block != pal.water
+        && block != pal.vine
+        && block != pal.short_grass
+        && block != pal.fern
+        && block != pal.kelp
+        && block != pal.seagrass
+}
+
+/// Feature vanilla `vines` (jungle) : **count 127**, y ∈ [64, 100]. À une
+/// position d'air adjacente à une face solide, accroche une liane et la fait
+/// pendre tant qu'il reste de l'air le long de la même face.
+fn decorate_vines(
+    grid: &mut [u32],
+    pal: &Pal,
+    biome_idx: &[[u16; 16]; 16],
+    biome_names: &[String],
+    rng: &mut Random,
+) {
+    let biome_at = |lx: usize, lz: usize| -> &str { &biome_names[biome_idx[lx][lz] as usize] };
+    for _ in 0..127 {
+        let lx = rng.next_bounded_int(16);
+        let lz = rng.next_bounded_int(16);
+        if !is_jungle(biome_at(lx as usize, lz as usize)) {
+            continue;
+        }
+        let wy = 64 + rng.next_bounded_int(37); // 64..=100
+        if at(grid, lx, wy, lz) != pal.air {
+            continue;
+        }
+        for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            if !is_vine_anchor(pal, at(grid, lx + dx, wy, lz + dz)) {
+                continue;
+            }
+            let len = 1 + rng.next_bounded_int(7); // 1..=7
+            for d in 0..len {
+                let y = wy - d;
+                if at(grid, lx, y, lz) != pal.air
+                    || !is_vine_anchor(pal, at(grid, lx + dx, y, lz + dz))
+                {
+                    break;
+                }
+                if let Some(i) = idx_ok(lx, y, lz) {
+                    grid[i] = pal.vine;
+                }
+            }
+            break;
+        }
+    }
 }
 
 /// Point d'entrée : décore un chunk déjà terrassé + habillé en surface.
@@ -728,6 +790,9 @@ pub fn decorate(
         let species = pick_tree(default, alts, &mut rng);
         place_tree(grid, &pal, species, lx, ground, lz, &mut rng);
     }
+
+    // ── Lianes (après les arbres) : feature vanilla `vines`, count 127 ──
+    decorate_vines(grid, &pal, biome_idx, biome_names, &mut rng);
 
     // ── Herbe / fougères / fleurs ──
     let grass_attempts: i32 = {
@@ -975,6 +1040,17 @@ mod tests {
             grid.contains(&pal.mangrove_log),
             "pas de bûche de palétuvier"
         );
+    }
+
+    #[test]
+    fn jungle_places_many_vines() {
+        // Jungle dense → la feature vines (127) doit couvrir les arbres.
+        let names = vec!["minecraft:jungle".to_string()];
+        let (mut grid, idx, surf) = flat_chunk(75, 0);
+        decorate(&mut grid, 99, 0, 0, &idx, &names, &surf);
+        let pal = Pal::new();
+        let vines = grid.iter().filter(|&&b| b == pal.vine).count();
+        assert!(vines > 20, "jungle trop pauvre en lianes: {vines}");
     }
 
     #[test]
