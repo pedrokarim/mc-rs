@@ -12,6 +12,10 @@ const BASELINE_TICKS_PER_SECOND: f32 = 20.0;
 const GRAVITY_PER_TICK: f32 = 0.08 * (BASELINE_TICKS_PER_SECOND / SERVER_TICKS_PER_SECOND);
 const AIR_DRAG: f32 = 0.996;
 const MAX_FALL_SPEED: f32 = -0.784;
+/// Friction horizontale appliquée chaque tick (le résidu décroît quand le mob
+/// n'est plus poussé par le `WalkController`). Sol plus adhérent que l'air.
+const GROUND_FRICTION: f32 = 0.6;
+const AIR_FRICTION: f32 = 0.91;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MobKind {
@@ -293,30 +297,47 @@ impl MobEntityManager {
 
             let old_position = entity.base.position;
             let old_velocity = entity.base.velocity;
+            let (_width, height) = entity.kind.size();
 
+            // --- Gravité (vertical) ---
             entity.base.velocity[1] =
                 (entity.base.velocity[1] - GRAVITY_PER_TICK).max(MAX_FALL_SPEED);
             entity.base.velocity[1] *= AIR_DRAG;
 
+            // --- Déplacement horizontal avec collision murale + step-up ---
+            move_horizontal(&mut entity.base, height, chunk_cache);
+
+            // --- Déplacement vertical avec collision au sol ---
+            // On ne clampe (et ne marque on_ground) que quand le mob descend :
+            // sinon un saut serait annulé dès l'ascension par le bloc de départ.
             let mut next_y = entity.base.position[1] + entity.base.velocity[1];
             let world_x = entity.base.position[0].floor() as i32;
             let world_z = entity.base.position[2].floor() as i32;
-            let support_y = (next_y - 0.01).floor() as i32;
-            let support_block = chunk_cache.get_block(world_x, support_y, world_z);
-            let on_ground = is_supporting_block(support_block);
-
-            if on_ground {
-                let floor_y = support_y as f32 + 1.0;
-                if next_y <= floor_y {
-                    next_y = floor_y;
-                    entity.base.velocity[1] = 0.0;
+            let mut on_ground = false;
+            if entity.base.velocity[1] <= 0.0 {
+                let support_y = (next_y - 0.01).floor() as i32;
+                if is_supporting_block(chunk_cache.get_block(world_x, support_y, world_z)) {
+                    let floor_y = support_y as f32 + 1.0;
+                    if next_y <= floor_y {
+                        next_y = floor_y;
+                        entity.base.velocity[1] = 0.0;
+                        on_ground = true;
+                    }
                 }
             }
-
             entity.base.position[1] = next_y;
+            entity.base.on_ground = on_ground;
 
-            let position_changed = (entity.base.position[1] - old_position[1]).abs() > 0.0001;
-            let velocity_changed = (entity.base.velocity[1] - old_velocity[1]).abs() > 0.0001;
+            // --- Friction horizontale (sol vs air) ---
+            let friction = if on_ground { GROUND_FRICTION } else { AIR_FRICTION };
+            entity.base.velocity[0] *= friction;
+            entity.base.velocity[2] *= friction;
+
+            let position_changed = (0..3).any(|i| {
+                (entity.base.position[i] - old_position[i]).abs() > 0.0001
+            });
+            let velocity_changed =
+                (0..3).any(|i| (entity.base.velocity[i] - old_velocity[i]).abs() > 0.0001);
 
             if position_changed || velocity_changed {
                 movement_updates.push(MovementUpdate {
@@ -333,6 +354,42 @@ impl MobEntityManager {
 
         TickResult { movement_updates }
     }
+}
+
+/// Déplace le mob horizontalement selon sa vélocité, **axe par axe** (glissement
+/// le long des murs), avec collision murale et franchissement automatique d'une
+/// marche d'1 bloc (step-up). Collision au centre (les hitboxes de mobs font < 1
+/// bloc de large), suffisante pour la v1.
+fn move_horizontal(base: &mut EntityBase, height: f32, cache: &mut ChunkCache) {
+    for axis in [0usize, 2usize] {
+        let v = base.velocity[axis];
+        if v == 0.0 {
+            continue;
+        }
+        let feet_y = base.position[1].floor() as i32;
+        let head_y = (base.position[1] + height - 0.001).floor() as i32;
+        let mut cand = base.position;
+        cand[axis] += v;
+
+        if !column_blocked(cache, cand[0], cand[2], feet_y, head_y) {
+            base.position[axis] = cand[axis];
+        } else if base.on_ground && !column_blocked(cache, cand[0], cand[2], feet_y + 1, head_y + 1) {
+            // Obstacle d'1 bloc avec espace libre au-dessus → on grimpe d'1 bloc.
+            base.position[1] = (feet_y + 1) as f32;
+            base.position[axis] = cand[axis];
+        } else {
+            // Mur trop haut → on s'arrête sur cet axe (glissement possible sur l'autre).
+            base.velocity[axis] = 0.0;
+        }
+    }
+}
+
+/// Y a-t-il un bloc solide dans la colonne verticale `[y0, y1]` à la cellule
+/// horizontale contenant `(x, z)` ?
+fn column_blocked(cache: &mut ChunkCache, x: f32, z: f32, y0: i32, y1: i32) -> bool {
+    let bx = x.floor() as i32;
+    let bz = z.floor() as i32;
+    (y0..=y1).any(|by| is_supporting_block(cache.get_block(bx, by, bz)))
 }
 
 /// Les blocs "non-solides" (passable par les items/mobs en chute).
@@ -379,10 +436,58 @@ pub(crate) fn is_supporting_block(runtime_id: u32) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_supporting_block, MobEntityManager, MobKind};
+    use super::{is_supporting_block, move_horizontal, MobEntity, MobEntityManager, MobKind};
     use crate::item_registry;
     use crate::world::block_registry::BLOCKS;
     use crate::world::chunk_cache::ChunkCache;
+
+    fn temp_cache(tag: &str) -> (ChunkCache, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("mc-rs-{}-{}", tag, std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        // Générateur "flat" : air au-dessus de la couche de surface basse, donc
+        // y >= 64 est dégagé → collisions/step-up déterministes (on place nous-mêmes les blocs).
+        (ChunkCache::new(&dir, 1, "flat"), dir)
+    }
+
+    #[test]
+    fn wall_blocks_horizontal_movement() {
+        let (mut cache, dir) = temp_cache("mob-wall");
+        // Mur de 2 blocs de haut en x=1.
+        cache.set_block(1, 64, 0, BLOCKS.stone);
+        cache.set_block(1, 65, 0, BLOCKS.stone);
+
+        let mut zombie = MobEntity::spawn(MobKind::Zombie, [0.7, 64.0, 0.5]);
+        zombie.base.on_ground = true;
+        zombie.base.velocity[0] = 0.5; // viserait x=1.2 → dans le mur
+
+        let height = MobKind::Zombie.size().1;
+        move_horizontal(&mut zombie.base, height, &mut cache);
+
+        // Bloqué : ni avance en X, ni step-up (mur trop haut).
+        assert!((zombie.base.position[0] - 0.7).abs() < 1e-6, "ne doit pas traverser le mur");
+        assert_eq!(zombie.base.velocity[0], 0.0, "vitesse X annulée par la collision");
+        assert!((zombie.base.position[1] - 64.0).abs() < 1e-6, "pas de step-up sur mur 2 blocs");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn steps_up_a_single_block() {
+        let (mut cache, dir) = temp_cache("mob-step");
+        // Marche d'1 bloc en x=1 (rien au-dessus).
+        cache.set_block(1, 64, 0, BLOCKS.stone);
+
+        let mut zombie = MobEntity::spawn(MobKind::Zombie, [0.7, 64.0, 0.5]);
+        zombie.base.on_ground = true;
+        zombie.base.velocity[0] = 0.5;
+
+        let height = MobKind::Zombie.size().1;
+        move_horizontal(&mut zombie.base, height, &mut cache);
+
+        // A grimpé d'1 bloc et avancé en X.
+        assert!((zombie.base.position[1] - 65.0).abs() < 1e-6, "doit grimper d'1 bloc");
+        assert!(zombie.base.position[0] > 1.0, "doit avancer par-dessus la marche");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn parses_mob_names() {
