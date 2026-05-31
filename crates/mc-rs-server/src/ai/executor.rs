@@ -556,6 +556,63 @@ impl Executor for TemptExecutor {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Errance volante 3D (mobs volants : chauve-souris, perroquet, allay, abeille)
+// ---------------------------------------------------------------------------
+
+/// Erre en 3D : choisit des cibles aléatoires autour de la position courante
+/// (XZ dans `range`, Y légèrement variable). Le `FlyController` y déplace le mob.
+pub struct FlyRoamExecutor {
+    speed: f32,
+    range: i32,
+}
+
+impl FlyRoamExecutor {
+    pub fn new(speed: f32, range: i32) -> Self {
+        Self { speed, range }
+    }
+
+    fn pick_target(&self, base: &EntityBase, memory: &mut Memory) {
+        let mut rng = rand::thread_rng();
+        let dx = rng.gen_range(-self.range..=self.range) as f64;
+        let dz = rng.gen_range(-self.range..=self.range) as f64;
+        let dy = rng.gen_range(-2..=4) as f64; // dérive verticale douce
+        memory.move_target = Some([
+            base.position[0] as f64 + dx,
+            base.position[1] as f64 + dy,
+            base.position[2] as f64 + dz,
+        ]);
+    }
+}
+
+impl Executor for FlyRoamExecutor {
+    fn on_start(&mut self, memory: &mut Memory, base: &mut EntityBase) {
+        memory.movement_speed = self.speed;
+        self.pick_target(base, memory);
+    }
+
+    fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
+        let reached = ctx
+            .memory
+            .move_target
+            .map(|t| {
+                let dx = t[0] - ctx.base.position[0] as f64;
+                let dy = t[1] - ctx.base.position[1] as f64;
+                let dz = t[2] - ctx.base.position[2] as f64;
+                dx * dx + dy * dy + dz * dz < 1.0
+            })
+            .unwrap_or(true);
+        if reached {
+            self.pick_target(ctx.base, ctx.memory);
+        }
+        true
+    }
+
+    fn on_stop(&mut self, memory: &mut Memory, _base: &mut EntityBase) {
+        memory.move_target = None;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

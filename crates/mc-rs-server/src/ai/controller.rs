@@ -130,6 +130,42 @@ fn block_ahead_solid(ctx: &mut ControlCtx, nx: f64, nz: f64) -> bool {
     is_supporting_block(ctx.chunk_cache.get_block(ax, ay, az))
 }
 
+/// Vol 3D : déplace le mob directement vers `memory.move_target` en 3 dimensions
+/// (sans route ni gravité) et l'oriente vers son mouvement. Pour les volants.
+#[derive(Default)]
+pub struct FlyController;
+
+impl FlyController {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Controller for FlyController {
+    fn control(&mut self, ctx: &mut ControlCtx) {
+        let Some(target) = ctx.memory.move_target else {
+            ctx.base.velocity = [0.0, 0.0, 0.0];
+            return;
+        };
+        let base = &mut *ctx.base;
+        let dx = target[0] - base.position[0] as f64;
+        let dy = target[1] - base.position[1] as f64;
+        let dz = target[2] - base.position[2] as f64;
+        let dist = (dx * dx + dy * dy + dz * dz).sqrt();
+        if dist < 0.3 {
+            base.velocity = [0.0, 0.0, 0.0];
+            return;
+        }
+        let f = (ctx.memory.movement_speed as f64 / dist).min(1.0);
+        base.velocity = [(dx * f) as f32, (dy * f) as f32, (dz * f) as f32];
+        // Orientation vers la direction de vol.
+        base.yaw = yaw_from_vector(dx, dz) as f32;
+        base.body_yaw = base.yaw;
+        base.head_yaw = base.yaw;
+        base.pitch = pitch_from_vector(dx, dy, dz) as f32;
+    }
+}
+
 /// Oriente le mob : `look_at_route` aligne le corps sur la direction de marche,
 /// `look_at_target` aligne la tête/le pitch sur la cible de regard. Port
 /// `LookController`.

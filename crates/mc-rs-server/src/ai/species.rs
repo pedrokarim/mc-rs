@@ -2,10 +2,10 @@
 //! d'entités d'Allay qui listent sensors + behaviors + controllers.
 
 use super::behavior::{AlwaysEvaluator, Behavior, ClosureEvaluator, FnEvaluator};
-use super::controller::{LookController, WalkController};
+use super::controller::{FlyController, LookController, WalkController};
 use super::executor::{
-    BowAttackExecutor, CreeperSwellExecutor, FlatRandomRoamExecutor, MeleeAttackExecutor,
-    PanicFleeExecutor, TemptExecutor,
+    BowAttackExecutor, CreeperSwellExecutor, FlatRandomRoamExecutor, FlyRoamExecutor,
+    MeleeAttackExecutor, PanicFleeExecutor, TemptExecutor,
 };
 use super::sensor::NearestPlayerSensor;
 use super::{BehaviorGroup, Controller, Sensor};
@@ -22,6 +22,8 @@ const TEMPT_RANGE: f64 = 10.0;
 const MELEE_COOLDOWN: u32 = 20;
 /// Rayon d'errance (blocs).
 const ROAM_RANGE: i32 = 8;
+/// Rayon d'errance des volants (blocs).
+const FLY_ROAM_RANGE: i32 = 10;
 /// Creeper : portée d'amorçage et durée de fuse (ticks 20 TPS → 1.5 s, vanilla).
 const CREEPER_IGNITE_RANGE: f64 = 3.0;
 const CREEPER_FUSE_TICKS: u32 = 30;
@@ -100,6 +102,17 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
         AiProfile::Neutral => {
             // Erre uniquement, regarde le joueur proche (n'attaque pas en v1).
             BehaviorGroup::new(vec![], vec![roam()], sensors, standard_controllers(), true)
+        }
+        AiProfile::Flying => {
+            // Vol 3D : errance volante + FlyController (pas de route au sol).
+            let normal = vec![Behavior::new(
+                Box::new(AlwaysEvaluator),
+                Box::new(FlyRoamExecutor::new(speed, FLY_ROAM_RANGE)),
+                PRIO_ROAM,
+                1,
+            )];
+            let controllers: Vec<Box<dyn Controller>> = vec![Box::new(FlyController::new())];
+            BehaviorGroup::new(vec![], normal, sensors, controllers, false)
         }
         AiProfile::Passive => {
             // Fuit si blessé (prio haute), suit la nourriture (tempt), sinon erre.

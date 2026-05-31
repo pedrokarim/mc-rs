@@ -34,6 +34,7 @@ pub enum AiProfile {
     CreeperSwell, // s'amorce et explose
     Passive,      // errance + fuite (+ tempt)
     Neutral,      // errance seule
+    Flying,       // vole et erre en 3D (pas de gravité)
 }
 
 /// Descripteur statique par espèce. Ajouter un mob = ajouter une variante +
@@ -118,6 +119,9 @@ pub enum MobKind {
     Camel,
     Armadillo,
     Sniffer,
+    // Volants
+    Allay,
+    Bee,
 }
 
 impl MobKind {
@@ -173,6 +177,8 @@ impl MobKind {
         Self::Camel,
         Self::Armadillo,
         Self::Sniffer,
+        Self::Allay,
+        Self::Bee,
     ];
 
     fn desc(self) -> MobDesc {
@@ -238,11 +244,13 @@ impl MobKind {
             Self::Turtle => d!("minecraft:turtle", "Turtle", 1.2, 0.4, Passive, Passive, 0.0, 0.15, &["minecraft:seagrass"]),
             Self::Villager => d!("minecraft:villager_v2", "Villager", 0.6, 1.95, Passive, Passive, 0.0, 0.25, &[]),
             Self::WanderingTrader => d!("minecraft:wandering_trader", "Wandering Trader", 0.6, 1.95, Passive, Passive, 0.0, 0.25, &[]),
-            Self::Bat => d!("minecraft:bat", "Bat", 0.5, 0.9, Passive, Passive, 0.0, 0.2, &[]),
-            Self::Parrot => d!("minecraft:parrot", "Parrot", 0.5, 0.9, Passive, Passive, 0.0, 0.25, SEEDS),
+            Self::Bat => d!("minecraft:bat", "Bat", 0.5, 0.9, Passive, Flying, 0.0, 0.2, &[]),
+            Self::Parrot => d!("minecraft:parrot", "Parrot", 0.5, 0.9, Passive, Flying, 0.0, 0.25, SEEDS),
             Self::Camel => d!("minecraft:camel", "Camel", 1.7, 2.375, Passive, Passive, 0.0, 0.25, &["minecraft:cactus"]),
             Self::Armadillo => d!("minecraft:armadillo", "Armadillo", 0.7, 0.65, Passive, Passive, 0.0, 0.2, &["minecraft:spider_eye"]),
             Self::Sniffer => d!("minecraft:sniffer", "Sniffer", 1.9, 1.75, Passive, Passive, 0.0, 0.2, &["minecraft:torchflower_seeds"]),
+            Self::Allay => d!("minecraft:allay", "Allay", 0.35, 0.6, Passive, Flying, 0.0, 0.25, &[]),
+            Self::Bee => d!("minecraft:bee", "Bee", 0.55, 0.5, Passive, Flying, 0.0, 0.25, &["minecraft:dandelion", "minecraft:poppy"]),
         }
     }
 
@@ -293,6 +301,11 @@ impl MobKind {
     /// Slime / magma cube (taille variable + split à la mort).
     pub fn is_slime(self) -> bool {
         matches!(self, Self::Slime | Self::MagmaCube)
+    }
+
+    /// Mob volant (vol 3D, pas de gravité).
+    pub fn is_flying(self) -> bool {
+        self.desc().profile == AiProfile::Flying
     }
 
     /// Distance de détection d'un joueur (blocs).
@@ -425,6 +438,11 @@ impl MobEntity {
         };
         if kind.is_slime() {
             mob.apply_slime_size(2); // taille moyenne par défaut (/summon)
+        }
+        if kind.is_flying() {
+            // Pas de gravité côté client (le mob plane).
+            use mc_rs_proto::packets::player::entity_flags;
+            mob.base.set_entity_flag(entity_flags::HAS_GRAVITY, false);
         }
         mob
     }
@@ -807,6 +825,28 @@ impl MobEntityManager {
             let old_position = entity.base.position;
             let old_velocity = entity.base.velocity;
             let (_width, height) = entity.kind.size();
+
+            // --- Vol : intégration 3D directe (vélocité posée par FlyController),
+            // pas de gravité ni de collision sol. ---
+            if entity.kind.is_flying() {
+                for i in 0..3 {
+                    entity.base.position[i] += entity.base.velocity[i];
+                    entity.base.velocity[i] *= 0.9; // légère traînée
+                }
+                entity.base.on_ground = false;
+                let moved = (0..3).any(|i| (entity.base.position[i] - old_position[i]).abs() > 0.0001);
+                if moved {
+                    movement_updates.push(MovementUpdate {
+                        entity_unique_id: entity.base.entity_unique_id,
+                        entity_position: entity.base.position,
+                        add_packet: entity.base.add_actor_packet(),
+                        move_packet: entity.base.move_absolute_packet(false, false),
+                        motion_packet: entity.base.motion_packet(),
+                    });
+                }
+                continue;
+            }
+
             let feet_in_water = in_water(chunk_cache, entity.base.position);
 
             // --- Gravité (vertical) ---
@@ -1271,9 +1311,10 @@ mod tests {
                     ),
                     "hostile {k:?} doit avoir un profil de combat"
                 ),
-                MobCategory::Passive => {
-                    assert_eq!(k.ai_profile(), AiProfile::Passive, "passif {k:?}")
-                }
+                MobCategory::Passive => assert!(
+                    matches!(k.ai_profile(), AiProfile::Passive | AiProfile::Flying),
+                    "passif {k:?}"
+                ),
                 MobCategory::Neutral => {
                     assert_eq!(k.ai_profile(), AiProfile::Neutral, "neutre {k:?}")
                 }
