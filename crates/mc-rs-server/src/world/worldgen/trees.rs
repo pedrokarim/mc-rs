@@ -120,6 +120,26 @@ impl Ctx<'_> {
         id == self.tb.air || id == self.tb.water
     }
 
+    /// Vrai si `id` est un bloc de feuilles (toutes espèces). Un TRONC peut
+    /// écraser une feuille (il la traverse) : sans ça, un petit arbre sous la
+    /// canopée d'un méga arbre aurait son tronc bloqué par les feuilles voisines
+    /// → seul son sommet serait écrit (feuilles flottantes). Déterministe car
+    /// l'ordre de pose des arbres l'est.
+    #[inline]
+    fn is_leaf(&self, id: u32) -> bool {
+        let t = self.tb;
+        id == t.oak_leaves
+            || id == t.birch_leaves
+            || id == t.spruce_leaves
+            || id == t.jungle_leaves
+            || id == t.acacia_leaves
+            || id == t.dark_oak_leaves
+            || id == t.cherry_leaves
+            || id == t.mangrove_leaves
+            || id == t.azalea_leaves
+            || id == t.azalea_leaves_flowered
+    }
+
     #[inline]
     fn set(&mut self, x: i32, y: i32, z: i32, id: u32) {
         if let Some(i) = self.idx(x, y, z) {
@@ -127,12 +147,12 @@ impl Ctx<'_> {
         }
     }
 
-    /// Pose un log si la cible est remplaçable. Retourne `true` pour la FORME
-    /// (monde virtuel = air), indépendamment du clip — le log est enregistré
-    /// pour les décos (vines/podzol).
+    /// Pose un log si la cible est air/eau OU une feuille (le tronc traverse le
+    /// feuillage). Le log est enregistré pour les décos (vines/podzol).
     fn place_log(&mut self, x: i32, y: i32, z: i32, log: u32, placed: &mut Vec<(i32, i32, i32)>) {
         if let Some(i) = self.idx(x, y, z) {
-            if self.replaceable(self.grid[i]) {
+            let cur = self.grid[i];
+            if self.replaceable(cur) || self.is_leaf(cur) {
                 self.grid[i] = log;
             }
         }

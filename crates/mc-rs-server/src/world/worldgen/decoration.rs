@@ -769,6 +769,11 @@ pub fn decorate(
     // ── Lianes (après les arbres) : feature vanilla `vines`, count 127 ──
     decorate_vines(grid, &pal, biome_idx, biome_names, &mut rng);
 
+    // ── Plantes hautes au sol (cactus / bambou / canne / arbustes morts) AVANT
+    // l'herbe : sinon l'herbe occupe `ground+1` et la base de ces plantes (posée
+    // uniquement sur de l'air) ne s'écrit pas → elles flottent au-dessus. ──
+    decorate_special(grid, &pal, biome_idx, biome_names, surfaces, &mut rng);
+
     // ── Herbe / fougères & fleurs : DATA-DRIVEN + posées en TOUFFES (clumps)
     // comme vanilla (`random_patch` : `tries` brins autour d'un centre). Densité
     // et palette lues des vraies features ; corrige la sur-végétation neige et le
@@ -800,9 +805,6 @@ pub fn decorate(
         super::features::flower_patches,
         true,
     );
-
-    // ── Spécial : cactus / arbustes morts / canne à sucre / bambou / nénuphars ──
-    decorate_special(grid, &pal, biome_idx, biome_names, surfaces, &mut rng);
 
     // ── Aquatique : kelp / seagrass / coraux ──
     decorate_aquatic(grid, &pal, biome_idx, biome_names, surfaces, &mut rng);
