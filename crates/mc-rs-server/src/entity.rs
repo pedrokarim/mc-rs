@@ -159,8 +159,18 @@ pub fn living_metadata(
     name_tag: Option<&str>,
 ) -> Vec<(u32, u32, MetadataValue)> {
     let name_tag = name_tag.unwrap_or_default();
-    let mut flags =
-        entity_flags::BREATHING | entity_flags::HAS_GRAVITY | entity_flags::HAS_COLLISION;
+    // NO_AI (alias IMMOBILE) : DÉSACTIVE l'IA/physique CÔTÉ CLIENT. Nos mobs
+    // sont 100 % pilotés serveur (IA + physique + position streamée). Sans ce
+    // flag, le client Bedrock exécute SA PROPRE IA de mob en parallèle et
+    // déplace l'entité tout seul → elle « bouge dans tous les sens » en se
+    // battant contre les positions qu'on envoie. C'est le hack documenté de
+    // PMMP (« client-side AI interference », Entity::setNoClientPredictions
+    // → EntityMetadataFlags::NO_AI). L'animation de marche suit le flux de
+    // positions, donc elle reste correcte.
+    let mut flags = entity_flags::BREATHING
+        | entity_flags::HAS_GRAVITY
+        | entity_flags::HAS_COLLISION
+        | entity_flags::NO_AI;
     if !name_tag.is_empty() {
         flags |= entity_flags::CAN_SHOW_NAMETAG;
     }
