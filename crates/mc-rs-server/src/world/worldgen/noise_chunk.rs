@@ -263,6 +263,19 @@ fn density_at(corners: &[[[f64; NX]; NY]; NX], lx: usize, wy: i32, lz: usize) ->
 /// Retourne `(sub_chunk_count, payload réseau)` — même contrat que
 /// `terrain_generator::generate_terrain_chunk`.
 pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<u8>) {
+    let (grid, biome3d) = generate_chunk_grid(chunk_x, chunk_z, seed);
+    serialize_chunk(&grid, &biome3d)
+}
+
+/// Construit la grille de blocs pleine hauteur d'un chunk (terrain + aquifères +
+/// biomes + surface rules + minerais + arbres cross-chunk + décoration) et la
+/// carte de biomes 3D. Séparé de la sérialisation pour pouvoir l'inspecter (tests
+/// / diagnostics).
+pub(crate) fn generate_chunk_grid(
+    chunk_x: i32,
+    chunk_z: i32,
+    seed: u64,
+) -> (Box<[u32]>, Vec<[[u16; 4]; 4]>) {
     let base_x = chunk_x * 16;
     let base_z = chunk_z * 16;
 
@@ -381,6 +394,20 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
     // identique des deux côtés → plus de coupures aux frontières de chunk.
     put_surfaces(seed, chunk_x, chunk_z, &surfaces); // évite de recalculer le centre
     {
+        // Surface du monde à des coords LOCALES au chunk courant (base_x/base_z),
+        // pour la décay des feuilles (un log sous le terrain est mangé). Cache
+        // local par chunk pour éviter de recloner les surfaces.
+        let surf_cache: std::cell::RefCell<HashMap<(i32, i32), SurfaceGrid>> =
+            std::cell::RefCell::new(HashMap::new());
+        let surface_at = |gx: i32, gz: i32| -> i32 {
+            let (wx, wz) = (base_x + gx, base_z + gz);
+            let (ccx, ccz) = (wx >> 4, wz >> 4);
+            let mut cache = surf_cache.borrow_mut();
+            let s = cache
+                .entry((ccx, ccz))
+                .or_insert_with(|| chunk_surfaces(seed, &router, ccx, ccz));
+            s[(wx & 15) as usize][(wz & 15) as usize]
+        };
         for dcz in -1..=1i32 {
             for dcx in -1..=1i32 {
                 let ocx = chunk_x + dcx;
@@ -446,6 +473,7 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
                             wx - base_x,
                             ground,
                             wz - base_z,
+                            &surface_at,
                         );
                     }
                 }
@@ -467,6 +495,11 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
         &biome3d,
     );
 
+    (grid, biome3d)
+}
+
+/// Sérialise une grille + biomes 3D au format réseau sub-chunk de Bedrock.
+fn serialize_chunk(grid: &[u32], biome3d: &[[[u16; 4]; 4]]) -> (u32, Vec<u8>) {
     // 5) Sérialisation sub-chunk par sub-chunk.
     let mut payload = Vec::with_capacity(16384);
     for sub_idx in 0..SUB_CHUNK_COUNT {
@@ -499,7 +532,7 @@ pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<
     }
 
     // 6) Biomes sérialisés en 3D (une section 4×4×4 par sub-chunk).
-    for sec in &biome3d {
+    for sec in biome3d {
         let mut cells = [0u32; 64];
         #[allow(clippy::needless_range_loop)]
         for cx in 0..4usize {
@@ -535,6 +568,188 @@ mod tests {
         let a = generate_noise_chunk(3, -7, 123);
         let b = generate_noise_chunk(3, -7, 123);
         assert_eq!(a, b);
+    }
+
+    #[test]
+    #[ignore]
+    fn diag_floating_leaves() {
+        use std::collections::HashSet;
+        let seed = 10619927421199041390u64;
+        let species = [
+            "oak", "birch", "spruce", "jungle", "acacia", "dark_oak", "cherry", "mangrove",
+        ];
+        let leaf_ids: HashSet<u32> = species
+            .iter()
+            .map(|s| BLOCKS.get(&format!("minecraft:{s}_leaves")))
+            .collect();
+        let log_ids: HashSet<u32> = species
+            .iter()
+            .map(|s| BLOCKS.get(&format!("minecraft:{s}_log")))
+            .collect();
+        // Centre la région sur une jungle (sinon : pas d'arbres).
+        let (jx, jz) = locate_biome(seed, 0, 0, 70, "jungle").expect("pas de jungle");
+        let (ccx, ccz) = (jx >> 4, jz >> 4);
+        println!("jungle trouvée en ({jx},{jz}) → chunk ({ccx},{ccz})");
+        let mut logs: HashSet<(i32, i32, i32)> = HashSet::new();
+        let mut leaves: Vec<(i32, i32, i32)> = Vec::new();
+        let (x0, z0) = (ccx - 2, ccz - 2);
+        for cx in x0..x0 + 5 {
+            for cz in z0..z0 + 5 {
+                let (grid, _) = generate_chunk_grid(cx, cz, seed);
+                for lx in 0..16usize {
+                    for lz in 0..16usize {
+                        for wy in SEA_LEVEL..MAX_Y {
+                            let b = grid[grid_index(lx, wy, lz)];
+                            let wp = (cx * 16 + lx as i32, wy, cz * 16 + lz as i32);
+                            if log_ids.contains(&b) {
+                                logs.insert(wp);
+                            } else if leaf_ids.contains(&b) {
+                                leaves.push(wp);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let near_log = |p: (i32, i32, i32)| {
+            for dx in -6..=6i32 {
+                for dy in -6..=6i32 {
+                    for dz in -6..=6i32 {
+                        if dx.abs() + dy.abs() + dz.abs() <= 6
+                            && logs.contains(&(p.0 + dx, p.1 + dy, p.2 + dz))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        };
+        // Indexe les blocs pour pouvoir interroger le terrain sous un floater.
+        let mut blocks: std::collections::HashMap<(i32, i32, i32), u32> =
+            std::collections::HashMap::new();
+        for cx in x0..x0 + 5 {
+            for cz in z0..z0 + 5 {
+                let (grid, _) = generate_chunk_grid(cx, cz, seed);
+                for lx in 0..16usize {
+                    for lz in 0..16usize {
+                        for wy in SEA_LEVEL..MAX_Y {
+                            let b = grid[grid_index(lx, wy, lz)];
+                            if b != BLOCKS.air {
+                                blocks.insert((cx * 16 + lx as i32, wy, cz * 16 + lz as i32), b);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let stone = BLOCKS.stone;
+        let dirt = BLOCKS.get("minecraft:dirt");
+        let grass_block = BLOCKS.grass_block;
+        let is_terrain = |b: u32| b == stone || b == dirt || b == grass_block;
+
+        let (xlo, xhi) = ((x0 + 1) * 16, (x0 + 4) * 16);
+        let (zlo, zhi) = ((z0 + 1) * 16, (z0 + 4) * 16);
+        let mut floaters = 0;
+        let mut on_boundary = 0; // floater dont x%16 ou z%16 ∈ {0,15}
+        let mut terrain_below = 0; // floater avec terrain à ≤3 en dessous
+        let mut samples = Vec::new();
+        let mut by_species: std::collections::HashMap<u32, i32> = std::collections::HashMap::new();
+        for &p in &leaves {
+            if !(xlo..xhi).contains(&p.0) || !(zlo..zhi).contains(&p.2) {
+                continue;
+            }
+            if !near_log(p) {
+                floaters += 1;
+                let bx = p.0 & 15;
+                let bz = p.2 & 15;
+                if bx == 0 || bx == 15 || bz == 0 || bz == 15 {
+                    on_boundary += 1;
+                }
+                if (1..=3).any(|d| {
+                    blocks
+                        .get(&(p.0, p.1 - d, p.2))
+                        .is_some_and(|&b| is_terrain(b))
+                }) {
+                    terrain_below += 1;
+                }
+                if samples.len() < 6 {
+                    samples.push(p);
+                }
+                let id = blocks.get(&p).copied().unwrap_or(0);
+                *by_species.entry(id).or_insert(0) += 1;
+            }
+        }
+        println!("floaters: total={floaters}  sur bord {{0,15}}={on_boundary}  terrain≤3 dessous={terrain_below}");
+        for s in &species {
+            let id = BLOCKS.get(&format!("minecraft:{s}_leaves"));
+            let n = by_species.get(&id).copied().unwrap_or(0);
+            if n > 0 {
+                println!("  espèce {s}: {n} floaters");
+            }
+        }
+        // Distance au tronc le plus proche (rayon large) pour les samples.
+        let nearest = |p: (i32, i32, i32)| -> i32 {
+            let mut best = 999;
+            for dx in -24..=24i32 {
+                for dy in -24..=24i32 {
+                    for dz in -24..=24i32 {
+                        if logs.contains(&(p.0 + dx, p.1 + dy, p.2 + dz)) {
+                            best = best.min(dx.abs() + dy.abs() + dz.abs());
+                        }
+                    }
+                }
+            }
+            best
+        };
+        println!(
+            "=== leaves={} logs={} floaters_interieur={floaters}",
+            leaves.len(),
+            logs.len()
+        );
+        for &p in &samples {
+            println!(
+                "  floater {p:?}  x%16={} z%16={}  tronc_le_plus_proche={}",
+                p.0 & 15,
+                p.2 & 15,
+                nearest(p)
+            );
+        }
+        // Dump : colonnes verticales (blocs) autour du 1er floater, pour voir où
+        // le tronc s'arrête. L = log, F = feuille, # = terrain, . = air.
+        let jungle_log = BLOCKS.get("minecraft:jungle_log");
+        let jungle_leaves = BLOCKS.get("minecraft:jungle_leaves");
+        let sym = |b: u32| -> char {
+            if b == jungle_log {
+                'L'
+            } else if b == jungle_leaves {
+                'F'
+            } else if is_terrain(b) {
+                '#'
+            } else if b == BLOCKS.air {
+                '.'
+            } else {
+                '?'
+            }
+        };
+        if let Some(&f) = samples.first() {
+            println!(
+                "--- colonnes autour du floater {f:?} (y {} bas -> {} haut) ---",
+                f.1 - 14,
+                f.1 + 4
+            );
+            for dx in -3..=3i32 {
+                for dz in -3..=3i32 {
+                    let (cx, cz) = (f.0 + dx, f.2 + dz);
+                    let col: String = (f.1 - 14..=f.1 + 4)
+                        .map(|wy| sym(*blocks.get(&(cx, wy, cz)).unwrap_or(&BLOCKS.air)))
+                        .collect();
+                    if col.contains('L') || col.contains('F') {
+                        println!("  ({cx},*,{cz}) x%16={} z%16={}: {col}", cx & 15, cz & 15);
+                    }
+                }
+            }
+        }
     }
 
     #[test]

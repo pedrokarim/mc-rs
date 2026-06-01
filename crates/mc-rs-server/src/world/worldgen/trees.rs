@@ -94,6 +94,11 @@ static TB: LazyLock<TreeBlocks> = LazyLock::new(|| {
 struct Ctx<'a> {
     grid: &'a mut [u32],
     tb: &'static TreeBlocks,
+    /// Toutes les positions de log de l'arbre courant (y compris clippées hors
+    /// chunk — « virtuelles » — pour que la décay reste cohérente cross-chunk).
+    logs: Vec<(i32, i32, i32)>,
+    /// Positions de feuilles réellement écrites (candidates à la décay).
+    leaves: Vec<(i32, i32, i32)>,
 }
 
 impl Ctx<'_> {
@@ -140,6 +145,21 @@ impl Ctx<'_> {
             || id == t.azalea_leaves_flowered
     }
 
+    /// Vrai si `id` est un bloc de bûche/racine d'arbre.
+    #[inline]
+    fn is_log(&self, id: u32) -> bool {
+        let t = self.tb;
+        id == t.oak_log
+            || id == t.birch_log
+            || id == t.spruce_log
+            || id == t.jungle_log
+            || id == t.acacia_log
+            || id == t.dark_oak_log
+            || id == t.cherry_log
+            || id == t.mangrove_log
+            || id == t.mangrove_roots
+    }
+
     #[inline]
     fn set(&mut self, x: i32, y: i32, z: i32, id: u32) {
         if let Some(i) = self.idx(x, y, z) {
@@ -157,6 +177,7 @@ impl Ctx<'_> {
             }
         }
         placed.push((x, y, z));
+        self.logs.push((x, y, z));
     }
 
     fn try_leaf(&mut self, x: i32, y: i32, z: i32, leaf: u32, placed: &mut Vec<(i32, i32, i32)>) {
@@ -164,6 +185,7 @@ impl Ctx<'_> {
             if self.replaceable(self.grid[i]) {
                 self.grid[i] = leaf;
                 placed.push((x, y, z));
+                self.leaves.push((x, y, z));
             }
         }
     }
@@ -765,12 +787,23 @@ fn fancy_oak(ctx: &mut Ctx, rng: &mut Random, x: i32, y: i32, z: i32, log: u32, 
         } else {
             branch_base_y as i32
         };
-        make_limb(ctx, (x, attach_base, z), foliage_pos, log, &mut logs);
         coords.push((foliage_pos, attach_base));
     }
 
     place_dirt_under(ctx, x, y - 1, z);
     make_limb(ctx, (x, y, z), (x, y + trunk_top_offset, z), log, &mut logs);
+
+    // Branches (limbs) — gardées par `trim`, COMME le feuillage, et incluant la
+    // couronne sommitale (depuis le haut du tronc) : indispensable, sinon le
+    // feuillage du sommet flotte au-dessus du tronc (port fidèle d'Allay).
+    for &(attach, branch_base) in &coords {
+        if fancy_trim(trunk_and_foliage, branch_base - y) {
+            let branch_start = (x, branch_base, z);
+            if branch_start != attach {
+                make_limb(ctx, branch_start, attach, log, &mut logs);
+            }
+        }
+    }
 
     let mut leaves = Vec::new();
     for &(attach, branch_base) in &coords {
@@ -1353,9 +1386,18 @@ pub(super) fn place(
     x: i32,
     ground: i32,
     z: i32,
+    // Surface du monde (Y) à des coords LOCALES au chunk cible — pour la décay :
+    // un log sous la surface serait mangé par le terrain (d'ici ou d'un chunk
+    // voisin) et ne compte donc pas comme support de feuille.
+    surface_at: &dyn Fn(i32, i32) -> i32,
 ) {
     let tb: &TreeBlocks = &TB;
-    let mut ctx = Ctx { grid, tb };
+    let mut ctx = Ctx {
+        grid,
+        tb,
+        logs: Vec::new(),
+        leaves: Vec::new(),
+    };
     let y = ground + 1;
     match species {
         Species::Oak => straight_blob(&mut ctx, rng, x, y, z, tb.oak_log, tb.oak_leaves, 4, 2, 0),
@@ -1447,12 +1489,125 @@ pub(super) fn place(
     // Azalée n'est pas dans `Species` (réservée aux grottes luxuriantes) ; gérée
     // ailleurs si besoin. `azalea` est exposée pour un usage futur.
     let _ = azalea;
+
+    // ── Décay des feuilles orphelines (règle Minecraft : une feuille à plus de
+    // 6 blocs de TOUT log décline). Garde-fou universel contre les feuilles
+    // flottantes (déterministe ; les logs « virtuels » clippés sont inclus, donc
+    // cohérent cross-chunk). Bon marché : la quasi-totalité des feuilles trouvent
+    // un log immédiatement (early-exit). ──
+    let logs = std::mem::take(&mut ctx.logs);
+    let leaves = std::mem::take(&mut ctx.leaves);
+    for (lx, ly, lz) in leaves {
+        let near = logs.iter().any(|&(gx, gy, gz)| {
+            gy > surface_at(gx, gz) && (gx - lx).abs() + (gy - ly).abs() + (gz - lz).abs() <= 6
+        });
+        if !near {
+            if let Some(i) = ctx.idx(lx, ly, lz) {
+                let cur = ctx.grid[i];
+                if ctx.is_leaf(cur) {
+                    ctx.grid[i] = ctx.tb.air;
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::noise_chunk::GRID_LEN;
+    use super::super::noise_chunk::{grid_index, GRID_LEN, MAX_Y, MIN_Y};
     use super::*;
+
+    /// Place une espèce isolée sur sol plat et compte les feuilles sans aucun log
+    /// à ≤ 6 (taxicab) — un arbre bien formé ne doit pas en avoir (hors clip de
+    /// bord). Détecte les bugs de FORME (feuilles déconnectées du tronc).
+    #[test]
+    fn no_floating_leaves_in_isolation() {
+        let tb: &TreeBlocks = &TB;
+        let leaves_set: std::collections::HashSet<u32> = [
+            tb.oak_leaves,
+            tb.birch_leaves,
+            tb.spruce_leaves,
+            tb.jungle_leaves,
+            tb.acacia_leaves,
+            tb.dark_oak_leaves,
+            tb.cherry_leaves,
+            tb.mangrove_leaves,
+        ]
+        .into_iter()
+        .collect();
+        let log_set: std::collections::HashSet<u32> = [
+            tb.oak_log,
+            tb.birch_log,
+            tb.spruce_log,
+            tb.jungle_log,
+            tb.acacia_log,
+            tb.dark_oak_log,
+            tb.cherry_log,
+            tb.mangrove_log,
+            tb.mangrove_roots,
+        ]
+        .into_iter()
+        .collect();
+        let species = [
+            Species::MegaJungle,
+            Species::MegaSpruce,
+            Species::FancyOak,
+            Species::DarkOak,
+            Species::Acacia,
+            Species::Cherry,
+            Species::JungleTree,
+            Species::Oak,
+            Species::Spruce,
+        ];
+        let mut worst: Option<(Species, i64, usize)> = None;
+        for &sp in &species {
+            for seed in 0..150i64 {
+                let mut grid = vec![tb.air; GRID_LEN].into_boxed_slice();
+                let mut rng = Random::new(seed);
+                place(&mut grid, &mut rng, sp, 8, 70, 8, &|_, _| i32::MIN);
+                // Indexe logs + leaves (coords locales).
+                let mut logs = std::collections::HashSet::new();
+                let mut leaves = Vec::new();
+                for lx in 0..16i32 {
+                    for lz in 0..16i32 {
+                        for wy in MIN_Y..MAX_Y {
+                            let b = grid[grid_index(lx as usize, wy, lz as usize)];
+                            if log_set.contains(&b) {
+                                logs.insert((lx, wy, lz));
+                            } else if leaves_set.contains(&b) {
+                                leaves.push((lx, wy, lz));
+                            }
+                        }
+                    }
+                }
+                let mut floaters = 0;
+                for &(lx, wy, lz) in &leaves {
+                    // hors bord (évite les faux positifs de clip 0..16).
+                    if !(3..13).contains(&lx) || !(3..13).contains(&lz) {
+                        continue;
+                    }
+                    let near = (-6..=6i32).any(|dx| {
+                        (-6..=6i32).any(|dy| {
+                            (-6..=6i32).any(|dz| {
+                                dx.abs() + dy.abs() + dz.abs() <= 6
+                                    && logs.contains(&(lx + dx, wy + dy, lz + dz))
+                            })
+                        })
+                    });
+                    if !near {
+                        floaters += 1;
+                    }
+                }
+                if floaters > 0 && worst.is_none_or(|(_, _, w)| floaters > w) {
+                    worst = Some((sp, seed, floaters));
+                }
+            }
+        }
+        assert!(
+            worst.is_none(),
+            "feuilles flottantes en isolation : {worst:?}"
+        );
+    }
 
     fn count(species: Species, seed: i64) -> (usize, usize) {
         let tb: &TreeBlocks = &TB;
@@ -1479,7 +1634,7 @@ mod tests {
         ];
         let mut grid = vec![tb.air; GRID_LEN].into_boxed_slice();
         let mut rng = Random::new(seed);
-        place(&mut grid, &mut rng, species, 8, 70, 8);
+        place(&mut grid, &mut rng, species, 8, 70, 8, &|_, _| i32::MIN);
         let logs = grid.iter().filter(|b| logs_set.contains(b)).count();
         let leaves = grid.iter().filter(|b| leaves_set.contains(b)).count();
         (logs, leaves)
