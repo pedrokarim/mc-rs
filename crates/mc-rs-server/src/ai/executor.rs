@@ -12,6 +12,12 @@ use crate::entity::EntityBase;
 const TARGET_REACHED_DIST_SQ: f64 = 1.0;
 /// Ticks sans progrès avant d'abandonner une cible de roam.
 const MAX_STUCK_TICKS: u32 = 40;
+/// Intervalle d'errance : entre deux balades, le mob attend (chance 1/INTERVAL
+/// par game tick) avant de choisir une nouvelle destination. Fidèle à vanilla
+/// `minecraft:behavior.random_stroll` (`interval` défaut 120) et à Allay
+/// (`FlatRandomRoamExecutor.frequency` ≈ 100). Sans ce gate, le mob re-tirait
+/// une direction à CHAQUE tick → mouvement chaotique « dans tous les sens ».
+const ROAM_INTERVAL: u32 = 120;
 
 /// Position 3D d'un joueur par runtime id (cherchée dans le snapshot).
 fn player_pos(players: &[super::PlayerSnapshot], runtime_id: u64) -> Option<[f32; 3]> {
@@ -399,6 +405,10 @@ impl FlatRandomRoamExecutor {
         }
     }
 
+    /// Choisit une nouvelle destination aléatoire et déclenche **un** calcul de
+    /// route ; le mob marchera tout le chemin (pas de re-tirage par tick). On
+    /// fixe aussi le regard sur la destination pour que le corps s'oriente vers
+    /// la marche (sinon il glisse de côté). Port `findNewTarget` d'Allay.
     fn find_new_target(&mut self, base: &EntityBase, memory: &mut Memory) {
         let mut rng = rand::thread_rng();
         let dx = rng.gen_range(-self.max_roam_range..=self.max_roam_range) as f64;
@@ -409,70 +419,66 @@ impl FlatRandomRoamExecutor {
             base.position[2] as f64 + dz,
         ];
         memory.move_target = Some(target);
+        memory.look_target = Some(target);
         memory.route_update_required = true;
         self.has_target = true;
+        self.stuck_tick = 0;
+        self.best_dist_sq = f64::MAX;
+    }
+
+    /// Cible atteinte ou abandonnée : repasse en pause (le gate d'intervalle
+    /// décidera quand repartir).
+    fn release_target(&mut self) {
+        self.has_target = false;
         self.stuck_tick = 0;
         self.best_dist_sq = f64::MAX;
     }
 }
 
 impl Executor for FlatRandomRoamExecutor {
-    fn on_start(&mut self, memory: &mut Memory, base: &mut EntityBase) {
-        self.has_target = false;
+    fn on_start(&mut self, memory: &mut Memory, _base: &mut EntityBase) {
+        // Pas de pick immédiat (Allay `calNextTargetImmediately = false`) : le
+        // mob commence à l'arrêt et part en balade après le gate d'intervalle.
+        self.release_target();
         memory.movement_speed = self.speed;
-        self.find_new_target(base, memory);
+        memory.move_target = None;
+        memory.clear_move_direction();
     }
 
     fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
-        // Regard « idle » : on fixe le joueur le plus proche s'il y en a un.
-        match ctx
-            .memory
-            .nearest_player
-            .and_then(|pid| ctx.players.iter().find(|p| p.runtime_id == pid).copied())
-        {
-            Some(p) => {
-                ctx.memory.look_target = Some([
-                    p.position[0] as f64,
-                    (p.position[1] + 1.62) as f64,
-                    p.position[2] as f64,
-                ]);
-            }
-            None => ctx.memory.look_target = None,
-        }
-
+        // Progression vers la cible courante : atteinte ou abandon si coincé.
         if let Some(target) = ctx.memory.move_target {
             let dx = target[0] - ctx.base.position[0] as f64;
             let dz = target[2] - ctx.base.position[2] as f64;
             let d2 = dx * dx + dz * dz;
             if d2 < TARGET_REACHED_DIST_SQ {
-                self.has_target = false; // arrivé → nouvelle cible au prochain tick
+                self.release_target(); // arrivé → pause
             } else if d2 + 0.0625 < self.best_dist_sq {
                 self.best_dist_sq = d2;
                 self.stuck_tick = 0;
             } else {
                 self.stuck_tick += 1;
                 if self.stuck_tick >= MAX_STUCK_TICKS {
-                    self.has_target = false; // coincé → abandonne
+                    self.release_target(); // coincé → pause
                 }
             }
-        } else {
-            self.has_target = false;
+        } else if self.has_target {
+            self.release_target();
         }
 
+        // Pause entre deux balades : le mob s'arrête réellement, et on n'engage
+        // une nouvelle destination qu'avec une chance 1/ROAM_INTERVAL par tick
+        // (≈ vanilla random_stroll). C'est ce gate qui supprime le mouvement
+        // erratique : sans lui, on re-tirait une direction chaque tick.
         if !self.has_target {
-            let base = &*ctx.base;
+            ctx.memory.move_target = None;
+            ctx.memory.look_target = None;
+            ctx.memory.clear_move_direction();
+
             let mut rng = rand::thread_rng();
-            let dx = rng.gen_range(-self.max_roam_range..=self.max_roam_range) as f64;
-            let dz = rng.gen_range(-self.max_roam_range..=self.max_roam_range) as f64;
-            ctx.memory.move_target = Some([
-                base.position[0] as f64 + dx,
-                base.position[1] as f64,
-                base.position[2] as f64 + dz,
-            ]);
-            ctx.memory.route_update_required = true;
-            self.has_target = true;
-            self.stuck_tick = 0;
-            self.best_dist_sq = f64::MAX;
+            if rng.gen_range(0..ROAM_INTERVAL) == 0 {
+                self.find_new_target(ctx.base, ctx.memory);
+            }
         }
 
         true // roam tourne indéfiniment (priorité basse)
@@ -1302,14 +1308,45 @@ mod tests {
     }
 
     #[test]
-    fn roam_sets_a_move_target_on_start() {
+    fn roam_waits_then_eventually_picks_a_target() {
         let mut exec = FlatRandomRoamExecutor::new(0.2, 8);
         let mut base = zombie_base([100.0, 64.0, 100.0]);
         let mut memory = Memory::new(0.2);
         exec.on_start(&mut memory, &mut base);
+        // Pas de pick immédiat (fidèle à Allay `calNextTargetImmediately=false`) :
+        // le mob démarre à l'arrêt.
         assert!(
-            memory.move_target.is_some(),
-            "le roam pose une cible au démarrage"
+            memory.move_target.is_none(),
+            "le roam démarre à l'arrêt, sans cible immédiate"
+        );
+
+        // Le gate 1/ROAM_INTERVAL finit par engager une balade (P(jamais sur
+        // 4000 ticks) ≈ (119/120)^4000, négligeable).
+        let players: Vec<PlayerSnapshot> = Vec::new();
+        let mut effects = Vec::new();
+        let mut picked = false;
+        for _ in 0..4000 {
+            let mut ctx = ExecCtx {
+                base: &mut base,
+                kind: MobKind::Cow,
+                memory: &mut memory,
+                players: &players,
+                effects: &mut effects,
+            };
+            exec.execute(&mut ctx);
+            if memory.move_target.is_some() {
+                picked = true;
+                break;
+            }
+        }
+        assert!(
+            picked,
+            "le roam finit par choisir une destination après le gate d'intervalle"
+        );
+        // Quand il choisit, il regarde sa destination (corps aligné sur la marche).
+        assert_eq!(
+            memory.move_target, memory.look_target,
+            "le regard suit la destination d'errance"
         );
     }
 

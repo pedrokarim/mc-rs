@@ -21,8 +21,12 @@ const PRIO_ROAM: i32 = 1;
 const TEMPT_RANGE: f64 = 10.0;
 /// Cooldown d'attaque mêlée (ticks à 20 TPS → ~1 s, comme vanilla).
 const MELEE_COOLDOWN: u32 = 20;
-/// Rayon d'errance (blocs).
-const ROAM_RANGE: i32 = 8;
+/// Rayon d'errance (blocs) — vanilla `random_stroll.xz_dist` défaut 10.
+const ROAM_RANGE: i32 = 10;
+/// Fraction de la vitesse de course utilisée pour l'errance tranquille. Allay
+/// erre à ~0.1 contre la pleine vitesse de chasse ; on garde un ratio pour
+/// que la balade soit nettement plus lente que la traque.
+const ROAM_SPEED_FACTOR: f32 = 0.5;
 /// Rayon d'errance des volants (blocs).
 const FLY_ROAM_RANGE: i32 = 10;
 /// Boules de feu : vitesse (blocs/tick) et cooldown de tir (ticks).
@@ -70,7 +74,10 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
     let roam = || -> Behavior {
         Behavior::new(
             Box::new(AlwaysEvaluator),
-            Box::new(FlatRandomRoamExecutor::new(speed, ROAM_RANGE)),
+            Box::new(FlatRandomRoamExecutor::new(
+                speed * ROAM_SPEED_FACTOR,
+                ROAM_RANGE,
+            )),
             PRIO_ROAM,
             1,
         )
