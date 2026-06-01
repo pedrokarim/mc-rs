@@ -133,17 +133,6 @@ pub fn tick<R: Rng>(
         let sx = center[0] as i32 + dx;
         let sz = center[2] as i32 + dz;
 
-        // Filtrage par biome : le mob doit être autorisé par le `biome_filter`
-        // vanilla du biome au point de spawn (ex. husk → "desert", stray →
-        // "frozen", cow → "animal"). Le biome ne dépend pas de Y.
-        let biome_id = cache.biome_at(sx, sz);
-        let biome_tags: &[String] = crate::world::biome::vanilla_data_for(biome_id)
-            .map(|d| d.tags.as_slice())
-            .unwrap_or(&[]);
-        if !crate::spawn_rules_vanilla::biome_allows(entity_id_for(picked), biome_tags) {
-            continue;
-        }
-
         // Trouve un sol valide (top non-air entre Y=320 et Y=-64).
         let mut sy = None;
         for y in (-64..=320).rev() {
@@ -164,6 +153,20 @@ pub fn tick<R: Rng>(
             }
         }
         let Some(sy) = sy else { continue };
+
+        // Filtrage par biome : le mob doit être autorisé par le `biome_filter`
+        // vanilla du biome RÉELLEMENT généré au point de spawn (ex. husk →
+        // "desert", stray → "frozen", parrot → "jungle", cow → "animal"). On
+        // lit le biome via le générateur ACTIF (`biome_identifier_at`) pour
+        // qu'il corresponde à ce que le joueur voit — comme Bedrock, qui teste
+        // le biome du bloc de spawn.
+        let biome_id = cache.biome_identifier_at(sx, sy, sz);
+        let biome_tags: &[String] = crate::biomes_vanilla::for_biome(biome_id)
+            .map(|d| d.tags.as_slice())
+            .unwrap_or(&[]);
+        if !crate::spawn_rules_vanilla::biome_allows(entity_id_for(picked), biome_tags) {
+            continue;
+        }
 
         // Spawn. Slimes : taille aléatoire (1/2/4). Animaux : ~5 % en bébé.
         let spawn_pos = [sx as f32 + 0.5, sy as f32, sz as f32 + 0.5];

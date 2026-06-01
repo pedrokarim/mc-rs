@@ -51,6 +51,44 @@ fn fallback_biome_data() -> Vec<u8> {
     biome_data
 }
 
+/// Biome (identifiant vanilla `"minecraft:..."`) du worldgen moderne « noise »
+/// à une position monde. Reproduit EXACTEMENT la passe de génération du chunk
+/// (`ClimateSampler::sample(x>>2, y>>2, z>>2)` → `BiomeParameters::find`), via
+/// les seules API **publiques** de `world::worldgen` — donc le biome est
+/// identique à celui que voit le joueur, sans dépendre des internes du worldgen
+/// (édités par ailleurs). La table climatique ne dépend pas du seed → static
+/// globale ; le router de densité en dépend → caché et reconstruit au
+/// changement de seed (construction coûteuse).
+///
+/// Le worldgen nomme les biomes « à la Java » (`badlands`, `snowy_plains`…),
+/// alors que la table de tags `biomes_vanilla` utilise les noms Bedrock legacy
+/// (`mesa`, `ice_plains`…). Le pont entre les deux est l'**ID réseau Bedrock**
+/// (`bedrock_ids`, mapping Geyser validé) → `biome::biome_identifier`.
+fn noise_biome_identifier(seed: u64, x: i32, y: i32, z: i32) -> &'static str {
+    use crate::world::worldgen::climate::{ClimateSampler, OverworldBiomes};
+    use crate::world::worldgen::density::{self, NoiseRouter};
+    use std::sync::{LazyLock, Mutex};
+
+    static BIOMES: LazyLock<OverworldBiomes> =
+        LazyLock::new(crate::world::worldgen::climate::load_overworld);
+    static ROUTER: LazyLock<Mutex<(u64, Option<NoiseRouter>)>> =
+        LazyLock::new(|| Mutex::new((0, None)));
+
+    let bedrock_id = {
+        let mut guard = ROUTER.lock().unwrap();
+        if guard.1.is_none() || guard.0 != seed {
+            *guard = (seed, Some(density::build_overworld(seed)));
+        }
+        let climate = ClimateSampler::from_router(guard.1.as_ref().unwrap());
+        let idx = BIOMES.params.find(&climate.sample(x >> 2, y >> 2, z >> 2));
+        BIOMES.bedrock_ids[idx as usize]
+    };
+    // Pont ID Bedrock → identifiant legacy connu de `biomes_vanilla`. Les
+    // biomes non couverts (rares, ex. certains caves/1.21) retombent sur
+    // plains : pas de tag spécifique, mais identifiant valide.
+    super::biome::biome_identifier(bedrock_id).unwrap_or("minecraft:plains")
+}
+
 /// In-memory chunk cache with LevelDB persistence.
 pub struct ChunkCache {
     chunks: HashMap<(i32, i32), ChunkColumn>,
@@ -219,12 +257,24 @@ impl ChunkCache {
         chunk.sub_chunks[sub_idx].get_block(local_x, local_y, local_z)
     }
 
-    /// ID de biome (numérique) à une position monde, via le sélecteur du
-    /// générateur de terrain. Pour les biomes vanilla et leurs tags, voir
-    /// `world::biome::vanilla_data_for`. Utilisé par le spawner pour le
-    /// filtrage par biome.
-    pub fn biome_at(&self, world_x: i32, world_z: i32) -> u32 {
-        terrain_generator::get_biome_at(world_x, world_z, self.seed)
+    /// Identifiant de biome (`"minecraft:forest"`, …) au point monde, calculé
+    /// selon le **générateur actif** pour correspondre au biome réellement
+    /// généré et visible par le joueur (comme Bedrock, qui teste le biome du
+    /// bloc de spawn). Pour les tags vanilla, voir `crate::biomes_vanilla`.
+    /// Utilisé par le spawner pour le filtrage par biome.
+    pub fn biome_identifier_at(&self, world_x: i32, world_y: i32, world_z: i32) -> &'static str {
+        match self.generator.as_str() {
+            // Worldgen moderne : biome climatique (mêmes API publiques que la
+            // génération du chunk → biome identique à celui que voit le joueur).
+            "noise" => noise_biome_identifier(self.seed, world_x, world_y, world_z),
+            // Flat : tout en plaines.
+            "flat" => "minecraft:plains",
+            // Générateur Simplex hérité.
+            _ => {
+                let id = terrain_generator::get_biome_at(world_x, world_z, self.seed);
+                super::biome::biome_identifier(id).unwrap_or("minecraft:plains")
+            }
+        }
     }
 
     /// Graine du monde.
@@ -337,6 +387,28 @@ mod tests {
             .unwrap()
             .as_nanos();
         std::env::temp_dir().join(format!("mc-rs-{name}-{unique}"))
+    }
+
+    #[test]
+    fn noise_biome_identifier_is_known_to_vanilla_data() {
+        // Le biome lu pour le spawn (générateur "noise") doit être un
+        // identifiant vanilla connu de `biomes_vanilla` — sinon le filtrage par
+        // biome (`biome_allows`) lirait des tags vides et serait inopérant.
+        let cache = ChunkCache::new(&temp_world_dir("biome-noise"), 12345, "noise");
+        let mut found_tagged = false;
+        for (x, z) in [(0, 0), (512, -512), (-2000, 3000), (10000, 10000)] {
+            let id = cache.biome_identifier_at(x, 72, z);
+            assert!(
+                id.starts_with("minecraft:"),
+                "identifiant de biome inattendu: {id}"
+            );
+            let data = crate::biomes_vanilla::for_biome(id)
+                .unwrap_or_else(|| panic!("biome {id} inconnu de biomes_vanilla"));
+            if !data.tags.is_empty() {
+                found_tagged = true;
+            }
+        }
+        assert!(found_tagged, "au moins un biome doit porter des tags");
     }
 
     #[test]
