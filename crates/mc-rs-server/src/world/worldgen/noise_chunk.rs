@@ -35,7 +35,8 @@ pub(super) const SEA_LEVEL: i32 = 63;
 /// Espacement minimal (Chebyshev) entre troncs d'arbres d'un même chunk
 /// d'origine — approxime la collision vanilla (les biomes denses comme la jungle
 /// ne posent pas réellement tous leurs ~50 arbres). Réglable : ↑ = plus clairsemé.
-const TREE_MIN_SPACING: i32 = 3;
+/// 4 = jungle dense mais praticable (Bedrock-like), vs les ~22 arbres de Java.
+const TREE_MIN_SPACING: i32 = 4;
 /// Colonnes par chunk (16×16).
 pub(super) const COLS: usize = 256;
 /// Taille de la grille de blocs d'un chunk (toute la hauteur).

@@ -855,10 +855,15 @@ fn decorate_patches(
             }
         }
     }
+    // L'herbe (pas les fleurs) est réduite : les `count` Java (jungle 25 × 32
+    // essais) tapissent le sol à 100 % ; Bedrock laisse le grass_block visible.
+    // Facteur réglable pour retrouver ce rendu (le sol réapparaît).
+    const GRASS_GROUND_SCALE: f64 = 0.35;
     for (biome, w) in weights {
         let frac = w as f64 / 256.0;
         for patch in patches_of(biome) {
-            let expected = patch.patch_count(noise) * frac;
+            let scale = if flower { 1.0 } else { GRASS_GROUND_SCALE };
+            let expected = patch.patch_count(noise) * frac * scale;
             let n = expected.floor() as i32 + i32::from(rng.next_float() < expected.fract());
             let xz = patch.xz_spread.max(1);
             for _ in 0..n {
