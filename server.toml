@@ -33,7 +33,7 @@ name = "world_noise"
 generator = "noise"
 
 # Seed du monde (0 = aléatoire). Même seed = même terrain.
-seed = 42
+seed = 0
 
 [gameplay]
 # Mode de jeu par défaut : "survival", "creative", "adventure", "spectator"
