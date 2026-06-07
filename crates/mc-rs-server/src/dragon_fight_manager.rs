@@ -145,6 +145,21 @@ impl DragonFightManager {
         }
     }
 
+    /// À appeler quand l'entité dragon a disparu du monde (tuée via le combat mob).
+    /// Renvoie l'effet de mort : portail de sortie + œuf au tout premier kill.
+    pub fn notify_dragon_killed(&mut self) -> Vec<DragonFightEffect> {
+        if self.dragon_runtime_id.is_none() {
+            return Vec::new();
+        }
+        let drop_egg = !self.fight.previously_killed;
+        self.fight.on_dragon_death();
+        self.dragon_runtime_id = None;
+        vec![DragonFightEffect::DragonDied {
+            fountain_xz: FOUNTAIN_XZ,
+            drop_egg,
+        }]
+    }
+
     /// Tentative d'infliger `amount` de dégâts au dragon (à la tête ou au corps).
     /// Rejette les dégâts tant qu'un crystal le soigne (invulnérabilité vanilla).
     /// Renvoie les effets (mort éventuelle, mise à jour de barre).

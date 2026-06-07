@@ -1931,6 +1931,27 @@ async fn main() {
                     for effect in dragon_fight.tick(end_has_players) {
                         apply_dragon_fight_effect(effect, &mut dragon_fight, &mut mob_entities);
                     }
+                    // Détection de mort : le dragon était lié mais son entité a disparu
+                    // (tué via le combat mob) → génère le portail de sortie + l'œuf.
+                    if let Some(rid) = dragon_fight.dragon_runtime_id() {
+                        let still_alive = mob_entities
+                            .all()
+                            .any(|m| m.base.entity_runtime_id == rid);
+                        if !still_alive {
+                            for effect in dragon_fight.notify_dragon_killed() {
+                                if let crate::dragon_fight_manager::DragonFightEffect::DragonDied {
+                                    fountain_xz,
+                                    drop_egg,
+                                } = effect
+                                {
+                                    if let Ok(mut cache) = worlds.get(2).lock() {
+                                        create_dragon_exit_portal(&mut cache, fountain_xz, drop_egg);
+                                    }
+                                    info!("[dragon] Ender dragon vaincu — portail de sortie généré (œuf={drop_egg})");
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Tick-based chunk sending (rate limited, spiral order)
@@ -2893,6 +2914,28 @@ fn apply_dragon_fight_effect(
         | E::UpdateBossBar { .. }
         | E::HideBossBar
         | E::DragonDied { .. } => {}
+    }
+}
+
+/// Génère la fontaine / portail de sortie de l'End à la mort du dragon : socle
+/// bedrock 3×3, bloc `end_portal` au centre (retour overworld via `check_end_portal`),
+/// et œuf de dragon au-dessus au tout premier kill.
+fn create_dragon_exit_portal(cache: &mut ChunkCache, fountain_xz: (i32, i32), drop_egg: bool) {
+    use crate::world::block_registry::BLOCKS;
+    let (fx, fz) = fountain_xz;
+    let bedrock = BLOCKS.get("minecraft:bedrock");
+    let end_portal = BLOCKS.get("minecraft:end_portal");
+    let dragon_egg = BLOCKS.get("minecraft:dragon_egg");
+    // Sommet de l'île centrale (cf. end_generator : centre y≈76).
+    let base_y = 76;
+    for dx in -1..=1 {
+        for dz in -1..=1 {
+            cache.set_block(fx + dx, base_y, fz + dz, bedrock);
+        }
+    }
+    cache.set_block(fx, base_y + 1, fz, end_portal);
+    if drop_egg {
+        cache.set_block(fx, base_y + 2, fz, dragon_egg);
     }
 }
 
