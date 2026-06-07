@@ -1562,6 +1562,7 @@ async fn main() {
                     &mut should_stop,
                     &event_manager,
                     &mut furnace_manager,
+                    &mut dragon_fight,
                 );
             }
 
@@ -1929,7 +1930,27 @@ async fn main() {
                         .values()
                         .any(|c| c.is_in_game() && c.current_dimension == 2);
                     for effect in dragon_fight.tick(end_has_players) {
-                        apply_dragon_fight_effect(effect, &mut dragon_fight, &mut mob_entities);
+                        use crate::dragon_fight_manager::DragonFightEffect as DE;
+                        match effect {
+                            DE::SpawnDragon { position } => {
+                                let e = mob_entities
+                                    .spawn(crate::mob_entities::MobKind::EnderDragon, position);
+                                let rid = e.base.entity_runtime_id;
+                                mob_entities.set_dimension(rid, 2);
+                                dragon_fight.on_dragon_spawned(rid);
+                                info!("[dragon] Ender dragon spawned at {position:?} (rid={rid})");
+                            }
+                            DE::SpawnCrystal { position } => {
+                                let rid =
+                                    spawn_end_crystal(&mut connections, &mut raknet, position);
+                                dragon_fight.on_crystal_spawned(rid);
+                            }
+                            // Barre de boss : gérée par la logique is_boss existante.
+                            DE::ShowBossBar
+                            | DE::UpdateBossBar { .. }
+                            | DE::HideBossBar
+                            | DE::DragonDied { .. } => {}
+                        }
                     }
                     // Détection de mort : le dragon était lié mais son entité a disparu
                     // (tué via le combat mob) → génère le portail de sortie + l'œuf.
@@ -2480,6 +2501,7 @@ async fn main() {
                     &mut should_stop,
                     &event_manager,
                     &mut furnace_manager,
+                    &mut dragon_fight,
                 );
             }
 
@@ -2891,30 +2913,38 @@ fn apply_mob_explosion(
 /// encodés UNE SEULE FOIS via `encode_shared_batch` avec Zlib, puis clonés
 /// par recipient avant `prepare_for_send` (qui applique l'encryption par-conn).
 /// Économise N appels à zlib pour un broadcast à N joueurs.
-/// Applique un effet du combat de l'ender dragon. Slice 1 : spawn du dragon
-/// (entité mob EnderDragon, dimension End) → vol + barre de boss + combat via les
-/// systèmes mob existants. Crystals/œuf/portail = slices suivantes.
-fn apply_dragon_fight_effect(
-    effect: crate::dragon_fight_manager::DragonFightEffect,
-    dragon_fight: &mut crate::dragon_fight_manager::DragonFightManager,
-    mob_entities: &mut MobEntityManager,
-) {
-    use crate::dragon_fight_manager::DragonFightEffect as E;
-    match effect {
-        E::SpawnDragon { position } => {
-            let e = mob_entities.spawn(crate::mob_entities::MobKind::EnderDragon, position);
-            let rid = e.base.entity_runtime_id;
-            mob_entities.set_dimension(rid, 2);
-            dragon_fight.on_dragon_spawned(rid);
-            info!("[dragon] Ender dragon spawned at {position:?} (rid={rid})");
-        }
-        // SpawnCrystal / barre de boss / mort : slices suivantes.
-        E::SpawnCrystal { .. }
-        | E::ShowBossBar
-        | E::UpdateBossBar { .. }
-        | E::HideBossBar
-        | E::DragonDied { .. } => {}
+/// Fait apparaître une entité end crystal à `position` (visible des joueurs de l'End)
+/// et renvoie son `entity_runtime_id` (suivi par le `DragonFightManager`).
+fn spawn_end_crystal(
+    connections: &mut HashMap<SocketAddr, Connection>,
+    raknet: &mut RakNetServer,
+    position: [f32; 3],
+) -> u64 {
+    let uid = crate::player_registry::next_entity_id();
+    let rid = uid as u64;
+    let add = mc_rs_proto::packets::player::AddActor {
+        entity_unique_id: uid,
+        entity_runtime_id: rid,
+        actor_type: "minecraft:ender_crystal".to_string(),
+        position,
+        velocity: [0.0, 0.0, 0.0],
+        pitch: 0.0,
+        yaw: 0.0,
+        head_yaw: 0.0,
+        body_yaw: 0.0,
+        attributes: Vec::new(),
+        metadata: Vec::new(),
     }
+    .encode();
+    for (addr, conn) in connections.iter_mut() {
+        if conn.is_in_game() && conn.current_dimension == 2 {
+            conn.visible_entities.insert(uid);
+            let pkt = conn.encode_compressed_packet(packet_id::ADD_ACTOR, &add);
+            let prep = conn.prepare_for_send(pkt);
+            raknet.send_to_session(addr, prep, Reliability::ReliableOrdered, true);
+        }
+    }
+    rid
 }
 
 /// Génère la fontaine / portail de sortie de l'End à la mort du dragon : socle
@@ -3187,6 +3217,7 @@ fn process_peer_events(
     should_stop: &mut bool,
     event_manager: &Arc<std::sync::Mutex<crate::event::EventManager>>,
     furnace_manager: &mut crate::furnace::FurnaceManager,
+    dragon_fight: &mut crate::dragon_fight_manager::DragonFightManager,
 ) {
     let addrs: Vec<SocketAddr> = peers.keys().copied().collect();
     for addr in addrs {
@@ -3827,6 +3858,30 @@ fn process_peer_events(
                                 // Ignore unused
                                 let _ = target_pos;
                             }
+                            continue;
+                        }
+
+                        // Combat de l'ender dragon (DIM-J slice B).
+                        // 1) Un end crystal touché est détruit (1 coup) → déconnecté du
+                        //    dragon. Quand tous le sont, le dragon devient vulnérable.
+                        if dragon_fight.is_crystal(attack.target_runtime_id) {
+                            let uid = attack.target_runtime_id as i64;
+                            dragon_fight.on_crystal_destroyed(attack.target_runtime_id);
+                            let remove = mc_rs_proto::packets::player::RemoveEntity {
+                                entity_unique_id: uid,
+                            }
+                            .encode();
+                            broadcast_entity_remove_culled(connections, raknet, uid, &remove);
+                            info!(
+                                "[dragon] End crystal détruit (rid={})",
+                                attack.target_runtime_id
+                            );
+                            continue;
+                        }
+                        // 2) Le dragon est invulnérable tant qu'un crystal le soigne.
+                        if dragon_fight.dragon_runtime_id() == Some(attack.target_runtime_id)
+                            && dragon_fight.dragon_invulnerable()
+                        {
                             continue;
                         }
 

@@ -1702,7 +1702,9 @@ impl MobEntityManager {
 
             // --- Despawn des hostiles trop loin de tout joueur (règles Bedrock) ---
             // (Si aucun joueur connecté, on ne despawn pas : pas de référentiel.)
-            if entity.kind.is_hostile() && !players.is_empty() {
+            // Les boss (ender dragon, wither) ne despawnent JAMAIS : sinon la
+            // détection de mort du dragon générerait le portail de sortie à tort.
+            if entity.kind.is_hostile() && !entity.kind.is_boss() && !players.is_empty() {
                 let nearest_sq = players
                     .iter()
                     .map(|p| {
