@@ -42,9 +42,17 @@ pub struct PendingItemEntitySpawn {
     pub item: ItemStack,
     pub position: [f32; 3],
     pub velocity: [f32; 3],
+    /// Dimension où faire apparaître l'item (0=overworld par défaut).
+    pub dimension: i32,
 }
 
 impl PendingItemEntitySpawn {
+    /// Fixe la dimension de spawn (builder).
+    pub fn with_dimension(mut self, dimension: i32) -> Self {
+        self.dimension = dimension;
+        self
+    }
+
     /// Spawn with zero velocity (used for items that appear already at rest,
     /// e.g. persistence restore).
     pub fn stationary(item: ItemStack, position: [f32; 3]) -> Self {
@@ -52,6 +60,7 @@ impl PendingItemEntitySpawn {
             item,
             position,
             velocity: [0.0, 0.0, 0.0],
+            dimension: 0,
         }
     }
 
@@ -69,6 +78,7 @@ impl PendingItemEntitySpawn {
             item,
             position,
             velocity: [vx, 0.2 * scale, vz],
+            dimension: 0,
         }
     }
 
@@ -86,6 +96,7 @@ impl PendingItemEntitySpawn {
                 direction[1] * force,
                 direction[2] * force,
             ],
+            dimension: 0,
         }
     }
 }
@@ -99,6 +110,8 @@ pub struct ItemEntity {
     pub velocity: [f32; 3],
     pub age_ticks: u32,
     pub pickup_delay_ticks: u32,
+    /// Dimension de l'item (0/1/2) — filtre diffusion + tick.
+    pub dimension: i32,
 }
 
 impl ItemEntity {
@@ -260,6 +273,7 @@ impl ItemEntityManager {
             velocity: spawn.velocity,
             age_ticks: 0,
             pickup_delay_ticks: PICKUP_DELAY_TICKS,
+            dimension: spawn.dimension,
         };
         self.entities
             .insert(entity.entity_runtime_id, entity.clone());
@@ -285,6 +299,11 @@ impl ItemEntityManager {
             let Some(entity) = self.entities.get_mut(&entity_runtime_id) else {
                 continue;
             };
+
+            // Ne ticke que les items de la dimension de ce cache.
+            if entity.dimension != chunk_cache.dimension() {
+                continue;
+            }
 
             entity.age_ticks = entity.age_ticks.saturating_add(1);
             if entity.pickup_delay_ticks > 0 {

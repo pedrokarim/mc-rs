@@ -192,6 +192,8 @@ pub fn tick<R: Rng>(
         } else {
             mobs.spawn(picked, spawn_pos)
         };
+        // L'entité appartient à la dimension actuellement tickée.
+        mobs.set_dimension(_entity.base.entity_runtime_id, cache.dimension());
         match cat {
             "monster" => hostile_count += 1,
             "animal" => passive_count += 1,

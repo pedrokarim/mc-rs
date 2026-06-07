@@ -22,6 +22,10 @@ pub struct EntityBase {
     pub on_ground: bool,
     pub attributes: Vec<AddActorAttribute>,
     pub metadata: Vec<(u32, u32, MetadataValue)>,
+    /// Dimension de l'entité (0=overworld, 1=nether, 2=end). Filtre le tick (contre
+    /// le bon cache) et la diffusion (visible seulement par les joueurs de la même
+    /// dimension). Voir le refactor « entités par dimension ».
+    pub dimension: i32,
 }
 
 impl EntityBase {
@@ -49,6 +53,7 @@ impl EntityBase {
             on_ground: false,
             attributes,
             metadata,
+            dimension: 0,
         }
     }
 

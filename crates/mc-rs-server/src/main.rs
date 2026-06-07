@@ -1928,14 +1928,20 @@ async fn main() {
                 }
 
                 crate::watchdog::checkpoint(10); // item_tick
-                let mut item_tick_result = if let Ok(mut cache) = chunk_cache.lock() {
-                    item_entities.tick(&registry, &mut cache)
+                let (mut item_tick_result, item_ticked_dim) = if let Ok(mut cache) =
+                    chunk_cache.lock()
+                {
+                    let dim = cache.dimension();
+                    (item_entities.tick(&registry, &mut cache), dim)
                 } else {
-                    crate::item_entities::TickResult {
-                        despawned: Vec::new(),
-                        pickup_candidates: Vec::new(),
-                        movement_updates: Vec::new(),
-                    }
+                    (
+                        crate::item_entities::TickResult {
+                            despawned: Vec::new(),
+                            pickup_candidates: Vec::new(),
+                            movement_updates: Vec::new(),
+                        },
+                        0,
+                    )
                 };
                 for update in item_tick_result.movement_updates.drain(..) {
                     broadcast_entity_movement_culled(
@@ -1947,6 +1953,7 @@ async fn main() {
                         &update.motion_packet,
                         update.entity_unique_id,
                         update.entity_position,
+                        item_ticked_dim,
                     );
                 }
 
@@ -2099,10 +2106,14 @@ async fn main() {
                     let t = world_state.time.rem_euclid(24000);
                     !(13000..23000).contains(&t)
                 };
-                let mob_tick_result = if let Ok(mut cache) = chunk_cache.lock() {
-                    Some(mob_entities.tick(&mut cache, &player_snapshots, is_day))
+                let (mob_tick_result, mob_ticked_dim) = if let Ok(mut cache) = chunk_cache.lock() {
+                    let dim = cache.dimension();
+                    (
+                        Some(mob_entities.tick(&mut cache, &player_snapshots, is_day)),
+                        dim,
+                    )
                 } else {
-                    None
+                    (None, 0)
                 };
                 if let Some(tick_result) = mob_tick_result {
                     for update in tick_result.movement_updates {
@@ -2115,6 +2126,7 @@ async fn main() {
                             &update.motion_packet,
                             update.entity_unique_id,
                             update.entity_position,
+                            mob_ticked_dim,
                         );
                     }
                     // Attaques mob→joueur (drainées hors du tick, comme les
@@ -2258,10 +2270,11 @@ async fn main() {
                     .filter(|p| p.is_attackable())
                     .map(|p| (p.runtime_id, p.position))
                     .collect();
-                let arrow_result = if let Ok(mut cache) = chunk_cache.lock() {
-                    Some(arrow_manager.tick(&mut cache, &arrow_players))
+                let (arrow_result, arrow_ticked_dim) = if let Ok(mut cache) = chunk_cache.lock() {
+                    let dim = cache.dimension();
+                    (Some(arrow_manager.tick(&mut cache, &arrow_players)), dim)
                 } else {
-                    None
+                    (None, 0)
                 };
                 if let Some(ar) = arrow_result {
                     for update in ar.movement_updates {
@@ -2274,6 +2287,7 @@ async fn main() {
                             &update.motion_packet,
                             update.entity_unique_id,
                             update.entity_position,
+                            arrow_ticked_dim,
                         );
                     }
                     for arrow in ar.despawned {
@@ -2844,6 +2858,7 @@ fn broadcast_entity_movement_culled(
     motion_packet: &[u8],
     entity_unique_id: i64,
     entity_position: [f32; 3],
+    entity_dimension: i32,
 ) {
     let shared_add = crate::connection::encode_shared_batch(
         add_packet_id,
@@ -2865,6 +2880,24 @@ fn broadcast_entity_movement_culled(
 
     for (addr, conn) in connections.iter_mut() {
         if !conn.is_in_game() {
+            continue;
+        }
+        // Pas de fuite inter-dimension : un joueur ne voit que les entités de SA
+        // dimension. Si l'entité est ailleurs, on la retire de sa vue le cas échéant.
+        if conn.current_dimension != entity_dimension {
+            if conn.visible_entities.remove(&entity_unique_id) {
+                let remove_batch = shared_remove.get_or_insert_with(|| {
+                    let remove_bytes =
+                        mc_rs_proto::packets::player::RemoveEntity { entity_unique_id }.encode();
+                    crate::connection::encode_shared_batch(
+                        packet_id::REMOVE_ACTOR,
+                        &remove_bytes,
+                        mc_rs_proto::batch::CompressionAlgorithm::Zlib,
+                    )
+                });
+                let prepared = conn.prepare_for_send(remove_batch.clone());
+                raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, true);
+            }
             continue;
         }
         let trans = entity_culling::classify_transition(
@@ -2948,7 +2981,7 @@ fn entity_visibility_scan(
     // le résultat de `encode_shared_batch` — pré-compressé une seule fois pour
     // tous les joueurs qui le recevront via prepare_for_send (qui n'applique
     // que l'encryption par-conn).
-    let item_snapshot: Vec<(i64, [f32; 3], Vec<u8>)> = item_entities
+    let item_snapshot: Vec<(i64, [f32; 3], i32, Vec<u8>)> = item_entities
         .all()
         .map(|e| {
             let add = e.add_actor_packet();
@@ -2957,10 +2990,10 @@ fn entity_visibility_scan(
                 &add,
                 mc_rs_proto::batch::CompressionAlgorithm::Zlib,
             );
-            (e.entity_unique_id, e.position, shared)
+            (e.entity_unique_id, e.position, e.dimension, shared)
         })
         .collect();
-    let mob_snapshot: Vec<(i64, [f32; 3], Vec<u8>)> = mob_entities
+    let mob_snapshot: Vec<(i64, [f32; 3], i32, Vec<u8>)> = mob_entities
         .all()
         .map(|e| {
             let add = e.add_actor_packet();
@@ -2969,7 +3002,12 @@ fn entity_visibility_scan(
                 &add,
                 mc_rs_proto::batch::CompressionAlgorithm::Zlib,
             );
-            (e.base.entity_unique_id, e.base.position, shared)
+            (
+                e.base.entity_unique_id,
+                e.base.position,
+                e.base.dimension,
+                shared,
+            )
         })
         .collect();
 
@@ -2986,9 +3024,23 @@ fn scan_for_player(
     raknet: &mut RakNetServer,
     addr: &SocketAddr,
     conn: &mut Connection,
-    entities: &[(i64, [f32; 3], Vec<u8>)],
+    entities: &[(i64, [f32; 3], i32, Vec<u8>)],
 ) {
-    for (entity_id, entity_pos, shared_add) in entities {
+    for (entity_id, entity_pos, entity_dim, shared_add) in entities {
+        // Pas de fuite inter-dimension : on ignore les entités d'une autre
+        // dimension (et on les retire de la vue si elles y étaient).
+        if conn.current_dimension != *entity_dim {
+            if conn.visible_entities.remove(entity_id) {
+                let remove_bytes = mc_rs_proto::packets::player::RemoveEntity {
+                    entity_unique_id: *entity_id,
+                }
+                .encode();
+                let pkt = conn.encode_compressed_packet(packet_id::REMOVE_ACTOR, &remove_bytes);
+                let prepared = conn.prepare_for_send(pkt);
+                raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, true);
+            }
+            continue;
+        }
         let trans = entity_culling::classify_transition(
             &mut conn.visible_entities,
             *entity_id,

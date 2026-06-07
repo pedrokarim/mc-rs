@@ -1512,6 +1512,14 @@ impl MobEntityManager {
         self.entities.remove(&entity_runtime_id)
     }
 
+    /// Fixe la dimension d'un mob stocké (appelé juste après le spawn pour que
+    /// l'entité appartienne à la dimension où elle apparaît).
+    pub fn set_dimension(&mut self, entity_runtime_id: u64, dimension: i32) {
+        if let Some(e) = self.entities.get_mut(&entity_runtime_id) {
+            e.base.dimension = dimension;
+        }
+    }
+
     /// Nourrit un mob : s'il est reproductible, adulte, hors cooldown et que
     /// l'item correspond à sa nourriture → le met en mode amour. Renvoie `true`
     /// si la nourriture a été acceptée (à consommer côté joueur).
@@ -1684,6 +1692,13 @@ impl MobEntityManager {
             let Some(entity) = self.entities.get_mut(&entity_id) else {
                 continue;
             };
+
+            // Ne ticke que les mobs de la dimension de ce cache (refactor entités
+            // par dimension) : un mob du Nether ne doit pas être tické/déplacé
+            // contre le terrain de l'overworld.
+            if entity.base.dimension != chunk_cache.dimension() {
+                continue;
+            }
 
             // --- Despawn des hostiles trop loin de tout joueur (règles Bedrock) ---
             // (Si aucun joueur connecté, on ne despawn pas : pas de référentiel.)

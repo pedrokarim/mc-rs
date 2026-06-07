@@ -1329,16 +1329,27 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
     fn spawn_mob(&mut self, mob_name: &str, position: [f32; 3]) -> Result<u64, String> {
         let kind =
             MobKind::parse(mob_name).ok_or_else(|| format!("Unknown mob type: {mob_name}"))?;
+        // Le mob apparaît dans la dimension du sender (console = overworld).
+        let dim = self
+            .sender_addr()
+            .and_then(|a| self.connections.get(&a))
+            .map(|c| c.current_dimension)
+            .unwrap_or(0);
         let entity = self.mob_entities.spawn(kind, position);
+        let runtime_id = entity.base.entity_runtime_id;
+        self.mob_entities.set_dimension(runtime_id, dim);
         let add_bytes = entity.add_actor_packet();
         let entity_uid = entity.base.entity_unique_id;
         let entity_pos = entity.base.position;
-        let runtime_id = entity.base.entity_runtime_id;
         let targets: Vec<std::net::SocketAddr> = self
             .connections
             .iter_mut()
             .filter_map(|(addr, conn)| {
                 if !conn.is_in_game() {
+                    return None;
+                }
+                // Même dimension uniquement (pas de fuite inter-dimension).
+                if conn.current_dimension != dim {
                     return None;
                 }
                 if !crate::entity_culling::is_within_view_for(conn, entity_pos) {

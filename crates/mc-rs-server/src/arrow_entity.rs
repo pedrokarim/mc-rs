@@ -189,6 +189,11 @@ impl ArrowEntityManager {
                 continue;
             };
 
+            // Ne ticke que les flèches de la dimension de ce cache.
+            if arrow.base.dimension != chunk_cache.dimension() {
+                continue;
+            }
+
             arrow.life += 1;
             if arrow.life >= ARROW_MAX_LIFE {
                 if let Some(a) = self.arrows.remove(&id) {
