@@ -48,6 +48,7 @@ mod damage;
 mod defaultgamemode;
 mod deop;
 mod difficulty;
+mod dimension;
 mod dumpmemory;
 mod effect;
 mod enchant;
@@ -119,6 +120,20 @@ pub enum TitlePacketAction {
     },
 }
 
+/// Position cible (position des yeux) lors d'un changement de dimension.
+/// OW↔Nether applique le ratio 1:8 (cf. `dimensions::nether_portal_coordinate`) ;
+/// vers l'End → plateforme. Y choisis pour atterrir sur le sol placeholder (DIM-D) ;
+/// affinés quand les vrais générateurs/portails arriveront (DIM-E→H).
+fn dimension_target_position(from: i32, to: i32, pos: [f32; 3]) -> [f32; 3] {
+    match (from, to) {
+        (0, 1) => [pos[0] / 8.0, 3.0, pos[2] / 8.0],
+        (1, 0) => [pos[0] * 8.0, 100.0, pos[2] * 8.0],
+        (_, 2) => [8.5, 3.0, 8.5],
+        (2, _) => [pos[0], 100.0, pos[2]],
+        _ => [pos[0], 3.0, pos[2]],
+    }
+}
+
 pub trait ServerCommandRuntime: CommandSender + SoftEnumSource {
     fn sender_addr(&self) -> Option<SocketAddr>;
     fn send_feedback(&mut self, message: &str);
@@ -133,6 +148,10 @@ pub trait ServerCommandRuntime: CommandSender + SoftEnumSource {
     fn player_addr_by_entity(&self, entity_id: u64) -> Option<SocketAddr>;
     fn teleport_player(&mut self, addr: SocketAddr, position: [f32; 3]);
     fn set_player_gamemode(&mut self, addr: SocketAddr, mode: i32);
+    /// Transfère un joueur vers une dimension (0=overworld, 1=nether, 2=end).
+    fn change_player_dimension(&mut self, addr: SocketAddr, dimension: i32);
+    /// Dimension courante d'un joueur (None si hors-ligne).
+    fn player_dimension(&self, addr: SocketAddr) -> Option<i32>;
     fn player_position(&self, addr: SocketAddr) -> Option<[f32; 3]>;
     fn player_name(&self, addr: SocketAddr) -> Option<String>;
     fn player_gamemode(&self, addr: SocketAddr) -> Option<i32>;
@@ -1237,6 +1256,30 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
                 self.send_prepared(addr, packet);
             }
         }
+    }
+
+    fn change_player_dimension(&mut self, addr: SocketAddr, dimension: i32) {
+        if let Some(connection) = self.connections.get_mut(&addr) {
+            let from = connection.current_dimension;
+            let position = dimension_target_position(from, dimension, connection.position);
+            let packets = connection.change_dimension(dimension, position, true);
+            self.registry.update_position(
+                &addr,
+                position,
+                connection.pitch,
+                connection.yaw,
+                connection.head_yaw,
+            );
+            for packet in packets {
+                self.send_prepared(addr, packet);
+            }
+        }
+    }
+
+    fn player_dimension(&self, addr: SocketAddr) -> Option<i32> {
+        self.connections
+            .get(&addr)
+            .map(|connection| connection.current_dimension)
     }
 
     fn player_position(&self, addr: SocketAddr) -> Option<[f32; 3]> {
@@ -2374,6 +2417,7 @@ pub fn build_command_system() -> ServerCommandSystem {
     setworldspawn::register(&mut permissions, &mut map);
     time::register(&mut permissions, &mut map);
     difficulty::register(&mut permissions, &mut map);
+    dimension::register(&mut permissions, &mut map);
     defaultgamemode::register(&mut permissions, &mut map);
     seed::register(&mut permissions, &mut map);
     weather::register(&mut permissions, &mut map);
@@ -2420,6 +2464,7 @@ mod tests {
         entity_id: u64,
         position: [f32; 3],
         gamemode: i32,
+        dimension: i32,
         spawn_position: [f32; 3],
         inventory: Vec<ItemStack>,
         messages: Vec<String>,
@@ -2472,6 +2517,7 @@ mod tests {
                 entity_id: 1,
                 position: [0.0, 64.0, 0.0],
                 gamemode: 0,
+                dimension: 0,
                 spawn_position: [0.0, 64.0, 0.0],
                 inventory: Vec::new(),
                 messages: Vec::new(),
@@ -2485,6 +2531,7 @@ mod tests {
                 entity_id: 2,
                 position: [10.0, 70.0, 10.0],
                 gamemode: 0,
+                dimension: 0,
                 spawn_position: [10.0, 70.0, 10.0],
                 inventory: Vec::new(),
                 messages: Vec::new(),
@@ -2657,6 +2704,23 @@ mod tests {
 
         fn set_player_gamemode(&mut self, addr: SocketAddr, mode: i32) {
             self.player_mut(addr).gamemode = mode;
+        }
+
+        fn change_player_dimension(&mut self, addr: SocketAddr, dimension: i32) {
+            let from = self.players.get(&addr).map(|p| p.dimension).unwrap_or(0);
+            let pos = self
+                .players
+                .get(&addr)
+                .map(|p| p.position)
+                .unwrap_or_default();
+            let target = dimension_target_position(from, dimension, pos);
+            let player = self.player_mut(addr);
+            player.dimension = dimension;
+            player.position = target;
+        }
+
+        fn player_dimension(&self, addr: SocketAddr) -> Option<i32> {
+            self.players.get(&addr).map(|player| player.dimension)
         }
 
         fn player_position(&self, addr: SocketAddr) -> Option<[f32; 3]> {
@@ -3073,6 +3137,31 @@ mod tests {
         let feedback = runtime.feedback.last().cloned().unwrap_or_default();
         assert!(feedback.contains("gamemode"));
         assert!(feedback.contains("transferserver"));
+    }
+
+    #[test]
+    fn dimension_command_transfers_player() {
+        let system = build_command_system();
+        let mut runtime = TestRuntime::new(&system);
+
+        assert_eq!(runtime.player("Steve").dimension, 0);
+
+        // Steve (x=0,z=0) → Nether : ratio 1:8 (0,0) et atterrit sur le sol placeholder.
+        dispatch_ok(&system, &mut runtime, "dimension nether Steve");
+        assert_eq!(runtime.player("Steve").dimension, 1);
+        assert_eq!(runtime.player("Steve").position, [0.0, 3.0, 0.0]);
+
+        // Retour Overworld.
+        dispatch_ok(&system, &mut runtime, "dimension overworld Steve");
+        assert_eq!(runtime.player("Steve").dimension, 0);
+    }
+
+    #[test]
+    fn dimension_command_rejects_unknown_dimension() {
+        let system = build_command_system();
+        let mut runtime = TestRuntime::new(&system);
+        let err = dispatch_err(&system, &mut runtime, "dimension moon Steve");
+        assert!(err.contains("Unknown dimension"));
     }
 
     #[test]

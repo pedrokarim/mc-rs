@@ -47,6 +47,33 @@ fn all_mobs() -> &'static [MobKind] {
     MobKind::ALL
 }
 
+/// Dimension numérique (0/1/2) d'un habitat de mob.
+fn habitat_dimension(h: Habitat) -> i32 {
+    match h {
+        Habitat::Overworld => 0,
+        Habitat::Nether => 1,
+        Habitat::End => 2,
+    }
+}
+
+/// Espèces (+ poids vanilla) éligibles au spawn naturel dans `dim`. Filtre par
+/// habitat (un blaze ne spawne qu'au Nether, un enderman/zombie en overworld…) et
+/// exclut les aquatiques du spawn terrestre.
+fn candidate_mobs_for_dimension(dim: i32) -> Vec<(MobKind, u32)> {
+    all_mobs()
+        .iter()
+        .filter_map(|&k| {
+            if habitat_dimension(k.habitat()) != dim {
+                return None;
+            }
+            if k.is_aquatic() {
+                return None;
+            }
+            crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k)).map(|w| (k, w.max(1)))
+        })
+        .collect()
+}
+
 /// Tick global — appelé chaque game tick (20 TPS) depuis main.rs.
 /// Spawn 0..N mobs selon les règles vanilla + caps.
 pub fn tick<R: Rng>(
@@ -81,21 +108,9 @@ pub fn tick<R: Rng>(
         let pi = rng.gen_range(0..player_positions.len());
         let center = player_positions[pi];
 
-        // Pick mob aléatoire pondéré par `spawn_weight` vanilla.
-        let weights: Vec<(MobKind, u32)> = all_mobs()
-            .iter()
-            .filter_map(|&k| {
-                // Seul l'overworld est implémenté : pas de spawn naturel des
-                // mobs du Nether/End (blaze, ghast, piglin, ender_dragon…).
-                if k.habitat() != Habitat::Overworld {
-                    return None;
-                }
-                if k.is_aquatic() {
-                    return None; // pas de spawn terrestre pour les aquatiques
-                }
-                crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k)).map(|w| (k, w.max(1)))
-            })
-            .collect();
+        // Pick mob aléatoire pondéré par `spawn_weight` vanilla, restreint aux
+        // espèces de la dimension actuellement tickée (overworld/nether/end).
+        let weights = candidate_mobs_for_dimension(cache.dimension());
         if weights.is_empty() {
             return;
         }
@@ -118,10 +133,9 @@ pub fn tick<R: Rng>(
             _ => {}
         }
 
-        // Monster ne spawn que dans la nuit (simplification — vanilla check
-        // light level réel chaque pos ; on veut éviter les mobs hostiles en
-        // plein jour à la surface).
-        if cat == "monster" && !is_night {
+        // Monster ne spawn que dans la nuit — uniquement en overworld. Le Nether
+        // et l'End n'ont pas de cycle jour/nuit : les hostiles y spawnent toujours.
+        if cat == "monster" && cache.dimension() == 0 && !is_night {
             continue;
         }
 
@@ -205,51 +219,53 @@ mod tests {
 
     #[test]
     fn weights_can_be_collected_for_supported_mobs() {
-        let weights: Vec<_> = all_mobs()
-            .iter()
-            .filter_map(|&k| {
-                if k.habitat() != Habitat::Overworld {
-                    return None;
-                }
-                if k.is_aquatic() {
-                    return None; // pas de spawn terrestre pour les aquatiques
-                }
-                crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k)).map(|w| (k, w))
-            })
-            .collect();
+        let weights = candidate_mobs_for_dimension(0);
         assert!(
             !weights.is_empty(),
-            "should have weight for at least one mob"
+            "should have weight for at least one overworld mob"
         );
     }
 
     #[test]
-    fn nether_and_end_mobs_are_excluded_from_overworld_spawn() {
-        // Le spawner naturel ne tourne que dans l'overworld : aucun mob
-        // Nether/End ne doit figurer dans la table de poids.
-        let candidates: Vec<MobKind> = all_mobs()
-            .iter()
-            .copied()
-            .filter(|&k| {
-                k.habitat() == Habitat::Overworld
-                    && !k.is_aquatic()
-                    && crate::spawn_rules_vanilla::spawn_weight(entity_id_for(k)).is_some()
-            })
-            .collect();
-        for k in &candidates {
+    fn overworld_candidates_are_all_overworld() {
+        for (k, _) in candidate_mobs_for_dimension(0) {
             assert_eq!(
                 k.habitat(),
                 Habitat::Overworld,
-                "{k:?} ne devrait pas spawner naturellement hors overworld"
+                "{k:?} ne devrait pas spawner naturellement en overworld"
             );
         }
-        // Vérifie explicitement quelques mobs Nether/End connus.
+    }
+
+    #[test]
+    fn nether_candidates_are_all_nether() {
+        let nether = candidate_mobs_for_dimension(1);
+        for (k, _) in &nether {
+            assert_eq!(habitat_dimension(k.habitat()), 1, "{k:?} pas Nether");
+        }
+        // Les mobs Nether connus avec une règle de spawn doivent être candidats.
+        let kinds: Vec<MobKind> = nether.iter().map(|(k, _)| *k).collect();
         assert_eq!(MobKind::Blaze.habitat(), Habitat::Nether);
-        assert_eq!(MobKind::Ghast.habitat(), Habitat::Nether);
-        assert_eq!(MobKind::WitherSkeleton.habitat(), Habitat::Nether);
-        assert_eq!(MobKind::EnderDragon.habitat(), Habitat::End);
-        assert_eq!(MobKind::Shulker.habitat(), Habitat::End);
-        // Enderman reste overworld (spawn via le tag de biome "monster").
-        assert_eq!(MobKind::Enderman.habitat(), Habitat::Overworld);
+        assert!(
+            kinds.contains(&MobKind::Blaze) || kinds.contains(&MobKind::Ghast),
+            "au moins un mob Nether emblématique devrait être candidat"
+        );
+    }
+
+    #[test]
+    fn no_overworld_mob_leaks_into_nether_or_end() {
+        for dim in [1, 2] {
+            for (k, _) in candidate_mobs_for_dimension(dim) {
+                assert_ne!(
+                    k.habitat(),
+                    Habitat::Overworld,
+                    "{k:?} (overworld) ne doit pas spawner en dim {dim}"
+                );
+            }
+        }
+        // Et symétriquement, aucun mob Nether/End en overworld.
+        for (k, _) in candidate_mobs_for_dimension(0) {
+            assert_eq!(k.habitat(), Habitat::Overworld);
+        }
     }
 }

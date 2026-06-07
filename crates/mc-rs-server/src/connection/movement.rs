@@ -695,6 +695,11 @@ impl Connection {
             self.handle_item_stack_request(request, &mut responses);
         }
 
+        // Portail Nether : si le joueur se tient dans un bloc de portail, avance le
+        // timer et déclenche le transfert le cas échéant (DIM-F).
+        let mut portal_resp = self.check_nether_portal();
+        responses.append(&mut portal_resp);
+
         responses
     }
 
@@ -757,6 +762,90 @@ impl Connection {
         Vec::new()
     }
 
+    /// Allumage d'un portail Nether (flint&steel sur obsidienne) : détecte un cadre
+    /// valide et le remplit de blocs portail ; sinon pose un bloc de feu. (DIM-F)
+    fn try_light_nether_portal(
+        &mut self,
+        interaction: &ItemInteractionData,
+        responses: &mut Vec<Vec<u8>>,
+    ) {
+        let cx = interaction.block_position[0];
+        let cy = interaction.block_position[1];
+        let cz = interaction.block_position[2];
+        let (dx, dy, dz) = match interaction.face {
+            0 => (0, -1, 0),
+            1 => (0, 1, 0),
+            2 => (0, 0, -1),
+            3 => (0, 0, 1),
+            4 => (-1, 0, 0),
+            5 => (1, 0, 0),
+            _ => (0, 1, 0),
+        };
+        let (ax, ay, az) = (cx + dx, cy + dy, cz + dz);
+
+        let obsidian = BLOCKS.get("minecraft:obsidian");
+        let portal_id = BLOCKS.get("minecraft:portal");
+        let fire_id = BLOCKS.get("minecraft:fire");
+
+        let clicked_is_obsidian = {
+            let mut cache = self.chunk_cache.lock().unwrap();
+            cache.get_block(cx, cy, cz) == obsidian
+        };
+        if !clicked_is_obsidian {
+            return;
+        }
+
+        let cells = {
+            let mut cache = self.chunk_cache.lock().unwrap();
+            crate::world::nether_portal_build::try_ignite(&mut cache, ax, ay, az)
+        };
+
+        match cells {
+            Some(cells) => {
+                for c in cells {
+                    let update = UpdateBlock {
+                        position: c,
+                        runtime_id: portal_id,
+                        flags: 3,
+                        layer: 0,
+                    };
+                    let payload = update.encode();
+                    responses
+                        .push(self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &payload));
+                    self.broadcasts.push((packet_id::UPDATE_BLOCK, payload));
+                }
+                info!(
+                    "[{}] Nether portal lit at ({},{},{})",
+                    self.addr, ax, ay, az
+                );
+            }
+            None => {
+                // Pas de cadre valide : flint&steel pose simplement du feu.
+                let placed = {
+                    let mut cache = self.chunk_cache.lock().unwrap();
+                    if cache.get_block(ax, ay, az) == BLOCKS.air {
+                        cache.set_block(ax, ay, az, fire_id);
+                        true
+                    } else {
+                        false
+                    }
+                };
+                if placed {
+                    let update = UpdateBlock {
+                        position: [ax, ay, az],
+                        runtime_id: fire_id,
+                        flags: 3,
+                        layer: 0,
+                    };
+                    let payload = update.encode();
+                    responses
+                        .push(self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &payload));
+                    self.broadcasts.push((packet_id::UPDATE_BLOCK, payload));
+                }
+            }
+        }
+    }
+
     pub(super) fn handle_block_place(
         &mut self,
         interaction: &ItemInteractionData,
@@ -775,6 +864,13 @@ impl Connection {
         );
         if held.item.is_air() {
             info!("[{}] block_place: held is AIR, abort", self.addr);
+            return;
+        }
+
+        // Allumage d'un portail Nether : flint&steel utilisé sur de l'obsidienne.
+        if crate::item_registry::item_name_by_id(held.item.id) == Some("minecraft:flint_and_steel")
+        {
+            self.try_light_nether_portal(interaction, responses);
             return;
         }
 

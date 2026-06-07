@@ -1,11 +1,17 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use tracing::{debug, info};
 
 use super::block_registry::BLOCKS;
 use super::chunk_serializer::{self, SubChunk};
 use super::storage::WorldStorage;
 use super::terrain_generator;
+
+/// Shared LevelDB handle. The 3 dimension caches (overworld/nether/end) all point
+/// to the SAME database (vanilla on-disk format, dimension encoded in the key).
+/// A single LevelDB lock file exists, so sharing via `Arc<Mutex>` is mandatory.
+pub type SharedStorage = Arc<Mutex<WorldStorage>>;
 
 /// A column of blocks in memory (16x16xN).
 pub struct ChunkColumn {
@@ -93,48 +99,83 @@ fn noise_biome_identifier(seed: u64, x: i32, y: i32, z: i32) -> &'static str {
 pub struct ChunkCache {
     chunks: HashMap<(i32, i32), ChunkColumn>,
     dirty: HashSet<(i32, i32)>,
-    storage: Option<WorldStorage>,
+    storage: Option<SharedStorage>,
     seed: u64,
     generator: String,
+    /// Numeric dimension id (0=overworld, 1=nether, 2=end) — used for LevelDB keys
+    /// and the per-chunk `dimension_id` sent on the wire.
+    dimension: i32,
 }
 
 impl ChunkCache {
-    fn persist_chunk(storage: &mut WorldStorage, cx: i32, cz: i32, chunk: &ChunkColumn) {
-        storage.save_chunk_version(cx, cz);
-        storage.save_finalization(cx, cz);
-        storage.save_biome_data(cx, cz, &chunk.biome_data);
+    fn persist_chunk(storage: &mut WorldStorage, dim: i32, cx: i32, cz: i32, chunk: &ChunkColumn) {
+        storage.save_chunk_version(dim, cx, cz);
+        storage.save_finalization(dim, cx, cz);
+        storage.save_biome_data(dim, cx, cz, &chunk.biome_data);
 
         let kept_sub_chunks = usize::min(chunk.sub_chunks.len(), chunk.sub_chunk_count as usize);
         for (i, sub) in chunk.sub_chunks.iter().take(kept_sub_chunks).enumerate() {
             let serialized = sub.serialize();
-            storage.save_sub_chunk(cx, cz, i as u8, &serialized);
+            storage.save_sub_chunk(dim, cx, cz, i as u8, &serialized);
         }
 
-        for y_index in kept_sub_chunks..24 {
-            storage.delete_sub_chunk(cx, cz, y_index as u8);
+        let max_sub_chunks = crate::dimensions::DimensionId::from_id(dim)
+            .map(|d| d.sub_chunk_count() as usize)
+            .unwrap_or(24);
+        for y_index in kept_sub_chunks..max_sub_chunks {
+            storage.delete_sub_chunk(dim, cx, cz, y_index as u8);
         }
     }
 
-    /// Create a new chunk cache backed by LevelDB storage.
-    pub fn new(world_dir: &Path, seed: u64, generator: &str) -> Self {
-        let storage = match WorldStorage::open(world_dir) {
+    /// Open the shared LevelDB at `world_dir`, or `None` if it can't be opened
+    /// (the server then runs purely generative, no persistence).
+    pub fn open_shared_storage(world_dir: &Path) -> Option<SharedStorage> {
+        match WorldStorage::open(world_dir) {
             Ok(s) => {
                 info!("World storage opened at {:?}", world_dir);
-                Some(s)
+                Some(Arc::new(Mutex::new(s)))
             }
             Err(e) => {
                 info!("No world storage (will generate all chunks): {}", e);
                 None
             }
-        };
+        }
+    }
 
+    /// Create a new overworld chunk cache that owns a freshly opened LevelDB.
+    /// Convenience for the single-world path; multi-dimension setups use
+    /// [`Self::with_shared_storage`] so all 3 caches share one database.
+    pub fn new(world_dir: &Path, seed: u64, generator: &str) -> Self {
+        let storage = Self::open_shared_storage(world_dir);
+        Self::with_shared_storage(storage, seed, generator, 0)
+    }
+
+    /// Create a cache for a given dimension, backed by a shared LevelDB handle.
+    pub fn with_shared_storage(
+        storage: Option<SharedStorage>,
+        seed: u64,
+        generator: &str,
+        dimension: i32,
+    ) -> Self {
         Self {
             chunks: HashMap::new(),
             dirty: HashSet::new(),
             storage,
             seed,
             generator: generator.to_lowercase(),
+            dimension,
         }
+    }
+
+    /// Set the dimension this cache belongs to (builder style).
+    pub fn with_dimension(mut self, dimension: i32) -> Self {
+        self.dimension = dimension;
+        self
+    }
+
+    /// The numeric dimension id of this cache.
+    pub fn dimension(&self) -> i32 {
+        self.dimension
     }
 
     /// Get a chunk, loading from disk or generating if needed.
@@ -156,9 +197,11 @@ impl ChunkCache {
         }
 
         // Try loading from storage first
-        let loaded = if let Some(ref mut storage) = self.storage {
-            if storage.has_chunk(cx, cz) {
-                let stored_sub_chunks = storage.load_sub_chunks(cx, cz);
+        let dim = self.dimension;
+        let loaded = if let Some(ref storage_arc) = self.storage {
+            let mut storage = storage_arc.lock().unwrap();
+            if storage.has_chunk(dim, cx, cz) {
+                let stored_sub_chunks = storage.load_sub_chunks(dim, cx, cz);
                 if !stored_sub_chunks.is_empty() {
                     debug!(
                         "Loaded chunk ({}, {}) from LevelDB ({} sub-chunks)",
@@ -172,7 +215,7 @@ impl ChunkCache {
                         payload.extend_from_slice(data);
                     }
                     let biome_data = storage
-                        .load_biome_data(cx, cz)
+                        .load_biome_data(dim, cx, cz)
                         .unwrap_or_else(fallback_biome_data);
                     payload.extend_from_slice(&biome_data);
                     payload.push(0); // border blocks
@@ -207,6 +250,10 @@ impl ChunkCache {
             let (sub_count, payload) = match self.generator.as_str() {
                 "flat" => super::flat_generator::generate_flat_chunk(),
                 "noise" => super::worldgen::noise_chunk::generate_noise_chunk(cx, cz, self.seed),
+                // Nether : générateur fidèle PMMP (netherrack/lave/bedrock, biome HELL).
+                "nether" => super::nether_generator::generate_nether_chunk(cx, cz, self.seed),
+                // End : île centrale flottante + piliers d'obsidienne + vide.
+                "end" => super::end_generator::generate_end_chunk(cx, cz, self.seed),
                 _ => terrain_generator::generate_terrain_chunk(cx, cz, self.seed),
             };
 
@@ -269,6 +316,9 @@ impl ChunkCache {
             "noise" => noise_biome_identifier(self.seed, world_x, world_y, world_z),
             // Flat : tout en plaines.
             "flat" => "minecraft:plains",
+            // Dimensions (placeholder jusqu'à DIM-E / DIM-G).
+            "nether" => "minecraft:nether_wastes",
+            "end" => "minecraft:the_end",
             // Générateur Simplex hérité.
             _ => {
                 let id = terrain_generator::get_biome_at(world_x, world_z, self.seed);
@@ -317,15 +367,19 @@ impl ChunkCache {
 
     /// Save one chunk immediately for durability-sensitive updates such as block edits.
     pub fn save_chunk_now(&mut self, cx: i32, cz: i32) -> bool {
-        let Some(storage) = self.storage.as_mut() else {
+        let dim = self.dimension;
+        let Some(storage_arc) = self.storage.as_ref() else {
             return false;
         };
         let Some(chunk) = self.chunks.get(&(cx, cz)) else {
             return false;
         };
 
-        Self::persist_chunk(storage, cx, cz, chunk);
-        storage.flush();
+        {
+            let mut storage = storage_arc.lock().unwrap();
+            Self::persist_chunk(&mut storage, dim, cx, cz, chunk);
+            storage.flush();
+        }
         self.dirty.remove(&(cx, cz));
         true
     }
@@ -341,7 +395,8 @@ impl ChunkCache {
             return;
         }
 
-        let Some(ref mut storage) = self.storage else {
+        let dim = self.dimension;
+        let Some(storage_arc) = self.storage.clone() else {
             self.dirty.clear();
             return;
         };
@@ -349,9 +404,10 @@ impl ChunkCache {
         let dirty_coords: Vec<(i32, i32)> = self.dirty.drain().collect();
         let mut saved = 0;
 
+        let mut storage = storage_arc.lock().unwrap();
         for (cx, cz) in &dirty_coords {
             if let Some(chunk) = self.chunks.get(&(*cx, *cz)) {
-                Self::persist_chunk(storage, *cx, *cz, chunk);
+                Self::persist_chunk(&mut storage, dim, *cx, *cz, chunk);
                 saved += 1;
             }
         }

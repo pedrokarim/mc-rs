@@ -1541,6 +1541,12 @@ mod tests {
 
         fn set_player_gamemode(&mut self, _addr: SocketAddr, _mode: i32) {}
 
+        fn change_player_dimension(&mut self, _addr: SocketAddr, _dimension: i32) {}
+
+        fn player_dimension(&self, _addr: SocketAddr) -> Option<i32> {
+            None
+        }
+
         fn player_position(&self, _addr: SocketAddr) -> Option<[f32; 3]> {
             None
         }

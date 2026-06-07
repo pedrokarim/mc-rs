@@ -131,7 +131,7 @@ impl Connection {
                     let chunk_pkt = LevelChunk {
                         chunk_x: cx,
                         chunk_z: cz,
-                        dimension_id: 0,
+                        dimension_id: self.current_dimension,
                         sub_chunk_count: sub_count,
                         cache_enabled: false,
                         payload,
@@ -165,7 +165,7 @@ impl Connection {
                 let chunk_pkt = LevelChunk {
                     chunk_x: cx,
                     chunk_z: cz,
-                    dimension_id: 0,
+                    dimension_id: self.current_dimension,
                     sub_chunk_count: sub_count,
                     cache_enabled: false,
                     payload,

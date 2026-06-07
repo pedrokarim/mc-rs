@@ -1,5 +1,6 @@
 mod chat;
 mod chunks;
+mod dimension;
 mod forms;
 mod inventory;
 mod login;
@@ -208,8 +209,19 @@ pub struct Connection {
     // Event manager partagé (fire events pour plugins).
     pub events: Arc<Mutex<EventManager>>,
 
-    // Shared chunk cache (world persistence)
+    // Cache de chunks de la **dimension courante** du joueur. Réassigné lors d'un
+    // transfert (DIM-D) vers `worlds.get(current_dimension)`, ce qui fait que tout le
+    // code chunk per-connexion opère automatiquement sur le bon monde.
     pub(super) chunk_cache: Arc<Mutex<ChunkCache>>,
+
+    // Les 3 mondes (overworld/nether/end), partagés. Source pour router `chunk_cache`.
+    pub(super) worlds: crate::world::worlds::Worlds,
+
+    // Dimension courante du joueur (0=overworld, 1=nether, 2=end).
+    pub(super) current_dimension: i32,
+
+    // État portail Nether (timer "dans le portail" + cooldown anti-rebond).
+    pub(super) portal_state: crate::nether_portal::PortalState,
 
     // Server config subset for this connection
     pub(super) config: Arc<ConnectionConfig>,
@@ -225,7 +237,7 @@ impl Connection {
     pub fn new(
         addr: SocketAddr,
         server_keypair: std::sync::Arc<ServerKeyPair>,
-        chunk_cache: Arc<Mutex<ChunkCache>>,
+        worlds: crate::world::worlds::Worlds,
         config: Arc<ConnectionConfig>,
         world_spawn_override: Option<[f32; 3]>,
         world_gamemode: i32,
@@ -234,6 +246,9 @@ impl Connection {
         events: Arc<Mutex<EventManager>>,
         resource_packs: Arc<Vec<crate::resource_pack::ResourcePack>>,
     ) -> Self {
+        // Le joueur démarre en overworld ; `chunk_cache` pointe sur ce monde.
+        let current_dimension = 0;
+        let chunk_cache = worlds.arc(current_dimension);
         let spawn_position = world_spawn_override
             .unwrap_or_else(|| spawn::find_spawn_position(&chunk_cache, config.world_seed));
         let inventory = PlayerInventory::new();
@@ -298,6 +313,11 @@ impl Connection {
             pending_form: None,
             server_keypair,
             chunk_cache,
+            worlds,
+            current_dimension,
+            portal_state: crate::nether_portal::PortalState::new(
+                crate::dimensions::DimensionId::Overworld,
+            ),
             config,
             resource_packs,
         }

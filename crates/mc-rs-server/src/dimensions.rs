@@ -51,6 +51,27 @@ impl DimensionId {
             Self::End => "minecraft:the_end",
         }
     }
+
+    /// Numeric dimension id used on the wire and in LevelDB keys.
+    pub fn as_id(&self) -> i32 {
+        *self as i32
+    }
+
+    /// Map a numeric dimension id (0/1/2) back to the enum.
+    pub fn from_id(id: i32) -> Option<Self> {
+        match id {
+            0 => Some(Self::Overworld),
+            1 => Some(Self::Nether),
+            2 => Some(Self::End),
+            _ => None,
+        }
+    }
+
+    /// Number of 16-block vertical sub-chunks spanning this dimension's height.
+    /// Overworld = 24, Nether = 8, End = 16 (réf PMMP `ChunkSerializer::getDimensionChunkBounds`).
+    pub fn sub_chunk_count(&self) -> u8 {
+        ((self.max_y() - self.min_y()) / 16) as u8
+    }
 }
 
 /// Portail Nether : ratio de scaling 1:8 entre Overworld et Nether.

@@ -1292,12 +1292,10 @@ async fn main() {
         );
     }
 
-    // World chunk cache with LevelDB persistence
-    let chunk_cache = std::sync::Arc::new(std::sync::Mutex::new(ChunkCache::new(
-        &world_dir,
-        world_seed,
-        &config.world.generator,
-    )));
+    // Les 3 mondes (overworld / nether / end) partageant une seule LevelDB.
+    let worlds = crate::world::worlds::Worlds::new(&world_dir, world_seed, &config.world.generator);
+    // L'overworld est la dimension primaire que la game loop ticke par défaut.
+    let chunk_cache = worlds.arc(0);
     if let Ok(mut manager) = plugin_manager.lock() {
         manager.enable_plugins(PluginLoadOrder::PostWorld, &mut command_system);
     } else {
@@ -1471,11 +1469,9 @@ async fn main() {
             } else {
                 warn!("Plugin manager lock is poisoned during shutdown.");
             }
-            // Save all dirty chunks
+            // Save all dirty chunks across every dimension
             crate::watchdog::checkpoint(13); // shutdown_save
-            if let Ok(mut cache) = chunk_cache.lock() {
-                cache.save_dirty();
-            }
+            worlds.save_all_dirty();
             // level.dat snapshot
             let level = crate::level_dat::LevelData {
                 seed: world_seed,
@@ -1533,7 +1529,7 @@ async fn main() {
                     let conn = Connection::new(
                         addr,
                         Arc::clone(&server_keypair),
-                        Arc::clone(&chunk_cache),
+                        worlds.clone(),
                         Arc::clone(&conn_config),
                         server_state.persistent.world_spawn,
                         server_state.effective_default_gamemode(conn_config.default_gamemode),
@@ -2407,9 +2403,7 @@ async fn main() {
                 auto_save_counter += 1;
                 if server_state.auto_save_enabled && auto_save_counter >= 1500 {
                     auto_save_counter = 0;
-                    if let Ok(mut cache) = chunk_cache.lock() {
-                        cache.save_dirty();
-                    }
+                    worlds.save_all_dirty();
                 }
 
                 crate::watchdog::checkpoint(12); // process_peer_events@tick
