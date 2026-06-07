@@ -24,6 +24,9 @@ pub struct PlayerInfo {
     pub yaw: f32,
     pub head_yaw: f32,
     pub gamemode: i32,
+    /// Dimension courante du joueur (0/1/2), synchronisée chaque tick depuis la
+    /// connexion. Permet au spawner de positionner les mobs par dimension.
+    pub dimension: i32,
 }
 
 /// Tracks all connected players.
@@ -67,6 +70,7 @@ impl PlayerRegistry {
                 yaw: 0.0,
                 head_yaw: 0.0,
                 gamemode: 0,
+                dimension: 0,
             },
         );
         entity_id
@@ -91,6 +95,13 @@ impl PlayerRegistry {
             info.pitch = pitch;
             info.yaw = yaw;
             info.head_yaw = head_yaw;
+        }
+    }
+
+    /// Synchronise la dimension d'un joueur (depuis la connexion, chaque tick).
+    pub fn set_dimension(&mut self, addr: &SocketAddr, dimension: i32) {
+        if let Some(info) = self.players.get_mut(addr) {
+            info.dimension = dimension;
         }
     }
 

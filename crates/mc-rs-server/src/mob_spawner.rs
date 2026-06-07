@@ -83,25 +83,35 @@ pub fn tick<R: Rng>(
     mobs: &mut MobEntityManager,
     is_night: bool,
 ) {
-    if registry.players.is_empty() {
+    // On ne spawn QUE autour des joueurs de la dimension de ce cache, et on
+    // compte les caps par dimension (chaque dimension a son propre budget de mobs).
+    let dim = cache.dimension();
+    let player_positions: Vec<[f32; 3]> = registry
+        .players
+        .values()
+        .filter(|p| p.dimension == dim)
+        .map(|p| p.position)
+        .collect();
+    if player_positions.is_empty() {
         return;
     }
 
-    // Caps.
-    let player_count = registry.players.len();
+    // Caps (par dimension).
+    let player_count = player_positions.len();
     let hostile_cap = HOSTILE_CAP_PER_PLAYER * player_count;
     let passive_cap = PASSIVE_CAP_PER_PLAYER * player_count;
     let mut hostile_count = 0;
     let mut passive_count = 0;
     for m in mobs.all() {
+        if m.base.dimension != dim {
+            continue;
+        }
         match category_of(m.kind) {
             "monster" => hostile_count += 1,
             "animal" => passive_count += 1,
             _ => {}
         }
     }
-
-    let player_positions: Vec<[f32; 3]> = registry.players.values().map(|p| p.position).collect();
 
     for _ in 0..SPAWN_TRIES_PER_TICK {
         // Pick joueur aléatoire.

@@ -1904,15 +1904,19 @@ async fn main() {
                     // is_night : world_time entre 13000 et 23000 (PMMP convention).
                     let world_time = world_state.time.rem_euclid(24000);
                     let is_night = (13000..23000).contains(&world_time);
-                    if let Ok(mut cache) = chunk_cache.lock() {
-                        let mut rng = rand::thread_rng();
-                        crate::mob_spawner::tick(
-                            &mut rng,
-                            &registry,
-                            &mut cache,
-                            &mut mob_entities,
-                            is_night,
-                        );
+                    // Tick par dimension active : chaque monde spawne ses propres mobs
+                    // (overworld toujours + toute dimension où se trouve un joueur).
+                    let mut rng = rand::thread_rng();
+                    for dim in active_dimensions(&connections) {
+                        if let Ok(mut cache) = worlds.get(dim).lock() {
+                            crate::mob_spawner::tick(
+                                &mut rng,
+                                &registry,
+                                &mut cache,
+                                &mut mob_entities,
+                                is_night,
+                            );
+                        }
                     }
                 }
 
@@ -2073,32 +2077,6 @@ async fn main() {
                 // émet les paquets. Tenir un std::sync::Mutex pendant un appel
                 // réseau potentiellement bloquant est une cause de gel.
                 // Snapshot des joueurs en jeu pour l'IA des mobs (sensors).
-                let player_snapshots: Vec<crate::ai::PlayerSnapshot> = connections
-                    .values()
-                    .filter(|c| c.is_in_game())
-                    .map(|c| crate::ai::PlayerSnapshot {
-                        runtime_id: c.entity_runtime_id,
-                        position: c.position,
-                        gamemode: c.gamemode,
-                        alive: c
-                            .attributes
-                            .must_get(crate::attribute::ids::HEALTH)
-                            .current_value
-                            > 0.0,
-                        held_item: c
-                            .inventory
-                            .slots
-                            .get(c.inventory.held_slot as usize)
-                            .map(|s| s.item.id)
-                            .unwrap_or(0),
-                        look_dir: {
-                            // Vecteur de visée (convention Bedrock yaw/pitch).
-                            let (sy, cy) = c.yaw.to_radians().sin_cos();
-                            let (sp, cp) = c.pitch.to_radians().sin_cos();
-                            [-sy * cp, -sp, cy * cp]
-                        },
-                    })
-                    .collect();
                 // Dégâts mêlée/flèche des mobs mis à l'échelle selon la difficulté.
                 let dmg_mult = difficulty_damage_multiplier(config.gameplay.difficulty_id());
                 // Jour (sun-burning des zombies/skeletons) : hors plage de nuit Bedrock.
@@ -2106,7 +2084,37 @@ async fn main() {
                     let t = world_state.time.rem_euclid(24000);
                     !(13000..23000).contains(&t)
                 };
-                let (mob_tick_result, mob_ticked_dim) = if let Ok(mut cache) = chunk_cache.lock() {
+                // IA des mobs + flèches, tickées PAR dimension active : chaque monde
+                // contre son propre cache, avec seulement SES joueurs (ciblage correct).
+                for tick_dim in active_dimensions(&connections) {
+                    let dim_cache_arc = worlds.arc(tick_dim);
+                    let player_snapshots: Vec<crate::ai::PlayerSnapshot> = connections
+                        .values()
+                        .filter(|c| c.is_in_game() && c.current_dimension == tick_dim)
+                        .map(|c| crate::ai::PlayerSnapshot {
+                            runtime_id: c.entity_runtime_id,
+                            position: c.position,
+                            gamemode: c.gamemode,
+                            alive: c
+                                .attributes
+                                .must_get(crate::attribute::ids::HEALTH)
+                                .current_value
+                                > 0.0,
+                            held_item: c
+                                .inventory
+                                .slots
+                                .get(c.inventory.held_slot as usize)
+                                .map(|s| s.item.id)
+                                .unwrap_or(0),
+                            look_dir: {
+                                // Vecteur de visée (convention Bedrock yaw/pitch).
+                                let (sy, cy) = c.yaw.to_radians().sin_cos();
+                                let (sp, cp) = c.pitch.to_radians().sin_cos();
+                                [-sy * cp, -sp, cy * cp]
+                            },
+                        })
+                        .collect();
+                let (mob_tick_result, mob_ticked_dim) = if let Ok(mut cache) = dim_cache_arc.lock() {
                     let dim = cache.dimension();
                     (
                         Some(mob_entities.tick(&mut cache, &player_snapshots, is_day)),
@@ -2164,7 +2172,7 @@ async fn main() {
                                     &mut connections,
                                     &mut raknet,
                                     &mut mob_entities,
-                                    &chunk_cache,
+                                    &dim_cache_arc,
                                     attacker_runtime_id,
                                     center,
                                 );
@@ -2270,7 +2278,7 @@ async fn main() {
                     .filter(|p| p.is_attackable())
                     .map(|p| (p.runtime_id, p.position))
                     .collect();
-                let (arrow_result, arrow_ticked_dim) = if let Ok(mut cache) = chunk_cache.lock() {
+                let (arrow_result, arrow_ticked_dim) = if let Ok(mut cache) = dim_cache_arc.lock() {
                     let dim = cache.dimension();
                     (Some(arrow_manager.tick(&mut cache, &arrow_players)), dim)
                 } else {
@@ -2322,6 +2330,7 @@ async fn main() {
                         );
                     }
                 }
+                } // fin boucle par dimension (IA mobs + flèches)
 
                 // Sons d'ambiance des mobs (grognements/meuglements) : faible
                 // probabilité par mob et par tick → ~1 son toutes les ~12 s/mob.
@@ -2848,6 +2857,18 @@ fn apply_mob_explosion(
 /// encodés UNE SEULE FOIS via `encode_shared_batch` avec Zlib, puis clonés
 /// par recipient avant `prepare_for_send` (qui applique l'encryption par-conn).
 /// Économise N appels à zlib pour un broadcast à N joueurs.
+/// Dimensions à ticker ce tick : l'overworld (toujours, pour la persistance et le
+/// comportement existant) + toute dimension où se trouve au moins un joueur en jeu.
+fn active_dimensions(connections: &HashMap<SocketAddr, Connection>) -> Vec<i32> {
+    let mut dims = vec![0];
+    for c in connections.values() {
+        if c.is_in_game() && !dims.contains(&c.current_dimension) {
+            dims.push(c.current_dimension);
+        }
+    }
+    dims
+}
+
 #[allow(clippy::too_many_arguments)]
 fn broadcast_entity_movement_culled(
     connections: &mut HashMap<SocketAddr, Connection>,
@@ -3148,6 +3169,7 @@ fn process_peer_events(
                             conn.yaw,
                             conn.head_yaw,
                         );
+                        registry.set_dimension(&addr, conn.current_dimension);
 
                         let broadcasts = conn.take_broadcasts();
                         let pending_commands = conn.take_pending_commands();
@@ -3195,6 +3217,10 @@ fn process_peer_events(
                                 yaw: 0.0,
                                 head_yaw: 0.0,
                                 gamemode: player_gamemode,
+                                dimension: connections
+                                    .get(&addr)
+                                    .map(|c| c.current_dimension)
+                                    .unwrap_or(0),
                             },
                         );
 
