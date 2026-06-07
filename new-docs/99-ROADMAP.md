@@ -6,17 +6,28 @@ Avancer **phase par phase**, chaque phase est **testable et fonctionnelle** avan
 
 ---
 
-## Phase DIM : Dimensions (Nether / End) — ⬜ NON COMMENCÉE (chantier futur)
+## Phase DIM : Dimensions (Nether / End) — ✅ TERMINÉE (2026-06-07)
 
-**Contexte** — Le serveur est aujourd'hui **mono-dimension (overworld uniquement)** : `dimension_id`
-est codé en dur à 0, il n'y a ni `ChangeDimensionPacket`, ni génération Nether/End, ni portails
-fonctionnels. Conséquence directe : les mobs du Nether (blaze, ghast, piglin, hoglin, wither
-skeleton, zombified piglin…), de l'**End** (ender dragon, enderman, shulker) et les **guardians**
-(monument océanique) **existent et ont une IA correcte** mais **n'ont pas d'habitat naturel** — on ne
-peut les voir que via `/summon`. Certains pourraient même spawner à tort dans l'overworld (cf.
-« spawn par biome »).
+> Cadrage complet + détail des sous-phases : [`26-DIMENSIONS-CADRAGE.md`](26-DIMENSIONS-CADRAGE.md).
+> Réf principale = Allay/dragonfly/mcmeta (PMMP insuffisant pour les dimensions).
 
-**Objectif** — Implémenter les 3 dimensions vanilla + le voyage entre elles.
+**Réalisé (DIM-A → DIM-J, 9+ commits) :**
+- [x] `ChangeDimensionPacket` + `RespawnPacket` + `PlayerAction` ack (séquence wire dragonfly 1.19.50)
+- [x] Storage LevelDB par dimension (clé vanilla, overworld inchangé / nether-end +4 octets)
+- [x] **3 mondes** (overworld/nether/end) partageant 1 LevelDB (`Worlds`), routage par dimension
+- [x] Transfert + commande debug `/dimension <ow|nether|end>` (safe-Y d'arrivée)
+- [x] **Générateur Nether** (port fidèle PMMP : netherrack/lave/bedrock/quartz, biome HELL)
+- [x] **Générateur End** (île centrale flottante + 10 piliers obsidienne)
+- [x] **Portail Nether** (cadre obsidienne + flint&steel + linking 1:8 + tp + portail retour)
+- [x] **Portail End** (cadre + eyes of ender + plateforme [100,49,0] + retour spawn)
+- [x] **Entités par dimension** (12a modèle + anti-fuite ; 12b tick par dimension : spawner+IA+flèches)
+- [x] **Spawn mobs gaté** par dimension (blaze/ghast/piglin au Nether, enderman/shulker à l'End)
+- [x] **Combat ender dragon complet** : spawn à l'entrée End, vol (AiProfile::Dragon), barre de boss,
+      end crystals + invulnérabilité tant qu'ils vivent, mort → portail de sortie + œuf
+- Reste optionnel : **DIM-K** structures (nether_fortress / bastion / end_city — données loot prêtes),
+  + suivis mineurs (items/passifs par dimension au drop, gateway End vers îles externes).
+
+**Objectif (atteint)** — Implémenter les 3 dimensions vanilla + le voyage entre elles.
 
 **À faire :**
 - [ ] `ChangeDimensionPacket` (proto) + state machine de transfert (dim_id, position, fade).
