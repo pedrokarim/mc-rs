@@ -1,4 +1,5 @@
 pub mod chunks;
+pub mod dimension;
 pub mod forms;
 pub mod login;
 pub mod player;
@@ -37,6 +38,7 @@ pub mod packet_id {
     pub const SET_ACTOR_DATA: u32 = 0x27;
     pub const SET_ACTOR_MOTION: u32 = 0x28;
     pub const SET_PLAYER_GAME_TYPE: u32 = 0x3E;
+    pub const CHANGE_DIMENSION: u32 = 0x3D;
     pub const SET_SPAWN_POSITION: u32 = 0x2B;
     pub const CRAFTING_DATA: u32 = 0x34;
     pub const LEVEL_CHUNK: u32 = 0x3A;
