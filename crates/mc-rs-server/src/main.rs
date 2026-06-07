@@ -300,6 +300,7 @@ pub mod door;
 pub mod dragon_egg;
 #[allow(dead_code)]
 pub mod dragon_fight;
+pub mod dragon_fight_manager;
 #[allow(dead_code)]
 pub mod dripleaf;
 #[allow(dead_code)]
