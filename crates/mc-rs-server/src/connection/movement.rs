@@ -700,6 +700,10 @@ impl Connection {
         let mut portal_resp = self.check_nether_portal();
         responses.append(&mut portal_resp);
 
+        // Portail End : entrer dans un bloc end_portal déclenche le voyage (DIM-H).
+        let mut end_resp = self.check_end_portal();
+        responses.append(&mut end_resp);
+
         responses
     }
 
@@ -846,6 +850,49 @@ impl Connection {
         }
     }
 
+    /// Eye of ender sur un cadre `end_portal_frame` : forme le portail End si
+    /// l'anneau de 12 cadres est complet, et diffuse les 9 blocs `end_portal`. (DIM-H)
+    fn try_form_end_portal_frame(
+        &mut self,
+        interaction: &ItemInteractionData,
+        responses: &mut Vec<Vec<u8>>,
+    ) {
+        let cx = interaction.block_position[0];
+        let cy = interaction.block_position[1];
+        let cz = interaction.block_position[2];
+
+        let clicked_is_frame = {
+            let mut cache = self.chunk_cache.lock().unwrap();
+            cache.get_block(cx, cy, cz) == BLOCKS.get("minecraft:end_portal_frame")
+        };
+        if !clicked_is_frame {
+            return;
+        }
+
+        let cells = {
+            let mut cache = self.chunk_cache.lock().unwrap();
+            crate::world::end_portal_build::try_form_end_portal(&mut cache, cx, cy, cz)
+        };
+        if let Some(cells) = cells {
+            let portal_id = BLOCKS.get("minecraft:end_portal");
+            for c in cells {
+                let update = UpdateBlock {
+                    position: c,
+                    runtime_id: portal_id,
+                    flags: 3,
+                    layer: 0,
+                };
+                let payload = update.encode();
+                responses.push(self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &payload));
+                self.broadcasts.push((packet_id::UPDATE_BLOCK, payload));
+            }
+            info!(
+                "[{}] End portal formed near ({},{},{})",
+                self.addr, cx, cy, cz
+            );
+        }
+    }
+
     pub(super) fn handle_block_place(
         &mut self,
         interaction: &ItemInteractionData,
@@ -871,6 +918,13 @@ impl Connection {
         if crate::item_registry::item_name_by_id(held.item.id) == Some("minecraft:flint_and_steel")
         {
             self.try_light_nether_portal(interaction, responses);
+            return;
+        }
+
+        // Eye of ender sur un cadre de portail End : forme le portail si l'anneau
+        // de 12 cadres est complet (DIM-H, simplifié — pas de suivi par-œil).
+        if crate::item_registry::item_name_by_id(held.item.id) == Some("minecraft:ender_eye") {
+            self.try_form_end_portal_frame(interaction, responses);
             return;
         }
 

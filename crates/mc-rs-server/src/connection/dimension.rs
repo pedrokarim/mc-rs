@@ -206,4 +206,45 @@ impl Connection {
         let eye = [arrival_feet[0], arrival_feet[1] + 1.62, arrival_feet[2]];
         self.change_dimension(target_dim, eye, false)
     }
+
+    /// Vérifie si le joueur se tient dans un bloc `end_portal` ; déclenche le voyage
+    /// Overworld→End (plateforme) ou End→Overworld (spawn). Pas de timer (Bedrock
+    /// téléporte ~immédiatement) ; pas de boucle car l'arrivée n'est pas un portail.
+    pub(super) fn check_end_portal(&mut self) -> Vec<Vec<u8>> {
+        use crate::world::end_portal_build::is_end_portal_block;
+
+        // Le portail End n'existe qu'en overworld (entrée) et à l'End (sortie).
+        if self.current_dimension == 1 {
+            return Vec::new();
+        }
+
+        let fx = self.position[0].floor() as i32;
+        let fz = self.position[2].floor() as i32;
+        let feet_y = (self.position[1] - 1.62).floor() as i32;
+        let eye_y = self.position[1].floor() as i32;
+
+        let in_portal = {
+            let mut cache = self.chunk_cache.lock().unwrap();
+            is_end_portal_block(&mut cache, fx, feet_y, fz)
+                || is_end_portal_block(&mut cache, fx, eye_y, fz)
+        };
+        if !in_portal {
+            return Vec::new();
+        }
+
+        if self.current_dimension == 2 {
+            // End → Overworld : retour au point de spawn.
+            let spawn = self.spawn_position;
+            self.change_dimension(0, spawn, true)
+        } else {
+            // Overworld → End : construit la plateforme et arrive dessus.
+            let arrival_feet = {
+                let end_arc = self.worlds.arc(2);
+                let mut cache = end_arc.lock().unwrap();
+                crate::world::end_portal_build::create_end_platform(&mut cache)
+            };
+            let eye = [arrival_feet[0], arrival_feet[1] + 1.62, arrival_feet[2]];
+            self.change_dimension(2, eye, false)
+        }
+    }
 }
