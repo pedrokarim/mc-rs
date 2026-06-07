@@ -1169,6 +1169,8 @@ async fn main() {
     let mut arrow_manager = crate::arrow_entity::ArrowEntityManager::new();
     let mut furnace_manager = crate::furnace::FurnaceManager::new();
     let mut chest_manager = crate::chest_storage::ChestManager::new();
+    // Combat de l'ender dragon (DIM-J) : spawn/crystals/invulnérabilité/mort.
+    let mut dragon_fight = crate::dragon_fight_manager::DragonFightManager::new();
     let mut sign_manager = crate::sign_storage::SignManager::new();
     let mut crafting_manager = crate::crafting::CraftingManager::default();
     let (sh, sl, fu) = crate::recipes_vanilla::register_all(&mut crafting_manager);
@@ -1918,6 +1920,16 @@ async fn main() {
                                 is_night,
                             );
                         }
+                    }
+
+                    // Combat de l'ender dragon : spawn à la 1re venue à l'End. Le vol,
+                    // la barre de boss et le combat passent par les systèmes mob existants
+                    // (AiProfile::Dragon + is_boss + apply_attack).
+                    let end_has_players = connections
+                        .values()
+                        .any(|c| c.is_in_game() && c.current_dimension == 2);
+                    for effect in dragon_fight.tick(end_has_players) {
+                        apply_dragon_fight_effect(effect, &mut dragon_fight, &mut mob_entities);
                     }
                 }
 
@@ -2858,6 +2870,32 @@ fn apply_mob_explosion(
 /// encodés UNE SEULE FOIS via `encode_shared_batch` avec Zlib, puis clonés
 /// par recipient avant `prepare_for_send` (qui applique l'encryption par-conn).
 /// Économise N appels à zlib pour un broadcast à N joueurs.
+/// Applique un effet du combat de l'ender dragon. Slice 1 : spawn du dragon
+/// (entité mob EnderDragon, dimension End) → vol + barre de boss + combat via les
+/// systèmes mob existants. Crystals/œuf/portail = slices suivantes.
+fn apply_dragon_fight_effect(
+    effect: crate::dragon_fight_manager::DragonFightEffect,
+    dragon_fight: &mut crate::dragon_fight_manager::DragonFightManager,
+    mob_entities: &mut MobEntityManager,
+) {
+    use crate::dragon_fight_manager::DragonFightEffect as E;
+    match effect {
+        E::SpawnDragon { position } => {
+            let e = mob_entities.spawn(crate::mob_entities::MobKind::EnderDragon, position);
+            let rid = e.base.entity_runtime_id;
+            mob_entities.set_dimension(rid, 2);
+            dragon_fight.on_dragon_spawned(rid);
+            info!("[dragon] Ender dragon spawned at {position:?} (rid={rid})");
+        }
+        // SpawnCrystal / barre de boss / mort : slices suivantes.
+        E::SpawnCrystal { .. }
+        | E::ShowBossBar
+        | E::UpdateBossBar { .. }
+        | E::HideBossBar
+        | E::DragonDied { .. } => {}
+    }
+}
+
 /// Dimensions à ticker ce tick : l'overworld (toujours, pour la persistance et le
 /// comportement existant) + toute dimension où se trouve au moins un joueur en jeu.
 fn active_dimensions(connections: &HashMap<SocketAddr, Connection>) -> Vec<i32> {
