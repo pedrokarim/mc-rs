@@ -279,15 +279,24 @@ impl ChunkCache {
         }
     }
 
+    /// Bornes Y (min_y, hauteur) de la dimension de ce cache. Les sub-chunks sont
+    /// indexés depuis `min_y` : overworld -64 (24 sections), nether 0 (8), end 0 (16).
+    fn y_bounds(&self) -> (i32, i32) {
+        crate::dimensions::DimensionId::from_id(self.dimension)
+            .map(|d| (d.min_y(), d.max_y() - d.min_y()))
+            .unwrap_or((-64, 384))
+    }
+
     /// Get a block's runtime ID at world coordinates.
     pub fn get_block(&mut self, world_x: i32, world_y: i32, world_z: i32) -> u32 {
         let cx = world_x.div_euclid(16);
         let cz = world_z.div_euclid(16);
         let local_x = world_x.rem_euclid(16) as usize;
-        let local_y_offset = world_y + 64;
+        let (min_y, height) = self.y_bounds();
+        let local_y_offset = world_y - min_y;
         let local_z = world_z.rem_euclid(16) as usize;
 
-        if !(0..384).contains(&local_y_offset) {
+        if !(0..height).contains(&local_y_offset) {
             return BLOCKS.air;
         }
 
@@ -338,10 +347,11 @@ impl ChunkCache {
         let cx = world_x.div_euclid(16);
         let cz = world_z.div_euclid(16);
         let local_x = world_x.rem_euclid(16) as usize;
-        let local_y_offset = world_y + 64;
+        let (min_y, height) = self.y_bounds();
+        let local_y_offset = world_y - min_y;
         let local_z = world_z.rem_euclid(16) as usize;
 
-        if !(0..384).contains(&local_y_offset) {
+        if !(0..height).contains(&local_y_offset) {
             return;
         }
 
@@ -492,5 +502,31 @@ mod tests {
         assert_eq!(reloaded_payload, original_payload);
 
         fs::remove_dir_all(&world_dir).ok();
+    }
+
+    /// Régression : `get_block`/`set_block` doivent utiliser le `min_y` de la
+    /// dimension. Un bug historique offsetait toujours de +64 (overworld), ce qui
+    /// désalignait les lectures Nether/End de 4 sub-chunks (joueur TP dans le vide).
+    #[test]
+    fn block_access_is_dimension_y_aligned() {
+        // Nether (min_y 0, hauteur 128) : pas d'offset overworld.
+        let mut nether = ChunkCache::with_shared_storage(None, 1, "nether", 1);
+        nether.set_block(3, 70, 3, BLOCKS.bedrock);
+        assert_eq!(nether.get_block(3, 70, 3), BLOCKS.bedrock);
+        // y=70 ≠ y=6 : si le bug +64 revenait, set@70 écrirait là où get@6 lit.
+        assert_ne!(nether.get_block(3, 6, 3), BLOCKS.bedrock);
+        // Hors bornes Nether (≥128) → air.
+        assert_eq!(nether.get_block(3, 200, 3), BLOCKS.air);
+
+        // End (min_y 0, hauteur 256) : l'île centrale générée est solide vers y56,
+        // et le vide (y0) est de l'air — exactement ce que safe_arrival doit voir.
+        let mut end = ChunkCache::with_shared_storage(None, 1, "end", 2);
+        assert_eq!(end.get_block(0, 56, 0), BLOCKS.get("minecraft:end_stone"));
+        assert_eq!(end.get_block(0, 5, 0), BLOCKS.air);
+
+        // Overworld : comportement inchangé (offset -64).
+        let mut ow = ChunkCache::with_shared_storage(None, 1, "flat", 0);
+        ow.set_block(1, 200, 1, BLOCKS.pumpkin);
+        assert_eq!(ow.get_block(1, 200, 1), BLOCKS.pumpkin);
     }
 }

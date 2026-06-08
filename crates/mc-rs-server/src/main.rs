@@ -1508,6 +1508,7 @@ async fn main() {
                         20.0,
                         20.0,
                         conn.spawn_position,
+                        conn.current_dimension,
                         &conn.inventory,
                     );
                     let _ = player_data::save_player(xuid, &save);
@@ -3913,6 +3914,7 @@ fn process_peer_events(
                                 20.0,
                                 20.0,
                                 conn.spawn_position,
+                                conn.current_dimension,
                                 &conn.inventory,
                             );
                             if let Err(e) = player_data::save_player(xuid, &save_data) {

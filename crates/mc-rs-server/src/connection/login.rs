@@ -86,13 +86,18 @@ impl Connection {
                             ];
                         }
                         self.inventory = save.inventory.into_runtime();
+                        // Restaure la dimension : on bascule le cache de chunks vers le
+                        // bon monde pour que StartGame + le chargement initial s'y fassent.
+                        self.current_dimension = save.dimension;
+                        self.chunk_cache = self.worlds.arc(save.dimension);
                         info!(
-                            "[{}] Restored position: {:.1}, {:.1}, {:.1} (gamemode={})",
+                            "[{}] Restored position: {:.1}, {:.1}, {:.1} (gamemode={}, dim={})",
                             self.addr,
                             self.position[0],
                             self.position[1],
                             self.position[2],
-                            self.gamemode
+                            self.gamemode,
+                            self.current_dimension,
                         );
                     }
                 }

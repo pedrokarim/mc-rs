@@ -16,6 +16,9 @@ pub struct PlayerSaveData {
     pub health: f32,
     pub hunger: f32,
     pub spawn_position: Option<[f64; 3]>,
+    /// Dimension où le joueur s'est déconnecté (0=overworld, 1=nether, 2=end).
+    #[serde(default)]
+    pub dimension: i32,
     #[serde(default)]
     pub inventory: SavedPlayerInventory,
 }
@@ -29,6 +32,7 @@ impl Default for PlayerSaveData {
             health: 20.0,
             hunger: 20.0,
             spawn_position: None,
+            dimension: 0,
             inventory: SavedPlayerInventory::default(),
         }
     }
@@ -163,6 +167,7 @@ impl SavedPlayerInventory {
 }
 
 impl PlayerSaveData {
+    #[allow(clippy::too_many_arguments)]
     pub fn from_runtime(
         position: [f32; 3],
         rotation: [f32; 2],
@@ -170,6 +175,7 @@ impl PlayerSaveData {
         health: f32,
         hunger: f32,
         spawn_position: [f32; 3],
+        dimension: i32,
         inventory: &PlayerInventory,
     ) -> Self {
         Self {
@@ -183,6 +189,7 @@ impl PlayerSaveData {
                 spawn_position[1] as f64,
                 spawn_position[2] as f64,
             ]),
+            dimension,
             inventory: SavedPlayerInventory::from_runtime(inventory),
         }
     }

@@ -27,6 +27,11 @@ impl Connection {
 
         // Void kill check
         if pkt.position[1] < -128.0 {
+            // Tomber dans le vide du Nether/End ramène à l'overworld (au spawn).
+            if self.current_dimension != 0 {
+                let spawn = self.spawn_position;
+                return self.change_dimension(0, spawn, true);
+            }
             self.position = self.spawn_position;
             let reset = MovePlayer {
                 runtime_entity_id: self.entity_runtime_id,

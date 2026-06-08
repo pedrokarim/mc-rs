@@ -136,6 +136,8 @@ impl Connection {
         start_game.difficulty = self.current_difficulty;
         start_game.world_name = self.config.world_name.clone();
         start_game.generator = self.config.generator_id;
+        // Spawn dans la dimension restaurée (ex. reconnexion dans le Nether/End).
+        start_game.dimension = self.current_dimension;
         responses.push(self.encode_compressed_packet(packet_id::START_GAME, &start_game.encode()));
 
         responses.push(

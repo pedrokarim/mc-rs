@@ -1021,6 +1021,7 @@ impl ExecutionContext<'_> {
                     20.0,
                     20.0,
                     connection.spawn_position,
+                    connection.current_dimension,
                     &connection.inventory,
                 );
                 let _ = player_data::save_player(xuid, &save);

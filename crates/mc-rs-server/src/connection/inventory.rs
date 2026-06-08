@@ -668,6 +668,26 @@ impl Connection {
 
         let mut out = Vec::new();
 
+        // Mort dans le Nether/End → renaissance dans l'overworld (vanilla). On bascule
+        // le cache + la dimension et on prévient le client (ChangeDimension respawn).
+        if self.current_dimension != 0 {
+            self.current_dimension = 0;
+            self.chunk_cache = self.worlds.arc(0);
+            self.sent_chunks.clear();
+            self.chunk_load_queue.clear();
+            self.visible_entities.clear();
+            self.last_chunk_x = (self.spawn_position[0] as i32) >> 4;
+            self.last_chunk_z = (self.spawn_position[2] as i32) >> 4;
+            self.chunk_order_countdown = 0; // re-stream les chunks overworld
+            let change = mc_rs_proto::packets::dimension::ChangeDimension {
+                dimension: 0,
+                position: self.spawn_position,
+                respawn: true,
+                loading_screen_id: None,
+            };
+            out.push(self.encode_compressed_packet(packet_id::CHANGE_DIMENSION, &change.encode()));
+        }
+
         // PMMP onServerRespawn : syncAttributes.
         let desync = self.attributes.drain_desync();
         if !desync.is_empty() {
