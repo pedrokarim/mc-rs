@@ -119,6 +119,12 @@ pub enum Df {
     Spline(Arc<Spline>),
     /// Cache/interpolated : transparent (l'argument est évalué directement).
     Marker(Arc<Df>),
+    /// Îles de l'End : île centrale `clamp(100 - dist*8)` + îles externes (>1024
+    /// blocs) tirées par un bruit 2D (réf vanilla `EndIslandDensityFunction` /
+    /// deepslate `EndIslands`). Indépendant de Y (heightmap → density).
+    EndIslands {
+        noise: Arc<crate::world::noise::Simplex>,
+    },
 }
 
 impl Df {
@@ -228,8 +234,41 @@ impl Df {
                 }
             }
             Df::Spline(s) => s.apply(x, y, z),
+            Df::EndIslands { noise } => end_islands_compute(noise, x, z),
         }
     }
+}
+
+/// Densité des îles de l'End en un bloc (y-indépendant) : `(height - 8) / 128`.
+fn end_islands_compute(noise: &crate::world::noise::Simplex, x: i32, z: i32) -> f64 {
+    (end_islands_height(noise, x.div_euclid(8), z.div_euclid(8)) - 8.0) / 128.0
+}
+
+/// Hauteur d'île de l'End en coords `/8` (réf deepslate `EndIslands.getHeightValue`).
+fn end_islands_height(noise: &crate::world::noise::Simplex, x: i32, z: i32) -> f64 {
+    let x0 = x.div_euclid(2) as i64;
+    let z0 = z.div_euclid(2) as i64;
+    let x1 = x.rem_euclid(2) as i64;
+    let z1 = z.rem_euclid(2) as i64;
+    // Île centrale (déterministe) : disque dômé centré sur l'origine.
+    let mut f =
+        (100.0 - ((x as f64 * x as f64 + z as f64 * z as f64).sqrt()) * 8.0).clamp(-100.0, 80.0);
+    // Îles externes (>1024 blocs) : grille 25×25 de centres candidats, tirés par bruit.
+    for i in -12..=12i64 {
+        for j in -12..=12i64 {
+            let x2 = x0 + i;
+            let z2 = z0 + j;
+            if x2 * x2 + z2 * z2 <= 4096 || noise.get_noise_2d(x2 as f64, z2 as f64) >= -0.9 {
+                continue;
+            }
+            let f1 = ((x2.abs() * 3439 + z2.abs() * 147) % 13 + 9) as f64;
+            let x3 = (x1 + i * 2) as f64;
+            let z3 = (z1 + j * 2) as f64;
+            let f2 = 100.0 - (x3 * x3 + z3 * z3).sqrt() * f1;
+            f = f.max(f2.clamp(-100.0, 80.0));
+        }
+    }
+    f
 }
 
 #[inline]
@@ -245,10 +284,13 @@ fn clamped_lerp(a: f64, b: f64, t: f64) -> f64 {
 
 /// Construit les density functions en instanciant les bruits seedés.
 struct Builder {
+    seed: u64,
     deriver: PositionalRandomFactory,
     noise_cache: HashMap<String, Arc<NormalNoise>>,
     df_cache: HashMap<String, Arc<Df>>,
     blended: Option<Arc<BlendedNoise>>,
+    /// Bruit 2D des îles de l'End (instancié une fois, comme `blended`).
+    end_islands: Option<Arc<crate::world::noise::Simplex>>,
 }
 
 impl Builder {
@@ -397,7 +439,17 @@ impl Builder {
                 Value::Number(n) => Df::Const(n.as_f64().unwrap()),
                 obj => Df::Spline(Arc::new(self.parse_spline(obj))),
             },
-            "minecraft:end_islands" => Df::Const(0.0), // overworld n'en a pas besoin
+            "minecraft:end_islands" => {
+                if self.end_islands.is_none() {
+                    let mut rng = crate::world::random::Random::new(self.seed as i64);
+                    self.end_islands = Some(Arc::new(crate::world::noise::Simplex::new(
+                        &mut rng, 1, 1.0, 1.0,
+                    )));
+                }
+                Df::EndIslands {
+                    noise: self.end_islands.as_ref().unwrap().clone(),
+                }
+            }
             other => panic!("type de density function non géré: {other}"),
         }
     }
@@ -457,10 +509,12 @@ pub fn build_overworld(seed: u64) -> NoiseRouter {
 
     let deriver = XoroshiroRandom::from_seed(seed).fork_positional();
     let mut builder = Builder {
+        seed,
         deriver,
         noise_cache: HashMap::new(),
         df_cache: HashMap::new(),
         blended: None,
+        end_islands: None,
     };
 
     let mut stage = |key: &str| Arc::new(builder.parse(&router[key]));
@@ -491,10 +545,12 @@ pub fn build_dimension_terrain(settings_id: &str, seed: u64) -> NoiseRouter {
 
     let deriver = XoroshiroRandom::from_seed(seed).fork_positional();
     let mut builder = Builder {
+        seed,
         deriver,
         noise_cache: HashMap::new(),
         df_cache: HashMap::new(),
         blended: None,
+        end_islands: None,
     };
     let final_density = Arc::new(builder.parse(&router["final_density"]));
     let zero = || Arc::new(Df::Const(0.0));

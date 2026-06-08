@@ -58,6 +58,7 @@ pub fn generate_dim_chunk(
     seed: u64,
     router: &NoiseRouter,
     cfg: &DimConfig,
+    decorate: impl Fn(&mut DimGrid),
 ) -> (u32, Vec<u8>) {
     let base_x = chunk_x * 16;
     let base_z = chunk_z * 16;
@@ -130,31 +131,54 @@ pub fn generate_dim_chunk(
         false
     };
 
+    // Grille pleine hauteur (terrain + bedrock), puis décoration (ex. piliers End),
+    // puis sérialisation. Index : (wy-min_y)*256 + lx*16 + lz.
+    let mut grid = DimGrid {
+        cells: vec![BLOCKS.air; cfg.height as usize * 256],
+        min_y: cfg.min_y,
+        height: cfg.height,
+        base_x,
+        base_z,
+    };
+    for lx in 0..16usize {
+        for lz in 0..16usize {
+            let wx = base_x + lx as i32;
+            let wz = base_z + lz as i32;
+            for wy in cfg.min_y..max_y {
+                let block = if is_bedrock(wx, wy, wz) {
+                    bedrock
+                } else if density_at(lx, wy, lz) > 0.0 {
+                    cfg.default_block
+                } else if wy <= cfg.sea_level {
+                    match cfg.default_fluid {
+                        Some(f) => f,
+                        None => continue,
+                    }
+                } else {
+                    continue;
+                };
+                grid.set(wx, wy, wz, block);
+            }
+        }
+    }
+
+    // Décoration spécifique à la dimension (piliers d'obsidienne de l'End, etc.).
+    decorate(&mut grid);
+
+    // Sérialisation sub-chunk par sub-chunk depuis la grille.
     let mut payload = Vec::with_capacity(8192);
     for sub_idx in 0..sub_count {
         let sub_y_start = cfg.min_y + sub_idx as i32 * 16;
         let mut blocks = [0u32; 4096];
         let mut palette: Vec<u32> = vec![BLOCKS.air];
         let mut has_blocks = false;
-
         for lx in 0..16usize {
             for lz in 0..16usize {
-                let wx = base_x + lx as i32;
-                let wz = base_z + lz as i32;
                 for ly in 0..16usize {
-                    let wy = sub_y_start + ly as i32;
-                    let block = if is_bedrock(wx, wy, wz) {
-                        bedrock
-                    } else if density_at(lx, wy, lz) > 0.0 {
-                        cfg.default_block
-                    } else if wy <= cfg.sea_level {
-                        match cfg.default_fluid {
-                            Some(f) => f,
-                            None => continue,
-                        }
-                    } else {
+                    let block = grid.get(lx, sub_y_start + ly as i32, lz);
+                    if block == BLOCKS.air {
                         continue;
-                    };
+                    }
                     let pidx = palette.iter().position(|&b| b == block).unwrap_or_else(|| {
                         palette.push(block);
                         palette.len() - 1
@@ -164,7 +188,6 @@ pub fn generate_dim_chunk(
                 }
             }
         }
-
         if has_blocks {
             payload.extend_from_slice(&chunk_serializer::serialize_sub_chunk(&blocks, &palette));
         } else {
@@ -181,4 +204,50 @@ pub fn generate_dim_chunk(
     payload.push(0); // border blocks count
 
     (sub_count as u32, payload)
+}
+
+/// Grille de blocs pleine hauteur d'un chunk, exposée à la décoration par dimension.
+/// `set` accepte des coords MONDE et clippe hors du chunk (pour poser des features
+/// dont le centre est dans un chunk voisin sans déborder).
+pub struct DimGrid {
+    cells: Vec<u32>,
+    min_y: i32,
+    height: i32,
+    base_x: i32,
+    base_z: i32,
+}
+
+impl DimGrid {
+    #[inline]
+    fn idx(&self, lx: usize, wy: i32, lz: usize) -> Option<usize> {
+        let off = wy - self.min_y;
+        if (0..self.height).contains(&off) {
+            Some(off as usize * 256 + lx * 16 + lz)
+        } else {
+            None
+        }
+    }
+    fn get(&self, lx: usize, wy: i32, lz: usize) -> u32 {
+        self.idx(lx, wy, lz)
+            .map(|i| self.cells[i])
+            .unwrap_or(BLOCKS.air)
+    }
+    /// Pose un bloc à des coords MONDE (clippé hors du chunk courant).
+    pub fn set(&mut self, wx: i32, wy: i32, wz: i32, block: u32) {
+        let (lx, lz) = (wx - self.base_x, wz - self.base_z);
+        if !(0..16).contains(&lx) || !(0..16).contains(&lz) {
+            return;
+        }
+        if let Some(i) = self.idx(lx as usize, wy, lz as usize) {
+            self.cells[i] = block;
+        }
+    }
+    /// Lit un bloc à des coords MONDE (air si hors chunk/bornes).
+    pub fn get_world(&self, wx: i32, wy: i32, wz: i32) -> u32 {
+        let (lx, lz) = (wx - self.base_x, wz - self.base_z);
+        if !(0..16).contains(&lx) || !(0..16).contains(&lz) {
+            return BLOCKS.air;
+        }
+        self.get(lx as usize, wy, lz as usize)
+    }
 }

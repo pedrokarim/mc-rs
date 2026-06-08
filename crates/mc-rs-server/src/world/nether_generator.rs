@@ -49,7 +49,7 @@ fn nether_config() -> DimConfig {
 /// Génère un chunk Nether : renvoie `(sub_chunk_count, payload)`.
 pub fn generate_nether_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<u8>) {
     let router = with_router(seed, |r| r.clone());
-    generate_dim_chunk(chunk_x, chunk_z, seed, &router, &nether_config())
+    generate_dim_chunk(chunk_x, chunk_z, seed, &router, &nether_config(), |_| {})
 }
 
 #[cfg(test)]
