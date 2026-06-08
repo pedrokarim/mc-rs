@@ -12,6 +12,7 @@ pub mod climate;
 pub mod data;
 pub mod decoration;
 pub mod density;
+pub mod dim_noise;
 pub mod features;
 pub mod noise_chunk;
 pub mod perlin;

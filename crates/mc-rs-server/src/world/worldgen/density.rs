@@ -479,6 +479,50 @@ pub fn build_overworld(seed: u64) -> NoiseRouter {
     }
 }
 
+/// Router terrain d'une dimension non-overworld (Nether/End) : seul `final_density`
+/// est parsé. Les autres stages (climat multi-noise, aquifère) → `Const(0)`, à
+/// compléter quand les biomes/aquifères de ces dimensions seront branchés.
+pub fn build_dimension_terrain(settings_id: &str, seed: u64) -> NoiseRouter {
+    let settings: Value = serde_json::from_str(
+        data::noise_settings_json(settings_id).unwrap_or_else(|| panic!("{settings_id} settings")),
+    )
+    .expect("settings JSON valide");
+    let router = &settings["noise_router"];
+
+    let deriver = XoroshiroRandom::from_seed(seed).fork_positional();
+    let mut builder = Builder {
+        deriver,
+        noise_cache: HashMap::new(),
+        df_cache: HashMap::new(),
+        blended: None,
+    };
+    let final_density = Arc::new(builder.parse(&router["final_density"]));
+    let zero = || Arc::new(Df::Const(0.0));
+    NoiseRouter {
+        final_density,
+        temperature: zero(),
+        vegetation: zero(),
+        continents: zero(),
+        erosion: zero(),
+        depth: zero(),
+        ridges: zero(),
+        barrier: zero(),
+        fluid_level_floodedness: zero(),
+        fluid_level_spread: zero(),
+        lava: zero(),
+    }
+}
+
+/// Router terrain du Nether (`noise_settings/nether.json`).
+pub fn build_nether(seed: u64) -> NoiseRouter {
+    build_dimension_terrain("minecraft:nether", seed)
+}
+
+/// Router terrain de l'End (`noise_settings/end.json`).
+pub fn build_the_end(seed: u64) -> NoiseRouter {
+    build_dimension_terrain("minecraft:end", seed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
