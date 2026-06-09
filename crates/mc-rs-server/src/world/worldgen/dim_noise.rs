@@ -292,6 +292,28 @@ impl DimGrid {
         g
     }
 
+    /// Grille de test « caverne » : sol plein jusqu'à `floor_top`, vide, puis toit
+    /// plein de `roof_bottom` au sommet (pour tester plafonds/glowstone).
+    #[cfg(test)]
+    pub fn test_cavern(
+        base_x: i32,
+        base_z: i32,
+        height: i32,
+        block: u32,
+        floor_top: i32,
+        roof_bottom: i32,
+    ) -> Self {
+        let mut g = Self::test_floor(base_x, base_z, 0, height, block, floor_top);
+        for lx in 0..16 {
+            for lz in 0..16 {
+                for wy in roof_bottom..height {
+                    g.set(base_x + lx, wy, base_z + lz, block);
+                }
+            }
+        }
+        g
+    }
+
     /// Compte les cellules égales à `block` (tests).
     #[cfg(test)]
     pub fn count(&self, block: u32) -> usize {

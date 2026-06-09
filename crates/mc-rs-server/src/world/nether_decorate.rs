@@ -6,13 +6,16 @@
 //! chaque colonne vient du climat multi-noise (`nether_generator::nether_biome_index`),
 //! la dispersion est déterministe (hash position+seed) donc rejouable.
 //!
-//! Réf : `new-docs/27-DIMENSIONS-GENERATION-SPEC.md` (données vanilla mcmeta). Les
-//! **minerais** sont des vraies veines (`count`/chunk + `size` + plage Y, moteur
-//! `feature`). Surface/végétation/fungi : en cours de portage fidèle.
+//! Réf : `new-docs/27-DIMENSIONS-GENERATION-SPEC.md` (données vanilla mcmeta).
+//! Minerais = vraies veines (moteur `feature`). Surface = surface rule par biome.
+//! Végétation = `count_on_every_layer` pondéré + huge fungus. Plus springs de lave,
+//! amas de glowstone, feu/soul fire, lianes. Le basalt_deltas (delta/colonnes/blobs)
+//! reste à porter (task suivante).
 
 use std::sync::LazyLock;
 
 use super::block_registry::BLOCKS;
+use super::feature::FeatureRng;
 use super::nether_generator::nether_biome_index;
 use super::worldgen::climate::ClimateSampler;
 use super::worldgen::dim_noise::DimGrid;
@@ -50,6 +53,8 @@ struct NetherBlocks {
     quartz_ore: u32,
     gold_ore: u32,
     ancient_debris: u32,
+    gravel: u32,
+    lava: u32,
 }
 
 static NB: LazyLock<NetherBlocks> = LazyLock::new(|| NetherBlocks {
@@ -78,6 +83,8 @@ static NB: LazyLock<NetherBlocks> = LazyLock::new(|| NetherBlocks {
     quartz_ore: BLOCKS.get("minecraft:quartz_ore"),
     gold_ore: BLOCKS.get("minecraft:nether_gold_ore"),
     ancient_debris: BLOCKS.get("minecraft:ancient_debris"),
+    gravel: BLOCKS.get("minecraft:gravel"),
+    lava: BLOCKS.lava,
 });
 
 /// RNG positionnel déterministe (splitmix64) pour la dispersion des features.
@@ -111,35 +118,61 @@ impl Rng {
 }
 
 /// Décore un chunk Nether déjà rempli (terrain). `base_x/base_z` = coin du chunk.
+/// Ordre proche de vanilla : surface (par colonne) → minerais → springs → glowstone
+/// → végétation → lianes.
 pub fn decorate(grid: &mut DimGrid, base_x: i32, base_z: i32, sampler: &ClimateSampler, seed: u64) {
     let nb = &*NB;
+    // 1. Surface : bloc de surface du biome (nylium / soul sand / basalt) + patches
+    //    gravel/soul_sand selon la surface rule (doc 27 §3), par colonne.
     for lx in 0..16i32 {
         for lz in 0..16i32 {
             let wx = base_x + lx;
             let wz = base_z + lz;
             let bi = nether_biome_index(sampler, wx, 64, wz);
             let mut rng = Rng::new(wx, wz, seed);
-
-            // Scan de haut en bas : on traite chaque frontière solide/air.
             for y in (2..126).rev() {
-                let here = grid.get_world(wx, y, wz);
-                if here != nb.netherrack {
+                if grid.get_world(wx, y, wz) != nb.netherrack {
                     continue;
                 }
-                let above = grid.get_world(wx, y + 1, wz);
-                let below = grid.get_world(wx, y - 1, wz);
-                if above == nb.air {
-                    apply_floor(grid, nb, wx, y, wz, bi, &mut rng);
-                }
-                if below == nb.air {
-                    apply_ceiling(grid, nb, wx, y, wz, bi, &mut rng);
+                if grid.get_world(wx, y + 1, wz) == nb.air {
+                    apply_surface(grid, nb, wx, y, wz, bi, &mut rng);
                 }
             }
         }
     }
-    // Minerais : veines `count`/chunk (biome dominant échantillonné au centre).
-    let chunk_biome = nether_biome_index(sampler, base_x + 8, 64, base_z + 8);
-    place_ores(grid, nb, base_x, base_z, seed, chunk_biome);
+    // Biome dominant du chunk (les features à count/chunk en dépendent).
+    let biome = nether_biome_index(sampler, base_x + 8, 64, base_z + 8);
+    place_ores(grid, nb, base_x, base_z, seed, biome);
+    place_springs(grid, nb, base_x, base_z, seed);
+    place_glowstone(grid, nb, base_x, base_z, seed);
+    place_fire(grid, nb, base_x, base_z, seed);
+    place_vegetation(grid, nb, base_x, base_z, seed, biome);
+    place_vines(grid, nb, base_x, base_z, seed, biome);
+}
+
+/// `patch_fire` + `patch_soul_fire` (doc 27 §5) : 0..5 foyers/chunk. Feu sur le sol ;
+/// soul fire si le sol est en soul soil.
+fn place_fire(grid: &mut DimGrid, nb: &NetherBlocks, base_x: i32, base_z: i32, seed: u64) {
+    let air = BLOCKS.air;
+    let mut rng = FeatureRng::new(base_x >> 4, base_z >> 4, seed, 0x_F12E);
+    let n = rng.range(6); // uniform 0..5
+    for _ in 0..n {
+        let wx = base_x + rng.range(16);
+        let wz = base_z + rng.range(16);
+        let sy = rng.between(4, 124);
+        // Premier sol (solide + air au-dessus) sous sy.
+        if let Some(fy) = (5..sy)
+            .rev()
+            .find(|&y| grid.get_world(wx, y, wz) != air && grid.get_world(wx, y + 1, wz) == air)
+        {
+            let on = if grid.get_world(wx, fy, wz) == nb.soul_soil {
+                nb.soul_fire
+            } else {
+                nb.fire
+            };
+            grid.set(wx, fy + 1, wz, on);
+        }
+    }
 }
 
 /// Minerais du Nether — veines vanilla (spec §4 du doc 27) : `count`/chunk, `size`
@@ -272,9 +305,10 @@ fn place_ores(
     );
 }
 
-/// Surface « sol » (bloc avec de l'air au-dessus) : remplace par le bloc de surface
-/// du biome + pose éventuellement de la végétation / un fungus au-dessus.
-fn apply_floor(
+/// Surface « sol » (bloc avec de l'air au-dessus) : pose **seulement** le bloc de
+/// surface du biome selon la surface rule vanilla (doc 27 §3). La végétation est
+/// posée par les passes chunk-level (`place_vegetation`).
+fn apply_surface(
     grid: &mut DimGrid,
     nb: &NetherBlocks,
     wx: i32,
@@ -283,120 +317,253 @@ fn apply_floor(
     bi: u16,
     rng: &mut Rng,
 ) {
-    let top = y + 1; // case d'air juste au-dessus du sol
     match bi {
         SOUL_SAND_VALLEY => {
-            let s = if rng.chance(0.7) {
+            // soul_sand/soul_soil ; gravel sous Y30 (surface rule).
+            let s = if y < 30 && rng.chance(0.5) {
+                nb.gravel
+            } else if rng.chance(0.85) {
                 nb.soul_sand
             } else {
                 nb.soul_soil
             };
             grid.set(wx, y, wz, s);
-            if rng.chance(0.02) {
-                grid.set(wx, top, wz, nb.soul_fire);
-            } else if rng.chance(0.05) {
-                grid.set(wx, top, wz, nb.nether_sprouts);
-            }
         }
-        CRIMSON => {
-            grid.set(wx, y, wz, nb.crimson_nylium);
-            if rng.chance(0.012) {
-                grow_fungus(grid, nb, wx, top, wz, true, rng);
-            } else if rng.chance(0.18) {
-                grid.set(wx, top, wz, nb.crimson_roots);
-            } else if rng.chance(0.08) {
-                grid.set(wx, top, wz, nb.nether_sprouts);
-            } else if rng.chance(0.02) {
-                grid.set(wx, top, wz, BLOCKS.get("minecraft:crimson_fungus"));
-            }
-        }
-        WARPED => {
-            grid.set(wx, y, wz, nb.warped_nylium);
-            if rng.chance(0.01) {
-                grow_fungus(grid, nb, wx, top, wz, false, rng);
-            } else if rng.chance(0.18) {
-                grid.set(wx, top, wz, nb.warped_roots);
-            } else if rng.chance(0.08) {
-                grid.set(wx, top, wz, nb.nether_sprouts);
-            } else if rng.chance(0.03) {
-                // pousse verticale de twisting_vines (1..4) depuis le sol
-                let h = 1 + rng.range(4);
-                for i in 0..h {
-                    if grid.get_world(wx, top + i, wz) != nb.air {
-                        break;
-                    }
-                    grid.set(wx, top + i, wz, nb.twisting_vines);
-                }
-            } else if rng.chance(0.02) {
-                grid.set(wx, top, wz, BLOCKS.get("minecraft:warped_fungus"));
-            }
-        }
+        CRIMSON => grid.set(wx, y, wz, nb.crimson_nylium),
+        WARPED => grid.set(wx, y, wz, nb.warped_nylium),
         BASALT => {
-            let s = if rng.chance(0.7) {
-                nb.basalt
-            } else {
-                nb.blackstone
-            };
+            // basalt ; gravel au-dessus de Y30 (surface rule).
+            let s = if y > 30 { nb.gravel } else { nb.basalt };
             grid.set(wx, y, wz, s);
-            if rng.chance(0.04) {
-                grid.set(wx, y, wz, nb.magma);
-            }
-            // petite colonne de basalte (delta) qui dépasse du sol
-            if rng.chance(0.01) {
-                let h = 1 + rng.range(4);
-                for i in 1..=h {
-                    if grid.get_world(wx, y + i, wz) != nb.air {
-                        break;
-                    }
-                    grid.set(wx, y + i, wz, nb.basalt);
-                }
-            }
         }
         _ => {
-            // nether_wastes : netherrack inchangé, feu occasionnel
-            if rng.chance(0.006) {
-                grid.set(wx, top, wz, nb.fire);
+            // nether_wastes : netherrack ; patches soul_sand/gravel vers Y30-32.
+            if (30..=32).contains(&y) && rng.chance(0.12) {
+                let s = if rng.chance(0.5) {
+                    nb.soul_sand
+                } else {
+                    nb.gravel
+                };
+                grid.set(wx, y, wz, s);
             }
         }
     }
 }
 
-/// Surface « plafond » (bloc avec de l'air en-dessous) : amas de glowstone qui pend
-/// (tous biomes) ou weeping vines en crimson forest.
-fn apply_ceiling(
+/// Itère les sols (bloc solide avec air au-dessus) sur `count` tentatives par tranche
+/// de 16 blocs de hauteur (vanilla `count_on_every_layer`) et appelle `f` sur chaque.
+fn on_every_layer(
+    grid: &mut DimGrid,
+    base_x: i32,
+    base_z: i32,
+    rng: &mut FeatureRng,
+    count: i32,
+    mut f: impl FnMut(&mut DimGrid, i32, i32, i32, &mut FeatureRng),
+) {
+    let air = BLOCKS.air;
+    for layer in 0..8 {
+        // 128/16
+        let y0 = layer * 16;
+        for _ in 0..count {
+            let wx = base_x + rng.range(16);
+            let wz = base_z + rng.range(16);
+            // Cherche un sol (solide + air au-dessus) dans cette tranche.
+            let mut floor = None;
+            for y in (y0 + 1..y0 + 16).rev() {
+                if grid.get_world(wx, y, wz) != air && grid.get_world(wx, y + 1, wz) == air {
+                    floor = Some(y);
+                    break;
+                }
+            }
+            if let Some(fy) = floor {
+                f(grid, wx, fy, wz, rng);
+            }
+        }
+    }
+}
+
+/// Végétation des forêts du Nether (doc 27 §5) via `count_on_every_layer` pondéré +
+/// fungi géants ; nether_sprouts en warped ; crimson roots en valley.
+fn place_vegetation(
+    grid: &mut DimGrid,
+    nb: &NetherBlocks,
+    base_x: i32,
+    base_z: i32,
+    seed: u64,
+    biome: u16,
+) {
+    let (cx, cz) = (base_x >> 4, base_z >> 4);
+    let crimson_fungus = BLOCKS.get("minecraft:crimson_fungus");
+    let warped_fungus = BLOCKS.get("minecraft:warped_fungus");
+    match biome {
+        CRIMSON => {
+            // crimson_forest_vegetation : roots 87 / crimson_fungus 11 / warped_fungus 1.
+            let mut rng = FeatureRng::new(cx, cz, seed, 0x_C012);
+            on_every_layer(grid, base_x, base_z, &mut rng, 6, |g, wx, fy, wz, r| {
+                if g.get_world(wx, fy, wz) != nb.crimson_nylium {
+                    return;
+                }
+                let w = r.range(99);
+                let b = if w < 87 {
+                    nb.crimson_roots
+                } else if w < 98 {
+                    crimson_fungus
+                } else {
+                    warped_fungus
+                };
+                g.set(wx, fy + 1, wz, b);
+            });
+            // crimson_fungi : fungi géants (every_layer 8).
+            let mut rng = FeatureRng::new(cx, cz, seed, 0x_C0F9);
+            on_every_layer(grid, base_x, base_z, &mut rng, 8, |g, wx, fy, wz, r| {
+                if g.get_world(wx, fy, wz) == nb.crimson_nylium {
+                    grow_fungus(g, nb, wx, fy + 1, wz, true, r);
+                }
+            });
+        }
+        WARPED => {
+            // warped_forest_vegetation : warped_roots 85 / warped_fungus 13 / crimson 1 / crimson_fungus 1.
+            let mut rng = FeatureRng::new(cx, cz, seed, 0x_7012);
+            on_every_layer(grid, base_x, base_z, &mut rng, 5, |g, wx, fy, wz, r| {
+                if g.get_world(wx, fy, wz) != nb.warped_nylium {
+                    return;
+                }
+                let w = r.range(100);
+                let b = if w < 85 {
+                    nb.warped_roots
+                } else if w < 98 {
+                    warped_fungus
+                } else if w < 99 {
+                    nb.crimson_roots
+                } else {
+                    crimson_fungus
+                };
+                g.set(wx, fy + 1, wz, b);
+            });
+            // nether_sprouts (every_layer 4).
+            let mut rng = FeatureRng::new(cx, cz, seed, 0x_7059);
+            on_every_layer(grid, base_x, base_z, &mut rng, 4, |g, wx, fy, wz, _| {
+                if g.get_world(wx, fy, wz) == nb.warped_nylium
+                    && g.get_world(wx, fy + 1, wz) == nb.air
+                {
+                    g.set(wx, fy + 1, wz, nb.nether_sprouts);
+                }
+            });
+            // warped_fungi géants (every_layer 8).
+            let mut rng = FeatureRng::new(cx, cz, seed, 0x_70F9);
+            on_every_layer(grid, base_x, base_z, &mut rng, 8, |g, wx, fy, wz, r| {
+                if g.get_world(wx, fy, wz) == nb.warped_nylium {
+                    grow_fungus(g, nb, wx, fy + 1, wz, false, r);
+                }
+            });
+        }
+        SOUL_SAND_VALLEY => {
+            // patch_crimson_roots : touffes sur le sol.
+            let mut rng = FeatureRng::new(cx, cz, seed, 0x_5012);
+            on_every_layer(grid, base_x, base_z, &mut rng, 3, |g, wx, fy, wz, r| {
+                if g.get_world(wx, fy + 1, wz) == nb.air && r.range(2) == 0 {
+                    g.set(wx, fy + 1, wz, nb.crimson_roots);
+                }
+            });
+        }
+        _ => {}
+    }
+}
+
+/// Lianes : twisting_vines (montantes, warped) et weeping_vines (pendantes, crimson),
+/// count 10/chunk chacune (doc 27 §5).
+fn place_vines(
+    grid: &mut DimGrid,
+    nb: &NetherBlocks,
+    base_x: i32,
+    base_z: i32,
+    seed: u64,
+    biome: u16,
+) {
+    let (cx, cz) = (base_x >> 4, base_z >> 4);
+    let air = BLOCKS.air;
+    if biome == WARPED {
+        let mut rng = FeatureRng::new(cx, cz, seed, 0x_71E5);
+        on_every_layer(grid, base_x, base_z, &mut rng, 10, |g, wx, fy, wz, r| {
+            let h = r.between(1, 8);
+            for i in 1..=h {
+                if g.get_world(wx, fy + i, wz) != air {
+                    break;
+                }
+                g.set(wx, fy + i, wz, nb.twisting_vines);
+            }
+        });
+    }
+    if biome == CRIMSON {
+        // weeping vines : pendent des plafonds (solide avec air en-dessous).
+        let mut rng = FeatureRng::new(cx, cz, seed, 0x_C1E5);
+        for _ in 0..10 {
+            let wx = base_x + rng.range(16);
+            let wz = base_z + rng.range(16);
+            let sy = rng.between(20, 110);
+            if let Some(cy) = find_ceiling(grid, nb, wx, sy, wz) {
+                let h = rng.between(1, 8);
+                for i in 1..=h {
+                    if grid.get_world(wx, cy - i, wz) != air {
+                        break;
+                    }
+                    grid.set(wx, cy - i, wz, nb.weeping_vines);
+                }
+            }
+        }
+    }
+}
+
+/// Cherche un plafond (netherrack avec air en-dessous) à/sous `from_y`.
+fn find_ceiling(grid: &DimGrid, nb: &NetherBlocks, wx: i32, from_y: i32, wz: i32) -> Option<i32> {
+    (4..from_y).rev().find(|&y| {
+        grid.get_world(wx, y, wz) == nb.netherrack && grid.get_world(wx, y - 1, wz) == nb.air
+    })
+}
+
+/// Amas de glowstone (`glowstone_blob`) pendant aux plafonds : count 10/chunk + extra.
+fn place_glowstone(grid: &mut DimGrid, nb: &NetherBlocks, base_x: i32, base_z: i32, seed: u64) {
+    let (cx, cz) = (base_x >> 4, base_z >> 4);
+    let mut rng = FeatureRng::new(cx, cz, seed, 0x_610B);
+    let count = 10 + rng.range(10).min(rng.range(10)); // 10 + glowstone_extra biased bas
+    for _ in 0..count {
+        let wx = base_x + rng.range(16);
+        let wz = base_z + rng.range(16);
+        let sy = rng.between(8, 122);
+        if let Some(cy) = find_ceiling(grid, nb, wx, sy, wz) {
+            grow_glowstone_blob(grid, nb, wx, cy - 1, wz, &mut rng);
+        }
+    }
+}
+
+/// Blob de glowstone : sphère partielle accrochée sous le plafond (rayon ~2).
+fn grow_glowstone_blob(
     grid: &mut DimGrid,
     nb: &NetherBlocks,
     wx: i32,
-    y: i32,
+    top_y: i32,
     wz: i32,
-    bi: u16,
-    rng: &mut Rng,
+    rng: &mut FeatureRng,
 ) {
-    if rng.chance(0.006) {
-        // Amas de glowstone : le bloc plafond + une petite grappe vers le bas.
-        grid.set(wx, y, wz, nb.glowstone);
-        let drop = 1 + rng.range(3);
-        for i in 1..=drop {
-            if grid.get_world(wx, y - i, wz) != nb.air {
-                break;
+    let air = BLOCKS.air;
+    for dy in 0..=3 {
+        let r = 2 - dy.min(2);
+        for dx in -r..=r {
+            for dz in -r..=r {
+                if dx * dx + dz * dz > r * r {
+                    continue;
+                }
+                let (x, y, z) = (wx + dx, top_y - dy, wz + dz);
+                if grid.get_world(x, y, z) == air && rng.range(3) != 0 {
+                    grid.set(x, y, z, nb.glowstone);
+                }
             }
-            if rng.chance(0.6) {
-                grid.set(wx, y - i, wz, nb.glowstone);
-            }
-        }
-    } else if bi == CRIMSON && rng.chance(0.04) {
-        // weeping vines qui pendent du plafond (1..5)
-        let h = 1 + rng.range(5);
-        for i in 1..=h {
-            if grid.get_world(wx, y - i, wz) != nb.air {
-                break;
-            }
-            grid.set(wx, y - i, wz, nb.weeping_vines);
         }
     }
 }
 
-/// Fungus géant compact : tige (4..9) + chapeau de wart block + shroomlight.
+/// Fungus géant (`HugeFungusFeature`) : tige (4..13) + chapeau dôme de wart block +
+/// shroomlight semé. `base_y` = case d'air juste au-dessus du nylium.
 fn grow_fungus(
     grid: &mut DimGrid,
     nb: &NetherBlocks,
@@ -404,37 +571,76 @@ fn grow_fungus(
     base_y: i32,
     wz: i32,
     crimson: bool,
-    rng: &mut Rng,
+    rng: &mut FeatureRng,
 ) {
     let (stem, wart) = if crimson {
         (nb.crimson_stem, nb.nether_wart_block)
     } else {
         (nb.warped_stem, nb.warped_wart_block)
     };
-    let h = 4 + rng.range(6); // 4..9
-                              // tige
+    let h = rng.between(4, 13);
     for i in 0..h {
         if grid.get_world(wx, base_y + i, wz) != nb.air {
-            return; // obstrué : on annule (pas de tige flottante tronquée bizarre)
+            return; // obstrué : pas de tige tronquée
         }
         grid.set(wx, base_y + i, wz, stem);
     }
-    // chapeau : blob de wart block 3×3 (+ centre une couche plus haut)
+    // Chapeau : dôme de wart block sur 3 couches (rayon 2 → 1 → 1 au sommet).
     let cap = base_y + h;
-    for dx in -1..=1i32 {
-        for dz in -1..=1i32 {
-            grid.set(wx + dx, cap, wz + dz, wart);
-            if dx == 0 && dz == 0 {
-                grid.set(wx, cap + 1, wz, wart);
+    for dy in 0..=2i32 {
+        let r = if dy == 0 { 2 } else { 1 };
+        for dx in -r..=r {
+            for dz in -r..=r {
+                if dx * dx + dz * dz <= r * r + 1 {
+                    grid.set(wx + dx, cap + dy, wz + dz, wart);
+                }
             }
         }
     }
-    // quelques shroomlight sous le chapeau
-    if rng.chance(0.6) {
-        grid.set(wx + 1, cap - 1, wz, nb.shroomlight);
+    // Shroomlight semés dans le chapeau (décor lumineux).
+    for _ in 0..rng.between(1, 4) {
+        let dx = rng.between(-2, 2);
+        let dz = rng.between(-2, 2);
+        grid.set(wx + dx, cap, wz + dz, nb.shroomlight);
     }
-    if rng.chance(0.6) {
-        grid.set(wx - 1, cap - 1, wz, nb.shroomlight);
+}
+
+/// Springs de lave (doc 27 §5) : `spring_nether_open` (count 8, source exposée à
+/// l'air) + `spring_nether_closed` (count 16, poche enclavée dans la netherrack).
+fn place_springs(grid: &mut DimGrid, nb: &NetherBlocks, base_x: i32, base_z: i32, seed: u64) {
+    let air = BLOCKS.air;
+    let is_air_exposed = |g: &DimGrid, x: i32, y: i32, z: i32| {
+        g.get_world(x + 1, y, z) == air
+            || g.get_world(x - 1, y, z) == air
+            || g.get_world(x, y, z + 1) == air
+            || g.get_world(x, y, z - 1) == air
+            || g.get_world(x, y - 1, z) == air
+    };
+    // open : 8 sources de lave dans une paroi/sol exposé.
+    let mut rng = FeatureRng::new(base_x >> 4, base_z >> 4, seed, 0x_5A0E);
+    for _ in 0..8 {
+        let wx = base_x + rng.range(16);
+        let wz = base_z + rng.range(16);
+        let y = rng.between(6, 120);
+        if grid.get_world(wx, y, wz) == nb.netherrack
+            && grid.get_world(wx, y + 1, wz) == nb.netherrack
+            && is_air_exposed(grid, wx, y, wz)
+        {
+            grid.set(wx, y, wz, nb.lava);
+        }
+    }
+    // closed : 16 poches de lave enclavées (aucune face d'air).
+    let mut rng = FeatureRng::new(base_x >> 4, base_z >> 4, seed, 0x_5A0C);
+    for _ in 0..16 {
+        let wx = base_x + rng.range(16);
+        let wz = base_z + rng.range(16);
+        let y = rng.between(6, 120);
+        if grid.get_world(wx, y, wz) == nb.netherrack
+            && !is_air_exposed(grid, wx, y, wz)
+            && grid.get_world(wx, y + 1, wz) == nb.netherrack
+        {
+            grid.set(wx, y, wz, nb.lava);
+        }
     }
 }
 
@@ -480,6 +686,39 @@ mod tests {
             "surfaces de biome attendues (nylium/soul sand/basalt)"
         );
         assert!(ores > 0, "minerais Nether attendus");
+    }
+
+    #[test]
+    fn forests_get_vegetation_and_glowstone() {
+        use crate::world::worldgen::density;
+        let nb = &*NB;
+        let router = density::build_nether(42);
+        let sampler = ClimateSampler::from_router(&router);
+        // Sur une large zone (plusieurs biomes), on doit voir de la végétation de
+        // forêt (roots/stems) et des amas de glowstone.
+        let (mut veg, mut glow, mut lava) = (0usize, 0usize, 0usize);
+        for cx in -8..8 {
+            for cz in -8..8 {
+                let (bx, bz) = (cx * 16, cz * 16);
+                // Caverne : sol jusqu'à y60, vide, toit à partir de y100 (plafonds
+                // pour glowstone/lianes).
+                let mut grid = DimGrid::test_cavern(bx, bz, 128, nb.netherrack, 60, 100);
+                decorate(&mut grid, bx, bz, &sampler, 42);
+                veg += grid.count(nb.crimson_roots)
+                    + grid.count(nb.warped_roots)
+                    + grid.count(nb.crimson_stem)
+                    + grid.count(nb.warped_stem)
+                    + grid.count(nb.nether_sprouts);
+                glow += grid.count(nb.glowstone);
+                lava += grid.count(nb.lava);
+            }
+        }
+        assert!(
+            veg > 0,
+            "végétation de forêt attendue (roots/stems/sprouts)"
+        );
+        assert!(glow > 0, "amas de glowstone attendus");
+        assert!(lava > 0, "springs de lave attendus");
     }
 }
 
