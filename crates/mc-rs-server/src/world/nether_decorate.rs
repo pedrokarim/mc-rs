@@ -1,16 +1,14 @@
-//! Décoration du Nether par biome : surfaces (nylium / soul sand / basalt), petite
-//! végétation (roots, sprouts, vines), fungi crimson/warped, amas de glowstone aux
-//! plafonds, et minerais (quartz, or, ancient debris).
-//!
-//! Appliqué après le terrain (`dim_noise`) via le callback `decorate`. Le biome de
-//! chaque colonne vient du climat multi-noise (`nether_generator::nether_biome_index`),
-//! la dispersion est déterministe (hash position+seed) donc rejouable.
+//! Décoration du Nether par biome, appliquée après le terrain (`dim_noise`) via le
+//! callback `decorate`. Le biome vient du climat multi-noise ; la dispersion est
+//! déterministe (hash position+seed), donc rejouable.
 //!
 //! Réf : `new-docs/27-DIMENSIONS-GENERATION-SPEC.md` (données vanilla mcmeta).
-//! Minerais = vraies veines (moteur `feature`). Surface = surface rule par biome.
-//! Végétation = `count_on_every_layer` pondéré + huge fungus. Plus springs de lave,
-//! amas de glowstone, feu/soul fire, lianes. Le basalt_deltas (delta/colonnes/blobs)
-//! reste à porter (task suivante).
+//! - **Minerais** : vraies veines (moteur `feature`) — quartz/or/magma/gravel/
+//!   blackstone/soul_sand/ancient_debris, `count`/chunk + `size` + plage Y exacts.
+//! - **Surface** : surface rule par biome (nylium, soul sand/gravel, basalt/gravel).
+//! - **Végétation** : `count_on_every_layer` pondéré + huge fungus (tige + dôme).
+//! - **basalt_deltas** : blobs basalt/blackstone, deltas de lave, colonnes.
+//! - Springs de lave, amas de glowstone, feu/soul fire, lianes (twisting/weeping).
 
 use std::sync::LazyLock;
 
@@ -142,6 +140,11 @@ pub fn decorate(grid: &mut DimGrid, base_x: i32, base_z: i32, sampler: &ClimateS
     }
     // Biome dominant du chunk (les features à count/chunk en dépendent).
     let biome = nether_biome_index(sampler, base_x + 8, 64, base_z + 8);
+    // basalt_deltas : blobs + deltas de lave + colonnes (avant les minerais, pour
+    // que les veines remplissent la netherrack restante).
+    if biome == BASALT {
+        place_basalt_deltas(grid, nb, base_x, base_z, seed);
+    }
     place_ores(grid, nb, base_x, base_z, seed, biome);
     place_springs(grid, nb, base_x, base_z, seed);
     place_glowstone(grid, nb, base_x, base_z, seed);
@@ -605,6 +608,113 @@ fn grow_fungus(
     }
 }
 
+/// Génération de `basalt_deltas` (doc 27 §5) : blobs basalt/blackstone qui remplacent
+/// la netherrack, deltas de lave (mares à bord de magma) et colonnes de basalte.
+fn place_basalt_deltas(grid: &mut DimGrid, nb: &NetherBlocks, base_x: i32, base_z: i32, seed: u64) {
+    let (cx, cz) = (base_x >> 4, base_z >> 4);
+    let netherrack = nb.netherrack;
+
+    // basalt_blobs (75) + blackstone_blobs (25) : sphères remplaçant la netherrack.
+    let mut rng = FeatureRng::new(cx, cz, seed, 0x_BA10);
+    for (count, state) in [(75, nb.basalt), (25, nb.blackstone)] {
+        for _ in 0..count {
+            let wx = base_x + rng.range(16);
+            let wz = base_z + rng.range(16);
+            let wy = rng.between(2, 125);
+            let r = rng.between(3, 7);
+            replace_blob(grid, wx, wy, wz, r, netherrack, state);
+        }
+    }
+
+    // delta : mares de lave (rayon 3-7) à bord de magma, sur les sols. every_layer 40.
+    let mut rng = FeatureRng::new(cx, cz, seed, 0x_DE17);
+    on_every_layer(grid, base_x, base_z, &mut rng, 40, |g, wx, fy, wz, r| {
+        let size = r.between(3, 7);
+        let rim = r.between(0, 2);
+        for dx in -size..=size {
+            for dz in -size..=size {
+                let d = dx * dx + dz * dz;
+                if d > size * size {
+                    continue;
+                }
+                // bord (rim) = magma, intérieur = lave (surface remplacée).
+                let block = if d > (size - rim) * (size - rim) {
+                    nb.magma
+                } else {
+                    nb.lava
+                };
+                if g.get_world(wx + dx, fy, wz + dz) != BLOCKS.air {
+                    g.set(wx + dx, fy, wz + dz, block);
+                }
+            }
+        }
+    });
+
+    // colonnes de basalte : small (h1-4, reach1) ev4 + large (h5-10, reach2-3) ev2.
+    let mut rng = FeatureRng::new(cx, cz, seed, 0x_C011);
+    on_every_layer(grid, base_x, base_z, &mut rng, 4, |g, wx, fy, wz, r| {
+        basalt_column(g, nb, wx, fy, wz, r.between(1, 4), 1);
+    });
+    let mut rng = FeatureRng::new(cx, cz, seed, 0x_C012);
+    on_every_layer(grid, base_x, base_z, &mut rng, 2, |g, wx, fy, wz, r| {
+        basalt_column(g, nb, wx, fy, wz, r.between(5, 10), r.between(2, 3));
+    });
+}
+
+/// Remplace la `target` par `state` dans une sphère de rayon `radius`.
+fn replace_blob(
+    grid: &mut DimGrid,
+    cx: i32,
+    cy: i32,
+    cz: i32,
+    radius: i32,
+    target: u32,
+    state: u32,
+) {
+    let r2 = radius * radius;
+    for dx in -radius..=radius {
+        for dy in -radius..=radius {
+            for dz in -radius..=radius {
+                if dx * dx + dy * dy + dz * dz > r2 {
+                    continue;
+                }
+                let (x, y, z) = (cx + dx, cy + dy, cz + dz);
+                if grid.get_world(x, y, z) == target {
+                    grid.set(x, y, z, state);
+                }
+            }
+        }
+    }
+}
+
+/// Colonne de basalte montant du sol `fy` (rayon de base `reach`, hauteur `height`).
+fn basalt_column(
+    grid: &mut DimGrid,
+    nb: &NetherBlocks,
+    wx: i32,
+    fy: i32,
+    wz: i32,
+    height: i32,
+    reach: i32,
+) {
+    let air = BLOCKS.air;
+    let r2 = reach * reach;
+    for dx in -reach..=reach {
+        for dz in -reach..=reach {
+            if dx * dx + dz * dz > r2 {
+                continue;
+            }
+            for h in 1..=height {
+                let (x, y, z) = (wx + dx, fy + h, wz + dz);
+                if grid.get_world(x, y, z) != air {
+                    break;
+                }
+                grid.set(x, y, z, nb.basalt);
+            }
+        }
+    }
+}
+
 /// Springs de lave (doc 27 §5) : `spring_nether_open` (count 8, source exposée à
 /// l'air) + `spring_nether_closed` (count 16, poche enclavée dans la netherrack).
 fn place_springs(grid: &mut DimGrid, nb: &NetherBlocks, base_x: i32, base_z: i32, seed: u64) {
@@ -719,6 +829,22 @@ mod tests {
         );
         assert!(glow > 0, "amas de glowstone attendus");
         assert!(lava > 0, "springs de lave attendus");
+    }
+
+    #[test]
+    fn basalt_deltas_get_blobs_and_lava() {
+        let nb = &*NB;
+        let mut grid = DimGrid::test_cavern(0, 0, 128, nb.netherrack, 60, 100);
+        place_basalt_deltas(&mut grid, nb, 0, 0, 42);
+        assert!(
+            grid.count(nb.basalt) > 0,
+            "blobs/colonnes de basalte attendus"
+        );
+        assert!(
+            grid.count(nb.blackstone) > 0,
+            "blobs de blackstone attendus"
+        );
+        assert!(grid.count(nb.lava) > 0, "deltas de lave attendus");
     }
 }
 
