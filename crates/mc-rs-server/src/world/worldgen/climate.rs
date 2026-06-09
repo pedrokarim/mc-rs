@@ -288,8 +288,7 @@ pub fn load_overworld() -> OverworldBiomes {
 /// Charge un param list multi-noise vendoré (`biome_parameters/<id>.json`) — même
 /// structure que l'overworld, réutilisable pour le Nether (`id = "nether"`).
 pub fn load_biomes(id: &str) -> OverworldBiomes {
-    let json = data::biome_parameters_json(id)
-        .unwrap_or_else(|| panic!("param list {id} vendoré"));
+    let json = data::biome_parameters_json(id).unwrap_or_else(|| panic!("param list {id} vendoré"));
     let arr: Value = serde_json::from_str(json).expect("param list JSON valide");
     let arr = arr.as_array().expect("param list = tableau");
 

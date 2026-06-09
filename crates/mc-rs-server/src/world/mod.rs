@@ -6,6 +6,7 @@ pub mod chunk_serializer;
 pub mod end_generator;
 pub mod end_portal_build;
 pub mod flat_generator;
+pub mod nether_decorate;
 pub mod nether_generator;
 pub mod nether_portal_build;
 pub mod noise;

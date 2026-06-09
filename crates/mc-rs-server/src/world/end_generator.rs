@@ -42,7 +42,7 @@ fn end_config() -> DimConfig {
         cell_h: 4, // size_vertical 1
         default_block: BLOCKS.get("minecraft:end_stone"),
         default_fluid: None, // pas de fluide à l'End
-        bedrock_floor: 0, // îles flottantes : ni sol ni toit bedrock
+        bedrock_floor: 0,    // îles flottantes : ni sol ni toit bedrock
         bedrock_roof: 0,
     }
 }

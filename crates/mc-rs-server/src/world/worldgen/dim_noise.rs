@@ -203,7 +203,11 @@ pub fn generate_dim_chunk(
         #[allow(clippy::needless_range_loop)]
         for cx in 0..4usize {
             for cz in 0..4usize {
-                let b = biome_at(base_x + cx as i32 * 4 + 2, mid_y, base_z + cz as i32 * 4 + 2);
+                let b = biome_at(
+                    base_x + cx as i32 * 4 + 2,
+                    mid_y,
+                    base_z + cz as i32 * 4 + 2,
+                );
                 for cy in 0..4usize {
                     cells[(cx << 4) | (cz << 2) | cy] = b;
                 }
@@ -259,5 +263,38 @@ impl DimGrid {
             return BLOCKS.air;
         }
         self.get(lx as usize, wy, lz as usize)
+    }
+
+    /// Grille de test : sol plein `block` de `min_y` à `floor_top`, air au-dessus.
+    #[cfg(test)]
+    pub fn test_floor(
+        base_x: i32,
+        base_z: i32,
+        min_y: i32,
+        height: i32,
+        block: u32,
+        floor_top: i32,
+    ) -> Self {
+        let mut g = DimGrid {
+            cells: vec![BLOCKS.air; height as usize * 256],
+            min_y,
+            height,
+            base_x,
+            base_z,
+        };
+        for lx in 0..16 {
+            for lz in 0..16 {
+                for wy in min_y..=floor_top {
+                    g.set(base_x + lx, wy, base_z + lz, block);
+                }
+            }
+        }
+        g
+    }
+
+    /// Compte les cellules égales à `block` (tests).
+    #[cfg(test)]
+    pub fn count(&self, block: u32) -> usize {
+        self.cells.iter().filter(|&&b| b == block).count()
     }
 }

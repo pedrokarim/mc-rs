@@ -51,15 +51,21 @@ fn nether_config() -> DimConfig {
 
 /// Index du biome Nether (Java) au point monde, via le climat multi-noise.
 pub fn nether_biome_index(sampler: &ClimateSampler, wx: i32, wy: i32, wz: i32) -> u16 {
-    BIOMES.params.find(&sampler.sample(wx >> 2, wy >> 2, wz >> 2))
+    BIOMES
+        .params
+        .find(&sampler.sample(wx >> 2, wy >> 2, wz >> 2))
 }
 
 /// Génère un chunk Nether : renvoie `(sub_chunk_count, payload)`.
 pub fn generate_nether_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<u8>) {
     let router = with_router(seed, |r| r.clone());
     let sampler = ClimateSampler::from_router(&router);
+    let (base_x, base_z) = (chunk_x * 16, chunk_z * 16);
     let biome_at = |wx: i32, wy: i32, wz: i32| -> u32 {
         BIOMES.bedrock_ids[nether_biome_index(&sampler, wx, wy, wz) as usize]
+    };
+    let decorate = |grid: &mut super::worldgen::dim_noise::DimGrid| {
+        super::nether_decorate::decorate(grid, base_x, base_z, &sampler, seed);
     };
     generate_dim_chunk(
         chunk_x,
@@ -67,7 +73,7 @@ pub fn generate_nether_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec
         seed,
         &router,
         &nether_config(),
-        |_| {},
+        decorate,
         biome_at,
     )
 }
@@ -131,6 +137,10 @@ mod tests {
                 seen.insert(nether_biome_index(&sampler, x, 64, z));
             }
         }
-        assert!(seen.len() >= 3, "Nether multi-biome attendu (trouvé {})", seen.len());
+        assert!(
+            seen.len() >= 3,
+            "Nether multi-biome attendu (trouvé {})",
+            seen.len()
+        );
     }
 }
