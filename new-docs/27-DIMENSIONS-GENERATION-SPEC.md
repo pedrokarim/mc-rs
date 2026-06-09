@@ -200,27 +200,29 @@ r42 autour de (0,0)) : (-42,-1) (-34,-25) (-34,24) (-13,-40) (-13,39) (12,-40) (
 
 ---
 
-## 11. Écart implémentation actuelle ⟶ à corriger
+## 11. État de l'implémentation (mis à jour 2026-06-09)
 
-État au 2026-06-09 (décorateurs `nether_decorate.rs` / `end_decorate.rs`) :
+Décorateurs `nether_decorate.rs` / `end_decorate.rs` + moteur `world/feature.rs`.
 
-- ❌ **Minerais** : posés en *proba/bloc* inventées → **FAUX**. Doit devenir
-  veines `count`/chunk + `size` + plages Y (cf. §4) via un vrai algo `OreFeature`.
-- ❌ **Springs** (lave open/closed) : absents.
-- ❌ **basalt_deltas** : pas de `delta` (lacs lave), pas de colonnes de basalte, pas
-  de blobs basalt/blackstone — seulement un placeholder.
-- ❌ **Végétation** : densités inventées au lieu de `count_on_every_layer` + listes
-  pondérées vanilla. Fungi compacts au lieu de `HugeFungusFeature`.
-- ❌ **Surface** : nylium posé en top partout dans les forêts (approx correcte) mais
-  gravel/soul_sand patches (wastes, deltas, valley) + wart block sous-surface absents.
-- ❌ **glowstone** : proba/plafond au lieu de count 10 + `glowstone_blob`.
-- ⚠️ **End** : chorus trees densité inventée ; pas de end_island (petites îles
-  décorées), pas de gateways. Spikes ✅.
+- ✅ **Moteur de features** : `world/feature.rs` — `OreFeature` (veine ellipsoïde
+  fidèle + scattered), `Region`, `HeightRange` (uniform/trapezoid + ancrages),
+  `Count`, RNG par chunk+salt. Réutilisable.
+- ✅ **Minerais** : vraies veines `count`/chunk + `size` + plages Y (§4). Fini la
+  proba/bloc. Probe : quartz ~220/chunk, debris rare.
+- ✅ **Springs** : lave open (8) + closed (16).
+- ✅ **basalt_deltas** : blobs basalt (75) / blackstone (25), deltas de lave
+  (every_layer 40, rim magma), colonnes small (ev4) + large (ev2).
+- ✅ **Végétation** : `count_on_every_layer` pondéré (listes vanilla) + huge fungus
+  (tige 4-13 + dôme wart block + shroomlight).
+- ✅ **Surface** : surface rule par biome (nylium, soul sand/gravel, basalt/gravel,
+  patches wastes).
+- ✅ **glowstone** : count 10 + extra, blobs accrochés aux plafonds.
+- ✅ **feu** : patch_fire / patch_soul_fire (0-5/chunk).
+- ✅ **End chorus** : croissance récursive fidèle (`ChorusPlantFeature`).
+- ✅ **End spikes** : §9 (positions/hauteurs/cages exactes).
 
-### Plan de réimplémentation (ordre)
-1. **Moteur de features réutilisable** : `OreFeature` (vein + scattered), `count` /
-   `count_on_every_layer` / `rarity_filter`, résolution des plages Y → un module
-   `world/feature/` paramétrable par données (réutilisable Nether + End + overworld).
-2. **Nether** : ores (§4), springs, glowstone, surface complète (§3), végétation
-   pondérée + huge fungus (§5), puis basalt_deltas (delta + colonnes + blobs).
-3. **End** : chorus_plant fidèle, end_island (petites îles), end_gateway (post-dragon).
+### Reste (suivis, hors « génération de terrain » pure)
+- **end_gateway** : sortie post-dragon vers les îles externes → mécanique de TP.
+- **Structures** : nether_fortress, bastion, end_city (loot data déjà présente).
+- **Parité de seed Java** : les RNG sont déterministes par chunk mais pas
+  bit-identiques à Java (positions différentes, statistiques identiques).

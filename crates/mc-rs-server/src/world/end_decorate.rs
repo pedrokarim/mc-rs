@@ -6,9 +6,10 @@
 //! nue, l'**anneau de vide** (~100..1024) est vide, et les **îles externes** portent
 //! les chorus. On classe chaque colonne par distance + relief généré.
 //!
-//! Réf : minecraft.wiki/w/The_End (chorus plants ubiquitaires sur les îles externes)
-//! + `ChorusPlantFeature`. L'arbre est une version branchée compacte (chorus_plant
-//! + chorus_flower aux extrémités).
+//! Réf : minecraft.wiki/w/The_End + `ChorusPlantFeature` (croissance récursive :
+//! segments verticaux + branches horizontales, fleurs aux extrémités). Les end
+//! gateways (sortie post-dragon vers les îles externes) relèvent de la mécanique de
+//! téléportation, pas de la génération de terrain → suivi séparé.
 
 use std::sync::LazyLock;
 
@@ -94,34 +95,56 @@ pub fn decorate(grid: &mut DimGrid, base_x: i32, base_z: i32, seed: u64) {
 /// Chorus tree compact : tronc de `chorus_plant` + quelques branches, extrémités
 /// coiffées de `chorus_flower`.
 fn grow_chorus(grid: &mut DimGrid, eb: &EndBlocks, wx: i32, y0: i32, wz: i32, rng: &mut Rng) {
-    let trunk = 2 + rng.range(7); // 2..8
-    for i in 0..trunk {
-        if grid.get_world(wx, y0 + i, wz) != eb.air {
-            return;
-        }
-        grid.set(wx, y0 + i, wz, eb.chorus_plant);
-    }
-    grid.set(wx, y0 + trunk, wz, eb.chorus_flower);
+    grow_branch(grid, eb, wx, y0, wz, rng, 0);
+}
 
-    // Quelques branches : à partir d'une hauteur, sortir d'1 bloc puis monter.
-    let branches = rng.range(4);
+/// Croissance récursive d'une branche de chorus (réf `ChorusPlantFeature`) : segment
+/// vertical (1..4, +1 à la base) puis 0..3 branches horizontales qui recursent ;
+/// `chorus_flower` aux extrémités qui ne ramifient pas. Profondeur max 4.
+fn grow_branch(
+    grid: &mut DimGrid,
+    eb: &EndBlocks,
+    x: i32,
+    y: i32,
+    z: i32,
+    rng: &mut Rng,
+    iter: i32,
+) {
     const DIRS: [(i32, i32); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
-    for _ in 0..branches {
-        let bh = y0 + 1 + rng.range(trunk.max(1));
-        let (dx, dz) = DIRS[rng.range(4) as usize];
-        let (bx, bz) = (wx + dx, wz + dz);
-        if grid.get_world(bx, bh, wz + dz) != eb.air {
-            continue;
+    // Segment vertical.
+    let mut seg = 1 + rng.range(4); // 1..4
+    if iter == 0 {
+        seg += 1; // tronc un peu plus haut
+    }
+    let mut top = y;
+    for i in 0..seg {
+        let ny = y + i;
+        if grid.get_world(x, ny, z) != eb.air {
+            break;
         }
-        grid.set(bx, bh, bz, eb.chorus_plant);
-        let up = 1 + rng.range(3);
-        for i in 1..=up {
-            if grid.get_world(bx, bh + i, bz) != eb.air {
-                break;
+        grid.set(x, ny, z, eb.chorus_plant);
+        top = ny;
+    }
+
+    // Branches horizontales (puis récursion vers le haut).
+    let mut branched = false;
+    if iter < 4 {
+        let n = rng.range(4) + if iter == 0 { 1 } else { 0 }; // 0..3 (+1 à la base)
+        for _ in 0..n {
+            let (dx, dz) = DIRS[rng.range(4) as usize];
+            let (bx, bz) = (x + dx, z + dz);
+            // La branche doit sortir dans le vide (pas posée sur un bloc en dessous).
+            if grid.get_world(bx, top, bz) == eb.air && grid.get_world(bx, top - 1, bz) == eb.air {
+                grid.set(bx, top, bz, eb.chorus_plant);
+                grow_branch(grid, eb, bx, top, bz, rng, iter + 1);
+                branched = true;
             }
-            grid.set(bx, bh + i, bz, eb.chorus_plant);
         }
-        grid.set(bx, bh + up + 1, bz, eb.chorus_flower);
+    }
+
+    // Extrémité non ramifiée → fleur de chorus.
+    if !branched && grid.get_world(x, top + 1, z) == eb.air {
+        grid.set(x, top + 1, z, eb.chorus_flower);
     }
 }
 
