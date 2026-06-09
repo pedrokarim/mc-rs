@@ -6,9 +6,9 @@
 //! chaque colonne vient du climat multi-noise (`nether_generator::nether_biome_index`),
 //! la dispersion est déterministe (hash position+seed) donc rejouable.
 //!
-//! Réf comportement : minecraft.wiki (Nether biomes / Huge fungus) + features
-//! vanilla `nether/*`. Les fungi sont une version compacte (tige + chapeau de wart
-//! block + shroomlight), pas l'algorithme exact, mais visuellement fidèle.
+//! Réf : `new-docs/27-DIMENSIONS-GENERATION-SPEC.md` (données vanilla mcmeta). Les
+//! **minerais** sont des vraies veines (`count`/chunk + `size` + plage Y, moteur
+//! `feature`). Surface/végétation/fungi : en cours de portage fidèle.
 
 use std::sync::LazyLock;
 
@@ -135,9 +135,141 @@ pub fn decorate(grid: &mut DimGrid, base_x: i32, base_z: i32, sampler: &ClimateS
                     apply_ceiling(grid, nb, wx, y, wz, bi, &mut rng);
                 }
             }
-            scatter_ores(grid, nb, wx, wz, &mut rng);
         }
     }
+    // Minerais : veines `count`/chunk (biome dominant échantillonné au centre).
+    let chunk_biome = nether_biome_index(sampler, base_x + 8, 64, base_z + 8);
+    place_ores(grid, nb, base_x, base_z, seed, chunk_biome);
+}
+
+/// Minerais du Nether — veines vanilla (spec §4 du doc 27) : `count`/chunk, `size`
+/// de veine et plage Y exacts, via le moteur `feature`. Le biome dominant du chunk
+/// pilote les variantes (deltas : plus de quartz/or, ni gravel ni blackstone ;
+/// valley : soul_sand).
+fn place_ores(
+    grid: &mut DimGrid,
+    nb: &NetherBlocks,
+    base_x: i32,
+    base_z: i32,
+    seed: u64,
+    biome: u16,
+) {
+    use super::feature::{place_ore, Anchor::*, FeatureRng, HeightRange::*, Ore, Region};
+    let region = Region {
+        base_x,
+        base_z,
+        min_y: 0,
+        max_y: 128,
+    };
+    let (cx, cz) = (base_x >> 4, base_z >> 4);
+    let netherrack = nb.netherrack;
+    let basalt = nb.basalt;
+    let blackstone = nb.blackstone;
+    let is_rack = move |b: u32| b == netherrack;
+    // ancient debris cible la pierre de base du Nether (netherrack/basalt/blackstone).
+    let is_base_stone = move |b: u32| b == netherrack || b == basalt || b == blackstone;
+    let deltas = biome == BASALT;
+
+    // (block, size, discard, scattered, count, height, salt, target)
+    let mut run =
+        |block, size, discard, scattered, count: i32, h, salt: u64, tgt: &dyn Fn(u32) -> bool| {
+            let mut rng = FeatureRng::new(cx, cz, seed, salt);
+            let ore = Ore {
+                block,
+                size,
+                discard_air: discard,
+                scattered,
+                is_target: tgt,
+            };
+            place_ore(grid, &mut rng, &region, count, h, &ore);
+        };
+
+    let body = Uniform(AboveBottom(10), BelowTop(10));
+    run(
+        nb.quartz_ore,
+        14,
+        0.0,
+        false,
+        if deltas { 32 } else { 16 },
+        body,
+        0x0_0001,
+        &is_rack,
+    );
+    run(
+        nb.gold_ore,
+        10,
+        0.0,
+        false,
+        if deltas { 20 } else { 10 },
+        body,
+        0x0_0002,
+        &is_rack,
+    );
+    run(
+        nb.magma,
+        33,
+        0.0,
+        false,
+        4,
+        Uniform(Absolute(27), Absolute(36)),
+        0x0_0003,
+        &is_rack,
+    );
+    if !deltas {
+        run(
+            BLOCKS.get("minecraft:gravel"),
+            33,
+            0.0,
+            false,
+            2,
+            Uniform(Absolute(5), Absolute(41)),
+            0x0_0004,
+            &is_rack,
+        );
+        run(
+            blackstone,
+            33,
+            0.0,
+            false,
+            2,
+            Uniform(Absolute(5), Absolute(31)),
+            0x0_0005,
+            &is_rack,
+        );
+    }
+    if biome == SOUL_SAND_VALLEY {
+        run(
+            nb.soul_sand,
+            12,
+            0.0,
+            false,
+            12,
+            Uniform(AboveBottom(0), Absolute(31)),
+            0x0_0006,
+            &is_rack,
+        );
+    }
+    // ancient debris : dispersé, jamais exposé à l'air (discard 1.0).
+    run(
+        nb.ancient_debris,
+        3,
+        1.0,
+        true,
+        1,
+        Trapezoid(Absolute(8), Absolute(24)),
+        0x0_0007,
+        &is_base_stone,
+    );
+    run(
+        nb.ancient_debris,
+        2,
+        1.0,
+        true,
+        1,
+        Uniform(AboveBottom(8), BelowTop(8)),
+        0x0_0008,
+        &is_base_stone,
+    );
 }
 
 /// Surface « sol » (bloc avec de l'air au-dessus) : remplace par le bloc de surface
@@ -306,23 +438,6 @@ fn grow_fungus(
     }
 }
 
-/// Disperse les minerais dans la netherrack de la colonne (petites veines).
-fn scatter_ores(grid: &mut DimGrid, nb: &NetherBlocks, wx: i32, wz: i32, rng: &mut Rng) {
-    for y in 2..126 {
-        if grid.get_world(wx, y, wz) != nb.netherrack {
-            continue;
-        }
-        // Quartz : commun, toute hauteur. Or néthérite : moins. Ancient debris : rare, y8..22.
-        if rng.chance(0.020) {
-            grid.set(wx, y, wz, nb.quartz_ore);
-        } else if rng.chance(0.010) {
-            grid.set(wx, y, wz, nb.gold_ore);
-        } else if (8..=22).contains(&y) && rng.chance(0.0008) {
-            grid.set(wx, y, wz, nb.ancient_debris);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -365,5 +480,43 @@ mod tests {
             "surfaces de biome attendues (nylium/soul sand/basalt)"
         );
         assert!(ores > 0, "minerais Nether attendus");
+    }
+}
+
+#[cfg(test)]
+mod ore_probe {
+    use super::*;
+    use crate::world::worldgen::density;
+    #[test]
+    fn ore_counts_in_vanilla_ballpark() {
+        let nb = &*NB;
+        let router = density::build_nether(42);
+        let sampler = ClimateSampler::from_router(&router);
+        let (mut q, mut g, mut m, mut d) = (0usize, 0usize, 0usize, 0usize);
+        let chunks = 20;
+        for cx in 0..chunks {
+            let (bx, bz) = (cx * 16, 0);
+            let mut grid = DimGrid::test_floor(bx, bz, 0, 128, nb.netherrack, 120);
+            decorate(&mut grid, bx, bz, &sampler, 42);
+            q += grid.count(nb.quartz_ore);
+            g += grid.count(nb.gold_ore);
+            m += grid.count(nb.magma);
+            d += grid.count(nb.ancient_debris);
+        }
+        let n = chunks as usize;
+        println!(
+            "[ore/chunk] quartz={} gold={} magma={} debris={}",
+            q / n,
+            g / n,
+            m / n,
+            d / n
+        );
+        // quartz ~16 veines*size14 -> ~150-400 blocs/chunk ; debris rare mais présent.
+        assert!(
+            q / n > 80 && q / n < 1200,
+            "quartz/chunk hors plage: {}",
+            q / n
+        );
+        assert!(m / n > 20, "magma (size33) attendu: {}", m / n);
     }
 }
