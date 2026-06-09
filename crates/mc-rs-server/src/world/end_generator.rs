@@ -42,7 +42,6 @@ fn end_config() -> DimConfig {
         cell_h: 4, // size_vertical 1
         default_block: BLOCKS.get("minecraft:end_stone"),
         default_fluid: None, // pas de fluide à l'End
-        biome_id: END_BIOME,
         bedrock_floor: 0, // îles flottantes : ni sol ni toit bedrock
         bedrock_roof: 0,
     }
@@ -90,9 +89,15 @@ fn place_spikes(grid: &mut DimGrid, seed: u64) {
 /// Génère un chunk de l'End : renvoie `(sub_chunk_count, payload)`.
 pub fn generate_end_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<u8>) {
     let router = with_router(seed, |r| r.clone());
-    generate_dim_chunk(chunk_x, chunk_z, seed, &router, &end_config(), |grid| {
-        place_spikes(grid, seed)
-    })
+    generate_dim_chunk(
+        chunk_x,
+        chunk_z,
+        seed,
+        &router,
+        &end_config(),
+        |grid| place_spikes(grid, seed),
+        |_, _, _| END_BIOME, // the_end partout (multi-biome End = milestone suivant)
+    )
 }
 
 #[cfg(test)]

@@ -552,20 +552,26 @@ pub fn build_dimension_terrain(settings_id: &str, seed: u64) -> NoiseRouter {
         blended: None,
         end_islands: None,
     };
-    let final_density = Arc::new(builder.parse(&router["final_density"]));
-    let zero = || Arc::new(Df::Const(0.0));
+    // Parse une étape si présente et non-nulle, sinon `Const(0)` (le Nether n'a
+    // que temperature/vegetation ; l'End n'a que erosion, etc.).
+    let mut stage = |key: &str| -> Arc<Df> {
+        match router.get(key) {
+            Some(v) if !v.is_null() => Arc::new(builder.parse(v)),
+            _ => Arc::new(Df::Const(0.0)),
+        }
+    };
     NoiseRouter {
-        final_density,
-        temperature: zero(),
-        vegetation: zero(),
-        continents: zero(),
-        erosion: zero(),
-        depth: zero(),
-        ridges: zero(),
-        barrier: zero(),
-        fluid_level_floodedness: zero(),
-        fluid_level_spread: zero(),
-        lava: zero(),
+        final_density: stage("final_density"),
+        temperature: stage("temperature"),
+        vegetation: stage("vegetation"),
+        continents: stage("continentalness"),
+        erosion: stage("erosion"),
+        depth: stage("depth"),
+        ridges: stage("ridges"),
+        barrier: stage("barrier"),
+        fluid_level_floodedness: stage("fluid_level_floodedness"),
+        fluid_level_spread: stage("fluid_level_spread"),
+        lava: stage("lava"),
     }
 }
 

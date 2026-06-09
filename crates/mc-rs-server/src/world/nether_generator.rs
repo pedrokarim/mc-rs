@@ -6,18 +6,22 @@
 //! **forme est fidèle** — voûtes de netherrack, mer de lave à Y≤32, toit/sol
 //! bedrock. Remplace l'ancien placeholder Simplex.
 //!
-//! v1 : biome `nether_wastes` partout + crust simple (netherrack/lave). Les surface
-//! rules détaillées (soul sand, basalt deltas, gravier) et les biomes multi-noise
-//! (crimson/warped/soul_sand_valley/basalt_deltas) viendront ensuite (le
-//! `surface_rule` vanilla est déjà vendoré dans `nether.json`).
+//! Biomes : **multi-noise vanilla** (5 biomes — nether_wastes / soul_sand_valley /
+//! crimson_forest / warped_forest / basalt_deltas) via `ClimateSampler` + le param
+//! list `biome_parameters/nether.json`. Les surface rules détaillées par biome
+//! (nylium, soul sand, basalt) et les features (fungi, glowstone) viennent ensuite ;
+//! le `surface_rule` vanilla est déjà vendoré dans `nether.json`.
 
 use std::sync::{LazyLock, Mutex};
 
 use super::block_registry::BLOCKS;
+use super::worldgen::climate::{ClimateSampler, OverworldBiomes};
 use super::worldgen::density::{self, NoiseRouter};
 use super::worldgen::dim_noise::{generate_dim_chunk, DimConfig};
 
-const NETHER_BIOME: u32 = 8; // BiomeIds::HELL (nether_wastes côté Bedrock)
+/// Param list multi-noise du Nether (5 biomes), chargé une fois.
+static BIOMES: LazyLock<OverworldBiomes> =
+    LazyLock::new(|| super::worldgen::climate::load_biomes("nether"));
 
 /// Router Nether caché par seed (instancié une fois, comme l'overworld).
 static ROUTER: LazyLock<Mutex<(u64, Option<NoiseRouter>)>> =
@@ -40,16 +44,32 @@ fn nether_config() -> DimConfig {
         cell_h: 8,     // size_vertical 2
         default_block: BLOCKS.get("minecraft:netherrack"),
         default_fluid: Some(BLOCKS.lava),
-        biome_id: NETHER_BIOME,
         bedrock_floor: 5,
         bedrock_roof: 5,
     }
 }
 
+/// Index du biome Nether (Java) au point monde, via le climat multi-noise.
+pub fn nether_biome_index(sampler: &ClimateSampler, wx: i32, wy: i32, wz: i32) -> u16 {
+    BIOMES.params.find(&sampler.sample(wx >> 2, wy >> 2, wz >> 2))
+}
+
 /// Génère un chunk Nether : renvoie `(sub_chunk_count, payload)`.
 pub fn generate_nether_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<u8>) {
     let router = with_router(seed, |r| r.clone());
-    generate_dim_chunk(chunk_x, chunk_z, seed, &router, &nether_config(), |_| {})
+    let sampler = ClimateSampler::from_router(&router);
+    let biome_at = |wx: i32, wy: i32, wz: i32| -> u32 {
+        BIOMES.bedrock_ids[nether_biome_index(&sampler, wx, wy, wz) as usize]
+    };
+    generate_dim_chunk(
+        chunk_x,
+        chunk_z,
+        seed,
+        &router,
+        &nether_config(),
+        |_| {},
+        biome_at,
+    )
 }
 
 #[cfg(test)]
@@ -99,5 +119,18 @@ mod tests {
             solid > 0 && air > 0,
             "relief attendu, pas constant (solid={solid} air={air})"
         );
+    }
+    #[test]
+    fn nether_has_multiple_biomes() {
+        // Le climat multi-noise doit produire plusieurs biomes Nether (pas un seul).
+        let router = with_router(42, |r| r.clone());
+        let sampler = ClimateSampler::from_router(&router);
+        let mut seen = std::collections::HashSet::new();
+        for x in (-512..512).step_by(48) {
+            for z in (-512..512).step_by(48) {
+                seen.insert(nether_biome_index(&sampler, x, 64, z));
+            }
+        }
+        assert!(seen.len() >= 3, "Nether multi-biome attendu (trouvé {})", seen.len());
     }
 }

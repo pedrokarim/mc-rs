@@ -26,8 +26,6 @@ pub struct DimConfig {
     pub default_block: u32,
     /// Fluide sous le sea level (`None` = pas de fluide, ex. End).
     pub default_fluid: Option<u32>,
-    /// Biome Bedrock unique (v1 ; multi-biome = milestone suivant).
-    pub biome_id: u32,
     /// Nombre de couches de bedrock au plancher et au plafond (0 = aucune).
     pub bedrock_floor: i32,
     pub bedrock_roof: i32,
@@ -59,6 +57,7 @@ pub fn generate_dim_chunk(
     router: &NoiseRouter,
     cfg: &DimConfig,
     decorate: impl Fn(&mut DimGrid),
+    biome_at: impl Fn(i32, i32, i32) -> u32,
 ) -> (u32, Vec<u8>) {
     let base_x = chunk_x * 16;
     let base_z = chunk_z * 16;
@@ -196,9 +195,20 @@ pub fn generate_dim_chunk(
         }
     }
 
-    // Biomes : un seul biome pour toute la dimension (v1), une section par sub-chunk.
-    let cells = [cfg.biome_id; 64];
-    for _ in 0..sub_count {
+    // Biomes 3D : une section 4×4×4 par sub-chunk, échantillonnée via `biome_at`
+    // au centre de chaque cellule (mid-Y du sub-chunk).
+    for sub_idx in 0..sub_count {
+        let mid_y = cfg.min_y + sub_idx as i32 * 16 + 8;
+        let mut cells = [0u32; 64];
+        #[allow(clippy::needless_range_loop)]
+        for cx in 0..4usize {
+            for cz in 0..4usize {
+                let b = biome_at(base_x + cx as i32 * 4 + 2, mid_y, base_z + cz as i32 * 4 + 2);
+                for cy in 0..4usize {
+                    cells[(cx << 4) | (cz << 2) | cy] = b;
+                }
+            }
+        }
         payload.extend_from_slice(&chunk_serializer::serialize_biome_section(&cells));
     }
     payload.push(0); // border blocks count
