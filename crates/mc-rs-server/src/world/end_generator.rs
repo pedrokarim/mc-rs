@@ -20,8 +20,6 @@ use super::worldgen::dim_noise::{generate_dim_chunk, DimConfig, DimGrid};
 use crate::obsidian_pillar;
 
 const END_BIOME: u32 = 9; // BiomeIds::THE_END (Bedrock)
-/// Base des piliers d'obsidienne (ancrée dans l'île centrale).
-const PILLAR_BASE_Y: i32 = 50;
 
 /// Router End caché par seed.
 static ROUTER: LazyLock<Mutex<(u64, Option<NoiseRouter>)>> =
@@ -50,24 +48,40 @@ fn end_config() -> DimConfig {
     }
 }
 
-/// Pose les 10 piliers d'obsidienne (réf `obsidian_pillar`) sur l'île centrale :
-/// colonne d'obsidienne `rayon 2` de `PILLAR_BASE_Y` au sommet, coiffée de bedrock
-/// (l'end crystal qui s'y pose est une entité — `dragon_fight_manager`). `grid.set`
-/// clippe hors du chunk, donc on itère tous les piliers à chaque chunk sans déborder.
-fn place_pillars(grid: &mut DimGrid) {
+/// Pose les 10 end spikes (spec vanilla `obsidian_pillar::end_spikes`) : colonne
+/// d'obsidienne `rayon` de Y=0 au sommet, coiffée de bedrock, + cage de 73 barreaux
+/// de fer (5×5) pour les piliers gardés. Le **cristal** (à `height+1`) est une
+/// entité spawnée par `dragon_fight_manager`. `grid.set` clippe hors du chunk, donc
+/// on itère tous les piliers à chaque chunk sans déborder.
+fn place_spikes(grid: &mut DimGrid, seed: u64) {
     let obsidian = BLOCKS.get("minecraft:obsidian");
     let bedrock = BLOCKS.bedrock;
-    for p in obsidian_pillar::vanilla_pillar_locations() {
-        let top = 76 + (p.height as i32 - 41); // ~78..92 (variété vanilla)
-        for dx in -2..=2 {
-            for dz in -2..=2 {
-                if dx * dx + dz * dz > 4 {
-                    continue; // colonne ~circulaire (rayon 2)
+    let iron_bars = BLOCKS.get("minecraft:iron_bars");
+    for s in obsidian_pillar::end_spikes(seed) {
+        let r2 = s.radius * s.radius;
+        for dx in -s.radius..=s.radius {
+            for dz in -s.radius..=s.radius {
+                if dx * dx + dz * dz > r2 {
+                    continue; // colonne circulaire de rayon `s.radius`
                 }
-                for y in PILLAR_BASE_Y..top {
-                    grid.set(p.x + dx, y, p.z + dz, obsidian);
+                for y in 0..s.height {
+                    grid.set(s.x + dx, y, s.z + dz, obsidian);
                 }
-                grid.set(p.x + dx, top, p.z + dz, bedrock);
+                grid.set(s.x + dx, s.height, s.z + dz, bedrock); // sommet bedrock
+            }
+        }
+        // Cage de fer (5×5, 73 barreaux) autour du cristal des piliers gardés :
+        // parois où |dx|==2 ou |dz|==2, + couche du dessus pleine (dy==3).
+        if s.guarded {
+            let cy = s.crystal_y();
+            for dy in 0..=3i32 {
+                for dx in -2..=2i32 {
+                    for dz in -2..=2i32 {
+                        if dx.abs() == 2 || dz.abs() == 2 || dy == 3 {
+                            grid.set(s.x + dx, cy + dy, s.z + dz, iron_bars);
+                        }
+                    }
+                }
             }
         }
     }
@@ -76,14 +90,9 @@ fn place_pillars(grid: &mut DimGrid) {
 /// Génère un chunk de l'End : renvoie `(sub_chunk_count, payload)`.
 pub fn generate_end_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<u8>) {
     let router = with_router(seed, |r| r.clone());
-    generate_dim_chunk(
-        chunk_x,
-        chunk_z,
-        seed,
-        &router,
-        &end_config(),
-        place_pillars,
-    )
+    generate_dim_chunk(chunk_x, chunk_z, seed, &router, &end_config(), |grid| {
+        place_spikes(grid, seed)
+    })
 }
 
 #[cfg(test)]

@@ -19,8 +19,6 @@ use crate::obsidian_pillar;
 /// Centre de l'île de l'End / portail de sortie (X,Z) et altitude de spawn du dragon.
 pub const FOUNTAIN_XZ: (i32, i32) = (0, 0);
 pub const DRAGON_SPAWN: [f32; 3] = [0.0, 80.0, 0.0];
-/// Altitude des end crystals (au sommet des piliers d'obsidienne).
-const CRYSTAL_BASE_Y: i32 = 78;
 
 /// Effet à appliquer par la game loop suite à un tick / hook du combat.
 #[derive(Debug, Clone, PartialEq)]
@@ -88,9 +86,10 @@ impl DragonFightManager {
         self.fight.phase == DragonFightPhase::DragonAlive && self.dragon_runtime_id.is_some()
     }
 
-    /// Tick du combat. `end_has_players` : un joueur est présent à l'End.
+    /// Tick du combat. `end_has_players` : un joueur est présent à l'End. `seed` :
+    /// graine du monde (pour placer les cristaux au sommet des bons piliers).
     /// Renvoie les effets à appliquer (spawn initial, mise à jour de barre, etc.).
-    pub fn tick(&mut self, end_has_players: bool) -> Vec<DragonFightEffect> {
+    pub fn tick(&mut self, end_has_players: bool, seed: u64) -> Vec<DragonFightEffect> {
         let mut effects = Vec::new();
         self.fight.tick();
 
@@ -102,9 +101,11 @@ impl DragonFightManager {
             effects.push(DragonFightEffect::SpawnDragon {
                 position: DRAGON_SPAWN,
             });
-            for p in obsidian_pillar::vanilla_pillar_locations() {
+            // Un cristal au sommet (height+1) de chaque end spike — coords/hauteurs
+            // vanilla (partagées avec le terrain via `obsidian_pillar::end_spikes`).
+            for s in obsidian_pillar::end_spikes(seed) {
                 effects.push(DragonFightEffect::SpawnCrystal {
-                    position: [p.x as f32 + 0.5, CRYSTAL_BASE_Y as f32, p.z as f32 + 0.5],
+                    position: [s.x as f32 + 0.5, s.crystal_y() as f32, s.z as f32 + 0.5],
                 });
             }
             effects.push(DragonFightEffect::ShowBossBar);
@@ -192,7 +193,7 @@ mod tests {
 
     fn spawned_manager() -> DragonFightManager {
         let mut m = DragonFightManager::new();
-        let effects = m.tick(true);
+        let effects = m.tick(true, 42);
         // Spawn dragon + 10 crystals + show boss bar.
         assert!(effects.contains(&DragonFightEffect::SpawnDragon {
             position: DRAGON_SPAWN
@@ -269,7 +270,7 @@ mod tests {
         // Force quelques HP manquants en retirant tous les crystals, frappant, puis…
         // ici on vérifie juste que le tick soigne tant que des crystals existent.
         m.dragon.hp = 100.0;
-        m.tick(true);
+        m.tick(true, 42);
         assert!(m.dragon.hp > 100.0, "crystals should heal the dragon");
     }
 }

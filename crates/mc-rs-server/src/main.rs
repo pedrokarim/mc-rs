@@ -1930,7 +1930,7 @@ async fn main() {
                     let end_has_players = connections
                         .values()
                         .any(|c| c.is_in_game() && c.current_dimension == 2);
-                    for effect in dragon_fight.tick(end_has_players) {
+                    for effect in dragon_fight.tick(end_has_players, world_seed) {
                         use crate::dragon_fight_manager::DragonFightEffect as DE;
                         match effect {
                             DE::SpawnDragon { position } => {
