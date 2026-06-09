@@ -3,6 +3,7 @@ pub mod block_registry;
 pub mod block_registry_data;
 pub mod chunk_cache;
 pub mod chunk_serializer;
+pub mod end_decorate;
 pub mod end_generator;
 pub mod end_portal_build;
 pub mod flat_generator;

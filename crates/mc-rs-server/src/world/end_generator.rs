@@ -7,10 +7,10 @@
 //! (`clamp(100 - dist·8)`) + les **îles externes** flottantes (>1024 blocs) tirées
 //! par un bruit 2D. Remplace l'ancien placeholder géométrique (ellipsoïde + piliers).
 //!
-//! v1 : biome `the_end` partout, end_stone uniquement. Le portail de sortie + les
-//! piliers d'obsidienne + les end crystals sont posés par le combat du dragon
-//! (`dragon_fight_manager`), pas par le terrain. Multi-biome (highlands/midlands/
-//! barrens/small_islands via erosion) = milestone suivant.
+//! Biome `the_end` partout (Bedrock fusionne tous les biomes End). Les piliers
+//! d'obsidienne + cages sont posés par `place_spikes` (cristaux = entités du
+//! `dragon_fight_manager`) ; les **chorus trees des îles externes** par
+//! `end_decorate`. End gateways (sortie post-dragon) + end cities = suite.
 
 use std::sync::{LazyLock, Mutex};
 
@@ -89,14 +89,18 @@ fn place_spikes(grid: &mut DimGrid, seed: u64) {
 /// Génère un chunk de l'End : renvoie `(sub_chunk_count, payload)`.
 pub fn generate_end_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<u8>) {
     let router = with_router(seed, |r| r.clone());
+    let (base_x, base_z) = (chunk_x * 16, chunk_z * 16);
     generate_dim_chunk(
         chunk_x,
         chunk_z,
         seed,
         &router,
         &end_config(),
-        |grid| place_spikes(grid, seed),
-        |_, _, _| END_BIOME, // the_end partout (multi-biome End = milestone suivant)
+        |grid| {
+            place_spikes(grid, seed); // piliers + cristaux au centre
+            super::end_decorate::decorate(grid, base_x, base_z, seed); // chorus îles externes
+        },
+        |_, _, _| END_BIOME, // Bedrock : tout l'End est `the_end`
     )
 }
 
@@ -139,5 +143,33 @@ mod tests {
             r.final_density.compute(5000, 50, 5000) <= 0.0,
             "le vide de l'End attendu loin de toute île"
         );
+    }
+}
+
+#[cfg(test)]
+mod map_probe {
+    use super::*;
+    /// Structure vanilla : île centrale solide, anneau de vide (~100..1024),
+    /// puis îles externes au-delà de ~1024 blocs.
+    #[test]
+    fn end_has_center_voidring_and_outer_islands() {
+        let r = with_router(42, |x| x.clone());
+        let solid = |wx: i32, wz: i32| {
+            (0..120)
+                .filter(|&y| r.final_density.compute(wx, y, wz) > 0.0)
+                .count()
+        };
+        let center = solid(0, 0);
+        let ring: usize = (200..900).step_by(64).map(|d| solid(d, 0)).sum();
+        let outer: usize = (1100..3000)
+            .step_by(53)
+            .map(|d| solid(d, 0) + solid(d, d))
+            .sum();
+        assert!(center > 0, "île centrale solide attendue");
+        assert_eq!(
+            ring, 0,
+            "anneau de vide attendu entre centre et îles externes"
+        );
+        assert!(outer > 0, "îles externes attendues au-delà de ~1024 blocs");
     }
 }
