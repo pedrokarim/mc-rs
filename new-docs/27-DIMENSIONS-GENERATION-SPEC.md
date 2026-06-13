@@ -92,7 +92,7 @@ Tirée de `noise_settings/nether.json → surface_rule`. Ordre = priorité.
 ### Communes (toutes ou presque)
 | Feature | count/chunk | Plage Y | Détail |
 |---|---|---|---|
-| glowstone | **10** | 0 → 128 | blob de glowstone (`glowstone_blob`) accroché au plafond |
+| glowstone | **10** (Java) | 0 → 128 | blob de glowstone (`glowstone_blob`) accroché au plafond. ⚠️ Java=10 rend bien trop dense visuellement ; **Bedrock ≈ 2-3/chunk** → on génère 2-3 |
 | glowstone_extra | 0..9 (biais bas) | 4 → 124 | blobs supplémentaires |
 | patch_fire | 0..5 | 4 → 124 | feu sur netherrack |
 | patch_soul_fire | 0..5 | 4 → 124 | soul fire (sauf crimson) |

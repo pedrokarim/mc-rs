@@ -528,7 +528,9 @@ fn find_ceiling(grid: &DimGrid, nb: &NetherBlocks, wx: i32, from_y: i32, wz: i32
 fn place_glowstone(grid: &mut DimGrid, nb: &NetherBlocks, base_x: i32, base_z: i32, seed: u64) {
     let (cx, cz) = (base_x >> 4, base_z >> 4);
     let mut rng = FeatureRng::new(cx, cz, seed, 0x_610B);
-    let count = 10 + rng.range(10).min(rng.range(10)); // 10 + glowstone_extra biased bas
+    // Java = count 10 + extra (mcmeta) — beaucoup trop dense en jeu (rendu Bedrock).
+    // Bedrock génère le glowstone bien plus rarement : ~2-3 blobs/chunk.
+    let count = 2 + rng.range(2); // 2..3
     for _ in 0..count {
         let wx = base_x + rng.range(16);
         let wz = base_z + rng.range(16);
