@@ -2,13 +2,14 @@
 //! callback `decorate`. Le biome vient du climat multi-noise ; la dispersion est
 //! déterministe (hash position+seed), donc rejouable.
 //!
-//! Réf : `new-docs/27-DIMENSIONS-GENERATION-SPEC.md` (données vanilla mcmeta).
-//! - **Minerais** : vraies veines (moteur `feature`) — quartz/or/magma/gravel/
-//!   blackstone/soul_sand/ancient_debris, `count`/chunk + `size` + plage Y exacts.
+//! Réf : `new-docs/27-DIMENSIONS-GENERATION-SPEC.md`. Densités = **Nukkit (Bedrock)** ;
+//! structure (surface rules, biomes) = mcmeta (Java).
+//! - **Minerais** : veines Bedrock (moteur `feature`) — quartz/or/magma/gravel/
+//!   soul_sand/lave/ancient_debris (réf Nukkit `OreType`), remplacent la netherrack.
 //! - **Surface** : surface rule par biome (nylium, soul sand/gravel, basalt/gravel).
 //! - **Végétation** : `count_on_every_layer` pondéré + huge fungus (tige + dôme).
 //! - **basalt_deltas** : blobs basalt/blackstone, deltas de lave, colonnes.
-//! - Springs de lave, amas de glowstone, feu/soul fire, lianes (twisting/weeping).
+//! - **glowstone** (réf Nukkit) ~1 chunk/9, springs de lave, feu, lianes.
 
 use std::sync::LazyLock;
 
