@@ -1,10 +1,15 @@
 # Spec de génération — Nether & End (référence canonique)
 
-> Source autoritaire : données vanilla **data-driven** dans
-> `.reference/mcmeta/data/minecraft/worldgen/` (biome / configured_feature /
-> placed_feature / noise_settings), recoupées avec minecraft.wiki et bedrock.dev.
-> **Toute valeur ici est tirée des fichiers vanilla, pas devinée.** Les générateurs
-> mc-rs doivent reproduire ces nombres exactement.
+> Sources autoritaires :
+> - **Nukkit** (`.reference/Nukkit/`) = serveur **Bedrock** : `level/generator/Nether.java`
+>   + `populator/impl/*` + `object/ore/OreType.java`. **C'est LA référence Bedrock** pour
+>   les densités (count/size/Y de minerais, glowstone, deltas, fungi…).
+> - **mcmeta** (`.reference/mcmeta/data/minecraft/worldgen/`) = données **Java** : utile
+>   pour la structure (surface rules, classification biomes), mais les **densités
+>   divergent** de Bedrock (ex. glowstone Java=10/chunk vs Bedrock=1/9 chunks).
+>
+> **Toute valeur est tirée des fichiers de référence, pas devinée.** Pour les densités
+> en jeu (minerais, glowstone…), **Nukkit prime** car le serveur cible est Bedrock.
 >
 > ⚠️ Édition Bedrock : les 5 biomes de l'End sont **fusionnés en `the_end` (id 9)**
 > côté client, mais la *distribution des features* suit la classification Java.
@@ -73,6 +78,12 @@ Tirée de `noise_settings/nether.json → surface_rule`. Ordre = priorité.
 > sous la surface. À reproduire : top = nylium dans les forêts.
 
 ## 4. NETHER — minerais (veines, `count`/chunk)
+
+> ⚠️ **Implémentation = valeurs Nukkit/Bedrock** (ci-dessous le tableau Java de mcmeta,
+> conservé pour référence). Bedrock (Nukkit `Nether.java`) : quartz 16×**24**, or 10×**16**,
+> magma 4×**64** (Y26-33), gravel 2×**64** (Y5-105), soul_sand 12×**23** (Y0-105, **tout le
+> Nether**), lave 1×16 (Y0-31), ancient_debris **2×3** (Y8-23) + **3×2** (Y8-119). **Pas de
+> blackstone en minerai**, tout remplace la netherrack **sans discard-on-air**.
 
 | Feature | Biomes | count/chunk | size (vein) | Plage Y | discard_air | Bloc |
 |---|---|---|---|---|---|---|

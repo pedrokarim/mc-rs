@@ -142,12 +142,12 @@ pub fn decorate(grid: &mut DimGrid, base_x: i32, base_z: i32, sampler: &ClimateS
     let biome = nether_biome_index(sampler, base_x + 8, 64, base_z + 8);
     // basalt_deltas : blobs + deltas de lave + colonnes (avant les minerais, pour
     // que les veines remplissent la netherrack restante).
+    place_ores(grid, nb, base_x, base_z, seed);
     if biome == BASALT {
         place_basalt_deltas(grid, nb, base_x, base_z, seed);
     }
-    place_ores(grid, nb, base_x, base_z, seed, biome);
     place_springs(grid, nb, base_x, base_z, seed);
-    place_glowstone(grid, nb, base_x, base_z, seed);
+    place_glowstone(grid, nb, base_x, base_z, seed, biome);
     place_fire(grid, nb, base_x, base_z, seed);
     place_vegetation(grid, nb, base_x, base_z, seed, biome);
     place_vines(grid, nb, base_x, base_z, seed, biome);
@@ -178,19 +178,14 @@ fn place_fire(grid: &mut DimGrid, nb: &NetherBlocks, base_x: i32, base_z: i32, s
     }
 }
 
-/// Minerais du Nether — veines vanilla (spec §4 du doc 27) : `count`/chunk, `size`
-/// de veine et plage Y exacts, via le moteur `feature`. Le biome dominant du chunk
-/// pilote les variantes (deltas : plus de quartz/or, ni gravel ni blackstone ;
-/// valley : soul_sand).
-fn place_ores(
-    grid: &mut DimGrid,
-    nb: &NetherBlocks,
-    base_x: i32,
-    base_z: i32,
-    seed: u64,
-    biome: u16,
-) {
-    use super::feature::{place_ore, Anchor::*, FeatureRng, HeightRange::*, Ore, Region};
+/// Minerais du Nether — veines **Bedrock** (réf Nukkit `Nether.java` + `OreType`,
+/// pas les données Java de mcmeta) : quartz 16×24, or 10×16, magma 4×64, gravel
+/// 2×64, soul_sand 12×23, lave 1×16, ancient_debris 2×3 + 3×2. Tout remplace la
+/// netherrack, sans discard-on-air, mêmes valeurs pour tous les biomes.
+fn place_ores(grid: &mut DimGrid, nb: &NetherBlocks, base_x: i32, base_z: i32, seed: u64) {
+    use super::feature::{
+        place_ore, Anchor::Absolute, FeatureRng, HeightRange::Uniform, Ore, Region,
+    };
     let region = Region {
         base_x,
         base_z,
@@ -199,113 +194,38 @@ fn place_ores(
     };
     let (cx, cz) = (base_x >> 4, base_z >> 4);
     let netherrack = nb.netherrack;
-    let basalt = nb.basalt;
-    let blackstone = nb.blackstone;
+    // Bedrock (Nukkit PopulatorOre) : toutes les veines remplacent la NETHERRACK, sans
+    // discard-on-air. Mêmes count/size/Y pour tous les biomes du Nether.
     let is_rack = move |b: u32| b == netherrack;
-    // ancient debris cible la pierre de base du Nether (netherrack/basalt/blackstone).
-    let is_base_stone = move |b: u32| b == netherrack || b == basalt || b == blackstone;
-    let deltas = biome == BASALT;
 
-    // (block, size, discard, scattered, count, height, salt, target)
-    let mut run =
-        |block, size, discard, scattered, count: i32, h, salt: u64, tgt: &dyn Fn(u32) -> bool| {
-            let mut rng = FeatureRng::new(cx, cz, seed, salt);
-            let ore = Ore {
-                block,
-                size,
-                discard_air: discard,
-                scattered,
-                is_target: tgt,
-            };
-            place_ore(grid, &mut rng, &region, count, h, &ore);
+    // (block, clusterSize, clusterCount, ymin, ymax, salt) — valeurs Nukkit (Bedrock).
+    let mut run = |block, size, count: i32, ymin, ymax, salt: u64| {
+        let mut rng = FeatureRng::new(cx, cz, seed, salt);
+        let ore = Ore {
+            block,
+            size,
+            discard_air: 0.0,
+            scattered: false,
+            is_target: &is_rack,
         };
+        place_ore(
+            grid,
+            &mut rng,
+            &region,
+            count,
+            Uniform(Absolute(ymin), Absolute(ymax)),
+            &ore,
+        );
+    };
 
-    let body = Uniform(AboveBottom(10), BelowTop(10));
-    run(
-        nb.quartz_ore,
-        14,
-        0.0,
-        false,
-        if deltas { 32 } else { 16 },
-        body,
-        0x0_0001,
-        &is_rack,
-    );
-    run(
-        nb.gold_ore,
-        10,
-        0.0,
-        false,
-        if deltas { 20 } else { 10 },
-        body,
-        0x0_0002,
-        &is_rack,
-    );
-    run(
-        nb.magma,
-        33,
-        0.0,
-        false,
-        4,
-        Uniform(Absolute(27), Absolute(36)),
-        0x0_0003,
-        &is_rack,
-    );
-    if !deltas {
-        run(
-            BLOCKS.get("minecraft:gravel"),
-            33,
-            0.0,
-            false,
-            2,
-            Uniform(Absolute(5), Absolute(41)),
-            0x0_0004,
-            &is_rack,
-        );
-        run(
-            blackstone,
-            33,
-            0.0,
-            false,
-            2,
-            Uniform(Absolute(5), Absolute(31)),
-            0x0_0005,
-            &is_rack,
-        );
-    }
-    if biome == SOUL_SAND_VALLEY {
-        run(
-            nb.soul_sand,
-            12,
-            0.0,
-            false,
-            12,
-            Uniform(AboveBottom(0), Absolute(31)),
-            0x0_0006,
-            &is_rack,
-        );
-    }
-    // ancient debris : dispersé, jamais exposé à l'air (discard 1.0).
-    run(
-        nb.ancient_debris,
-        3,
-        1.0,
-        true,
-        1,
-        Trapezoid(Absolute(8), Absolute(24)),
-        0x0_0007,
-        &is_base_stone,
-    );
-    run(
-        nb.ancient_debris,
-        2,
-        1.0,
-        true,
-        1,
-        Uniform(AboveBottom(8), BelowTop(8)),
-        0x0_0008,
-        &is_base_stone,
-    );
+    run(nb.quartz_ore, 24, 16, 10, 117, 0x01);
+    run(nb.gold_ore, 16, 10, 10, 117, 0x02);
+    run(nb.magma, 64, 4, 26, 33, 0x03);
+    run(nb.gravel, 64, 2, 5, 105, 0x04);
+    run(nb.soul_sand, 23, 12, 0, 105, 0x05);
+    run(nb.lava, 16, 1, 0, 31, 0x06); // poches de lave
+    run(nb.ancient_debris, 3, 2, 8, 23, 0x07);
+    run(nb.ancient_debris, 2, 3, 8, 119, 0x08);
 }
 
 /// Surface « sol » (bloc avec de l'air au-dessus) : pose **seulement** le bloc de
@@ -524,45 +444,52 @@ fn find_ceiling(grid: &DimGrid, nb: &NetherBlocks, wx: i32, from_y: i32, wz: i32
     })
 }
 
-/// Amas de glowstone (`glowstone_blob`) pendant aux plafonds : count 10/chunk + extra.
-fn place_glowstone(grid: &mut DimGrid, nb: &NetherBlocks, base_x: i32, base_z: i32, seed: u64) {
-    let (cx, cz) = (base_x >> 4, base_z >> 4);
-    let mut rng = FeatureRng::new(cx, cz, seed, 0x_610B);
-    // Java = count 10 + extra (mcmeta) — beaucoup trop dense en jeu (rendu Bedrock).
-    // Bedrock génère le glowstone bien plus rarement : ~2-3 blobs/chunk.
-    let count = 2 + rng.range(2); // 2..3
-    for _ in 0..count {
-        let wx = base_x + rng.range(16);
-        let wz = base_z + rng.range(16);
-        let sy = rng.between(8, 122);
-        if let Some(cy) = find_ceiling(grid, nb, wx, sy, wz) {
-            grow_glowstone_blob(grid, nb, wx, cy - 1, wz, &mut rng);
-        }
-    }
-}
-
-/// Blob de glowstone : sphère partielle accrochée sous le plafond (rayon ~2).
-fn grow_glowstone_blob(
+/// Amas de glowstone — **portage fidèle de Nukkit** `PopulatorGlowStone` (Bedrock) :
+/// seulement ~1 chunk sur 9 en porte un (jamais en soul sand valley), et alors **un
+/// seul** blob accroché sous le plafond (count 20-42 blocs, taille 3-6).
+fn place_glowstone(
     grid: &mut DimGrid,
     nb: &NetherBlocks,
-    wx: i32,
-    top_y: i32,
-    wz: i32,
-    rng: &mut FeatureRng,
+    base_x: i32,
+    base_z: i32,
+    seed: u64,
+    biome: u16,
 ) {
-    let air = BLOCKS.air;
-    for dy in 0..=3 {
-        let r = 2 - dy.min(2);
-        for dx in -r..=r {
-            for dz in -r..=r {
-                if dx * dx + dz * dz > r * r {
-                    continue;
-                }
-                let (x, y, z) = (wx + dx, top_y - dy, wz + dz);
-                if grid.get_world(x, y, z) == air && rng.range(3) != 0 {
-                    grid.set(x, y, z, nb.glowstone);
-                }
-            }
+    let (cx, cz) = (base_x >> 4, base_z >> 4);
+    let mut rng = FeatureRng::new(cx, cz, seed, 0x_610B);
+    // Bedrock : 8 chunks sur 9 n'ont PAS de glowstone ; jamais en soul sand valley.
+    if rng.range(9) < 8 || biome == SOUL_SAND_VALLEY {
+        return;
+    }
+    let x = base_x + rng.range(16);
+    let z = base_z + rng.range(16);
+    // Plus haut bloc d'air sous Y120 (sous le plafond de netherrack).
+    let mut y = -1;
+    for yy in (0..=120).rev() {
+        if grid.get_world(x, yy, z) == nb.air {
+            y = yy;
+            break;
+        }
+    }
+    if y <= 0 {
+        return;
+    }
+    y += 1;
+    let vertical = rng.range(2) == 0;
+    let mut size = rng.between(3, 6);
+    let count = rng.between(20 + size * 2, 30 + size * 2);
+    if vertical && size > 3 {
+        size -= 1;
+    }
+    for _ in 0..count {
+        let yy = y + (rng.range(size) - rng.between(3, if vertical { 5 } else { 3 }));
+        if yy <= 0 {
+            continue;
+        }
+        let xx = x + (rng.range(size) - 3);
+        let zz = z + (rng.range(size) - 3);
+        if grid.get_world(xx, yy, zz) == nb.air {
+            grid.set(xx, yy, zz, nb.glowstone);
         }
     }
 }
