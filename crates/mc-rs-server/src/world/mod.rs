@@ -9,6 +9,7 @@ pub mod end_portal_build;
 pub mod feature;
 pub mod flat_generator;
 pub mod nether_decorate;
+pub mod nether_fortress;
 pub mod nether_generator;
 pub mod nether_portal_build;
 pub mod noise;

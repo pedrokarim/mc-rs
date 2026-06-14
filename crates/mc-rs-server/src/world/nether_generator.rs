@@ -66,6 +66,8 @@ pub fn generate_nether_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec
     };
     let decorate = |grid: &mut super::worldgen::dim_noise::DimGrid| {
         super::nether_decorate::decorate(grid, base_x, base_z, &sampler, seed);
+        // Structures : forteresse du Nether (carve par-dessus la décoration).
+        super::nether_fortress::carve_into_chunk(grid, base_x, base_z, seed);
     };
     generate_dim_chunk(
         chunk_x,
