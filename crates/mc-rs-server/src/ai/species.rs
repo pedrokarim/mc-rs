@@ -12,7 +12,10 @@ use super::sensor::NearestPlayerSensor;
 use super::{BehaviorGroup, Controller, Sensor};
 use crate::mob_entities::MobKind;
 
-/// Priorités (plus grand = plus prioritaire).
+/// Priorités (plus grand = plus prioritaire). NB : bedrock-samples utilise la
+/// convention INVERSE (petit numéro = prioritaire), on garde celle d'Allay
+/// (grand = prioritaire) mais l'ORDRE sémantique est identique au vanilla :
+/// panic > breed > tempt > follow_parent > random_stroll.
 const PRIO_COMBAT: i32 = 4;
 const PRIO_PANIC: i32 = 4;
 const PRIO_TEMPT: i32 = 3;
@@ -23,10 +26,28 @@ const TEMPT_RANGE: f64 = 10.0;
 const MELEE_COOLDOWN: u32 = 20;
 /// Rayon d'errance (blocs) — vanilla `random_stroll.xz_dist` défaut 10.
 const ROAM_RANGE: i32 = 10;
-/// Fraction de la vitesse de course utilisée pour l'errance tranquille. Allay
-/// erre à ~0.1 contre la pleine vitesse de chasse ; on garde un ratio pour
-/// que la balade soit nettement plus lente que la traque.
-const ROAM_SPEED_FACTOR: f32 = 0.5;
+
+// --- Vitesses : multiplicateurs par comportement, recalés sur la spec vanilla
+// (bedrock-samples `behavior_pack/entities/*.json`, champ `speed_multiplier`).
+// La vitesse effective = attribut `minecraft:movement` du mob (kind.movement_speed)
+// × SPEED_SCALE × multiplicateur du comportement. SPEED_SCALE est un bouton de
+// calibrage global de notre moteur (l'attribut vanilla n'est pas une vitesse/tick
+// exacte) : 1.0 = attribut tel quel ; à baisser en jeu si tout est trop rapide.
+/// Calibrage global attribut→vitesse/tick.
+const SPEED_SCALE: f32 = 1.0;
+/// `minecraft:behavior.random_stroll` (défaut 1.0 ; certains animaux 0.8).
+const STROLL_MULT: f32 = 1.0;
+/// `minecraft:behavior.panic` (1.25 ; poule 1.5).
+const PANIC_MULT: f32 = 1.25;
+/// `minecraft:behavior.tempt` (1.25 ; poule 1.0).
+const TEMPT_MULT: f32 = 1.25;
+/// `minecraft:behavior.melee_box_attack` / `melee_attack` (1.0 ; creeper 1.25).
+const MELEE_MULT: f32 = 1.0;
+
+/// Vitesse effective d'un comportement = attribut × calibrage × multiplicateur.
+fn beh_speed(base: f32, multiplier: f32) -> f32 {
+    base * SPEED_SCALE * multiplier
+}
 /// Rayon d'errance des volants (blocs).
 const FLY_ROAM_RANGE: i32 = 10;
 /// Boules de feu : vitesse (blocs/tick) et cooldown de tir (ticks).
@@ -75,7 +96,7 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
         Behavior::new(
             Box::new(AlwaysEvaluator),
             Box::new(FlatRandomRoamExecutor::new(
-                speed * ROAM_SPEED_FACTOR,
+                beh_speed(speed, STROLL_MULT),
                 ROAM_RANGE,
             )),
             PRIO_ROAM,
@@ -86,7 +107,7 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
     match kind.ai_profile() {
         AiProfile::Melee => {
             let combat = combat_behavior(Box::new(MeleeAttackExecutor::new(
-                speed,
+                beh_speed(speed, MELEE_MULT),
                 kind.sight_range(),
                 kind.attack_range(),
                 MELEE_COOLDOWN,
@@ -201,7 +222,7 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
             // Fuit si blessé (prio haute), suit la nourriture (tempt), sinon erre.
             let mut normal = vec![Behavior::new(
                 Box::new(FnEvaluator(PanicFleeExecutor::should_flee)),
-                Box::new(PanicFleeExecutor::new(speed * 1.25, 8.0)),
+                Box::new(PanicFleeExecutor::new(beh_speed(speed, PANIC_MULT), 8.0)),
                 PRIO_PANIC,
                 1,
             )];
@@ -225,7 +246,11 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
                             dx * dx + dy * dy + dz * dz <= range_sq
                         })
                     }))),
-                    Box::new(TemptExecutor::new(speed, food_ids, TEMPT_RANGE)),
+                    Box::new(TemptExecutor::new(
+                        beh_speed(speed, TEMPT_MULT),
+                        food_ids,
+                        TEMPT_RANGE,
+                    )),
                     PRIO_TEMPT,
                     1,
                 ));
