@@ -171,6 +171,7 @@ impl BlockEntity {
         }
         match self.kind {
             BlockEntityKind::MobSpawner => {
+                // Champs vanilla (réf PMMP `MonsterSpawner.php`).
                 if let Some(entity) = &self.spawn_entity {
                     c.insert("EntityIdentifier".into(), NbtTag::String(entity.clone()));
                 }
@@ -181,6 +182,11 @@ impl BlockEntity {
                 c.insert("SpawnRange".into(), NbtTag::Short(4));
                 c.insert("MaxNearbyEntities".into(), NbtTag::Short(6));
                 c.insert("RequiredPlayerRange".into(), NbtTag::Short(16));
+                // Dimensions de l'entité affichée (mob qui tourne dans le bloc).
+                // Sans elles le client ne rend pas le mob. Valeurs blaze (~0.6×1.8).
+                c.insert("DisplayEntityWidth".into(), NbtTag::Float(0.6));
+                c.insert("DisplayEntityHeight".into(), NbtTag::Float(1.8));
+                c.insert("DisplayEntityScale".into(), NbtTag::Float(1.0));
             }
             _ if self.kind.inventory_size().is_some() => {
                 // Inventaire (coffres…). v1 : liste vide si pas d'items (butin = suite).
