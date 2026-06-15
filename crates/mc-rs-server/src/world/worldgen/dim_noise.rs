@@ -48,17 +48,17 @@ fn lerp(t: f64, a: f64, b: f64) -> f64 {
     a + t * (b - a)
 }
 
-/// Génère un chunk de dimension : renvoie `(sub_chunk_count, payload réseau)`,
-/// même contrat que les autres générateurs.
+/// Génère un chunk de dimension : renvoie `(sub_chunk_count, payload réseau,
+/// block_entities)`. La décoration peut émettre des block entities (forteresse…).
 pub fn generate_dim_chunk(
     chunk_x: i32,
     chunk_z: i32,
     seed: u64,
     router: &NoiseRouter,
     cfg: &DimConfig,
-    decorate: impl Fn(&mut DimGrid),
+    decorate: impl FnOnce(&mut DimGrid, &mut Vec<crate::block_entities::BlockEntity>),
     biome_at: impl Fn(i32, i32, i32) -> u32,
-) -> (u32, Vec<u8>) {
+) -> (u32, Vec<u8>, Vec<crate::block_entities::BlockEntity>) {
     let base_x = chunk_x * 16;
     let base_z = chunk_z * 16;
     let max_y = cfg.min_y + cfg.height;
@@ -161,8 +161,10 @@ pub fn generate_dim_chunk(
         }
     }
 
-    // Décoration spécifique à la dimension (piliers d'obsidienne de l'End, etc.).
-    decorate(&mut grid);
+    // Décoration spécifique à la dimension (piliers d'obsidienne de l'End, etc.),
+    // qui peut émettre des block entities (coffres/spawners de forteresse).
+    let mut block_entities: Vec<crate::block_entities::BlockEntity> = Vec::new();
+    decorate(&mut grid, &mut block_entities);
 
     // Sérialisation sub-chunk par sub-chunk depuis la grille.
     let mut payload = Vec::with_capacity(8192);
@@ -217,7 +219,7 @@ pub fn generate_dim_chunk(
     }
     payload.push(0); // border blocks count
 
-    (sub_count as u32, payload)
+    (sub_count as u32, payload, block_entities)
 }
 
 /// Grille de blocs pleine hauteur d'un chunk, exposée à la décoration par dimension.

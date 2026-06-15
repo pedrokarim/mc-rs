@@ -32,14 +32,20 @@ pub struct ChunkColumn {
     /// Évite N compressions Zlib quand N joueurs chargent le même chunk.
     /// Invalidé à chaque set_block en même temps que `payload_dirty`.
     pub cached_zlib_batch: Option<Vec<u8>>,
+    /// Block entities de la colonne (coffres, spawners, panneaux…). Inclus dans le
+    /// payload réseau (après le border byte) et persistés en LevelDB (clé '1').
+    pub block_entities: Vec<crate::block_entities::BlockEntity>,
 }
 
 impl ChunkColumn {
     /// Get the network-ready payload, rebuilding if needed.
     pub fn get_network_payload(&mut self) -> &[u8] {
         if self.payload_dirty {
-            self.network_payload =
-                chunk_serializer::rebuild_network_payload(&self.sub_chunks, &self.biome_data);
+            self.network_payload = chunk_serializer::rebuild_network_payload(
+                &self.sub_chunks,
+                &self.biome_data,
+                &self.block_entities,
+            );
             self.payload_dirty = false;
             // Le payload a changé → invalider la batch Zlib cachée.
             self.cached_zlib_batch = None;
@@ -112,6 +118,12 @@ impl ChunkCache {
         storage.save_chunk_version(dim, cx, cz);
         storage.save_finalization(dim, cx, cz);
         storage.save_biome_data(dim, cx, cz, &chunk.biome_data);
+        storage.save_block_entities(
+            dim,
+            cx,
+            cz,
+            &crate::block_entities::serialize_le(&chunk.block_entities),
+        );
 
         let kept_sub_chunks = usize::min(chunk.sub_chunks.len(), chunk.sub_chunk_count as usize);
         for (i, sub) in chunk.sub_chunks.iter().take(kept_sub_chunks).enumerate() {
@@ -220,6 +232,11 @@ impl ChunkCache {
                     payload.extend_from_slice(&biome_data);
                     payload.push(0); // border blocks
 
+                    let block_entities = storage
+                        .load_block_entities(dim, cx, cz)
+                        .map(|d| crate::block_entities::parse_le(&d))
+                        .unwrap_or_default();
+
                     let sub_count = stored_sub_chunks.len() as u32;
                     let (sub_chunks, _) =
                         chunk_serializer::parse_chunk_payload(&payload, sub_count, BLOCKS.air);
@@ -230,9 +247,11 @@ impl ChunkCache {
                         sub_chunks,
                         biome_data,
                         network_payload: payload,
-                        payload_dirty: false,
+                        // Reconstruire le payload avec les block entities si présentes.
+                        payload_dirty: !block_entities.is_empty(),
                         sub_chunk_count: sub_count,
                         cached_zlib_batch: None,
+                        block_entities,
                     })
                 } else {
                     None
@@ -246,15 +265,29 @@ impl ChunkCache {
 
         let generated = loaded.is_none();
         let column = loaded.unwrap_or_else(|| {
-            // Generate new chunk using the configured generator
-            let (sub_count, payload) = match self.generator.as_str() {
-                "flat" => super::flat_generator::generate_flat_chunk(),
-                "noise" => super::worldgen::noise_chunk::generate_noise_chunk(cx, cz, self.seed),
-                // Nether : générateur fidèle PMMP (netherrack/lave/bedrock, biome HELL).
+            // Generate new chunk using the configured generator. Seul le Nether émet
+            // des block entities (forteresse) pour l'instant.
+            let (sub_count, payload, block_entities) = match self.generator.as_str() {
+                "flat" => {
+                    let (c, p) = super::flat_generator::generate_flat_chunk();
+                    (c, p, Vec::new())
+                }
+                "noise" => {
+                    let (c, p) =
+                        super::worldgen::noise_chunk::generate_noise_chunk(cx, cz, self.seed);
+                    (c, p, Vec::new())
+                }
+                // Nether : terrain + décoration + forteresse (avec coffres/spawners).
                 "nether" => super::nether_generator::generate_nether_chunk(cx, cz, self.seed),
                 // End : île centrale flottante + piliers d'obsidienne + vide.
-                "end" => super::end_generator::generate_end_chunk(cx, cz, self.seed),
-                _ => terrain_generator::generate_terrain_chunk(cx, cz, self.seed),
+                "end" => {
+                    let (c, p) = super::end_generator::generate_end_chunk(cx, cz, self.seed);
+                    (c, p, Vec::new())
+                }
+                _ => {
+                    let (c, p) = terrain_generator::generate_terrain_chunk(cx, cz, self.seed);
+                    (c, p, Vec::new())
+                }
             };
 
             let (sub_chunks, biome_data) =
@@ -266,9 +299,11 @@ impl ChunkCache {
                 sub_chunks,
                 biome_data,
                 network_payload: payload,
-                payload_dirty: false,
+                // Reconstruire le payload avec les block entities si présentes.
+                payload_dirty: !block_entities.is_empty(),
                 sub_chunk_count: sub_count,
                 cached_zlib_batch: None,
+                block_entities,
             }
         });
 

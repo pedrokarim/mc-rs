@@ -270,8 +270,14 @@ pub fn deserialize_sub_chunk_data(data: &[u8]) -> Option<(SubChunk, usize)> {
     Some((SubChunk { blocks }, reader.position()))
 }
 
-/// Rebuild the full network payload from sub-chunks and biome data.
-pub fn rebuild_network_payload(sub_chunks: &[SubChunk], biome_data: &[u8]) -> Vec<u8> {
+/// Rebuild the full network payload from sub-chunks, biome data and block entities.
+/// Format (réf PMMP `ChunkSerializer`) : sub-chunks, biomes, byte border-blocks (0),
+/// puis les NBT réseau des block entities **concaténés sans compteur**.
+pub fn rebuild_network_payload(
+    sub_chunks: &[SubChunk],
+    biome_data: &[u8],
+    block_entities: &[crate::block_entities::BlockEntity],
+) -> Vec<u8> {
     let mut payload = Vec::with_capacity(16384);
 
     for sub in sub_chunks {
@@ -282,6 +288,11 @@ pub fn rebuild_network_payload(sub_chunks: &[SubChunk], biome_data: &[u8]) -> Ve
 
     // Border blocks count
     payload.push(0);
+
+    // Block entities (NBT réseau concaténé, après le border byte).
+    if !block_entities.is_empty() {
+        payload.extend_from_slice(&crate::block_entities::serialize_network(block_entities));
+    }
 
     payload
 }

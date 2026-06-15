@@ -8,6 +8,8 @@ mod chunk_tag {
     pub const FINALIZATION: u8 = 0x36;
     // Custom mc-rs tag storing serialized biome palette data for a chunk column.
     pub const BIOME_DATA: u8 = 0x90;
+    // Block entities (NBT little-endian concaténé), une entrée par colonne. Vanilla '1'.
+    pub const BLOCK_ENTITIES: u8 = 0x31;
 }
 
 /// LevelDB-backed world storage for Bedrock Edition chunks.
@@ -105,6 +107,22 @@ impl WorldStorage {
     pub fn save_biome_data(&mut self, dim: i32, x: i32, z: i32, data: &[u8]) {
         let key = Self::chunk_key(dim, x, z, chunk_tag::BIOME_DATA);
         self.db.put(&key, data).ok();
+    }
+
+    /// Load the chunk's block entities blob (NBT little-endian concaténé).
+    pub fn load_block_entities(&mut self, dim: i32, x: i32, z: i32) -> Option<Vec<u8>> {
+        let key = Self::chunk_key(dim, x, z, chunk_tag::BLOCK_ENTITIES);
+        self.db.get(&key)
+    }
+
+    /// Save the chunk's block entities blob (vide => supprime la clé).
+    pub fn save_block_entities(&mut self, dim: i32, x: i32, z: i32, data: &[u8]) {
+        let key = Self::chunk_key(dim, x, z, chunk_tag::BLOCK_ENTITIES);
+        if data.is_empty() {
+            self.db.delete(&key).ok();
+        } else {
+            self.db.put(&key, data).ok();
+        }
     }
 
     /// Save chunk version marker.

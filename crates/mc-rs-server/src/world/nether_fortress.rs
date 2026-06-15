@@ -12,15 +12,17 @@
 //! dont des cellules débordent, et on écrit (via `DimGrid::set`, clippé) les blocs qui
 //! tombent dans le chunk. Déterministe et cohérent d'un chunk à l'autre.
 //!
-//! v1 : la structure (blocs) est complète ; le **block-entity** du spawner (données
-//! de spawn blaze) et le **butin** des coffres sont des suivis (nécessitent les block
-//! entities en chunk).
+//! Les coffres et le spawner de blaze sont émis comme **block entities** (persistées
+//! en LevelDB + envoyées au client : le coffre s'affiche, le spawner montre le blaze
+//! qui tourne). Suivi restant (task #28) : remplir le **butin** des coffres et faire
+//! **tick** le spawner pour qu'il fasse apparaître des blazes.
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use super::block_registry::BLOCKS;
 use super::worldgen::dim_noise::DimGrid;
+use crate::block_entities::BlockEntity;
 
 const CELL: i32 = 8; // taille d'une cellule de plan (blocs)
 const SPACING: i32 = 27; // chunks entre régions de forteresse
@@ -160,7 +162,14 @@ fn plan(origin_cx: i32, origin_cz: i32, seed: u64) -> HashMap<(i32, i32), Kind> 
 }
 
 /// Carve les forteresses qui débordent dans ce chunk. Appelé après la décoration.
-pub fn carve_into_chunk(grid: &mut DimGrid, base_x: i32, base_z: i32, seed: u64) {
+/// Émet dans `bes` les block entities (coffres/spawners) qui tombent dans ce chunk.
+pub fn carve_into_chunk(
+    grid: &mut DimGrid,
+    base_x: i32,
+    base_z: i32,
+    seed: u64,
+    bes: &mut Vec<BlockEntity>,
+) {
     // Régions candidates : celle du chunk + 8 voisines (une forteresse peut déborder).
     let crx = base_x.div_euclid(SPACING * 16);
     let crz = base_z.div_euclid(SPACING * 16);
@@ -173,13 +182,30 @@ pub fn carve_into_chunk(grid: &mut DimGrid, base_x: i32, base_z: i32, seed: u64)
             if (base_x - ox).abs() > reach + 16 || (base_z - oz).abs() > reach + 16 {
                 continue;
             }
-            carve_fortress(grid, base_x, base_z, ox, oz, seed);
+            carve_fortress(grid, base_x, base_z, ox, oz, seed, bes);
         }
     }
 }
 
+/// Émet un block entity `be` s'il tombe dans le chunk `[base_x..+16) × [base_z..+16)`.
+fn emit_be(bes: &mut Vec<BlockEntity>, base_x: i32, base_z: i32, be: BlockEntity) {
+    let [x, _, z] = be.position;
+    if (base_x..base_x + 16).contains(&x) && (base_z..base_z + 16).contains(&z) {
+        bes.push(be);
+    }
+}
+
 /// Rend une forteresse (origine monde `ox,oz`) dans le chunk courant.
-fn carve_fortress(grid: &mut DimGrid, base_x: i32, base_z: i32, ox: i32, oz: i32, seed: u64) {
+#[allow(clippy::too_many_arguments)]
+fn carve_fortress(
+    grid: &mut DimGrid,
+    base_x: i32,
+    base_z: i32,
+    ox: i32,
+    oz: i32,
+    seed: u64,
+    bes: &mut Vec<BlockEntity>,
+) {
     // Cellule d'origine = celle contenant (ox,oz).
     let origin_cx = ox.div_euclid(CELL);
     let origin_cz = oz.div_euclid(CELL);
@@ -201,12 +227,22 @@ fn carve_fortress(grid: &mut DimGrid, base_x: i32, base_z: i32, ox: i32, oz: i32
             occupied(rcx, rcz + 1), // sud  (z+)
             occupied(rcx, rcz - 1), // nord (z-)
         ];
-        render_cell(grid, wx0, wz0, kind, conn);
+        render_cell(grid, base_x, base_z, wx0, wz0, kind, conn, bes);
     }
 }
 
 /// Rend une cellule 8×8 à `(wx0, wz0)`. `conn = [est, ouest, sud, nord]`.
-fn render_cell(grid: &mut DimGrid, wx0: i32, wz0: i32, kind: Kind, conn: [bool; 4]) {
+#[allow(clippy::too_many_arguments)]
+fn render_cell(
+    grid: &mut DimGrid,
+    base_x: i32,
+    base_z: i32,
+    wx0: i32,
+    wz0: i32,
+    kind: Kind,
+    conn: [bool; 4],
+    bes: &mut Vec<BlockEntity>,
+) {
     let fb = &*FB;
     let (x1, z1) = (wx0 + CELL - 1, wz0 + CELL - 1); // bord inclus (7)
     let floor = BASE_Y - 1;
@@ -288,6 +324,13 @@ fn render_cell(grid: &mut DimGrid, wx0: i32, wz0: i32, kind: Kind, conn: [bool; 
             for &(dx, dz) in &[(-1, 0), (1, 0), (0, -1), (0, 1)] {
                 grid.set(mx + dx, BASE_Y + 1, mz + dz, fb.fence);
             }
+            // Block entity du spawner (entité = blaze).
+            emit_be(
+                bes,
+                base_x,
+                base_z,
+                BlockEntity::new_spawner([mx, BASE_Y + 1, mz], "minecraft:blaze"),
+            );
         }
         Kind::Wart => {
             // Rangées de soul sand + nether wart sur le sol.
@@ -302,6 +345,16 @@ fn render_cell(grid: &mut DimGrid, wx0: i32, wz0: i32, kind: Kind, conn: [bool; 
         }
         Kind::Chest => {
             grid.set(mx, BASE_Y, mz, fb.chest);
+            // Block entity du coffre (butin = suite, inventaire vide pour l'instant).
+            emit_be(
+                bes,
+                base_x,
+                base_z,
+                BlockEntity::new(
+                    crate::block_entities::BlockEntityKind::Chest,
+                    [mx, BASE_Y, mz],
+                ),
+            );
         }
         _ => {}
     }
@@ -335,15 +388,26 @@ mod tests {
         let (ocx, ocz) = fortress_origin_chunk(0, 0, seed);
         let mut bricks = 0usize;
         let mut spawners = 0usize;
+        let mut be_spawners = 0usize;
+        let mut be_chests = 0usize;
         // Carve une grille de chunks autour de l'origine.
         for cx in (ocx - 5)..(ocx + 6) {
             for cz in (ocz - 5)..(ocz + 6) {
                 let (bx, bz) = (cx * 16, cz * 16);
                 let mut grid =
                     DimGrid::test_floor(bx, bz, 0, 128, BLOCKS.get("minecraft:netherrack"), 80);
-                carve_into_chunk(&mut grid, bx, bz, seed);
+                let mut bes = Vec::new();
+                carve_into_chunk(&mut grid, bx, bz, seed, &mut bes);
                 bricks += grid.count(fb.brick);
                 spawners += grid.count(fb.spawner);
+                be_spawners += bes
+                    .iter()
+                    .filter(|b| b.kind == crate::block_entities::BlockEntityKind::MobSpawner)
+                    .count();
+                be_chests += bes
+                    .iter()
+                    .filter(|b| b.kind == crate::block_entities::BlockEntityKind::Chest)
+                    .count();
             }
         }
         assert!(
@@ -351,5 +415,8 @@ mod tests {
             "nether brick de forteresse attendue (trouvé {bricks})"
         );
         assert!(spawners >= 1, "au moins un spawner de blaze attendu");
+        // Les block entities émises doivent correspondre aux blocs posés.
+        assert_eq!(be_spawners, spawners, "1 block entity par spawner");
+        assert!(be_chests >= 1, "au moins un coffre (block entity) attendu");
     }
 }

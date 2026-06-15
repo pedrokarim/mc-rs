@@ -86,22 +86,24 @@ fn place_spikes(grid: &mut DimGrid, seed: u64) {
     }
 }
 
-/// Génère un chunk de l'End : renvoie `(sub_chunk_count, payload)`.
+/// Génère un chunk de l'End : renvoie `(sub_chunk_count, payload)`. (L'End n'émet pas
+/// de block entities pour l'instant — on jette le 3e élément.)
 pub fn generate_end_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<u8>) {
     let router = with_router(seed, |r| r.clone());
     let (base_x, base_z) = (chunk_x * 16, chunk_z * 16);
-    generate_dim_chunk(
+    let (sub_count, payload, _bes) = generate_dim_chunk(
         chunk_x,
         chunk_z,
         seed,
         &router,
         &end_config(),
-        |grid| {
+        |grid, _block_entities| {
             place_spikes(grid, seed); // piliers + cristaux au centre
             super::end_decorate::decorate(grid, base_x, base_z, seed); // chorus îles externes
         },
         |_, _, _| END_BIOME, // Bedrock : tout l'End est `the_end`
-    )
+    );
+    (sub_count, payload)
 }
 
 #[cfg(test)]

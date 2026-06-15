@@ -56,19 +56,26 @@ pub fn nether_biome_index(sampler: &ClimateSampler, wx: i32, wy: i32, wz: i32) -
         .find(&sampler.sample(wx >> 2, wy >> 2, wz >> 2))
 }
 
-/// Génère un chunk Nether : renvoie `(sub_chunk_count, payload)`.
-pub fn generate_nether_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<u8>) {
+/// Génère un chunk Nether : renvoie `(sub_chunk_count, payload, block_entities)`.
+pub fn generate_nether_chunk(
+    chunk_x: i32,
+    chunk_z: i32,
+    seed: u64,
+) -> (u32, Vec<u8>, Vec<crate::block_entities::BlockEntity>) {
     let router = with_router(seed, |r| r.clone());
     let sampler = ClimateSampler::from_router(&router);
     let (base_x, base_z) = (chunk_x * 16, chunk_z * 16);
     let biome_at = |wx: i32, wy: i32, wz: i32| -> u32 {
         BIOMES.bedrock_ids[nether_biome_index(&sampler, wx, wy, wz) as usize]
     };
-    let decorate = |grid: &mut super::worldgen::dim_noise::DimGrid| {
-        super::nether_decorate::decorate(grid, base_x, base_z, &sampler, seed);
-        // Structures : forteresse du Nether (carve par-dessus la décoration).
-        super::nether_fortress::carve_into_chunk(grid, base_x, base_z, seed);
-    };
+    let decorate =
+        |grid: &mut super::worldgen::dim_noise::DimGrid,
+         block_entities: &mut Vec<crate::block_entities::BlockEntity>| {
+            super::nether_decorate::decorate(grid, base_x, base_z, &sampler, seed);
+            // Structures : forteresse du Nether (carve par-dessus la décoration), qui
+            // émet ses coffres/spawners comme block entities.
+            super::nether_fortress::carve_into_chunk(grid, base_x, base_z, seed, block_entities);
+        };
     generate_dim_chunk(
         chunk_x,
         chunk_z,
@@ -86,7 +93,7 @@ mod tests {
 
     #[test]
     fn nether_chunk_has_8_sub_chunks() {
-        let (count, payload) = generate_nether_chunk(0, 0, 12345);
+        let (count, payload, _bes) = generate_nether_chunk(0, 0, 12345);
         assert_eq!(count, 8); // 128 / 16
         assert!(!payload.is_empty());
     }
@@ -103,7 +110,7 @@ mod tests {
     fn nether_has_terrain_and_bedrock_cap() {
         // Le terrain density doit produire de la netherrack quelque part, et le
         // plancher/plafond bedrock doit exister (sanity : chunk non vide).
-        let (_, payload) = generate_nether_chunk(0, 0, 42);
+        let (_, payload, _bes) = generate_nether_chunk(0, 0, 42);
         assert!(
             payload.len() > 100,
             "le Nether doit générer du terrain solide"
