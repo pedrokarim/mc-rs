@@ -1810,6 +1810,21 @@ async fn main() {
                         continue;
                     };
                     let pos = (cx, cy, cz);
+                    // Coffre de structure : à la 1re ouverture, amorcer l'inventaire
+                    // depuis le butin du block entity (loot consommé côté monde et
+                    // persisté vidé, façon vanilla).
+                    if chest_manager.get(pos).is_none() {
+                        if let Ok(mut cache) = worlds.arc(conn.current_dimension).lock() {
+                            if let Some(loot) = cache.take_block_entity_loot(cx, cy, cz) {
+                                let data = chest_manager.get_or_create(pos);
+                                for (i, it) in loot.into_iter().enumerate() {
+                                    if i < data.slots.len() {
+                                        data.slots[i] = it;
+                                    }
+                                }
+                            }
+                        }
+                    }
                     chest_manager.add_viewer(pos);
                     let data = chest_manager.get_or_create(pos).clone();
                     // Window ID dynamique (1-100 plage block container).

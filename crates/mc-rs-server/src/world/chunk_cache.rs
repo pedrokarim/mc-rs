@@ -410,6 +410,33 @@ impl ChunkCache {
         self.dirty.insert((cx, cz));
     }
 
+    /// Récupère et **consomme** le butin du block entity (coffre) à `(wx,wy,wz)` :
+    /// renvoie ses items et les vide (vanilla : loot consommé à la 1re ouverture).
+    /// Le chunk est marqué dirty pour persister le coffre vidé. `None` si aucun butin.
+    pub fn take_block_entity_loot(
+        &mut self,
+        wx: i32,
+        wy: i32,
+        wz: i32,
+    ) -> Option<Vec<mc_rs_proto::packets::player::ItemStack>> {
+        use mc_rs_proto::packets::player::ItemStack;
+        let cx = wx.div_euclid(16);
+        let cz = wz.div_euclid(16);
+        self.ensure_chunk_loaded(cx, cz);
+        let chunk = self.chunks.get_mut(&(cx, cz))?;
+        let be = chunk
+            .block_entities
+            .iter_mut()
+            .find(|b| b.position == [wx, wy, wz])?;
+        if be.items.iter().all(|i| i.is_air()) {
+            return None;
+        }
+        let n = be.items.len();
+        let items = std::mem::replace(&mut be.items, vec![ItemStack::AIR; n]);
+        self.dirty.insert((cx, cz));
+        Some(items)
+    }
+
     /// Save one chunk immediately for durability-sensitive updates such as block edits.
     pub fn save_chunk_now(&mut self, cx: i32, cz: i32) -> bool {
         let dim = self.dimension;

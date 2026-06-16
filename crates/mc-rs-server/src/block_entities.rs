@@ -222,16 +222,58 @@ impl BlockEntity {
         if let Some(NbtTag::String(entity)) = c.get("EntityIdentifier") {
             be.spawn_entity = Some(entity.clone());
         }
+        // Inventaire (coffres…) : reconstruit les items depuis la liste `Items`.
+        if let Some(NbtTag::List(items)) = c.get("Items") {
+            for tag in items {
+                if let NbtTag::Compound(ic) = tag {
+                    if let Some((slot, item)) = item_from_compound(ic) {
+                        if slot < be.items.len() {
+                            be.items[slot] = item;
+                        }
+                    }
+                }
+            }
+        }
         Some(be)
     }
 }
 
-/// Compound NBT d'un item d'inventaire (slot + id string + count). `None` si l'item
-/// n'a pas de nom connu (les ids réseau sont convertis ailleurs ; v1 = sauté).
-fn item_compound(_item: &ItemStack, _slot: u8) -> Option<NbtCompound> {
-    // Le mapping id réseau -> nom string vanilla n'est pas encore branché ici ; les
-    // coffres générés sont vides en v1 (le butin viendra avec le tick/ouverture).
-    None
+/// Compound NBT d'un item d'inventaire (réf PMMP `Item::nbtSerialize`) : `Slot` (Byte),
+/// `Name` (string vanilla), `Count` (Byte), `Damage` (Short). `None` si l'id réseau
+/// n'a pas de nom connu.
+fn item_compound(item: &ItemStack, slot: u8) -> Option<NbtCompound> {
+    let name = crate::item_registry::item_name_by_id(item.id)?;
+    let mut c = NbtCompound::new();
+    c.insert("Slot".into(), NbtTag::Byte(slot as i8));
+    c.insert("Name".into(), NbtTag::String(name.to_string()));
+    c.insert("Count".into(), NbtTag::Byte(item.count as i8));
+    c.insert("Damage".into(), NbtTag::Short(item.meta as i16));
+    Some(c)
+}
+
+/// Reconstruit un `ItemStack` depuis un compound item NBT (`Name`/`Count`/`Damage`).
+/// Renvoie `(slot, item)`.
+fn item_from_compound(c: &NbtCompound) -> Option<(usize, ItemStack)> {
+    let name = match c.get("Name") {
+        Some(NbtTag::String(s)) => s.as_str(),
+        _ => return None,
+    };
+    let id = crate::item_registry::network_id(name)?;
+    let slot = match c.get("Slot") {
+        Some(NbtTag::Byte(b)) => *b as usize,
+        _ => 0,
+    };
+    let count = match c.get("Count") {
+        Some(NbtTag::Byte(b)) => *b as u16,
+        _ => 1,
+    };
+    let meta = match c.get("Damage") {
+        Some(NbtTag::Short(s)) => *s as u32,
+        _ => 0,
+    };
+    let mut item = ItemStack::new(id, count, 0);
+    item.meta = meta;
+    Some((slot, item))
 }
 
 /// Identifiant string vanilla -> `BlockEntityKind` (sous-ensemble utile à la gen).

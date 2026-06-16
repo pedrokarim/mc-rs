@@ -345,18 +345,39 @@ fn render_cell(
         }
         Kind::Chest => {
             grid.set(mx, BASE_Y, mz, fb.chest);
-            // Block entity du coffre (butin = suite, inventaire vide pour l'instant).
-            emit_be(
-                bes,
-                base_x,
-                base_z,
-                BlockEntity::new(
-                    crate::block_entities::BlockEntityKind::Chest,
-                    [mx, BASE_Y, mz],
-                ),
+            // Block entity du coffre + butin « nether_bridge » roulé de façon
+            // déterministe (seedé par position).
+            let mut chest = BlockEntity::new(
+                crate::block_entities::BlockEntityKind::Chest,
+                [mx, BASE_Y, mz],
             );
+            fill_chest_loot(&mut chest, mx, mz);
+            emit_be(bes, base_x, base_z, chest);
         }
         _ => {}
+    }
+}
+
+/// Remplit l'inventaire d'un coffre avec le butin de la table `nether_bridge`,
+/// tiré de façon déterministe (graine = position du coffre) → rejouable.
+fn fill_chest_loot(chest: &mut BlockEntity, wx: i32, wz: i32) {
+    use rand::{RngCore, SeedableRng};
+    let seed = mix(((wx as u64) << 32) ^ (wz as u64 & 0xFFFF_FFFF) ^ 0x00C0_FFE5);
+    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+    let drops = crate::loot_table::roll_chest_loot_with("minecraft:nether_bridge", &mut rng);
+    let slots = chest.items.len().max(1);
+    for (name, count) in drops {
+        let Some(id) = crate::item_registry::network_id(&name) else {
+            continue;
+        };
+        // Place dans un slot libre (quelques essais pour éviter les collisions).
+        for _ in 0..8 {
+            let s = (rng.next_u32() as usize) % slots;
+            if chest.items[s].is_air() {
+                chest.items[s] = mc_rs_proto::packets::player::ItemStack::new(id, count as u16, 0);
+                break;
+            }
+        }
     }
 }
 
@@ -418,5 +439,27 @@ mod tests {
         // Les block entities émises doivent correspondre aux blocs posés.
         assert_eq!(be_spawners, spawners, "1 block entity par spawner");
         assert!(be_chests >= 1, "au moins un coffre (block entity) attendu");
+    }
+
+    /// Le coffre de forteresse est pré-rempli avec du butin (table nether_bridge).
+    #[test]
+    fn fortress_chest_has_loot() {
+        let mut chest =
+            BlockEntity::new(crate::block_entities::BlockEntityKind::Chest, [10, 64, 20]);
+        fill_chest_loot(&mut chest, 10, 20);
+        let non_air = chest.items.iter().filter(|i| !i.is_air()).count();
+        assert!(
+            non_air > 0,
+            "le coffre de forteresse doit contenir du butin"
+        );
+        // Déterministe : même position -> même butin.
+        let mut chest2 =
+            BlockEntity::new(crate::block_entities::BlockEntityKind::Chest, [10, 64, 20]);
+        fill_chest_loot(&mut chest2, 10, 20);
+        assert_eq!(
+            chest.items.iter().filter(|i| !i.is_air()).count(),
+            non_air,
+            "butin déterministe par position"
+        );
     }
 }

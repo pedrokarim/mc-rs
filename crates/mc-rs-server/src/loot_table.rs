@@ -290,7 +290,12 @@ pub fn entity_count() -> usize {
 
 /// Rolle la loot table d'un coffre vanilla (ex. `minecraft:simple_dungeon`).
 pub fn roll_chest_loot(chest_name: &str) -> LootDrops {
-    let mut rng = rand::thread_rng();
+    roll_chest_loot_with(chest_name, &mut rand::thread_rng())
+}
+
+/// Comme [`roll_chest_loot`] mais avec un RNG fourni → permet un tirage **déterministe**
+/// (ex. butin de structure seedé par la position + la graine du monde).
+pub fn roll_chest_loot_with<R: Rng>(chest_name: &str, rng: &mut R) -> LootDrops {
     let Some(table) = CHEST_LOOT.get(chest_name) else {
         return Vec::new();
     };
@@ -303,7 +308,7 @@ pub fn roll_chest_loot(chest_name: &str) -> LootDrops {
     for pool in &table.pools {
         let mut pool_ok = true;
         for c in &pool.conditions {
-            if !check_condition(c, &ctx, &mut rng) {
+            if !check_condition(c, &ctx, rng) {
                 pool_ok = false;
                 break;
             }
@@ -311,9 +316,9 @@ pub fn roll_chest_loot(chest_name: &str) -> LootDrops {
         if !pool_ok {
             continue;
         }
-        let rolls = pool.rolls.as_ref().map(|r| r.roll(&mut rng)).unwrap_or(1);
+        let rolls = pool.rolls.as_ref().map(|r| r.roll(rng)).unwrap_or(1);
         for _ in 0..rolls.max(0) {
-            let Some(entry) = pick_weighted_entry(&pool.entries, &mut rng) else {
+            let Some(entry) = pick_weighted_entry(&pool.entries, rng) else {
                 continue;
             };
             if entry.entry_type != "item" {
@@ -325,9 +330,9 @@ pub fn roll_chest_loot(chest_name: &str) -> LootDrops {
             let base_count = entry
                 .count
                 .as_ref()
-                .map(|c| c.roll(&mut rng).max(0) as u32)
+                .map(|c| c.roll(rng).max(0) as u32)
                 .unwrap_or(1);
-            let final_count = apply_functions(&entry.functions, name, base_count, &ctx, &mut rng);
+            let final_count = apply_functions(&entry.functions, name, base_count, &ctx, rng);
             if final_count == 0 {
                 continue;
             }
