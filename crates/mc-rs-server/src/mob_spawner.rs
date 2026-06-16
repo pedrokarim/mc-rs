@@ -225,6 +225,82 @@ pub fn tick<R: Rng>(
     }
 }
 
+/// Délai moyen (game ticks) entre deux salves d'un spawner actif. Vanilla : aléatoire
+/// 200..800 ; on approxime par une proba par tick (pas de registre de délai par
+/// spawner). À 20 TPS → ~1 salve toutes les ~20 s par spawner avec un joueur proche.
+const SPAWNER_AVG_DELAY: i32 = 400;
+/// Portée joueur requise (RequiredPlayerRange vanilla) + cap d'entités proches.
+const SPAWNER_PLAYER_RANGE: f32 = 16.0;
+const SPAWNER_MAX_NEARBY: usize = 6;
+const SPAWNER_SPAWN_RANGE: i32 = 4;
+
+/// Tick des **spawners (block entities)** d'une dimension : pour chaque spawner d'un
+/// chunk chargé, si un joueur est à portée et que le cap d'entités proches n'est pas
+/// atteint, fait apparaître par salves les mobs de l'EntityIdentifier (forteresse =
+/// blaze). Réf comportement : `MonsterSpawner` (Bedrock).
+pub fn tick_spawners<R: Rng>(
+    rng: &mut R,
+    registry: &PlayerRegistry,
+    cache: &mut ChunkCache,
+    mobs: &mut MobEntityManager,
+) {
+    let dim = cache.dimension();
+    let players: Vec<[f32; 3]> = registry
+        .players
+        .values()
+        .filter(|p| p.dimension == dim)
+        .map(|p| p.position)
+        .collect();
+    if players.is_empty() {
+        return;
+    }
+    let spawners = cache.mob_spawner_positions();
+    for (pos, entity) in spawners {
+        let center = [pos[0] as f32 + 0.5, pos[1] as f32, pos[2] as f32 + 0.5];
+        // Joueur à portée ?
+        let near_player = players.iter().any(|p| {
+            let (dx, dy, dz) = (p[0] - center[0], p[1] - center[1], p[2] - center[2]);
+            dx * dx + dy * dy + dz * dz <= SPAWNER_PLAYER_RANGE * SPAWNER_PLAYER_RANGE
+        });
+        if !near_player {
+            continue;
+        }
+        // Cap d'entités proches du spawner (MaxNearbyEntities).
+        let nearby = mobs
+            .all()
+            .filter(|m| m.base.dimension == dim)
+            .filter(|m| {
+                let (dx, dz) = (
+                    m.base.position[0] - center[0],
+                    m.base.position[2] - center[2],
+                );
+                dx * dx + dz * dz <= (SPAWNER_PLAYER_RANGE * SPAWNER_PLAYER_RANGE)
+            })
+            .count();
+        if nearby >= SPAWNER_MAX_NEARBY {
+            continue;
+        }
+        // Délai approximé par proba/tick.
+        if rng.gen_range(0..SPAWNER_AVG_DELAY) != 0 {
+            continue;
+        }
+        // Forteresse = blaze ; sinon on ignore (autres entités = suivi).
+        let kind = if entity == "minecraft:blaze" {
+            MobKind::Blaze
+        } else {
+            continue;
+        };
+        // Salve : SpawnCount (1..4) mobs dans SpawnRange autour du spawner.
+        let count = 1 + rng.gen_range(0..4);
+        for _ in 0..count {
+            let sx = center[0] + rng.gen_range(-SPAWNER_SPAWN_RANGE..=SPAWNER_SPAWN_RANGE) as f32;
+            let sz = center[2] + rng.gen_range(-SPAWNER_SPAWN_RANGE..=SPAWNER_SPAWN_RANGE) as f32;
+            let spawned = mobs.spawn(kind, [sx, center[1], sz]);
+            mobs.set_dimension(spawned.base.entity_runtime_id, dim);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

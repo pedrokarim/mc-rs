@@ -437,6 +437,22 @@ impl ChunkCache {
         Some(items)
     }
 
+    /// Positions des spawners de mobs (block entities `MobSpawner`) dans les chunks
+    /// **chargés**, avec leur entité (`minecraft:blaze`…). Pour le tick des spawners.
+    pub fn mob_spawner_positions(&self) -> Vec<([i32; 3], String)> {
+        let mut out = Vec::new();
+        for chunk in self.chunks.values() {
+            for be in &chunk.block_entities {
+                if be.kind == crate::block_entities::BlockEntityKind::MobSpawner {
+                    if let Some(entity) = &be.spawn_entity {
+                        out.push((be.position, entity.clone()));
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// Save one chunk immediately for durability-sensitive updates such as block edits.
     pub fn save_chunk_now(&mut self, cx: i32, cz: i32) -> bool {
         let dim = self.dimension;

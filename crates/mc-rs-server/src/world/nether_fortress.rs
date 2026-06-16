@@ -13,9 +13,10 @@
 //! tombent dans le chunk. Déterministe et cohérent d'un chunk à l'autre.
 //!
 //! Les coffres et le spawner de blaze sont émis comme **block entities** (persistées
-//! en LevelDB + envoyées au client : le coffre s'affiche, le spawner montre le blaze
-//! qui tourne). Suivi restant (task #28) : remplir le **butin** des coffres et faire
-//! **tick** le spawner pour qu'il fasse apparaître des blazes.
+//! en LevelDB + envoyées au client). Les coffres sont **pré-remplis** avec le butin
+//! `nether_bridge` (tirage déterministe, consommé à la 1re ouverture) ; le spawner
+//! **tick** réellement (`mob_spawner::tick_spawners`) et fait apparaître des blazes
+//! quand un joueur est à portée.
 
 use std::collections::HashMap;
 use std::sync::LazyLock;

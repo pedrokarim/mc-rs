@@ -1936,6 +1936,13 @@ async fn main() {
                                 &mut mob_entities,
                                 is_night,
                             );
+                            // Spawners (block entities) : forteresse → blazes.
+                            crate::mob_spawner::tick_spawners(
+                                &mut rng,
+                                &registry,
+                                &mut cache,
+                                &mut mob_entities,
+                            );
                         }
                     }
 
