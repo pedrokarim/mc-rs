@@ -83,24 +83,78 @@ Le tick physique (après l'IA) intègre la vélocité posée par le `WalkControl
   annulés). `EntityBase.on_ground` est lu par le `WalkController` pour décider de sauter.
 - Friction horizontale (sol/air) pour stopper le résidu quand le mob n'est plus poussé.
 
-## Comportements (executors)
+## Inventaire exhaustif des comportements
 
-| Executor | Mobs | Comportement |
-|----------|------|--------------|
-| `MeleeAttackExecutor` | zombie | Chasse via A\*, frappe au contact (cooldown), émet `AiEffect::Attack` |
-| `BowAttackExecutor` | skeleton | Kite (recule <4, s'approche >12), vise (compensation de chute), tire `AiEffect::ShootArrow` |
-| `CreeperSwellExecutor` | creeper | Chasse, s'amorce à portée 3 (fuse 30 ticks), émet `AiEffect::Explode` |
-| `FlatRandomRoamExecutor` | tous | Errance aléatoire (priorité basse) quand pas de cible |
-| `PanicFleeExecutor` | passifs | Fuit en ligne droite quand blessé + joueur proche |
+> Source de vérité : le code (`ai/executor.rs`, `ai/species.rs`, `mob_entities.rs`).
+> Mis à jour le 2026-07-02. Total : **12 executors d'IA**, **11 profils**, **1 sensor**,
+> **3 controllers**, **~12 comportements de cycle de vie / physique**.
 
-### Assemblage par espèce (`species.rs`)
+### A. Comportements d'IA — 12 executors (`ai/executor.rs`)
 
-| Espèce | Sensors | Behaviors (priorité) | Controllers |
-|--------|---------|----------------------|-------------|
-| Zombie | NearestPlayer(16) | Melee(4), Roam(1) | Walk, Look(cible+route) |
-| Skeleton | NearestPlayer(16) | Bow(4), Roam(1) | Walk, Look(cible+route) |
-| Creeper | NearestPlayer(16) | Swell(4), Roam(1) | Walk, Look(cible+route) |
-| Passifs | NearestPlayer(16) | Flee(4), Roam(1) | Walk, Look(route) |
+| # | Executor | Comportement |
+|---|----------|--------------|
+| 1 | `MeleeAttackExecutor` | Traque via A\*, frappe au contact (cooldown), émet `AiEffect::Attack` |
+| 2 | `BowAttackExecutor` | Kite (recule <4, s'approche >12), vise (compensation de chute), tire une flèche OU un projectile (`with_projectile` : potion sorcière, wind charge breeze, bullet à tête chercheuse shulker) |
+| 3 | `CreeperSwellExecutor` | Traque, s'amorce à portée 3 (fuse 30 ticks), émet `AiEffect::Explode` |
+| 4 | `FlatRandomRoamExecutor` | Errance aléatoire au sol ; gate d'intervalle (1/120 tick, vanilla `random_stroll`) → pause entre balades ; regarde la destination |
+| 5 | `PanicFleeExecutor` | Fuit en ligne droite quand blessé + joueur proche |
+| 6 | `TemptExecutor` | Suit le joueur tenant sa nourriture (`tempting_items`) |
+| 7 | `FlyRoamExecutor` | Errance en vol 3D (pas de gravité) |
+| 8 | `FlyShootExecutor` | Vol stationnaire + tir de boules de feu (ghast/blaze/wither) — `AiEffect::ShootFireball` |
+| 9 | `FlyAttackExecutor` | Vole vers le joueur et frappe au contact (phantom/vex) |
+| 10 | `CreakingExecutor` | Se fige tant qu'un joueur le regarde (cône de produit scalaire via `look_dir`), sinon fonce |
+| 11 | `DragonExecutor` | Phases de l'ender dragon (cercle ↔ strafe + souffle) |
+| 12 | `GuardianLaserExecutor` | Se tient à distance, charge un rayon, frappe (aquatique, nage 3D) |
+
+### B. Profils d'IA — 11 (`AiProfile`, assemblés dans `species.rs`)
+
+`Melee` · `Bow` · `CreeperSwell` · `Passive` · `Neutral` · `Flying` · `FlyingShooter` ·
+`FlyingMelee` · `Creaking` · `Dragon` · `GuardianLaser`.
+
+Chaque profil combine sensor + behaviors priorisés + controllers. Priorités (convention Allay,
+grand = prioritaire ; ordre sémantique = vanilla) : Combat/Panic **4** > Tempt **3** > Roam **1**.
+Vitesses recalées sur bedrock-samples (`speed_multiplier`) : stroll ×1.0, panic ×1.25, tempt ×1.25,
+melee ×1.0, via `beh_speed(attribut × SPEED_SCALE × mult)`.
+
+### C. Framework de support
+
+- **Sensors (1)** : `NearestPlayerSensor` (portée par espèce + raycast ligne de vue).
+- **Controllers (3)** : `WalkController` (marche + saut + step-up), `FlyController` (vol 3D),
+  `LookController` (yaw corps / yaw tête / pitch vers cible ou route).
+
+### D. Comportements de cycle de vie / physique — ~12 (`mob_entities.rs` tick, hors executors)
+
+Reproduction (nourrissage → mode amour → bébé, cooldown) · croissance bébé→adulte ·
+téléportation de l'enderman blessé · brûlure au soleil (zombie/skeleton) · dégâts de chute ·
+flottaison/nage (aquatiques) · split des slimes/magma cubes à la mort · despawn des hostiles
+(distance) · mouton broute l'herbe + repousse la laine · tonte (shear) · knockback · flag `NO_AI`
+(coupe l'IA client).
+
+## Correspondance avec le vanilla (`minecraft:behavior.*`, bedrock-samples)
+
+Vanilla a **~30+ composants** `minecraft:behavior.*`. Couverture actuelle :
+
+| Composant vanilla | Chez nous | État |
+|-------------------|-----------|------|
+| `random_stroll` | `FlatRandomRoamExecutor` | ✅ |
+| `melee_attack` / `melee_box_attack` | `MeleeAttackExecutor` | ✅ |
+| `ranged_attack` | `BowAttackExecutor` | ✅ |
+| `swell` (creeper) | `CreeperSwellExecutor` | ✅ |
+| `panic` | `PanicFleeExecutor` | ✅ |
+| `tempt` | `TemptExecutor` | ✅ |
+| `nearest_attackable_target` | `NearestPlayerSensor` (joueur uniquement) | ⚠️ partiel (pas les autres entités) |
+| `float` / `float_wander` | flottaison en physique / `FlyRoamExecutor` | ⚠️ pas un behavior propre |
+| `breed` | repro dans le tick manager (pas de pathfinding vers le partenaire) | ⚠️ partiel |
+| `follow_parent` | — | ❌ (les bébés ne suivent pas) |
+| `look_at_player` / `random_look_around` | `LookController` (fixe le joueur proche) | ⚠️ pas de behavior dédié |
+| `eat_block` | mouton mange l'herbe (tick manager) | ⚠️ pas un behavior propre |
+| `avoid_mob_type` | — | ❌ (creeper ne fuit pas les chats) |
+| `hurt_by_target` | — | ❌ (pas de riposte quand frappé sans être vu) |
+| `leap_at_target` | — | ❌ (araignée ne saute pas) |
+| `mount_pathing` / `controlled_by_player` | — | ❌ (montures) |
+| `equip_item` / `pickup_items` | — | ❌ |
+| `flee_sun` | brûlure gérée en physique | ⚠️ ne fuit pas le soleil |
+| `stomp_turtle_egg` | — | ❌ |
 
 ## Intégration dans la game loop (`AiEffect`)
 
@@ -126,17 +180,22 @@ même chemin combat que les attaques mêlée.
 
 ## Constantes de réglage (à affiner en jeu)
 
-- Vitesses mob : ~0.2–0.25 blocs/tick (`MobKind::movement_speed`).
-- Cooldown mêlée / fuse creeper / cooldown arc : 30 ticks (~1.5 s à 20 TPS).
-- Creeper : portée d'amorçage 3, rayon d'explosion 3 (`ExplosionSource::Creeper`).
+- Vitesses : `beh_speed(attribut × SPEED_SCALE × multiplicateur)` — multiplicateurs recalés sur
+  bedrock-samples (`speed_multiplier`). `SPEED_SCALE` (`species.rs`) = bouton de calibrage global.
+- Errance : gate d'intervalle `ROAM_INTERVAL = 120` (1/120 par tick, vanilla `random_stroll`),
+  rayon `ROAM_RANGE = 10` (vanilla `xz_dist`).
+- Cooldown mêlée 20 ticks ; fuse creeper 30 ticks ; cooldown arc 30 ticks.
 - Arc : recul <4, tir 4–12, vitesse de flèche 1.4 b/tick, dégâts 3.
+- Client : flag `NO_AI` posé sur tous les mobs (coupe l'IA/prédiction côté client — cf PMMP
+  « client-side AI interference »).
 
 ## Follow-ups non faits
 
-- Son/particule d'explosion & d'impact de flèche (pas de `LevelEvent` explosion dans le proto —
-  format binaire à ne pas deviner).
-- Dégâts par difficulté (easy/normal/hard) ; actuellement valeurs « normal ».
+- **Behaviors vanilla manquants** : voir le tableau « Correspondance avec le vanilla » ci-dessus
+  (`breed`/`follow_parent`, `look_at_player` dédié, `avoid_mob_type`, `hurt_by_target`,
+  `leap_at_target`, `equip_item`/`pickup_items`, `flee_sun`, `stomp_turtle_egg`, montures…).
+- Son/particule d'explosion & d'impact de flèche (pas de `LevelEvent` explosion dans le proto).
 - Lissage de chemin (Floyd) ; flèche ramassable ; strafe latéral du squelette.
-- Unification des deux enums `MobKind` (`mob_ai` 45 espèces registres vs `mob_entities` 7 vivantes).
+- Calibrage in-game de `SPEED_SCALE` (jamais validé manette en main).
 
 Voir [`99-ROADMAP.md`](99-ROADMAP.md) et [`07-ENTITY-SYSTEM.md`](07-ENTITY-SYSTEM.md).
