@@ -1139,8 +1139,8 @@ async fn main() {
     // Build MOTD
     let motd = Motd {
         name: config.server.motd.clone(),
-        protocol_version: 975,
-        version_string: "1.26.20".to_string(),
+        protocol_version: 1001,
+        version_string: "1.26.30".to_string(),
         online_players: 0,
         max_players: config.server.max_players,
         server_guid,
@@ -1408,7 +1408,7 @@ async fn main() {
             host_ip: "0.0.0.0".to_string(),
             player_names: Vec::new(),
             plugins: String::new(),
-            version: "1.26.20".to_string(),
+            version: "1.26.30".to_string(),
         }));
 
     if config.query.enabled {

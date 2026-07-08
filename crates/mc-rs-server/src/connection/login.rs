@@ -25,9 +25,9 @@ impl Connection {
             self.addr, pkt.protocol_version
         );
 
-        if pkt.protocol_version != 975 {
+        if pkt.protocol_version != 1001 {
             warn!(
-                "[{}] Incompatible protocol: {} (expected 975)",
+                "[{}] Incompatible protocol: {} (expected 1001)",
                 self.addr, pkt.protocol_version
             );
             let disconnect = Disconnect {
@@ -396,7 +396,7 @@ impl Connection {
             writer.write_string(&pack.version_string());
             writer.write_string(""); // subPackName
         }
-        writer.write_string("1.26.20"); // baseGameVersion
+        writer.write_string("1.26.30"); // baseGameVersion
         writer.write_u32_le(0); // experiments count
         writer.write_bool(false); // hasPreviouslyUsedExperiments
         writer.write_bool(false); // useVanillaEditorPacks

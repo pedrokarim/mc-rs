@@ -65,6 +65,10 @@ pub struct StartGame {
     pub experimental_gameplay_override: Option<bool>,
     pub chat_restriction_level: u8,
     pub disable_player_interactions: bool,
+    /// Protocol 997 (bedrock 1.26.30) : politique de connexion éditeur serveur.
+    pub server_editor_connection_policy: i32,
+    /// Protocol 997 (bedrock 1.26.30) : drops de blocs anonymes en monde éditeur hybride.
+    pub allow_anonymous_block_drops_in_editor_worlds: bool,
     // ── End LevelSettings ──
     pub level_id: String,
     pub world_name: String,
@@ -97,6 +101,9 @@ pub struct StartGame {
 
     // NetworkPermissions
     pub disable_client_sounds: bool,
+
+    /// Protocol 995 (bedrock 1.26.30) : le serveur logue-t-il le chat.
+    pub is_logging_chat: bool,
 
     // ServerJoinInformation: Optional (we write false = not present)
 
@@ -211,6 +218,9 @@ impl StartGame {
 
         w.write_u8(self.chat_restriction_level);
         w.write_bool(self.disable_player_interactions);
+        // Protocol 997 (bedrock 1.26.30) : 2 champs ajoutés en fin de LevelSettings.
+        w.write_var_i32(self.server_editor_connection_policy);
+        w.write_bool(self.allow_anonymous_block_drops_in_editor_worlds);
         // ── End LevelSettings ──
 
         w.write_string(&self.level_id);
@@ -254,7 +264,12 @@ impl StartGame {
         // NetworkPermissions
         w.write_bool(self.disable_client_sounds);
 
-        // ServerJoinInformation: Optional — write false (not present)
+        // Protocol 995 (bedrock 1.26.30) : isLoggingChat.
+        w.write_bool(self.is_logging_chat);
+
+        // ServerJoinInformation: Optional — write false (not present).
+        // (Protocol 999 a rendu experienceName/worldName optionnels DANS ce type,
+        // mais on écrit l'optional externe absent → rien à encoder à l'intérieur.)
         w.write_bool(false);
 
         // ServerTelemetryData
@@ -317,7 +332,7 @@ impl StartGame {
             disable_persona: false,
             disable_custom_skins: false,
             mute_emote_announcements: false,
-            vanilla_version: "1.26.20".to_string(),
+            vanilla_version: "1.26.30".to_string(),
             limited_world_width: 0,
             limited_world_length: 0,
             is_new_nether: true,
@@ -326,6 +341,8 @@ impl StartGame {
             experimental_gameplay_override: None,
             chat_restriction_level: 0,
             disable_player_interactions: false,
+            server_editor_connection_policy: 0,
+            allow_anonymous_block_drops_in_editor_worlds: false,
             level_id: "mcrs".to_string(),
             world_name: "MC-RS World".to_string(),
             premium_world_template_id: String::new(),
@@ -338,7 +355,7 @@ impl StartGame {
             // We currently run Bedrock in the legacy/disabled ItemStackNetManager mode.
             // The client expects ContainerOpen + legacy InventoryContent/Slot semantics in this mode.
             enable_new_inventory_system: false,
-            server_software_version: "1.26.20".to_string(),
+            server_software_version: "1.26.30".to_string(),
             // Empty NBT compound tag (network LE format):
             // tag_type=10 (compound), name_length=0 (VarUInt=0x00), end_tag=0x00
             player_actor_properties_nbt: vec![0x0A, 0x00, 0x00],
@@ -347,6 +364,7 @@ impl StartGame {
             enable_client_side_chunk_generation: false,
             block_network_ids_are_hashes: false,
             disable_client_sounds: true,
+            is_logging_chat: false,
             server_id: String::new(),
             scenario_id: String::new(),
             world_id: String::new(),
