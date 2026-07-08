@@ -1178,6 +1178,21 @@ impl MobKind {
         self.is_hostile() || self.is_aquatic() || matches!(self, Self::Bat)
     }
 
+    /// Mort-vivant qui prend feu en plein jour à découvert (hors de l'eau).
+    /// Vanilla : zombie, zombie villager, drowned (au sec), skeleton, stray,
+    /// bogged. **Exclus** : husk (zombie du désert) et wither skeleton.
+    pub fn burns_in_daylight(self) -> bool {
+        matches!(
+            self,
+            Self::Zombie
+                | Self::ZombieVillager
+                | Self::Drowned
+                | Self::Skeleton
+                | Self::Stray
+                | Self::Bogged
+        )
+    }
+
     /// Dimension d'habitat naturel du mob. Le spawner naturel ne tourne que
     /// dans l'overworld (seule dimension implémentée) : les mobs du Nether/End
     /// ne doivent JAMAIS spawner à la surface de l'overworld, même la nuit.
@@ -1262,6 +1277,12 @@ impl MobKind {
 
     /// Mob qui peut se reproduire (passif avec une nourriture).
     pub fn is_breedable(self) -> bool {
+        // Exceptions vanilla : stériles malgré une nourriture (utilisée pour la
+        // séduction/l'apprivoisement, pas la reproduction). Le mulet est un
+        // hybride stérile ; le tatou et le perroquet ne se reproduisent pas.
+        if matches!(self, Self::Mule | Self::Armadillo | Self::Parrot) {
+            return false;
+        }
         self.desc().category == MobCategory::Passive && !self.desc().breeding_food.is_empty()
     }
 
@@ -1936,8 +1957,8 @@ impl MobEntityManager {
             entity.base.velocity[0] *= friction;
             entity.base.velocity[2] *= friction;
 
-            // --- Sun-burning : zombies/skeletons brûlent en plein jour à découvert ---
-            if matches!(entity.kind, MobKind::Zombie | MobKind::Skeleton) {
+            // --- Sun-burning : morts-vivants brûlant en plein jour à découvert ---
+            if entity.kind.burns_in_daylight() {
                 let burning = is_day
                     && !feet_in_water
                     && sky_exposed(chunk_cache, entity.base.position, height);
@@ -2238,6 +2259,18 @@ mod tests {
             "le mob doit subir des dégâts de chute (got {total_fall_dmg})"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sterile_mobs_are_not_breedable() {
+        // Vanilla : mulet (hybride), tatou et perroquet ne se reproduisent pas.
+        assert!(!MobKind::Mule.is_breedable());
+        assert!(!MobKind::Armadillo.is_breedable());
+        assert!(!MobKind::Parrot.is_breedable());
+        // Les vrais animaux d'élevage restent reproductibles.
+        assert!(MobKind::Cow.is_breedable());
+        assert!(MobKind::Pig.is_breedable());
+        assert!(MobKind::Chicken.is_breedable());
     }
 
     #[test]

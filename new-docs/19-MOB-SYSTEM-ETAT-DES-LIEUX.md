@@ -231,6 +231,13 @@ code live) :
   ×0.2 (visée). `species.rs` : `BOW_ARROW_SPEED` 1.4→0.28, `FIREBALL_SPEED` 0.8→0.16. Trajectoire
   balistique préservée (5× plus de ticks × gravité/5). Projectiles ~5× moins rapides = réaliste.
 
+- **[FAIT] P2 #13 — Bugs de breeding.** `is_breedable()` exclut désormais les stériles vanilla
+  (mule/tatou/perroquet). (Wolf/Goat/Llama breedables = encore bloqué par leur catégorie `Neutral` ;
+  à traiter avec le refactor breedable data-driven.)
+- **[FAIT] Sun-burn fidèle.** `MobKind::burns_in_daylight()` : zombie, zombie_villager, drowned (au
+  sec), skeleton, stray, bogged brûlent au soleil ; husk & wither_skeleton exclus (avant : seulement
+  zombie/skeleton).
+
 ## 7. Méthode & limites de ce rapport
 
 - Établi par **lecture du code** (pas d'exécution en jeu). Les constats « trop rapide / trop haut » sont
