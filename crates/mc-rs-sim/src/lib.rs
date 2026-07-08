@@ -10,8 +10,12 @@
 //! Conçu pour pointer vers **ton propre serveur** (localhost / ton IP). Ne pas
 //! utiliser contre une infrastructure tierce.
 
+pub mod bedrock;
+pub mod identity;
 pub mod net;
 pub mod player;
 
+pub use bedrock::{BedrockClient, BedrockError, LoginState};
+pub use identity::SimIdentity;
 pub use net::{RakClient, RakError};
-pub use player::{SimConfig, SimPlayer};
+pub use player::{SimConfig, SimOutcome, SimPlayer};

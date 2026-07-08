@@ -136,9 +136,10 @@ async fn main() {
         set.spawn(async move {
             match SimPlayer::connect(cfg.clone()).await {
                 Ok(mut p) => p.run(duration).await,
-                Err(e) => mc_rs_sim::player::SimOutcome {
+                Err(e) => mc_rs_sim::SimOutcome {
                     name: cfg.name,
                     handshake: None,
+                    login: None,
                     last_rtt_ms: None,
                     error: Some(e.to_string()),
                 },
@@ -187,14 +188,26 @@ fn report(outcomes: &[mc_rs_sim::player::SimOutcome], wall: Duration) {
         }
     };
 
+    let logged_in = outcomes.iter().filter(|o| o.login.is_some()).count();
+    let mut login_ms: Vec<f64> = outcomes
+        .iter()
+        .filter_map(|o| o.login.map(|d| d.as_secs_f64() * 1000.0))
+        .collect();
+    login_ms.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
     let rtts: Vec<f64> = outcomes.iter().filter_map(|o| o.last_rtt_ms).collect();
 
     println!("\n──────────── Rapport de simulation ────────────");
     println!("Joueurs           : {total}");
     println!(
-        "Connectés         : {} ({:.0}%)",
+        "RakNet connectés  : {} ({:.0}%)",
         connected.len(),
         100.0 * connected.len() as f64 / total.max(1) as f64
+    );
+    println!(
+        "Login chiffré     : {} ({:.0}%)",
+        logged_in,
+        100.0 * logged_in as f64 / total.max(1) as f64
     );
     println!("Échecs            : {failed}");
     println!("Temps mur         : {:.2}s", wall.as_secs_f64());
@@ -206,6 +219,16 @@ fn report(outcomes: &[mc_rs_sim::player::SimOutcome], wall: Duration) {
             pct(&hs_ms, 0.95),
             hs_ms.last().copied().unwrap_or(0.0),
             avg(&hs_ms),
+        );
+    }
+    if !login_ms.is_empty() {
+        println!(
+            "Login (ms)        : min {:.1} | p50 {:.1} | p95 {:.1} | max {:.1} | avg {:.1}",
+            login_ms.first().copied().unwrap_or(0.0),
+            pct(&login_ms, 0.50),
+            pct(&login_ms, 0.95),
+            login_ms.last().copied().unwrap_or(0.0),
+            avg(&login_ms),
         );
     }
     if !rtts.is_empty() {
@@ -222,15 +245,15 @@ fn report(outcomes: &[mc_rs_sim::player::SimOutcome], wall: Duration) {
             avg(&rtts)
         );
     }
-    if failed > 0 {
-        // Compte les erreurs distinctes.
-        use std::collections::BTreeMap;
-        let mut errs: BTreeMap<String, usize> = BTreeMap::new();
-        for o in outcomes.iter().filter(|o| o.handshake.is_none()) {
-            *errs
-                .entry(o.error.clone().unwrap_or_else(|| "inconnue".into()))
-                .or_default() += 1;
-        }
+    // Erreurs distinctes (échec handshake OU login OU rupture en cours de vie).
+    use std::collections::BTreeMap;
+    let mut errs: BTreeMap<String, usize> = BTreeMap::new();
+    for o in outcomes.iter().filter(|o| o.error.is_some()) {
+        *errs
+            .entry(o.error.clone().unwrap_or_else(|| "inconnue".into()))
+            .or_default() += 1;
+    }
+    if !errs.is_empty() {
         println!("Erreurs           :");
         for (e, n) in errs {
             println!("  {n}× {e}");

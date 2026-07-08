@@ -7,10 +7,17 @@
 //!     par `spawn_rules_vanilla::spawn_weight` (les espèces sans règle vanilla
 //!     sont automatiquement ignorées)
 //!   - Pick une position dans un rayon SPAWN_RADIUS_MIN..MAX autour du joueur
-//!   - Vérifie : ground solide, headroom, light level (pour monsters dans le
-//!     range vanilla 0-7 via `spawn_rules_vanilla::brightness_range`)
+//!   - Vérifie : sol solide, headroom, bloc-support (`spawns_on_block`), biome
+//!     (`biome_allows`), habitat/dimension, nuit (monstres en overworld)
 //!   - Vérifie le mob cap par catégorie
-//!   - Spawn via `MobEntityManager::spawn` (~5 % d'animaux en bébé)
+//!   - Apparition en groupe (`herd`), ~5 % d'animaux en bébé
+//!
+//! ⚠️ NON implémenté (voir `new-docs/19-MOB-SYSTEM-ETAT-DES-LIEUX.md`) :
+//!   - **light level réel** au point de spawn (`brightness_range`) : nécessite un
+//!     moteur de lumière (light stocké/requêtable) qui n'existe pas encore. On se
+//!     rabat sur le gate nuit global pour les monstres. NE PAS prétendre l'inverse.
+//!   - spawn souterrain/grotte, aquatique, par structure ; `density_limit` ;
+//!     `difficulty_filter` ; `height_filter`.
 
 use rand::Rng;
 
@@ -45,6 +52,27 @@ fn category_of(kind: MobKind) -> &'static str {
 /// règle de spawn vanilla (`spawn_weight` = None) sont automatiquement ignorées.
 fn all_mobs() -> &'static [MobKind] {
     MobKind::ALL
+}
+
+/// Cherche un sol valide en (x, z) : 1er bloc solide (support) depuis le haut
+/// avec ≥ 2 blocs d'air au-dessus. Renvoie le Y des pieds (sol + 1), ou `None`.
+fn find_spawn_ground(cache: &mut ChunkCache, x: i32, z: i32) -> Option<i32> {
+    for y in (-64..=320).rev() {
+        let id = cache.get_block(x, y, z);
+        if id == BLOCKS.air || id == BLOCKS.water {
+            continue;
+        }
+        let name = BLOCKS.name_for(id).unwrap_or("");
+        if !crate::block_attachment::is_solid_support(name) {
+            continue;
+        }
+        let above1 = cache.get_block(x, y + 1, z);
+        let above2 = cache.get_block(x, y + 2, z);
+        if above1 == BLOCKS.air && above2 == BLOCKS.air {
+            return Some(y + 1);
+        }
+    }
+    None
 }
 
 /// Dimension numérique (0/1/2) d'un habitat de mob.
@@ -158,25 +186,18 @@ pub fn tick<R: Rng>(
         let sz = center[2] as i32 + dz;
 
         // Trouve un sol valide (top non-air entre Y=320 et Y=-64).
-        let mut sy = None;
-        for y in (-64..=320).rev() {
-            let id = cache.get_block(sx, y, sz);
-            if id == BLOCKS.air || id == BLOCKS.water {
-                continue;
-            }
-            let name = BLOCKS.name_for(id).unwrap_or("");
-            if !crate::block_attachment::is_solid_support(name) {
-                continue;
-            }
-            // Headroom : besoin d'au moins 2 blocs d'air au-dessus.
-            let above1 = cache.get_block(sx, y + 1, sz);
-            let above2 = cache.get_block(sx, y + 2, sz);
-            if above1 == BLOCKS.air && above2 == BLOCKS.air {
-                sy = Some(y + 1);
-                break;
-            }
+        let Some(sy) = find_spawn_ground(cache, sx, sz) else {
+            continue;
+        };
+
+        // Bloc-support : certains mobs exigent un bloc précis (vache → grass_block,
+        // chauve-souris → pierres, axolotl → clay). Sans filtre → tout solide OK.
+        let ground_name = BLOCKS
+            .name_for(cache.get_block(sx, sy - 1, sz))
+            .unwrap_or("");
+        if !crate::spawn_rules_vanilla::spawns_on_block(entity_id_for(picked), ground_name) {
+            continue;
         }
-        let Some(sy) = sy else { continue };
 
         // Filtrage par biome : le mob doit être autorisé par le `biome_filter`
         // vanilla du biome RÉELLEMENT généré au point de spawn (ex. husk →
@@ -192,22 +213,42 @@ pub fn tick<R: Rng>(
             continue;
         }
 
-        // Spawn. Slimes : taille aléatoire (1/2/4). Animaux : ~5 % en bébé.
-        let spawn_pos = [sx as f32 + 0.5, sy as f32, sz as f32 + 0.5];
-        let _entity = if picked.is_slime() {
-            let size = [1u8, 2, 4][rng.gen_range(0..3)];
-            mobs.spawn_slime(picked, spawn_pos, size)
-        } else if cat == "animal" && rng.gen_range(0..100) < 5 {
-            mobs.spawn_baby(picked, spawn_pos)
-        } else {
-            mobs.spawn(picked, spawn_pos)
-        };
-        // L'entité appartient à la dimension actuellement tickée.
-        mobs.set_dimension(_entity.base.entity_runtime_id, cache.dimension());
-        match cat {
-            "monster" => hostile_count += 1,
-            "animal" => passive_count += 1,
-            _ => {}
+        // Apparition en GROUPE (`minecraft:herd`, ex. vaches 2-3, zombies 2-4) :
+        // min..max individus en grappe autour du point validé. Le 1er au point
+        // ancre, les suivants avec un léger décalage (chacun cherche son sol).
+        let (hmin, hmax) = crate::spawn_rules_vanilla::herd_size(entity_id_for(picked));
+        let herd = rng.gen_range(hmin..=hmax.max(hmin));
+        for member in 0..herd {
+            // Respecte le cap au fil du groupe.
+            match cat {
+                "monster" if hostile_count >= hostile_cap => break,
+                "animal" if passive_count >= passive_cap => break,
+                _ => {}
+            }
+            let (mx, mz) = if member == 0 {
+                (sx, sz)
+            } else {
+                (sx + rng.gen_range(-2..=2), sz + rng.gen_range(-2..=2))
+            };
+            let Some(my) = find_spawn_ground(cache, mx, mz) else {
+                continue;
+            };
+            let spawn_pos = [mx as f32 + 0.5, my as f32, mz as f32 + 0.5];
+            let entity = if picked.is_slime() {
+                let size = [1u8, 2, 4][rng.gen_range(0..3)];
+                mobs.spawn_slime(picked, spawn_pos, size)
+            } else if cat == "animal" && rng.gen_range(0..100) < 5 {
+                mobs.spawn_baby(picked, spawn_pos)
+            } else {
+                mobs.spawn(picked, spawn_pos)
+            };
+            // L'entité appartient à la dimension actuellement tickée.
+            mobs.set_dimension(entity.base.entity_runtime_id, cache.dimension());
+            match cat {
+                "monster" => hostile_count += 1,
+                "animal" => passive_count += 1,
+                _ => {}
+            }
         }
 
         tracing::debug!(

@@ -213,6 +213,18 @@ code live) :
   - **NON scalé encore** : vitesses des projectiles (flèche `BOW_ARROW_SPEED`, boule de feu
     `FIREBALL_SPEED`) — à traiter avec l'audit des projectiles (P1).
 
+- **[FAIT] P0 #3 — Despawn.** Ajout de `MobKind::can_despawn()` (hostiles + aquatiques + bat
+  despawnent ; animaux de ferme, neutres et boss **persistent**, conforme à la persistance vanilla).
+  Le gate live passe de `is_hostile()` à `can_despawn()`. Persistance nommé/tamed = quand ces états
+  existeront (taming non implémenté). `despawn_rules.rs` reste un module de référence non câblé.
+- **[FAIT] P1 (partiel) — Spawn : bloc-support + groupes.** `spawn_rules_vanilla` : `spawns_on_block`
+  (vache→grass_block, chauve-souris→pierres…) + `herd_size` (min/max). `mob_spawner` : sol extrait en
+  helper `find_spawn_ground`, filtre bloc-support, et **apparition en groupe** (`herd`) en grappe
+  autour du point validé (respecte le cap). Docstring mensonger corrigé.
+- **[BLOQUÉ] P1 — Light level au spawn.** Nécessite un **moteur de lumière** (light stocké/requêtable)
+  absent. Gate nuit global conservé pour les monstres ; `brightness_range` reste défini mais non
+  utilisable tant que le light engine n'existe pas. Documenté honnêtement dans le docstring du spawner.
+
 ## 7. Méthode & limites de ce rapport
 
 - Établi par **lecture du code** (pas d'exécution en jeu). Les constats « trop rapide / trop haut » sont

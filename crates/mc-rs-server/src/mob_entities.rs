@@ -1166,6 +1166,18 @@ impl MobKind {
         matches!(self, Self::Wither | Self::EnderDragon)
     }
 
+    /// Le mob peut-il despawner naturellement quand il est loin des joueurs ?
+    /// Fidèle à la persistance vanilla : **despawnent** les hostiles, les
+    /// aquatiques (water_animal) et les ambiants (bat) ; **persistent** les
+    /// animaux de ferme (Passive terrestre), les neutres (loup/golem/…) et les
+    /// boss. (Nommés/apprivoisés persisteront aussi une fois ces états gérés.)
+    pub fn can_despawn(self) -> bool {
+        if self.is_boss() {
+            return false;
+        }
+        self.is_hostile() || self.is_aquatic() || matches!(self, Self::Bat)
+    }
+
     /// Dimension d'habitat naturel du mob. Le spawner naturel ne tourne que
     /// dans l'overworld (seule dimension implémentée) : les mobs du Nether/End
     /// ne doivent JAMAIS spawner à la surface de l'overworld, même la nuit.
@@ -1709,11 +1721,11 @@ impl MobEntityManager {
                 continue;
             }
 
-            // --- Despawn des hostiles trop loin de tout joueur (règles Bedrock) ---
+            // --- Despawn des mobs despawnables trop loin de tout joueur ---
             // (Si aucun joueur connecté, on ne despawn pas : pas de référentiel.)
-            // Les boss (ender dragon, wither) ne despawnent JAMAIS : sinon la
-            // détection de mort du dragon générerait le portail de sortie à tort.
-            if entity.kind.is_hostile() && !entity.kind.is_boss() && !players.is_empty() {
+            // `can_despawn` = hostiles + aquatiques + bat ; les animaux de ferme,
+            // les neutres et les boss persistent (cf règles de persistance vanilla).
+            if entity.kind.can_despawn() && !players.is_empty() {
                 let nearest_sq = players
                     .iter()
                     .map(|p| {

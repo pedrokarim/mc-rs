@@ -1960,6 +1960,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "mc-rs-sim"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "flate2",
+ "mc-rs-crypto",
+ "mc-rs-nbt",
+ "mc-rs-proto",
+ "mc-rs-raknet",
+ "p384",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "snap",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "mc-rs-webui"
 version = "0.1.0"
 dependencies = [

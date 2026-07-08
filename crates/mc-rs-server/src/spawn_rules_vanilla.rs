@@ -80,6 +80,51 @@ pub fn is_water_spawner(entity_id: &str) -> bool {
         .any(|c| c.get("minecraft:spawns_underwater").is_some())
 }
 
+/// Le bloc `block_name` (ex `"minecraft:grass_block"`) est-il autorisé comme
+/// support de spawn pour ce mob ? Lit `minecraft:spawns_on_block_filter`
+/// (chaîne ou tableau de chaînes). **Aucun filtre → tout bloc solide autorisé.**
+/// Vanilla : vache → grass_block, chauve-souris → pierres, axolotl → clay.
+pub fn spawns_on_block(entity_id: &str, block_name: &str) -> bool {
+    let Some(rule) = SPAWN_RULES.get(entity_id) else {
+        return true;
+    };
+    let mut had_filter = false;
+    for set in &rule.conditions {
+        let Some(f) = set.get("minecraft:spawns_on_block_filter") else {
+            continue;
+        };
+        had_filter = true;
+        let matches = match f {
+            serde_json::Value::String(s) => s == block_name,
+            serde_json::Value::Array(arr) => arr.iter().any(|v| v.as_str() == Some(block_name)),
+            _ => false,
+        };
+        if matches {
+            return true;
+        }
+    }
+    !had_filter
+}
+
+/// Taille de groupe (`minecraft:herd` min_size/max_size) à faire apparaître d'un
+/// coup. Défaut `(1, 1)` si non spécifié. Vanilla : vaches 2-3, zombies 2-4,
+/// chauve-souris 8, etc.
+pub fn herd_size(entity_id: &str) -> (u32, u32) {
+    if let Some(rule) = SPAWN_RULES.get(entity_id) {
+        for set in &rule.conditions {
+            if let Some(h) = set.get("minecraft:herd") {
+                let min = h.get("min_size").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
+                let max = h
+                    .get("max_size")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(min as u64) as u32;
+                return (min.max(1), max.max(min).max(1));
+            }
+        }
+    }
+    (1, 1)
+}
+
 /// Évalue un nœud de `minecraft:biome_filter` contre l'ensemble des tags du
 /// biome au point de spawn. Formats Bedrock supportés :
 ///   - test simple : `{"test":"has_biome_tag","operator":"==","value":"desert"}`
@@ -208,6 +253,25 @@ mod tests {
     #[test]
     fn unknown_mob_is_unrestricted() {
         assert!(biome_allows("minecraft:not_a_mob", &tags(&["whatever"])));
+    }
+
+    #[test]
+    fn cow_spawns_on_grass_only() {
+        assert!(spawns_on_block("minecraft:cow", "minecraft:grass_block"));
+        assert!(!spawns_on_block("minecraft:cow", "minecraft:stone"));
+    }
+
+    #[test]
+    fn unknown_mob_spawns_on_any_block() {
+        assert!(spawns_on_block("minecraft:not_a_mob", "minecraft:whatever"));
+    }
+
+    #[test]
+    fn herd_sizes_are_sane() {
+        let (min, max) = herd_size("minecraft:cow");
+        assert!(min >= 1 && max >= min, "cow herd {min}..{max}");
+        // Mob sans regle → (1, 1).
+        assert_eq!(herd_size("minecraft:not_a_mob"), (1, 1));
     }
 
     #[test]
