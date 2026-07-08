@@ -10,13 +10,19 @@ use crate::world::chunk_cache::ChunkCache;
 
 const SERVER_TICKS_PER_SECOND: f32 = 100.0;
 const BASELINE_TICKS_PER_SECOND: f32 = 20.0;
+/// Nombre de ticks serveur (100 TPS) par game-tick vanilla (20 TPS). Le tick
+/// des mobs tourne au tick SERVEUR : tout compteur exprimé en game-ticks vanilla
+/// doit être multiplié par ce facteur pour durer le bon temps réel.
+const SERVER_TICKS_PER_GAME_TICK: u32 = 5;
 const GRAVITY_PER_TICK: f32 = 0.08 * (BASELINE_TICKS_PER_SECOND / SERVER_TICKS_PER_SECOND);
 const AIR_DRAG: f32 = 0.996;
 const MAX_FALL_SPEED: f32 = -0.784;
-/// Friction horizontale appliquée chaque tick (le résidu décroît quand le mob
-/// n'est plus poussé par le `WalkController`). Sol plus adhérent que l'air.
-const GROUND_FRICTION: f32 = 0.6;
-const AIR_FRICTION: f32 = 0.91;
+/// Friction horizontale appliquée chaque tick serveur (le résidu décroît quand
+/// le mob n'est plus poussé par le `WalkController`). Sol plus adhérent que l'air.
+/// Valeurs vanilla 20 TPS (0.6 / 0.91) élevées à la puissance 1/5 pour un
+/// décroissement équivalent à 100 TPS (comme `AIR_DRAG` = 0.98^(1/5)).
+const GROUND_FRICTION: f32 = 0.9029; // 0.6^(1/5)
+const AIR_FRICTION: f32 = 0.9813; // 0.91^(1/5)
 
 /// Catégorie de comportement d'un mob.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1436,18 +1442,21 @@ pub struct TickResult {
 /// Distances de despawn des hostiles (port des règles Bedrock).
 const DESPAWN_INSTANT_DIST_SQ: f64 = 128.0 * 128.0;
 const DESPAWN_FAR_DIST_SQ: f64 = 32.0 * 32.0;
-/// Ticks loin (>32 blocs) avant despawn (~30 s à 20 TPS).
-const DESPAWN_TIMER_MAX: u32 = 600;
-/// Poussée d'Archimède par tick dans l'eau (le mob remonte) + vitesse max de montée.
-const WATER_BUOYANCY: f32 = 0.05;
-const WATER_MAX_RISE: f32 = 0.1;
+/// Temps loin (>32 blocs) avant despawn (~30 s) : 600 game-ticks → ticks serveur.
+const DESPAWN_TIMER_MAX: u32 = 600 * SERVER_TICKS_PER_GAME_TICK;
+/// Poussée d'Archimède par tick serveur dans l'eau + vitesse max de montée.
+/// Tunées pour la gravité 100 TPS (~0.016) : la poussée doit dépasser la gravité
+/// pour flotter, et la montée est plafonnée à ~2 b/s.
+const WATER_BUOYANCY: f32 = 0.03;
+const WATER_MAX_RISE: f32 = 0.02;
 /// Hauteur de chute (blocs) sans dégât ; au-delà : 1 dégât par bloc supplémentaire.
 const FALL_DAMAGE_THRESHOLD: f32 = 3.0;
-/// Reproduction (ticks 20 TPS) : durée du mode amour (~30 s), cooldown après
-/// reproduction (~5 min), croissance bébé → adulte (~20 min). Distance d'appariement.
-const LOVE_TICKS: u32 = 600;
-const BREED_COOLDOWN: u32 = 6000;
-const BABY_GROW_TICKS: u32 = 24000;
+/// Reproduction : durée du mode amour (~30 s), cooldown après reproduction
+/// (~5 min), croissance bébé → adulte (~20 min). Valeurs en game-ticks (20 TPS)
+/// × facteur → ticks serveur. Distance d'appariement.
+const LOVE_TICKS: u32 = 600 * SERVER_TICKS_PER_GAME_TICK;
+const BREED_COOLDOWN: u32 = 6000 * SERVER_TICKS_PER_GAME_TICK;
+const BABY_GROW_TICKS: u32 = 24000 * SERVER_TICKS_PER_GAME_TICK;
 const BREED_RANGE_SQ: f64 = 9.0;
 
 pub struct MobEntityManager {
@@ -1930,7 +1939,8 @@ impl MobEntityManager {
                 }
                 if burning {
                     entity.fire_tick += 1;
-                    if entity.fire_tick >= 20 {
+                    // 1 HP/s : 20 game-ticks → ticks serveur.
+                    if entity.fire_tick >= 20 * SERVER_TICKS_PER_GAME_TICK {
                         entity.fire_tick = 0;
                         damage_requests.push((entity_id, 1.0)); // 1 HP/s appliqué par main.rs
                     }
@@ -1946,7 +1956,8 @@ impl MobEntityManager {
                 let fz = entity.base.position[2].floor() as i32;
                 if chunk_cache.get_block(fx, fy, fz) == BLOCKS.grass_block {
                     entity.eat_grass_timer += 1;
-                    if entity.eat_grass_timer >= 100 {
+                    // ~5 s de broutage : 100 game-ticks → ticks serveur.
+                    if entity.eat_grass_timer >= 100 * SERVER_TICKS_PER_GAME_TICK {
                         entity.eat_grass_timer = 0;
                         chunk_cache.set_block(fx, fy, fz, BLOCKS.dirt);
                         block_changes.push(([fx, fy, fz], BLOCKS.dirt));
@@ -2262,8 +2273,9 @@ mod tests {
         assert!(mobs.shear_sheep(id).is_none(), "déjà tondu");
 
         // En broutant l'herbe, il finit par la manger et regagne sa laine.
+        // Le timer de broutage vaut 100 game-ticks × 5 = 500 ticks serveur.
         let mut ate = false;
-        for _ in 0..200 {
+        for _ in 0..600 {
             let r = mobs.tick(&mut cache, &[], false);
             if !r.block_changes.is_empty() {
                 ate = true;

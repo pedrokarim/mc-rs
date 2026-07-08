@@ -22,8 +22,12 @@ const PRIO_TEMPT: i32 = 3;
 const PRIO_ROAM: i32 = 1;
 /// Portée à laquelle un mob passif remarque la nourriture tenue (blocs).
 const TEMPT_RANGE: f64 = 10.0;
-/// Cooldown d'attaque mêlée (ticks à 20 TPS → ~1 s, comme vanilla).
-const MELEE_COOLDOWN: u32 = 20;
+/// Ticks serveur (100 TPS) par game-tick vanilla (20 TPS). Le tick des mobs
+/// tourne au tick serveur → tous les cooldowns/durées ci-dessous sont exprimés
+/// en game-ticks vanilla × ce facteur.
+const SERVER_TICKS_PER_GAME_TICK: u32 = 5;
+/// Cooldown d'attaque mêlée (~1 s : 20 game-ticks → ticks serveur, comme vanilla).
+const MELEE_COOLDOWN: u32 = 20 * SERVER_TICKS_PER_GAME_TICK;
 /// Rayon d'errance (blocs) — vanilla `random_stroll.xz_dist` défaut 10.
 const ROAM_RANGE: i32 = 10;
 
@@ -50,22 +54,22 @@ fn beh_speed(base: f32, multiplier: f32) -> f32 {
 }
 /// Rayon d'errance des volants (blocs).
 const FLY_ROAM_RANGE: i32 = 10;
-/// Boules de feu : vitesse (blocs/tick) et cooldown de tir (ticks).
+/// Boules de feu : vitesse (blocs/tick serveur) et cooldown de tir (game-ticks → serveur).
 const FIREBALL_SPEED: f32 = 0.8;
-const FIREBALL_COOLDOWN: u32 = 40;
-/// Guardian : distance de tir et durée de charge du rayon (ticks).
+const FIREBALL_COOLDOWN: u32 = 40 * SERVER_TICKS_PER_GAME_TICK;
+/// Guardian : distance de tir et durée de charge du rayon (game-ticks → serveur).
 const GUARDIAN_HOLD_RANGE: f64 = 10.0;
-const GUARDIAN_CHARGE_TICKS: u32 = 60;
-/// Creeper : portée d'amorçage et durée de fuse (ticks 20 TPS → 1.5 s, vanilla).
+const GUARDIAN_CHARGE_TICKS: u32 = 60 * SERVER_TICKS_PER_GAME_TICK;
+/// Creeper : portée d'amorçage et durée de fuse (~1.5 s : 30 game-ticks → serveur, vanilla).
 const CREEPER_IGNITE_RANGE: f64 = 3.0;
-const CREEPER_FUSE_TICKS: u32 = 30;
+const CREEPER_FUSE_TICKS: u32 = 30 * SERVER_TICKS_PER_GAME_TICK;
 /// Skeleton (arc) : on recule sous `MIN`, on s'approche au-delà de `SHOOT`,
 /// on tire entre les deux. Vitesse de flèche et dégâts/cooldown.
 const BOW_MIN_RANGE: f64 = 4.0;
 const BOW_SHOOT_RANGE: f64 = 12.0;
 const BOW_ARROW_SPEED: f32 = 1.4;
 const BOW_ARROW_DAMAGE: f32 = 3.0;
-const BOW_COOLDOWN: u32 = 30;
+const BOW_COOLDOWN: u32 = 30 * SERVER_TICKS_PER_GAME_TICK;
 
 /// Contrôleurs standard (marche + regard cible/route) communs à tous les profils.
 fn standard_controllers() -> Vec<Box<dyn Controller>> {
@@ -138,7 +142,7 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
                         BOW_SHOOT_RANGE,
                         BOW_ARROW_SPEED,
                         dmg,
-                        BOW_COOLDOWN + 20,
+                        BOW_COOLDOWN + 20 * SERVER_TICKS_PER_GAME_TICK,
                         Some(proj),
                     )))
                 }

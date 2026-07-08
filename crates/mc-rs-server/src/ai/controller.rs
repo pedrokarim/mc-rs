@@ -4,10 +4,20 @@
 use super::{ControlCtx, Controller};
 use crate::mob_entities::is_supporting_block;
 
-/// Délai (ticks) entre deux sauts (port `WalkController.JUMP_COOL_DOWN`).
-const JUMP_COOL_DOWN: u32 = 10;
-/// Impulsion verticale d'un saut (blocs/tick). À ajuster en jeu.
-const JUMP_IMPULSE: f32 = 0.42;
+// Le tick des mobs tourne au TICK SERVEUR (100 TPS), pas au game tick vanilla
+// (20 TPS) — comme la physique des items (`item_entities.rs`). La gravité/drag
+// sont déjà scalées pour 100 TPS dans `mob_entities.rs` ; il faut donc scaler
+// AUSSI les vitesses horizontales et les délais côté IA, sinon les mobs vont
+// ~5× trop vite. `TICK_SCALE` convertit une vitesse « blocs par game-tick
+// (20 TPS) » en « blocs par tick serveur (100 TPS) ».
+const TICK_SCALE: f32 = 20.0 / 100.0; // 0.2
+
+/// Délai entre deux sauts : 10 game-ticks (0.5 s) → ticks serveur.
+const JUMP_COOL_DOWN: u32 = 10 * 5;
+/// Impulsion verticale d'un saut (blocs/tick serveur). Dérivée pour un apex
+/// d'environ 1.25 bloc avec la gravité 100 TPS (~0.016) : v = √(2·g·h) ≈ 0.2.
+/// (Scaling en √ car la hauteur = v²/2g et g est scalée linéairement.)
+const JUMP_IMPULSE: f32 = 0.2;
 /// Hauteur de marche franchissable sans sauter.
 const STEP_HEIGHT: f64 = 0.5;
 
@@ -87,8 +97,9 @@ impl Controller for WalkController {
             return;
         }
 
-        // Vitesse effective bridée pour ne pas dépasser le waypoint.
-        let eff = (speed as f64).min(h);
+        // Vitesse effective bridée pour ne pas dépasser le waypoint. `speed` est
+        // en blocs/game-tick (20 TPS) ; on convertit en blocs/tick serveur.
+        let eff = (speed as f64 * TICK_SCALE as f64).min(h);
         let factor = eff / h;
         let target_mx = (dx * factor) as f32;
         let target_mz = (dz * factor) as f32;
@@ -156,8 +167,14 @@ impl Controller for FlyController {
             base.velocity = [0.0, 0.0, 0.0];
             return;
         }
+        // `movement_speed` en blocs/game-tick → blocs/tick serveur (×TICK_SCALE).
         let f = (ctx.memory.movement_speed as f64 / dist).min(1.0);
-        base.velocity = [(dx * f) as f32, (dy * f) as f32, (dz * f) as f32];
+        let s = TICK_SCALE as f64;
+        base.velocity = [
+            (dx * f * s) as f32,
+            (dy * f * s) as f32,
+            (dz * f * s) as f32,
+        ];
         // Orientation vers la direction de vol.
         base.yaw = yaw_from_vector(dx, dz) as f32;
         base.body_yaw = base.yaw;

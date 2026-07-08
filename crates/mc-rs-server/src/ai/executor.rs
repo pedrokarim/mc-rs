@@ -8,16 +8,19 @@ use super::memory::Memory;
 use super::{AiEffect, ExecCtx};
 use crate::entity::EntityBase;
 
+/// Ticks serveur (100 TPS) par game-tick vanilla (20 TPS). Le tick des mobs
+/// tourne au tick serveur → les durées vanilla (en game-ticks) sont ×5.
+const SERVER_TICKS_PER_GAME_TICK: u32 = 5;
 /// Distance² « cible atteinte » pour le roam.
 const TARGET_REACHED_DIST_SQ: f64 = 1.0;
-/// Ticks sans progrès avant d'abandonner une cible de roam.
-const MAX_STUCK_TICKS: u32 = 40;
+/// Ticks sans progrès avant d'abandonner une cible de roam (40 game-ticks → serveur).
+const MAX_STUCK_TICKS: u32 = 40 * SERVER_TICKS_PER_GAME_TICK;
 /// Intervalle d'errance : entre deux balades, le mob attend (chance 1/INTERVAL
-/// par game tick) avant de choisir une nouvelle destination. Fidèle à vanilla
-/// `minecraft:behavior.random_stroll` (`interval` défaut 120) et à Allay
-/// (`FlatRandomRoamExecutor.frequency` ≈ 100). Sans ce gate, le mob re-tirait
-/// une direction à CHAQUE tick → mouvement chaotique « dans tous les sens ».
-const ROAM_INTERVAL: u32 = 120;
+/// par tick serveur) avant de choisir une nouvelle destination. Fidèle à vanilla
+/// `minecraft:behavior.random_stroll` (`interval` défaut 120 game-ticks) → ×5
+/// pour le tick serveur (100 TPS). Sans ce gate, le mob re-tirait une direction
+/// à CHAQUE tick → mouvement chaotique « dans tous les sens ».
+const ROAM_INTERVAL: u32 = 120 * SERVER_TICKS_PER_GAME_TICK;
 
 /// Position 3D d'un joueur par runtime id (cherchée dans le snapshot).
 fn player_pos(players: &[super::PlayerSnapshot], runtime_id: u64) -> Option<[f32; 3]> {
@@ -961,10 +964,10 @@ impl Executor for CreakingExecutor {
 
 const DRAGON_RADIUS: f32 = 24.0;
 const DRAGON_HEIGHT: f32 = 12.0;
-const DRAGON_ANGULAR: f32 = 0.04; // rad/tick
-const DRAGON_CIRCLE_TICKS: u32 = 160;
-const DRAGON_STRAFE_TICKS: u32 = 120;
-const DRAGON_SHOOT_CD: u32 = 30;
+const DRAGON_ANGULAR: f32 = 0.04 * 0.2; // rad par tick serveur (0.04 rad/game-tick × 0.2)
+const DRAGON_CIRCLE_TICKS: u32 = 160 * SERVER_TICKS_PER_GAME_TICK;
+const DRAGON_STRAFE_TICKS: u32 = 120 * SERVER_TICKS_PER_GAME_TICK;
+const DRAGON_SHOOT_CD: u32 = 30 * SERVER_TICKS_PER_GAME_TICK;
 const DRAGON_FIREBALL_SPEED: f32 = 1.0;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -1321,11 +1324,11 @@ mod tests {
         );
 
         // Le gate 1/ROAM_INTERVAL finit par engager une balade (P(jamais sur
-        // 4000 ticks) ≈ (119/120)^4000, négligeable).
+        // 20000 ticks) ≈ (1-1/600)^20000 = e^-33, négligeable).
         let players: Vec<PlayerSnapshot> = Vec::new();
         let mut effects = Vec::new();
         let mut picked = false;
-        for _ in 0..4000 {
+        for _ in 0..20000 {
             let mut ctx = ExecCtx {
                 base: &mut base,
                 kind: MobKind::Cow,

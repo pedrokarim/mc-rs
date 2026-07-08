@@ -192,6 +192,27 @@ code live) :
 
 ---
 
+## 8. Journal de réparation (mise à jour au fil des corrections)
+
+> Chaque entrée = un bloc corrigé + commit. Sert à ne pas perdre le fil.
+
+- **[FAIT] P0 #1 — Scaling 100 TPS de la locomotion des mobs.** Le tick mob tourne au tick
+  serveur (100 TPS) **volontairement** (comme items/flèches : `SERVER_TICKS_PER_SECOND=100`).
+  Seules gravité/drag étaient scalées ; vitesse/saut/friction/timers ne l'étaient pas.
+  Corrigé **sans toucher `main.rs`** :
+  - `controller.rs` : vélocité Walk/Fly × `TICK_SCALE` (0.2) ; `JUMP_IMPULSE` 0.42→0.2 (apex ~1.25) ;
+    `JUMP_COOL_DOWN` ×5.
+  - `mob_entities.rs` : `GROUND_FRICTION`/`AIR_FRICTION` → puissance 1/5 (0.9029/0.9813) ;
+    `DESPAWN_TIMER_MAX`/`LOVE_TICKS`/`BREED_COOLDOWN`/`BABY_GROW_TICKS` ×5 ; `WATER_BUOYANCY`/
+    `WATER_MAX_RISE` re-tunés ; sun-burn (×5) ; brout mouton (×5).
+  - `species.rs` : `MELEE_COOLDOWN`/`FIREBALL_COOLDOWN`/`GUARDIAN_CHARGE_TICKS`/`CREEPER_FUSE_TICKS`/
+    `BOW_COOLDOWN` (+ variante projectile) ×5.
+  - `executor.rs` : `MAX_STUCK_TICKS`/`ROAM_INTERVAL`/`DRAGON_CIRCLE_TICKS`/`DRAGON_STRAFE_TICKS`/
+    `DRAGON_SHOOT_CD` ×5 ; `DRAGON_ANGULAR` ×0.2.
+  - Facteur `SERVER_TICKS_PER_GAME_TICK = 5` documenté dans chaque fichier. Reste à valider en jeu.
+  - **NON scalé encore** : vitesses des projectiles (flèche `BOW_ARROW_SPEED`, boule de feu
+    `FIREBALL_SPEED`) — à traiter avec l'audit des projectiles (P1).
+
 ## 7. Méthode & limites de ce rapport
 
 - Établi par **lecture du code** (pas d'exécution en jeu). Les constats « trop rapide / trop haut » sont
