@@ -2321,6 +2321,7 @@ async fn main() {
                         }
                     }
                     // Dégâts environnementaux (feu, chute) : mêmes conséquences que PvE.
+                    // Pas d'agresseur → aucune colère (`hurt_by_target`).
                     for (id, amount) in tick_result.damage_requests {
                         apply_mob_damage_broadcast(
                             &mut mob_entities,
@@ -2329,6 +2330,7 @@ async fn main() {
                             &mut item_entities,
                             id,
                             amount,
+                            None,
                         );
                     }
                     // Changements de blocs (mouton qui mange l'herbe) → UpdateBlock.
@@ -2679,6 +2681,7 @@ fn apply_mob_damage_broadcast(
     item_entities: &mut crate::item_entities::ItemEntityManager,
     runtime_id: u64,
     damage: f32,
+    attacker_runtime_id: Option<u64>,
 ) {
     use mc_rs_proto::packets::world::LevelSoundEvent;
     // Position/type AVANT (le mob peut être retiré s'il meurt) — pour le son.
@@ -2692,7 +2695,7 @@ fn apply_mob_damage_broadcast(
                 e.base.entity_unique_id,
             )
         });
-    let Some(result) = mob_entities.apply_attack(runtime_id, damage) else {
+    let Some(result) = mob_entities.apply_attack(runtime_id, damage, attacker_runtime_id) else {
         return;
     };
     let unique = runtime_id as i64;
@@ -3910,7 +3913,7 @@ fn process_peer_events(
 
                         // Dégâts joueur→mob selon l'arme tenue (poing 1.0, épée/
                         // hache/… via `weapon_stats`) : son + mort + drops.
-                        let (attacker_pos, held_item_id) = connections
+                        let (attacker_pos, held_item_id, attacker_rid) = connections
                             .get(&addr)
                             .map(|c| {
                                 let held = c
@@ -3919,9 +3922,9 @@ fn process_peer_events(
                                     .get(c.inventory.held_slot as usize)
                                     .map(|s| s.item.id)
                                     .unwrap_or(0);
-                                (c.position, held)
+                                (c.position, held, c.entity_runtime_id)
                             })
-                            .unwrap_or(([0.0; 3], 0));
+                            .unwrap_or(([0.0; 3], 0, 0));
                         let melee_damage = crate::weapon_stats::player_attack_damage(held_item_id);
                         apply_mob_damage_broadcast(
                             mob_entities,
@@ -3930,6 +3933,7 @@ fn process_peer_events(
                             item_entities,
                             attack.target_runtime_id,
                             melee_damage,
+                            Some(attacker_rid),
                         );
                         // Knockback du mob (no-op s'il est mort).
                         mob_entities.apply_knockback(attack.target_runtime_id, attacker_pos, 0.4);

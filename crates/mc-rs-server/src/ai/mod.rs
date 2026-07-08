@@ -203,6 +203,7 @@ impl BehaviorGroup {
         chunk_cache: &mut ChunkCache,
         effects: &mut Vec<AiEffect>,
     ) {
+        memory.tick_aggro();
         self.collect_sensors(memory, base, players, chunk_cache);
         self.evaluate_core(memory, base, players);
         self.evaluate_normal(memory, base, players);

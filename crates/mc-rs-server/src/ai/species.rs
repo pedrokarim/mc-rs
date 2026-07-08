@@ -80,10 +80,11 @@ fn standard_controllers() -> Vec<Box<dyn Controller>> {
     ]
 }
 
-/// Behavior de combat (lançable si une cible est en mémoire).
+/// Behavior de combat (lançable si une cible est en mémoire : joueur visible OU
+/// agresseur à riposter via `hurt_by_target`).
 fn combat_behavior(executor: Box<dyn super::behavior::Executor>) -> Behavior {
     Behavior::new(
-        Box::new(FnEvaluator(|m, _, _| m.nearest_player.is_some())),
+        Box::new(FnEvaluator(|m, _, _| m.target().is_some())),
         executor,
         PRIO_COMBAT,
         1,
@@ -181,8 +182,28 @@ pub fn build_behavior_group(kind: MobKind) -> BehaviorGroup {
             )
         }
         AiProfile::Neutral => {
-            // Erre uniquement, regarde le joueur proche (n'attaque pas en v1).
-            BehaviorGroup::new(vec![], vec![roam()], sensors, standard_controllers(), true)
+            // Neutre : erre, mais RIPOSTE quand on le frappe (`hurt_by_target`) —
+            // loup, zombified piglin, golem de fer, chèvre… foncent alors et
+            // frappent leur agresseur au corps-à-corps jusqu'à ce que la colère
+            // retombe. (Provocation par groupe/village = follow-up.)
+            let retaliate = Behavior::new(
+                Box::new(FnEvaluator(|m, _, _| m.aggro_target.is_some())),
+                Box::new(MeleeAttackExecutor::new(
+                    beh_speed(speed, MELEE_MULT),
+                    kind.sight_range(),
+                    kind.attack_range(),
+                    MELEE_COOLDOWN,
+                )),
+                PRIO_COMBAT,
+                1,
+            );
+            BehaviorGroup::new(
+                vec![],
+                vec![retaliate, roam()],
+                sensors,
+                standard_controllers(),
+                true,
+            )
         }
         AiProfile::Flying => {
             // Vol 3D : errance volante + FlyController (pas de route au sol).

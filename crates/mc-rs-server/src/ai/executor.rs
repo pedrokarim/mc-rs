@@ -83,7 +83,7 @@ impl Executor for MeleeAttackExecutor {
     fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
         self.attack_tick += 1;
 
-        let Some(target_id) = ctx.memory.nearest_player else {
+        let Some(target_id) = ctx.memory.target() else {
             return false;
         };
         let Some(tpos) = player_pos(ctx.players, target_id) else {
@@ -170,7 +170,7 @@ impl Executor for CreeperSwellExecutor {
     }
 
     fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
-        let Some(target_id) = ctx.memory.nearest_player else {
+        let Some(target_id) = ctx.memory.target() else {
             return false;
         };
         let Some(tpos) = player_pos(ctx.players, target_id) else {
@@ -295,7 +295,7 @@ impl Executor for BowAttackExecutor {
     }
 
     fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
-        let Some(target_id) = ctx.memory.nearest_player else {
+        let Some(target_id) = ctx.memory.target() else {
             return false;
         };
         let Some(tpos) = player_pos(ctx.players, target_id) else {
@@ -530,7 +530,7 @@ impl Executor for PanicFleeExecutor {
     }
 
     fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
-        let Some(target_id) = ctx.memory.nearest_player else {
+        let Some(target_id) = ctx.memory.target() else {
             return false;
         };
         let Some(tpos) = player_pos(ctx.players, target_id) else {
@@ -726,7 +726,7 @@ impl Executor for FlyShootExecutor {
 
     fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
         self.tick += 1;
-        let Some(target_id) = ctx.memory.nearest_player else {
+        let Some(target_id) = ctx.memory.target() else {
             return false;
         };
         let Some(tpos) = player_pos(ctx.players, target_id) else {
@@ -820,7 +820,7 @@ impl Executor for FlyAttackExecutor {
 
     fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
         self.attack_tick += 1;
-        let Some(target_id) = ctx.memory.nearest_player else {
+        let Some(target_id) = ctx.memory.target() else {
             return false;
         };
         let Some(tpos) = player_pos(ctx.players, target_id) else {
@@ -918,7 +918,7 @@ impl Executor for CreakingExecutor {
 
     fn execute(&mut self, ctx: &mut ExecCtx) -> bool {
         self.attack_tick += 1;
-        let Some(target_id) = ctx.memory.nearest_player else {
+        let Some(target_id) = ctx.memory.target() else {
             return false;
         };
         let Some(tpos) = player_pos(ctx.players, target_id) else {
@@ -1016,7 +1016,7 @@ impl Executor for DragonExecutor {
         let center = self.center.unwrap_or(ctx.base.position);
         let target = ctx
             .memory
-            .nearest_player
+            .target()
             .and_then(|id| player_pos(ctx.players, id));
 
         match self.phase {

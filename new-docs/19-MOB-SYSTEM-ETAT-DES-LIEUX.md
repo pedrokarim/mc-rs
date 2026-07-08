@@ -243,6 +243,17 @@ code live) :
   tables PMMP). Câblé au site d'attaque dans `main.rs`. **Reste** : enchant/critique/cooldown d'attaque,
   armure/défense côté mob (soustraction encore brute), trident/masse.
 
+- **[FAIT] P2 #10/#11 — Riposte (`hurt_by_target`) + neutres qui contre-attaquent.** `Memory` a une
+  cible de riposte (`aggro_target` + `aggro_ticks`, `target()` = agresseur ∨ joueur visible). `apply_attack`
+  reçoit désormais l'agresseur et met le mob en colère (~20 s) ; le tick décrémente. Les executors de
+  combat visent `target()` (donc traquent l'agresseur **même sans ligne de vue** / frappé en douce). Le
+  profil **Neutral** gagne un behavior de riposte mêlée déclenché par la colère → loup, golem de fer,
+  zombified piglin, ours polaire, chèvre, piglin **ripostent** au lieu d'être des punching-balls. Dégâts
+  d'attaque vanilla donnés à ces neutres (wolf 3, polar_bear 6, iron_golem 15, zombified_piglin 8,
+  piglin 5, goat 2 ; snow_golem/llama restent à distance). Câblé dans `main.rs` (l'agresseur = joueur qui
+  frappe). Tests : logique de colère (memory) + riposte end-to-end (loup frappé attaque son agresseur).
+  **Reste** : mob→mob (golem vs zombie) = infra de ciblage d'entités ; provocation de groupe/village.
+
 ## 7. Méthode & limites de ce rapport
 
 - Établi par **lecture du code** (pas d'exécution en jeu). Les constats « trop rapide / trop haut » sont

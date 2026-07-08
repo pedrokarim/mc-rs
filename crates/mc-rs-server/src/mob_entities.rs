@@ -732,7 +732,7 @@ impl MobKind {
                 1.9,
                 Neutral,
                 Neutral,
-                0.0,
+                8.0,
                 0.23,
                 &[]
             ),
@@ -743,7 +743,7 @@ impl MobKind {
                 1.95,
                 Neutral,
                 Neutral,
-                0.0,
+                5.0,
                 0.35,
                 &[]
             ),
@@ -754,7 +754,7 @@ impl MobKind {
                 2.7,
                 Neutral,
                 Neutral,
-                0.0,
+                15.0,
                 0.25,
                 &[]
             ),
@@ -776,7 +776,7 @@ impl MobKind {
                 0.85,
                 Neutral,
                 Neutral,
-                0.0,
+                3.0,
                 0.3,
                 &[
                     "minecraft:beef",
@@ -792,7 +792,7 @@ impl MobKind {
                 1.4,
                 Neutral,
                 Neutral,
-                0.0,
+                6.0,
                 0.25,
                 &[]
             ),
@@ -803,7 +803,7 @@ impl MobKind {
                 1.3,
                 Neutral,
                 Neutral,
-                0.0,
+                2.0,
                 0.3,
                 WHEAT
             ),
@@ -1491,6 +1491,9 @@ const LOVE_TICKS: u32 = 600 * SERVER_TICKS_PER_GAME_TICK;
 const BREED_COOLDOWN: u32 = 6000 * SERVER_TICKS_PER_GAME_TICK;
 const BABY_GROW_TICKS: u32 = 24000 * SERVER_TICKS_PER_GAME_TICK;
 const BREED_RANGE_SQ: f64 = 9.0;
+/// Durée de colère (`hurt_by_target`) après avoir été frappé : ~20 s
+/// (400 game-ticks → ticks serveur). Le mob traque son agresseur pendant ce temps.
+const AGGRO_TICKS: u32 = 400 * SERVER_TICKS_PER_GAME_TICK;
 
 pub struct MobEntityManager {
     entities: HashMap<u64, MobEntity>,
@@ -1617,7 +1620,12 @@ impl MobEntityManager {
         }
     }
 
-    pub fn apply_attack(&mut self, entity_runtime_id: u64, damage: f32) -> Option<DamageResult> {
+    pub fn apply_attack(
+        &mut self,
+        entity_runtime_id: u64,
+        damage: f32,
+        attacker_runtime_id: Option<u64>,
+    ) -> Option<DamageResult> {
         let entity = self.entities.get_mut(&entity_runtime_id)?;
         let max_health = entity.kind.max_health();
         let current = entity
@@ -1641,6 +1649,18 @@ impl MobEntityManager {
         // Enderman blessé (mais vivant) → téléportation au prochain tick.
         if new_health > 0.0 && entity.kind.teleports() {
             entity.teleport_pending = true;
+        }
+
+        // Riposte (`hurt_by_target`) : un mob survivant se met en colère contre
+        // son agresseur et le traque même sans ligne de vue, jusqu'à ce que la
+        // colère retombe. Rend les neutres (loup, golem…) et les hostiles frappés
+        // en douce réactifs. `self.entities` et `self.ai` sont des champs disjoints.
+        if new_health > 0.0 {
+            if let Some(attacker) = attacker_runtime_id {
+                if let Some(ai) = self.ai.get_mut(&entity_runtime_id) {
+                    ai.memory.set_aggro(attacker, AGGRO_TICKS);
+                }
+            }
         }
 
         let runtime_entity_id = entity.base.entity_runtime_id;
@@ -2262,6 +2282,58 @@ mod tests {
     }
 
     #[test]
+    fn neutral_mob_retaliates_when_hit() {
+        use crate::ai::PlayerSnapshot;
+        let (mut cache, dir) = temp_cache("mob-retaliate");
+        // Sol solide sous le loup + le joueur (sinon le loup tombe → hors portée).
+        for bx in -2..=2 {
+            for bz in -2..=2 {
+                cache.set_block(bx, 63, bz, BLOCKS.stone);
+            }
+        }
+        let mut mobs = MobEntityManager::new();
+        // Loup = profil Neutral (n'attaque pas spontanément).
+        let wolf = mobs.spawn(MobKind::Wolf, [0.5, 64.0, 0.5]);
+        let attacker_rid = 4242u64;
+        let players = vec![PlayerSnapshot {
+            runtime_id: attacker_rid,
+            position: [1.0, 64.0, 0.5], // adjacent, à portée de mêlée
+            gamemode: 0,
+            alive: true,
+            held_item: 0,
+            look_dir: [0.0, 0.0, 1.0],
+        }];
+
+        // Avant d'être frappé : le loup ne cible pas le joueur.
+        let mut pre_attacks = 0;
+        for _ in 0..60 {
+            let r = mobs.tick(&mut cache, &players, false);
+            pre_attacks += r.attack_requests.len();
+        }
+        assert_eq!(pre_attacks, 0, "un neutre n'attaque pas spontanément");
+
+        // On le frappe (sans le tuer) → colère contre l'agresseur.
+        mobs.apply_attack(wolf.base.entity_runtime_id, 1.0, Some(attacker_rid));
+
+        // Il doit désormais riposter : au moins une attaque visant l'agresseur.
+        let mut retaliated = false;
+        for _ in 0..300 {
+            let r = mobs.tick(&mut cache, &players, false);
+            if r.attack_requests.iter().any(|e| {
+                matches!(e, crate::ai::AiEffect::Attack { target_runtime_id, .. } if *target_runtime_id == attacker_rid)
+            }) {
+                retaliated = true;
+                break;
+            }
+        }
+        assert!(
+            retaliated,
+            "le neutre frappé doit riposter contre son agresseur"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn sterile_mobs_are_not_breedable() {
         // Vanilla : mulet (hybride), tatou et perroquet ne se reproduisent pas.
         assert!(!MobKind::Mule.is_breedable());
@@ -2344,7 +2416,7 @@ mod tests {
         let big = mobs.spawn_slime(MobKind::Slime, [0.0, 64.0, 0.0], 4);
         let id = big.base.entity_runtime_id;
         // Le gros slime (PV 16) meurt → 2 enfants de taille 2.
-        let _ = mobs.apply_attack(id, 100.0);
+        let _ = mobs.apply_attack(id, 100.0, None);
         assert_eq!(mobs.all().count(), 2, "le slime se divise en 2 enfants");
         assert!(
             mobs.all().all(|e| e.slime_size == 2),
@@ -2355,7 +2427,7 @@ mod tests {
         let small = mobs.spawn_slime(MobKind::Slime, [50.0, 64.0, 50.0], 1);
         let sid = small.base.entity_runtime_id;
         let before = mobs.all().count();
-        let _ = mobs.apply_attack(sid, 100.0);
+        let _ = mobs.apply_attack(sid, 100.0, None);
         assert_eq!(
             mobs.all().count(),
             before - 1,
@@ -2381,7 +2453,7 @@ mod tests {
         let mut prev = e.base.position;
         let mut teleported = false;
         for _ in 0..8 {
-            let _ = mobs.apply_attack(id, 1.0); // PV 40 → survit
+            let _ = mobs.apply_attack(id, 1.0, None); // PV 40 → survit
             let _ = mobs.tick(&mut cache, &[], false);
             let p = mobs
                 .all()
@@ -2562,13 +2634,13 @@ mod tests {
         let zombie = mobs.spawn(MobKind::Zombie, [0.5, 70.0, 0.5]);
 
         let first_hit = mobs
-            .apply_attack(zombie.base.entity_runtime_id, 4.0)
+            .apply_attack(zombie.base.entity_runtime_id, 4.0, None)
             .expect("mob should exist");
         assert!(first_hit.update_attributes_packet.is_some());
         assert!(first_hit.remove_packet.is_none());
 
         for _ in 0..4 {
-            let _ = mobs.apply_attack(zombie.base.entity_runtime_id, 4.0);
+            let _ = mobs.apply_attack(zombie.base.entity_runtime_id, 4.0, None);
         }
 
         assert!(mobs
@@ -2590,7 +2662,7 @@ mod tests {
             let cow = mobs.spawn(MobKind::Cow, [4.5, 70.0, -2.5]);
             let mut last_result = None;
             for _ in 0..3 {
-                last_result = mobs.apply_attack(cow.base.entity_runtime_id, 4.0);
+                last_result = mobs.apply_attack(cow.base.entity_runtime_id, 4.0, None);
             }
             let result = last_result.expect("expected kill result");
             assert!(result.remove_packet.is_some());
