@@ -30,6 +30,14 @@ struct Args {
     webui: Option<SocketAddr>,
     /// Chemin d'export CSV des résultats par joueur.
     csv: Option<String>,
+    /// Mode : montée en charge (joueurs) ou robustesse (clients non-conformes).
+    mode: Mode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Load,
+    Probe,
 }
 
 impl Default for Args {
@@ -43,6 +51,7 @@ impl Default for Args {
             behavior: Behavior::Wander,
             webui: Some("127.0.0.1:8080".parse().unwrap()),
             csv: None,
+            mode: Mode::Load,
         }
     }
 }
@@ -90,6 +99,14 @@ fn parse_args() -> Result<Args, String> {
             "--csv" => {
                 args.csv = Some(next()?);
             }
+            "--mode" | "-m" => {
+                let v = next()?;
+                args.mode = match v.to_ascii_lowercase().as_str() {
+                    "load" | "charge" => Mode::Load,
+                    "probe" | "robustesse" => Mode::Probe,
+                    _ => return Err(format!("--mode invalide: {v} (load|probe)")),
+                };
+            }
             "--help" | "-h" => {
                 print_help();
                 std::process::exit(0);
@@ -112,6 +129,7 @@ fn print_help() {
          \x20 -b, --behavior <B>      Comportement: idle | wander | active (défaut wander)\n\
          \x20     --webui <ADDR|off>  Adresse webui pour le TPS (défaut 127.0.0.1:8080)\n\
          \x20     --csv <FICHIER>     Export CSV des résultats par joueur\n\
+         \x20 -m, --mode <M>          Mode: load (charge) | probe (robustesse) (défaut load)\n\
          \x20 -h, --help              Cette aide"
     );
 }
@@ -132,6 +150,12 @@ async fn main() {
             std::process::exit(2);
         }
     };
+
+    // Mode robustesse : suite de clients non-conformes, puis on sort.
+    if args.mode == Mode::Probe {
+        run_probe_mode(args.target).await;
+        return;
+    }
 
     info!(
         "Simulation: {} joueur(s) → {} (durée {}s, mtu {}, comportement {:?}{})",
@@ -213,6 +237,35 @@ async fn main() {
             Ok(()) => println!("CSV écrit : {path}"),
             Err(e) => eprintln!("Erreur écriture CSV {path}: {e}"),
         }
+    }
+}
+
+/// Mode robustesse : lance la suite de clients non-conformes et rapporte si le
+/// serveur a survécu à chaque attaque.
+async fn run_probe_mode(target: SocketAddr) {
+    info!("Robustesse: suite de clients non-conformes → {target}");
+
+    // Vérifie d'abord que le serveur est vivant avant de commencer.
+    if !mc_rs_sim::probe::server_responds(target).await {
+        eprintln!("Le serveur ne répond pas sur {target} — abandon.");
+        std::process::exit(1);
+    }
+
+    let reports = mc_rs_sim::probe::run_suite(target).await;
+
+    println!("\n──────────── Robustesse serveur ────────────");
+    let mut survived_all = true;
+    for r in &reports {
+        let mark = if r.server_alive { "OK  " } else { "MORT" };
+        println!("[{mark}] {:<38} {}", r.name, r.detail);
+        survived_all &= r.server_alive;
+    }
+    println!("─────────────────────────────────────────────");
+    if survived_all {
+        println!("✔ Le serveur a survécu à toutes les attaques.");
+    } else {
+        println!("✘ Le serveur a cessé de répondre après au moins une attaque.");
+        std::process::exit(1);
     }
 }
 

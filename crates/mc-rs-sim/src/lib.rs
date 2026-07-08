@@ -15,6 +15,7 @@ pub mod identity;
 pub mod metrics;
 pub mod net;
 pub mod player;
+pub mod probe;
 
 pub use bedrock::{BedrockClient, BedrockError, LoginState};
 pub use identity::SimIdentity;
