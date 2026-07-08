@@ -99,6 +99,58 @@ pub fn encode_disconnection_notification() -> Vec<u8> {
     vec![0x15]
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// Client → serveur : encode des requêtes / decode des réponses.
+// ══════════════════════════════════════════════════════════════════════════
+
+/// Encode un ConnectionRequest.
+/// Layout : id(1) + client_guid(8) + send_time(8) + security(1)
+pub fn encode_connection_request(client_guid: i64, send_time: i64, security: bool) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(18);
+    buf.push(0x09); // ID_CONNECTION_REQUEST
+    write_i64_be(&mut buf, client_guid);
+    write_i64_be(&mut buf, send_time);
+    buf.push(if security { 1 } else { 0 });
+    buf
+}
+
+/// Parse un ConnectionRequestAccepted. On a seulement besoin des timestamps
+/// (request_time / pong_time) à ré-écho dans le NewIncomingConnection.
+/// Layout : id(1) + client_addr(7) + system_index(2) + system_addresses(20*7)
+///          + request_time(8) + pong_time(8)
+pub fn decode_connection_request_accepted(buf: &[u8]) -> Option<(i64, i64)> {
+    // Le client_addr peut être IPv4 (7) ou IPv6 (29). On lit sa longueur.
+    if buf.len() < 8 {
+        return None;
+    }
+    let (_client_addr, addr_len) = read_address(&buf[1..]);
+    let offset = 1 + addr_len + 2 + SYSTEM_ADDRESS_COUNT * 7;
+    if buf.len() < offset + 16 {
+        return None;
+    }
+    let request_time = read_i64_be(&buf[offset..]);
+    let pong_time = read_i64_be(&buf[offset + 8..]);
+    Some((request_time, pong_time))
+}
+
+/// Encode un NewIncomingConnection.
+/// Layout : id(1) + server_addr(7) + system_addresses(20*7) + ping_time(8) + pong_time(8)
+pub fn encode_new_incoming_connection(
+    server_addr: &SocketAddr,
+    ping_time: i64,
+    pong_time: i64,
+) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(1 + 7 + SYSTEM_ADDRESS_COUNT * 7 + 16);
+    buf.push(0x13); // ID_NEW_INCOMING_CONNECTION
+    write_address(&mut buf, server_addr);
+    for _ in 0..SYSTEM_ADDRESS_COUNT {
+        write_dummy_address(&mut buf);
+    }
+    write_i64_be(&mut buf, ping_time);
+    write_i64_be(&mut buf, pong_time);
+    buf
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -120,5 +172,34 @@ mod tests {
         let pong_time = read_i64_be(&pong[9..17]);
         assert_eq!(ping_time, 1000);
         assert_eq!(pong_time, 2000);
+    }
+
+    // ── Client-side roundtrips ──
+
+    #[test]
+    fn test_client_connection_request_decoded_by_server() {
+        let req = encode_connection_request(0x1234, 5555, false);
+        let (guid, send_time, security) = decode_connection_request(&req).unwrap();
+        assert_eq!(guid, 0x1234);
+        assert_eq!(send_time, 5555);
+        assert!(!security);
+    }
+
+    #[test]
+    fn test_client_decodes_accepted() {
+        let addr: SocketAddr = "127.0.0.1:19132".parse().unwrap();
+        let accepted = encode_connection_request_accepted(&addr, 111, 222);
+        let (request_time, pong_time) = decode_connection_request_accepted(&accepted).unwrap();
+        assert_eq!(request_time, 111);
+        assert_eq!(pong_time, 222);
+    }
+
+    #[test]
+    fn test_client_new_incoming_decoded_by_server() {
+        let addr: SocketAddr = "127.0.0.1:19132".parse().unwrap();
+        let nic = encode_new_incoming_connection(&addr, 111, 222);
+        let (_srv, ping, pong) = decode_new_incoming_connection(&nic).unwrap();
+        assert_eq!(ping, 111);
+        assert_eq!(pong, 222);
     }
 }
