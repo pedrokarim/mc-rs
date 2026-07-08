@@ -3908,18 +3908,28 @@ fn process_peer_events(
                             continue;
                         }
 
-                        // Dégâts joueur→mob (épée = 4.0 placeholder) : son + mort + drops.
-                        let attacker_pos = connections
+                        // Dégâts joueur→mob selon l'arme tenue (poing 1.0, épée/
+                        // hache/… via `weapon_stats`) : son + mort + drops.
+                        let (attacker_pos, held_item_id) = connections
                             .get(&addr)
-                            .map(|c| c.position)
-                            .unwrap_or([0.0; 3]);
+                            .map(|c| {
+                                let held = c
+                                    .inventory
+                                    .slots
+                                    .get(c.inventory.held_slot as usize)
+                                    .map(|s| s.item.id)
+                                    .unwrap_or(0);
+                                (c.position, held)
+                            })
+                            .unwrap_or(([0.0; 3], 0));
+                        let melee_damage = crate::weapon_stats::player_attack_damage(held_item_id);
                         apply_mob_damage_broadcast(
                             mob_entities,
                             connections,
                             raknet,
                             item_entities,
                             attack.target_runtime_id,
-                            4.0,
+                            melee_damage,
                         );
                         // Knockback du mob (no-op s'il est mort).
                         mob_entities.apply_knockback(attack.target_runtime_id, attacker_pos, 0.4);

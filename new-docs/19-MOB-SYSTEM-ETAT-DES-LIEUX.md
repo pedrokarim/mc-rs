@@ -238,6 +238,11 @@ code live) :
   sec), skeleton, stray, bogged brûlent au soleil ; husk & wither_skeleton exclus (avant : seulement
   zombie/skeleton).
 
+- **[FAIT] P1 #7 (partiel) — Dégâts joueur→mob selon l'arme.** Plus de `4.0` en dur :
+  `weapon_stats::player_attack_damage(held_item_id)` (poing 1.0, épée/hache/pioche/pelle/houe via les
+  tables PMMP). Câblé au site d'attaque dans `main.rs`. **Reste** : enchant/critique/cooldown d'attaque,
+  armure/défense côté mob (soustraction encore brute), trident/masse.
+
 ## 7. Méthode & limites de ce rapport
 
 - Établi par **lecture du code** (pas d'exécution en jeu). Les constats « trop rapide / trop haut » sont
