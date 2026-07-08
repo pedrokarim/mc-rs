@@ -219,9 +219,10 @@ impl Executor for CreeperSwellExecutor {
 
 /// Hauteur des yeux du tireur (≈ skeleton).
 const SHOOTER_EYE: f32 = 1.62;
-/// Gravité d'une flèche (doit correspondre à `arrow_entity::ARROW_GRAVITY`),
-/// utilisée pour compenser la chute lors de la visée.
-const ARROW_GRAVITY_COMP: f32 = 0.05;
+/// Gravité d'une flèche par tick serveur (doit correspondre à
+/// `arrow_entity::ARROW_GRAVITY` = 0.05/game-tick × 0.2), pour compenser la
+/// chute lors de la visée balistique.
+const ARROW_GRAVITY_COMP: f32 = 0.05 * 0.2;
 
 /// Le squelette garde ses distances (recule si trop près, s'approche si trop
 /// loin), vise le joueur et tire des flèches via [`AiEffect::ShootArrow`].

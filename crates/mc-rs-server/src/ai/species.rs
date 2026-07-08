@@ -54,8 +54,8 @@ fn beh_speed(base: f32, multiplier: f32) -> f32 {
 }
 /// Rayon d'errance des volants (blocs).
 const FLY_ROAM_RANGE: i32 = 10;
-/// Boules de feu : vitesse (blocs/tick serveur) et cooldown de tir (game-ticks → serveur).
-const FIREBALL_SPEED: f32 = 0.8;
+/// Boules de feu : vitesse (blocs/tick serveur = 0.8/game-tick × 0.2) et cooldown (game-ticks → serveur).
+const FIREBALL_SPEED: f32 = 0.8 * 0.2;
 const FIREBALL_COOLDOWN: u32 = 40 * SERVER_TICKS_PER_GAME_TICK;
 /// Guardian : distance de tir et durée de charge du rayon (game-ticks → serveur).
 const GUARDIAN_HOLD_RANGE: f64 = 10.0;
@@ -67,7 +67,8 @@ const CREEPER_FUSE_TICKS: u32 = 30 * SERVER_TICKS_PER_GAME_TICK;
 /// on tire entre les deux. Vitesse de flèche et dégâts/cooldown.
 const BOW_MIN_RANGE: f64 = 4.0;
 const BOW_SHOOT_RANGE: f64 = 12.0;
-const BOW_ARROW_SPEED: f32 = 1.4;
+/// Vitesse de la flèche : 1.4/game-tick × 0.2 = blocs/tick serveur (100 TPS).
+const BOW_ARROW_SPEED: f32 = 1.4 * 0.2;
 const BOW_ARROW_DAMAGE: f32 = 3.0;
 const BOW_COOLDOWN: u32 = 30 * SERVER_TICKS_PER_GAME_TICK;
 

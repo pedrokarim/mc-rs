@@ -14,14 +14,24 @@ use crate::entity::{living_metadata, EntityBase};
 use crate::mob_entities::{is_supporting_block, MovementUpdate};
 use crate::world::chunk_cache::ChunkCache;
 
-/// Gravité d'une flèche par tick (≈ vanilla 0.05 à 20 TPS).
-const ARROW_GRAVITY: f32 = 0.05;
-/// Traînée par tick.
-const ARROW_DRAG: f32 = 0.99;
-/// Durée de vie max (ticks 20 TPS → ~30 s) avant despawn.
-const ARROW_MAX_LIFE: u32 = 600;
+/// Le tick des projectiles tourne au tick SERVEUR (100 TPS), pas au game-tick
+/// vanilla (20 TPS). Les vitesses/gravité vanilla sont exprimées par game-tick →
+/// on les convertit (vitesse & gravité × 0.2 ; traînée ^1/5 ; durées × 5). La
+/// trajectoire balistique reste identique (5× plus de ticks × gravité/5).
+const SERVER_TICKS_PER_GAME_TICK: u32 = 5;
+/// Gravité d'une flèche par tick serveur (vanilla 0.05/game-tick × 0.2).
+const ARROW_GRAVITY: f32 = 0.05 * 0.2;
+/// Traînée par tick serveur (vanilla 0.99/game-tick, ^1/5).
+const ARROW_DRAG: f32 = 0.998;
+/// Durée de vie max (~30 s) : 600 game-ticks → ticks serveur.
+const ARROW_MAX_LIFE: u32 = 600 * SERVER_TICKS_PER_GAME_TICK;
 /// Rayon de collision flèche↔joueur (blocs).
 const ARROW_HIT_RADIUS: f32 = 0.8;
+/// Grâce anti-auto-collision du tireur (~5 game-ticks → ticks serveur).
+const ARROW_SELF_HIT_GRACE: u32 = 5 * SERVER_TICKS_PER_GAME_TICK;
+/// Agilité du virage des projectiles à tête chercheuse (lerp par tick serveur ;
+/// vanilla ~0.25/game-tick → 1−(1−0.25)^(1/5) ≈ 0.056 pour un virage équivalent).
+const HOMING_STEER: f32 = 0.056;
 
 #[derive(Clone)]
 pub struct ArrowEntity {
@@ -226,10 +236,10 @@ impl ArrowEntityManager {
                     let v = arrow.base.velocity;
                     let speed = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
                     if to_len > 0.1 && speed > 0.001 {
-                        const STEER: f32 = 0.25; // agilité du virage
                         for i in 0..3 {
                             let desired = to[i] / to_len * speed;
-                            arrow.base.velocity[i] = v[i] * (1.0 - STEER) + desired * STEER;
+                            arrow.base.velocity[i] =
+                                v[i] * (1.0 - HOMING_STEER) + desired * HOMING_STEER;
                         }
                     }
                 }
@@ -243,7 +253,7 @@ impl ArrowEntityManager {
             // Collision joueur : distance du joueur au segment start→end.
             let mut hit_player: Option<(u64, [f32; 3])> = None;
             for (pid, ppos) in players {
-                if *pid == arrow.shooter_runtime_id && arrow.life < 5 {
+                if *pid == arrow.shooter_runtime_id && arrow.life < ARROW_SELF_HIT_GRACE {
                     continue; // ne pas toucher le tireur juste après le tir
                 }
                 // Centre de masse du joueur (~mi-hauteur).
@@ -359,10 +369,11 @@ mod tests {
         let mut mgr = ArrowEntityManager::new();
         // Bullet filant en +X mais joueur décalé en +Z : sans tête chercheuse,
         // il manquerait. Le homing doit l'infléchir jusqu'à toucher.
+        // Vélocité en blocs/tick serveur (100 TPS) : ~0.24 comme une vraie bullet.
         let fb = mgr.spawn_fireball(
             "minecraft:shulker_bullet",
             [0.0, 65.0, 0.0],
-            [1.2, 0.0, 0.0],
+            [0.24, 0.0, 0.0],
             4.0,
             999,
             Some(7),
@@ -370,7 +381,7 @@ mod tests {
         assert!(fb.homing_target == Some(7));
         let players = vec![(7u64, [5.0, 64.0, 5.0])];
         let mut hit = false;
-        for _ in 0..40 {
+        for _ in 0..600 {
             let r = mgr.tick(&mut cache, &players);
             if r.hits.iter().any(|h| h.target_runtime_id == 7) {
                 hit = true;

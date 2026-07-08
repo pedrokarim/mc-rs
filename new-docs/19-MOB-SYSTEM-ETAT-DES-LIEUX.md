@@ -225,6 +225,12 @@ code live) :
   absent. Gate nuit global conservé pour les monstres ; `brightness_range` reste défini mais non
   utilisable tant que le light engine n'existe pas. Documenté honnêtement dans le docstring du spawner.
 
+- **[FAIT] P0 #1 (suite) — Projectiles scalés 100 TPS.** Flèches & boules de feu tickent aussi au
+  tick serveur. `arrow_entity.rs` : `ARROW_GRAVITY` ×0.2, `ARROW_DRAG` ^1/5 (0.998), `ARROW_MAX_LIFE`
+  ×5, grâce anti-auto-collision ×5, `HOMING_STEER` 0.25→0.056. `executor.rs` : `ARROW_GRAVITY_COMP`
+  ×0.2 (visée). `species.rs` : `BOW_ARROW_SPEED` 1.4→0.28, `FIREBALL_SPEED` 0.8→0.16. Trajectoire
+  balistique préservée (5× plus de ticks × gravité/5). Projectiles ~5× moins rapides = réaliste.
+
 ## 7. Méthode & limites de ce rapport
 
 - Établi par **lecture du code** (pas d'exécution en jeu). Les constats « trop rapide / trop haut » sont
