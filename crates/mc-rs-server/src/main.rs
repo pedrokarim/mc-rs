@@ -1200,7 +1200,7 @@ async fn main() {
     );
     let _ = crate::crafting::CRAFTING_DATA_PAYLOAD.set(crafting_data_payload);
     // Passive entities (TNT / FallingBlock / XPOrb) — spawned via commands or events.
-    let _passive_entities = crate::passive_entities::PassiveEntityManager::new();
+    let mut passive_entities = crate::passive_entities::PassiveEntityManager::new();
     // Event manager partagé (tous les Connection le clonent).
     let event_manager: Arc<std::sync::Mutex<crate::event::EventManager>> =
         Arc::new(std::sync::Mutex::new(crate::event::EventManager::new()));
@@ -1554,6 +1554,7 @@ async fn main() {
                     &mut raknet,
                     &mut registry,
                     &mut item_entities,
+                    &mut passive_entities,
                     &mut mob_entities,
                     &mut world_state,
                     &mut server_state,
@@ -1608,9 +1609,9 @@ async fn main() {
                     .to_string();
                     let item_count = item_entities.all().count() as u32;
                     let mob_count = mob_entities.all().count() as u32;
-                    let passive_count = (_passive_entities.tnt.len()
-                        + _passive_entities.falling_blocks.len()
-                        + _passive_entities.xp_orbs.len())
+                    let passive_count = (passive_entities.tnt.len()
+                        + passive_entities.falling_blocks.len()
+                        + passive_entities.xp_orbs.len())
                         as u32;
                     let sessions = raknet.session_count() as u32;
                     // Live values (peuvent changer via commandes /difficulty, /gamemode, etc.)
@@ -2148,6 +2149,79 @@ async fn main() {
                     }
                 }
 
+                // --- Tick des orbes d'XP : attraction vers le joueur proche,
+                // ramassage (→ XP crédité), expiration. Tick serveur (100 TPS). ---
+                {
+                    let orb_players: Vec<(u64, [f32; 3])> = connections
+                        .values()
+                        .filter(|c| c.is_in_game())
+                        .map(|c| (c.entity_runtime_id, c.position))
+                        .collect();
+                    let find_closest = |pos: [f32; 3]| -> Option<(u64, f32, [f32; 3])> {
+                        orb_players
+                            .iter()
+                            .map(|(rid, ppos)| {
+                                let dx = ppos[0] - pos[0];
+                                let dy = ppos[1] - pos[1];
+                                let dz = ppos[2] - pos[2];
+                                (*rid, (dx * dx + dy * dy + dz * dz).sqrt(), *ppos)
+                            })
+                            .filter(|(_, d, _)| {
+                                *d <= crate::passive_entities::XP_ORB_ATTRACT_RANGE
+                            })
+                            .min_by(|a, b| {
+                                a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+                            })
+                    };
+                    let orb_tick = passive_entities.tick_xp_orbs(find_closest);
+                    // Mouvements (attraction) → MoveActorAbsolute aux joueurs qui la voient.
+                    for (uid, _pos, move_pkt) in orb_tick.movements {
+                        for (addr, conn) in connections.iter_mut() {
+                            if conn.is_in_game() && conn.visible_entities.contains(&uid) {
+                                let pkt = conn.encode_compressed_packet(
+                                    packet_id::MOVE_ACTOR_ABSOLUTE,
+                                    &move_pkt,
+                                );
+                                let prep = conn.prepare_for_send(pkt);
+                                raknet.send_to_session(
+                                    addr,
+                                    prep,
+                                    Reliability::ReliableOrdered,
+                                    false,
+                                );
+                            }
+                        }
+                    }
+                    // Expirations → RemoveActor.
+                    for (uid, remove_pkt) in orb_tick.despawns {
+                        broadcast_entity_remove_culled(
+                            &mut connections,
+                            &mut raknet,
+                            uid,
+                            &remove_pkt,
+                        );
+                    }
+                    // Ramassages → RemoveActor + crédit XP au joueur (les attributs
+                    // XP désynchronisés partent au prochain `tick_game_state`).
+                    for (player_rid, xp, uid, remove_pkt) in orb_tick.pickups {
+                        broadcast_entity_remove_culled(
+                            &mut connections,
+                            &mut raknet,
+                            uid,
+                            &remove_pkt,
+                        );
+                        if let Some(conn) = connections
+                            .values_mut()
+                            .find(|c| c.entity_runtime_id == player_rid)
+                        {
+                            crate::attribute::ExperienceManager::add_xp(
+                                &mut conn.attributes,
+                                xp as i32,
+                            );
+                        }
+                    }
+                }
+
                 crate::watchdog::checkpoint(9); // mob_tick
                 // Fix deadlock : on NE tient PAS le guard `chunk_cache` pendant
                 // les envois réseau (raknet.send_to_session). On collecte le
@@ -2328,6 +2402,7 @@ async fn main() {
                             &mut connections,
                             &mut raknet,
                             &mut item_entities,
+                            &mut passive_entities,
                             id,
                             amount,
                             None,
@@ -2517,6 +2592,7 @@ async fn main() {
                     &mut raknet,
                     &mut registry,
                     &mut item_entities,
+                    &mut passive_entities,
                     &mut mob_entities,
                     &mut world_state,
                     &mut server_state,
@@ -2585,6 +2661,30 @@ async fn main() {
                 }
             }
         }
+    }
+}
+
+/// Fait apparaître une orbe d'XP et diffuse son `AddActor` aux joueurs à portée
+/// de vue. Utilisé quand un mob est tué par un joueur.
+fn spawn_and_broadcast_xp_orb(
+    connections: &mut HashMap<SocketAddr, Connection>,
+    raknet: &mut RakNetServer,
+    passive_entities: &mut crate::passive_entities::PassiveEntityManager,
+    position: [f32; 3],
+    xp: u32,
+) {
+    let uid = crate::player_registry::next_entity_id();
+    let orb = crate::passive_entities::ExperienceOrbEntity::new(uid, uid as u64, position, xp);
+    let add_bytes = orb.add_actor_packet();
+    passive_entities.spawn_xp_orb(orb);
+    for (addr, conn) in connections.iter_mut() {
+        if !conn.is_in_game() || !entity_culling::is_within_view_for(conn, position) {
+            continue;
+        }
+        conn.visible_entities.insert(uid);
+        let pkt = conn.encode_compressed_packet(packet_id::ADD_ACTOR, &add_bytes);
+        let prepared = conn.prepare_for_send(pkt);
+        raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, true);
     }
 }
 
@@ -2674,11 +2774,13 @@ fn difficulty_damage_multiplier(difficulty_id: i32) -> f32 {
 /// Applique des dégâts à un mob (joueur, feu, …) et diffuse les conséquences :
 /// son hurt/death, UpdateAttributes (cullé), RemoveEntity + drops à la mort.
 /// Factorise le chemin PvE et le sun-burning.
+#[allow(clippy::too_many_arguments)]
 fn apply_mob_damage_broadcast(
     mob_entities: &mut crate::mob_entities::MobEntityManager,
     connections: &mut HashMap<SocketAddr, Connection>,
     raknet: &mut RakNetServer,
     item_entities: &mut crate::item_entities::ItemEntityManager,
+    passive_entities: &mut crate::passive_entities::PassiveEntityManager,
     runtime_id: u64,
     damage: f32,
     attacker_runtime_id: Option<u64>,
@@ -2735,6 +2837,27 @@ fn apply_mob_damage_broadcast(
                 item_entities,
                 PendingItemEntitySpawn::with_scatter(drop, death_position),
             );
+        }
+        // XP : uniquement si tué par un joueur (pas feu/chute), comme vanilla.
+        if attacker_runtime_id.is_some() {
+            if let Some((_, stype, _)) = info {
+                use rand::Rng as _;
+                let (min, max) = crate::mob_xp::mob_xp_drop(stype);
+                let xp = if max > min {
+                    rand::thread_rng().gen_range(min..=max)
+                } else {
+                    min
+                };
+                if xp > 0 {
+                    spawn_and_broadcast_xp_orb(
+                        connections,
+                        raknet,
+                        passive_entities,
+                        death_position,
+                        xp,
+                    );
+                }
+            }
         }
     }
 }
@@ -3234,6 +3357,7 @@ fn process_peer_events(
     raknet: &mut RakNetServer,
     registry: &mut PlayerRegistry,
     item_entities: &mut ItemEntityManager,
+    passive_entities: &mut crate::passive_entities::PassiveEntityManager,
     mob_entities: &mut MobEntityManager,
     world_state: &mut WorldState,
     server_state: &mut ServerState,
@@ -3931,6 +4055,7 @@ fn process_peer_events(
                             connections,
                             raknet,
                             item_entities,
+                            passive_entities,
                             attack.target_runtime_id,
                             melee_damage,
                             Some(attacker_rid),

@@ -206,12 +206,73 @@ impl ExperienceOrbEntity {
         self.position[2] += self.motion[2];
         OrbTickResult::Live
     }
+
+    /// `AddActor` de l'orbe : type `minecraft:xp_orb` + valeur d'XP en metadata
+    /// `EXPERIENCE_VALUE` (clé 15, Int) — comme PMMP `ExperienceOrb`. Diffusé à
+    /// l'apparition.
+    pub fn add_actor_packet(&self) -> Vec<u8> {
+        use mc_rs_proto::packets::player::{AddActor, MetadataValue};
+        AddActor {
+            entity_unique_id: self.entity_unique_id,
+            entity_runtime_id: self.entity_runtime_id,
+            actor_type: "minecraft:xp_orb".to_string(),
+            position: self.position,
+            velocity: self.motion,
+            pitch: 0.0,
+            yaw: 0.0,
+            head_yaw: 0.0,
+            body_yaw: 0.0,
+            attributes: Vec::new(),
+            metadata: vec![
+                (0, 7, MetadataValue::Long(0)),                    // flags
+                (38, 3, MetadataValue::Float(1.0)),                // scale
+                (53, 3, MetadataValue::Float(0.25)),               // largeur hitbox
+                (54, 3, MetadataValue::Float(0.25)),               // hauteur hitbox
+                (15, 2, MetadataValue::Int(self.xp_value as i32)), // EXPERIENCE_VALUE
+            ],
+        }
+        .encode()
+    }
+
+    /// `MoveActorAbsolute` (position streamée chaque tick pendant l'attraction).
+    pub fn move_absolute_packet(&self) -> Vec<u8> {
+        use mc_rs_proto::packets::player::MoveActorAbsolute;
+        MoveActorAbsolute {
+            runtime_entity_id: self.entity_runtime_id,
+            position: self.position,
+            pitch: 0.0,
+            yaw: 0.0,
+            head_yaw: 0.0,
+            flags: 0,
+        }
+        .encode()
+    }
+
+    /// `RemoveEntity` (ramassage / expiration).
+    pub fn remove_packet(&self) -> Vec<u8> {
+        use mc_rs_proto::packets::player::RemoveEntity;
+        RemoveEntity {
+            entity_unique_id: self.entity_unique_id,
+        }
+        .encode()
+    }
 }
 
 pub enum OrbTickResult {
     Live,
     Pickup(u64, u32),
     Despawn,
+}
+
+/// Résultat d'un tick des orbes d'XP du manager.
+#[derive(Default)]
+pub struct XpOrbTick {
+    /// `(unique_id, position, move_packet)` des orbes vivantes.
+    pub movements: Vec<(i64, [f32; 3], Vec<u8>)>,
+    /// `(player_runtime_id, xp, unique_id, remove_packet)` des ramassages.
+    pub pickups: Vec<(u64, u32, i64, Vec<u8>)>,
+    /// `(unique_id, remove_packet)` des orbes expirées.
+    pub despawns: Vec<(i64, Vec<u8>)>,
 }
 
 // ── Manager — stocke les 3 types dans un état partagé ───────────────────────
@@ -251,6 +312,42 @@ impl PassiveEntityManager {
         self.tnt.remove(&runtime_id);
         self.falling_blocks.remove(&runtime_id);
         self.xp_orbs.remove(&runtime_id);
+    }
+
+    /// Tick des orbes d'XP : attraction vers le joueur proche, ramassage,
+    /// expiration. `find_closest(pos)` renvoie `(runtime_id, distance, position)`
+    /// du joueur le plus proche dans le rayon d'attraction (ou `None`).
+    pub fn tick_xp_orbs<F>(&mut self, find_closest: F) -> XpOrbTick
+    where
+        F: Fn([f32; 3]) -> Option<(u64, f32, [f32; 3])> + Copy,
+    {
+        let mut out = XpOrbTick::default();
+        let mut to_remove = Vec::new();
+        for (rid, orb) in self.xp_orbs.iter_mut() {
+            match orb.tick(find_closest) {
+                OrbTickResult::Live => {
+                    out.movements.push((
+                        orb.entity_unique_id,
+                        orb.position,
+                        orb.move_absolute_packet(),
+                    ));
+                }
+                OrbTickResult::Pickup(pid, xp) => {
+                    out.pickups
+                        .push((pid, xp, orb.entity_unique_id, orb.remove_packet()));
+                    to_remove.push(*rid);
+                }
+                OrbTickResult::Despawn => {
+                    out.despawns
+                        .push((orb.entity_unique_id, orb.remove_packet()));
+                    to_remove.push(*rid);
+                }
+            }
+        }
+        for rid in to_remove {
+            self.xp_orbs.remove(&rid);
+        }
+        out
     }
 }
 
@@ -303,6 +400,23 @@ mod tests {
             }
             _ => panic!("expected pickup"),
         }
+    }
+
+    #[test]
+    fn manager_ticks_orbs_and_routes_pickup() {
+        let mut mgr = PassiveEntityManager::new();
+        let orb = ExperienceOrbEntity::new(1, 1, [0.0, 64.0, 0.0], 7);
+        // Les 3 paquets réseau se construisent.
+        assert!(!orb.add_actor_packet().is_empty());
+        assert!(!orb.move_absolute_packet().is_empty());
+        assert!(!orb.remove_packet().is_empty());
+        mgr.spawn_xp_orb(orb);
+        // Joueur adjacent → ramassage routé par le manager, orbe retirée.
+        let out = mgr.tick_xp_orbs(|_pos| Some((42u64, 0.5, [0.0, 64.0, 0.0])));
+        assert_eq!(out.pickups.len(), 1);
+        assert_eq!(out.pickups[0].0, 42, "runtime id du joueur");
+        assert_eq!(out.pickups[0].1, 7, "valeur d'XP");
+        assert!(mgr.xp_orbs.is_empty(), "orbe retirée après ramassage");
     }
 
     #[test]

@@ -254,6 +254,17 @@ code live) :
   frappe). Tests : logique de colère (memory) + riposte end-to-end (loup frappé attaque son agresseur).
   **Reste** : mob→mob (golem vs zombie) = infra de ciblage d'entités ; provocation de groupe/village.
 
+- **[FAIT] P1 #6 — XP à la mort (orbes d'expérience).** Feature câblée de bout en bout (l'entité orbe
+  + `ExperienceManager` existaient mais n'étaient pas branchés) : à la mort d'un mob **tué par un
+  joueur**, `apply_mob_damage_broadcast` fait apparaître une orbe (`mob_xp::mob_xp_drop`) via
+  `spawn_and_broadcast_xp_orb` (AddActor type `minecraft:xp_orb` + metadata `EXPERIENCE_VALUE`=15).
+  `PassiveEntityManager::tick_xp_orbs` (activé chaque tick serveur) : attraction vers le joueur proche
+  (MoveActorAbsolute), **ramassage** → `ExperienceManager::add_xp` (XP synchronisée via le desync
+  d'attributs → `tick_game_state`) + RemoveActor, expiration → RemoveActor. Morts environnementales
+  (feu/chute) = pas d'XP (vanilla). Packet builders ajoutés à `ExperienceOrbEntity`. Tests : flux orbe
+  (paquets + tick manager + routage ramassage). **Reste** : split vanilla en plusieurs orbes, orbes qui
+  fusionnent, XP scaling 100 TPS de l'attraction (mineur).
+
 ## 7. Méthode & limites de ce rapport
 
 - Établi par **lecture du code** (pas d'exécution en jeu). Les constats « trop rapide / trop haut » sont
