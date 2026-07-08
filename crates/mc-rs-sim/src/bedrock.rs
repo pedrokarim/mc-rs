@@ -83,6 +83,8 @@ pub struct BedrockClient {
     pub yaw: f32,
     /// Nombre de LevelChunk reçus (diagnostic de charge).
     pub chunks_received: usize,
+    /// Compteur de game-tick pour PlayerAuthInput.
+    game_tick: u64,
 
     // ── Chronométrage du flux de connexion ──
     flow_start: Option<Instant>,
@@ -107,6 +109,7 @@ impl BedrockClient {
             pitch: 0.0,
             yaw: 0.0,
             chunks_received: 0,
+            game_tick: 0,
             flow_start: None,
             encrypted_at: None,
             ingame_at: None,
@@ -391,6 +394,58 @@ impl BedrockClient {
         self.send(packet_id::SET_LOCAL_PLAYER_AS_INITIALIZED, &w.into_bytes());
     }
 
+    // ── Actions en jeu (Phase 4) ──
+
+    /// Envoie un PlayerAuthInput (mouvement/orientation). C'est le paquet le
+    /// plus fréquent d'un vrai client (≈20/s) : il pilote le suivi de position,
+    /// le chunk loading dynamique et les broadcasts de mouvement côté serveur.
+    ///
+    /// `delta` = déplacement depuis le tick précédent. Aucun flag d'action
+    /// (bits 34/35/36) n'est posé, donc le paquet s'arrête après le delta.
+    #[allow(clippy::too_many_arguments)]
+    pub fn send_player_auth_input(
+        &mut self,
+        pos: [f32; 3],
+        pitch: f32,
+        yaw: f32,
+        head_yaw: f32,
+        move_vec: [f32; 2],
+        delta: [f32; 3],
+        input_flags: u128,
+    ) {
+        self.game_tick += 1;
+        let mut w = ProtoWriter::with_capacity(80);
+        w.write_f32_le(pitch);
+        w.write_f32_le(yaw);
+        w.write_f32_le(pos[0]);
+        w.write_f32_le(pos[1]);
+        w.write_f32_le(pos[2]);
+        w.write_f32_le(move_vec[0]);
+        w.write_f32_le(move_vec[1]);
+        w.write_f32_le(head_yaw);
+        write_bitset(&mut w, input_flags);
+        w.write_var_u32(1); // input_mode = Mouse
+        w.write_var_u32(0); // play_mode = Normal
+        w.write_var_u32(0); // interaction_mode = Touch/None
+        w.write_f32_le(0.0); // interact_rotation_x
+        w.write_f32_le(0.0); // interact_rotation_y
+        w.write_var_u64(self.game_tick);
+        w.write_f32_le(delta[0]);
+        w.write_f32_le(delta[1]);
+        w.write_f32_le(delta[2]);
+        self.send(packet_id::PLAYER_AUTH_INPUT, &w.into_bytes());
+    }
+
+    /// Envoie un message de chat (broadcast serveur à tous les joueurs).
+    pub fn send_chat(&mut self, message: &str) {
+        let payload = mc_rs_proto::packets::player::Text::chat(
+            &self.identity.display_name,
+            message,
+            &self.identity.xuid,
+        );
+        self.send(packet_id::TEXT, &payload);
+    }
+
     /// Amorce la séquence de connexion : RequestNetworkSettings.
     fn start_login(&mut self) {
         self.flow_start = Some(Instant::now());
@@ -419,6 +474,22 @@ impl BedrockClient {
     /// Coupe proprement la session.
     pub async fn disconnect(&mut self) {
         self.rak.disconnect().await;
+    }
+}
+
+/// Écrit un bitset u128 au format PlayerAuthInput (7 bits/octet, bit 7 =
+/// continuation). Miroir de `read_bitset` côté proto. `0` → un seul octet.
+fn write_bitset(w: &mut ProtoWriter, mut v: u128) {
+    loop {
+        let mut byte = (v & 0x7F) as u8;
+        v >>= 7;
+        if v != 0 {
+            byte |= 0x80;
+        }
+        w.write_u8(byte);
+        if v == 0 {
+            break;
+        }
     }
 }
 

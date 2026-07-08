@@ -15,6 +15,7 @@ use tokio::task::JoinSet;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
+use mc_rs_sim::player::Behavior;
 use mc_rs_sim::{SimConfig, SimPlayer};
 
 struct Args {
@@ -23,6 +24,7 @@ struct Args {
     rate: f64,
     duration: Duration,
     mtu: u16,
+    behavior: Behavior,
 }
 
 impl Default for Args {
@@ -33,6 +35,7 @@ impl Default for Args {
             rate: 0.0, // 0 = tous d'un coup
             duration: Duration::from_secs(15),
             mtu: 1400,
+            behavior: Behavior::Wander,
         }
     }
 }
@@ -64,6 +67,11 @@ fn parse_args() -> Result<Args, String> {
             "--mtu" => {
                 args.mtu = next()?.parse().map_err(|e| format!("--mtu: {e}"))?;
             }
+            "--behavior" | "-b" => {
+                let v = next()?;
+                args.behavior =
+                    Behavior::parse(&v).ok_or_else(|| format!("--behavior invalide: {v}"))?;
+            }
             "--help" | "-h" => {
                 print_help();
                 std::process::exit(0);
@@ -83,6 +91,7 @@ fn print_help() {
          \x20 -r, --rate <N/s>        Cadence de connexion, joueurs/seconde (défaut: tous d'un coup)\n\
          \x20 -d, --duration <SECS>   Durée de vie de chaque joueur (défaut 15)\n\
          \x20     --mtu <N>           MTU RakNet visée (défaut 1400)\n\
+         \x20 -b, --behavior <B>      Comportement: idle | wander | active (défaut wander)\n\
          \x20 -h, --help              Cette aide"
     );
 }
@@ -105,11 +114,12 @@ async fn main() {
     };
 
     info!(
-        "Simulation: {} joueur(s) → {} (durée {}s, mtu {}{})",
+        "Simulation: {} joueur(s) → {} (durée {}s, mtu {}, comportement {:?}{})",
         args.players,
         args.target,
         args.duration.as_secs(),
         args.mtu,
+        args.behavior,
         if args.rate > 0.0 {
             format!(", cadence {}/s", args.rate)
         } else {
@@ -131,6 +141,7 @@ async fn main() {
             server_addr: args.target,
             name: format!("Sim{i:04}"),
             mtu: args.mtu,
+            behavior: args.behavior,
         };
         let duration = args.duration;
         set.spawn(async move {
@@ -142,6 +153,8 @@ async fn main() {
                     login: None,
                     spawn: None,
                     chunks: 0,
+                    inputs_sent: 0,
+                    chats_sent: 0,
                     last_rtt_ms: None,
                     error: Some(e.to_string()),
                 },
@@ -237,6 +250,12 @@ fn report(outcomes: &[mc_rs_sim::player::SimOutcome], wall: Duration) {
         100.0 * in_game as f64 / total.max(1) as f64
     );
     println!("Chunks reçus      : {total_chunks}");
+    let total_inputs: u64 = outcomes.iter().map(|o| o.inputs_sent).sum();
+    let total_chats: u64 = outcomes.iter().map(|o| o.chats_sent).sum();
+    println!("PlayerAuthInput   : {total_inputs} envoyés");
+    if total_chats > 0 {
+        println!("Chat              : {total_chats} messages");
+    }
     println!("Échecs            : {failed}");
     println!("Temps mur         : {:.2}s", wall.as_secs_f64());
     line("Handshake (ms)", &hs_ms);
