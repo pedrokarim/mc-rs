@@ -23,6 +23,7 @@ base64 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
+sysinfo = { version = "0.32", default-features = false, features = ["system"] }
 p384 = { workspace = true }
 flate2 = { workspace = true }
 snap = { workspace = true }

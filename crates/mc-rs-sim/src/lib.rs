@@ -12,6 +12,7 @@
 
 pub mod bedrock;
 pub mod identity;
+pub mod metrics;
 pub mod net;
 pub mod player;
 

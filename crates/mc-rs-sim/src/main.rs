@@ -15,8 +15,9 @@ use tokio::task::JoinSet;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
+use mc_rs_sim::metrics::{Sampler, ServerMetrics};
 use mc_rs_sim::player::Behavior;
-use mc_rs_sim::{SimConfig, SimPlayer};
+use mc_rs_sim::{SimConfig, SimOutcome, SimPlayer};
 
 struct Args {
     target: SocketAddr,
@@ -25,6 +26,10 @@ struct Args {
     duration: Duration,
     mtu: u16,
     behavior: Behavior,
+    /// Adresse du webui pour scraper le TPS (`/api/health`). None = désactivé.
+    webui: Option<SocketAddr>,
+    /// Chemin d'export CSV des résultats par joueur.
+    csv: Option<String>,
 }
 
 impl Default for Args {
@@ -36,6 +41,8 @@ impl Default for Args {
             duration: Duration::from_secs(15),
             mtu: 1400,
             behavior: Behavior::Wander,
+            webui: Some("127.0.0.1:8080".parse().unwrap()),
+            csv: None,
         }
     }
 }
@@ -72,6 +79,17 @@ fn parse_args() -> Result<Args, String> {
                 args.behavior =
                     Behavior::parse(&v).ok_or_else(|| format!("--behavior invalide: {v}"))?;
             }
+            "--webui" => {
+                let v = next()?;
+                args.webui = if v.eq_ignore_ascii_case("off") || v.eq_ignore_ascii_case("none") {
+                    None
+                } else {
+                    Some(v.parse().map_err(|e| format!("--webui: {e}"))?)
+                };
+            }
+            "--csv" => {
+                args.csv = Some(next()?);
+            }
             "--help" | "-h" => {
                 print_help();
                 std::process::exit(0);
@@ -92,6 +110,8 @@ fn print_help() {
          \x20 -d, --duration <SECS>   Durée de vie de chaque joueur (défaut 15)\n\
          \x20     --mtu <N>           MTU RakNet visée (défaut 1400)\n\
          \x20 -b, --behavior <B>      Comportement: idle | wander | active (défaut wander)\n\
+         \x20     --webui <ADDR|off>  Adresse webui pour le TPS (défaut 127.0.0.1:8080)\n\
+         \x20     --csv <FICHIER>     Export CSV des résultats par joueur\n\
          \x20 -h, --help              Cette aide"
     );
 }
@@ -133,8 +153,14 @@ async fn main() {
         Duration::ZERO
     };
 
+    // Démarre l'échantillonnage des ressources serveur (TPS via webui + CPU/RAM
+    // du process) pour toute la durée de la simulation.
+    let sampler = args
+        .webui
+        .map(|addr| Sampler::start(addr, "mc-rs-server".to_string()));
+
     let run_start = Instant::now();
-    let mut set: JoinSet<mc_rs_sim::player::SimOutcome> = JoinSet::new();
+    let mut set: JoinSet<SimOutcome> = JoinSet::new();
 
     for i in 0..args.players {
         let cfg = SimConfig {
@@ -174,10 +200,53 @@ async fn main() {
         }
     }
 
-    report(&outcomes, run_start.elapsed());
+    // Stoppe le sampler et récupère les séries serveur.
+    let server_metrics = match sampler {
+        Some(s) => s.stop().await,
+        None => ServerMetrics::default(),
+    };
+
+    report(&outcomes, run_start.elapsed(), &server_metrics);
+
+    if let Some(path) = args.csv {
+        match write_csv(&path, &outcomes) {
+            Ok(()) => println!("CSV écrit : {path}"),
+            Err(e) => eprintln!("Erreur écriture CSV {path}: {e}"),
+        }
+    }
 }
 
-fn report(outcomes: &[mc_rs_sim::player::SimOutcome], wall: Duration) {
+/// Écrit les résultats par joueur en CSV.
+fn write_csv(path: &str, outcomes: &[SimOutcome]) -> std::io::Result<()> {
+    use std::io::Write;
+    let ms = |d: Option<Duration>| {
+        d.map(|d| format!("{:.1}", d.as_secs_f64() * 1000.0))
+            .unwrap_or_default()
+    };
+    let mut f = std::fs::File::create(path)?;
+    writeln!(
+        f,
+        "name,handshake_ms,login_ms,spawn_ms,chunks,inputs,chats,rtt_ms,error"
+    )?;
+    for o in outcomes {
+        writeln!(
+            f,
+            "{},{},{},{},{},{},{},{},{}",
+            o.name,
+            ms(o.handshake),
+            ms(o.login),
+            ms(o.spawn),
+            o.chunks,
+            o.inputs_sent,
+            o.chats_sent,
+            o.last_rtt_ms.map(|r| format!("{r:.1}")).unwrap_or_default(),
+            o.error.as_deref().unwrap_or("").replace(',', ";"),
+        )?;
+    }
+    Ok(())
+}
+
+fn report(outcomes: &[SimOutcome], wall: Duration, server: &ServerMetrics) {
     let total = outcomes.len();
     let connected: Vec<_> = outcomes.iter().filter(|o| o.handshake.is_some()).collect();
     let failed = total - connected.len();
@@ -275,6 +344,45 @@ fn report(outcomes: &[mc_rs_sim::player::SimOutcome], wall: Duration) {
             avg(&rtts)
         );
     }
+    // ── Ressources serveur pendant la simulation ──
+    if !server.is_empty() {
+        println!("─── Serveur sous charge ───");
+        let f32min = |v: &[f32]| v.iter().cloned().fold(f32::INFINITY, f32::min);
+        let f32max = |v: &[f32]| v.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        let f32avg = |v: &[f32]| {
+            if v.is_empty() {
+                0.0
+            } else {
+                v.iter().sum::<f32>() / v.len() as f32
+            }
+        };
+        if !server.tps.is_empty() {
+            println!(
+                "TPS               : min {:.1} | avg {:.1} | max {:.1} (cible 20)",
+                f32min(&server.tps),
+                f32avg(&server.tps),
+                f32max(&server.tps),
+            );
+        }
+        if let Some(max_players) = server.players.iter().max() {
+            println!("Joueurs vus serveur: max {max_players}");
+        }
+        if !server.cpu.is_empty() {
+            println!(
+                "CPU serveur (%)   : avg {:.0} | max {:.0}",
+                f32avg(&server.cpu),
+                f32max(&server.cpu),
+            );
+        }
+        if !server.ram_mb.is_empty() {
+            println!(
+                "RAM serveur (Mo)  : avg {:.0} | max {:.0}",
+                f32avg(&server.ram_mb),
+                f32max(&server.ram_mb),
+            );
+        }
+    }
+
     // Erreurs distinctes (échec handshake OU login OU rupture en cours de vie).
     use std::collections::BTreeMap;
     let mut errs: BTreeMap<String, usize> = BTreeMap::new();
