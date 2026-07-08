@@ -40,8 +40,12 @@ pub struct SimOutcome {
     pub name: String,
     /// Durée du handshake RakNet (None si échec).
     pub handshake: Option<Duration>,
-    /// Durée du login Bedrock (RakNet connecté → chiffrement vérifié).
+    /// Délai jusqu'au chiffrement vérifié (depuis le début du flux Bedrock).
     pub login: Option<Duration>,
+    /// Délai jusqu'à l'état InGame (depuis le début du flux Bedrock).
+    pub spawn: Option<Duration>,
+    /// Nombre de LevelChunk reçus pendant la session.
+    pub chunks: usize,
     /// RTT observé en fin de session, si mesuré.
     pub last_rtt_ms: Option<f64>,
     /// Erreur éventuelle.
@@ -53,11 +57,11 @@ pub struct SimPlayer {
     cfg: SimConfig,
     client: BedrockClient,
     handshake: Duration,
-    login: Duration,
 }
 
 impl SimPlayer {
-    /// Se connecte au serveur : handshake RakNet puis login Bedrock chiffré.
+    /// Se connecte au serveur : handshake RakNet, login chiffré, puis spawn
+    /// jusqu'à l'état InGame.
     pub async fn connect(cfg: SimConfig) -> Result<Self, BedrockError> {
         let t0 = Instant::now();
         let rak = RakClient::open(cfg.server_addr, cfg.mtu).await?;
@@ -65,20 +69,16 @@ impl SimPlayer {
 
         let identity = SimIdentity::generate(&cfg.name);
         let mut client = BedrockClient::new(rak, identity);
-
-        let t1 = Instant::now();
-        client.login().await?;
-        let login = t1.elapsed();
+        client.join().await?;
 
         debug!(
-            "[{}] connecté + login chiffré (rak {:?}, login {:?})",
-            cfg.name, handshake, login
+            "[{}] InGame (rak {:?}, login {:?}, spawn {:?}, {} chunks)",
+            cfg.name, handshake, client.encrypted_at, client.ingame_at, client.chunks_received
         );
         Ok(Self {
             cfg,
             client,
             handshake,
-            login,
         })
     }
 
@@ -105,7 +105,9 @@ impl SimPlayer {
         SimOutcome {
             name: self.cfg.name.clone(),
             handshake: Some(self.handshake),
-            login: Some(self.login),
+            login: self.client.encrypted_at,
+            spawn: self.client.ingame_at,
+            chunks: self.client.chunks_received,
             last_rtt_ms: self.client.last_rtt_ms(),
             error,
         }

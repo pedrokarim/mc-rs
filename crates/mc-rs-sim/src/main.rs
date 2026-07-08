@@ -140,6 +140,8 @@ async fn main() {
                     name: cfg.name,
                     handshake: None,
                     login: None,
+                    spawn: None,
+                    chunks: 0,
                     last_rtt_ms: None,
                     error: Some(e.to_string()),
                 },
@@ -189,13 +191,33 @@ fn report(outcomes: &[mc_rs_sim::player::SimOutcome], wall: Duration) {
     };
 
     let logged_in = outcomes.iter().filter(|o| o.login.is_some()).count();
-    let mut login_ms: Vec<f64> = outcomes
-        .iter()
-        .filter_map(|o| o.login.map(|d| d.as_secs_f64() * 1000.0))
-        .collect();
-    login_ms.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let in_game = outcomes.iter().filter(|o| o.spawn.is_some()).count();
+    let ms_of = |f: &dyn Fn(&mc_rs_sim::SimOutcome) -> Option<Duration>| -> Vec<f64> {
+        let mut v: Vec<f64> = outcomes
+            .iter()
+            .filter_map(|o| f(o).map(|d| d.as_secs_f64() * 1000.0))
+            .collect();
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        v
+    };
+    let login_ms = ms_of(&|o| o.login);
+    let spawn_ms = ms_of(&|o| o.spawn);
+    let total_chunks: usize = outcomes.iter().map(|o| o.chunks).sum();
 
     let rtts: Vec<f64> = outcomes.iter().filter_map(|o| o.last_rtt_ms).collect();
+
+    let line = |label: &str, v: &[f64]| {
+        if !v.is_empty() {
+            println!(
+                "{label:<18}: min {:.1} | p50 {:.1} | p95 {:.1} | max {:.1} | avg {:.1}",
+                v.first().copied().unwrap_or(0.0),
+                pct(v, 0.50),
+                pct(v, 0.95),
+                v.last().copied().unwrap_or(0.0),
+                avg(v),
+            );
+        }
+    };
 
     println!("\n──────────── Rapport de simulation ────────────");
     println!("Joueurs           : {total}");
@@ -209,28 +231,17 @@ fn report(outcomes: &[mc_rs_sim::player::SimOutcome], wall: Duration) {
         logged_in,
         100.0 * logged_in as f64 / total.max(1) as f64
     );
+    println!(
+        "InGame            : {} ({:.0}%)",
+        in_game,
+        100.0 * in_game as f64 / total.max(1) as f64
+    );
+    println!("Chunks reçus      : {total_chunks}");
     println!("Échecs            : {failed}");
     println!("Temps mur         : {:.2}s", wall.as_secs_f64());
-    if !hs_ms.is_empty() {
-        println!(
-            "Handshake (ms)    : min {:.1} | p50 {:.1} | p95 {:.1} | max {:.1} | avg {:.1}",
-            hs_ms.first().copied().unwrap_or(0.0),
-            pct(&hs_ms, 0.50),
-            pct(&hs_ms, 0.95),
-            hs_ms.last().copied().unwrap_or(0.0),
-            avg(&hs_ms),
-        );
-    }
-    if !login_ms.is_empty() {
-        println!(
-            "Login (ms)        : min {:.1} | p50 {:.1} | p95 {:.1} | max {:.1} | avg {:.1}",
-            login_ms.first().copied().unwrap_or(0.0),
-            pct(&login_ms, 0.50),
-            pct(&login_ms, 0.95),
-            login_ms.last().copied().unwrap_or(0.0),
-            avg(&login_ms),
-        );
-    }
+    line("Handshake (ms)", &hs_ms);
+    line("Login (ms)", &login_ms);
+    line("Spawn→InGame (ms)", &spawn_ms);
     if !rtts.is_empty() {
         println!(
             "RTT final (ms)    : p50 {:.1} | avg {:.1}",

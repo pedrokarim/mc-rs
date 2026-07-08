@@ -73,6 +73,23 @@ pub struct BedrockClient {
     pub state: LoginState,
     /// Vrai dès qu'un paquet chiffré du serveur a été déchiffré avec succès.
     pub encryption_verified: bool,
+
+    // ── État de jeu capté depuis StartGame (utile Phase 4) ──
+    /// Runtime ID de notre entité joueur (pour PlayerAuthInput).
+    pub runtime_id: u64,
+    /// Position de spawn reçue.
+    pub position: [f32; 3],
+    pub pitch: f32,
+    pub yaw: f32,
+    /// Nombre de LevelChunk reçus (diagnostic de charge).
+    pub chunks_received: usize,
+
+    // ── Chronométrage du flux de connexion ──
+    flow_start: Option<Instant>,
+    /// Délai jusqu'au chiffrement vérifié.
+    pub encrypted_at: Option<Duration>,
+    /// Délai jusqu'à l'état InGame.
+    pub ingame_at: Option<Duration>,
 }
 
 impl BedrockClient {
@@ -85,7 +102,20 @@ impl BedrockClient {
             encryption: None,
             state: LoginState::NetworkSettings,
             encryption_verified: false,
+            runtime_id: 0,
+            position: [0.0; 3],
+            pitch: 0.0,
+            yaw: 0.0,
+            chunks_received: 0,
+            flow_start: None,
+            encrypted_at: None,
+            ingame_at: None,
         }
+    }
+
+    /// Vrai une fois l'état InGame atteint.
+    pub fn is_in_game(&self) -> bool {
+        self.state == LoginState::InGame
     }
 
     /// Adresse locale de la session (diagnostic).
@@ -145,7 +175,10 @@ impl BedrockClient {
         let decrypted = if let Some(ctx) = self.encryption.as_mut() {
             match ctx.decrypt(payload) {
                 Ok(d) => {
-                    self.encryption_verified = true;
+                    if !self.encryption_verified {
+                        self.encryption_verified = true;
+                        self.encrypted_at = self.flow_start.map(|s| s.elapsed());
+                    }
                     d
                 }
                 Err(e) => {
@@ -201,7 +234,7 @@ impl BedrockClient {
         Ok(())
     }
 
-    /// Traite un paquet de jeu reçu (machine à états de login).
+    /// Traite un paquet de jeu reçu (machine à états login → spawn).
     fn handle_packet(&mut self, pkt_id: u32, payload: &[u8]) {
         match pkt_id {
             packet_id::NETWORK_SETTINGS => {
@@ -217,18 +250,74 @@ impl BedrockClient {
                 }
             }
             packet_id::PLAY_STATUS => {
-                // Reçu chiffré ⇒ chiffrement bidirectionnel confirmé.
-                trace!("PlayStatus reçu (chiffrement OK)");
+                // i32_be status : 0=LoginSuccess, 3=PlayerSpawn.
+                let status = if payload.len() >= 4 {
+                    i32::from_be_bytes(payload[0..4].try_into().unwrap())
+                } else {
+                    -1
+                };
+                match status {
+                    0 => trace!("PlayStatus(LoginSuccess) — chiffrement OK"),
+                    3 => {
+                        // PlayerSpawn : on signale qu'on est prêt → InGame.
+                        self.send_set_local_player_initialized();
+                        self.state = LoginState::InGame;
+                        self.ingame_at = self.flow_start.map(|s| s.elapsed());
+                        debug!("→ InGame (SetLocalPlayerAsInitialized envoyé)");
+                    }
+                    other => trace!("PlayStatus({other})"),
+                }
             }
             packet_id::RESOURCE_PACKS_INFO => {
                 if self.state == LoginState::Encrypted {
                     self.state = LoginState::ResourcePacks;
                 }
-                trace!("ResourcePacksInfo reçu");
+                // HAVE_ALL_PACKS (on ne télécharge aucun pack).
+                self.send_resource_pack_response(3);
+                trace!("ResourcePacksInfo → réponse HAVE_ALL_PACKS");
+            }
+            packet_id::RESOURCE_PACK_STACK => {
+                // COMPLETED → le serveur enchaîne sur PreSpawn (StartGame…).
+                self.send_resource_pack_response(4);
+                trace!("ResourcePackStack → réponse COMPLETED");
+            }
+            packet_id::START_GAME => {
+                self.parse_start_game(payload);
+                // Le client demande son rayon de chunks après StartGame.
+                self.send_request_chunk_radius(self.rak_view_distance());
+                debug!(
+                    "StartGame reçu (runtime_id={}, pos={:?}) → RequestChunkRadius",
+                    self.runtime_id, self.position
+                );
+            }
+            packet_id::LEVEL_CHUNK => {
+                self.chunks_received += 1;
             }
             other => {
                 trace!("paquet 0x{other:03X} ignoré (état {:?})", self.state);
             }
+        }
+    }
+
+    /// Rayon de chunks demandé par le bot (petit par défaut : on ne rend rien).
+    fn rak_view_distance(&self) -> i32 {
+        4
+    }
+
+    /// Parse les champs de tête de StartGame (runtime_id + position).
+    fn parse_start_game(&mut self, payload: &[u8]) {
+        let mut r = ProtoReader::new(payload);
+        let _unique = r.read_var_i64();
+        if let Ok(rid) = r.read_var_u64() {
+            self.runtime_id = rid;
+        }
+        let _gamemode = r.read_var_i32();
+        if let (Ok(x), Ok(y), Ok(z)) = (r.read_f32_le(), r.read_f32_le(), r.read_f32_le()) {
+            self.position = [x, y, z];
+        }
+        if let (Ok(p), Ok(yw)) = (r.read_f32_le(), r.read_f32_le()) {
+            self.pitch = p;
+            self.yaw = yw;
         }
     }
 
@@ -278,16 +367,44 @@ impl BedrockClient {
         Ok(())
     }
 
-    /// Pilote la séquence de login jusqu'à ce que le chiffrement soit vérifié
-    /// (ou une étape ultérieure atteinte).
-    pub async fn login(&mut self) -> Result<(), BedrockError> {
-        // Étape 1 : RequestNetworkSettings (non compressé, non chiffré).
+    /// Envoie ResourcePackClientResponse avec le `status` donné, 0 packs.
+    /// (3 = HAVE_ALL_PACKS, 4 = COMPLETED.)
+    fn send_resource_pack_response(&mut self, status: u8) {
+        let mut w = ProtoWriter::with_capacity(4);
+        w.write_u8(status);
+        w.write_u16_le(0); // aucun pack demandé
+        self.send(packet_id::RESOURCE_PACK_CLIENT_RESPONSE, &w.into_bytes());
+    }
+
+    /// Envoie RequestChunkRadius.
+    fn send_request_chunk_radius(&mut self, radius: i32) {
+        let mut w = ProtoWriter::with_capacity(6);
+        w.write_var_i32(radius);
+        w.write_u8(radius.clamp(0, 255) as u8); // max_radius (ignoré par le serveur)
+        self.send(packet_id::REQUEST_CHUNK_RADIUS, &w.into_bytes());
+    }
+
+    /// Envoie SetLocalPlayerAsInitialized (var_u64 runtime_id).
+    fn send_set_local_player_initialized(&mut self) {
+        let mut w = ProtoWriter::with_capacity(9);
+        w.write_var_u64(self.runtime_id);
+        self.send(packet_id::SET_LOCAL_PLAYER_AS_INITIALIZED, &w.into_bytes());
+    }
+
+    /// Amorce la séquence de connexion : RequestNetworkSettings.
+    fn start_login(&mut self) {
+        self.flow_start = Some(Instant::now());
         let mut proto = ProtoWriter::with_capacity(4);
         proto.write_i32_be(PROTOCOL_VERSION);
         self.send(packet_id::REQUEST_NETWORK_SETTINGS, &proto.into_bytes());
+    }
 
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while !self.encryption_verified {
+    /// Pilote toute la séquence login → spawn jusqu'à l'état InGame.
+    pub async fn join(&mut self) -> Result<(), BedrockError> {
+        self.start_login();
+
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while !self.is_in_game() {
             if self.rak.is_disconnected() {
                 return Err(BedrockError::Disconnected);
             }
