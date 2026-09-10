@@ -10,6 +10,17 @@ pub enum ProtoReadError {
     VarLongTooLarge,
     #[error("invalid UTF-8 string: {0}")]
     InvalidUtf8(#[from] std::string::FromUtf8Error),
+    /// Nombre d'éléments annoncé au-delà du maximum défini par le protocole.
+    #[error("{what}: {value} exceeds protocol maximum {max}")]
+    LimitExceeded {
+        what: &'static str,
+        value: u64,
+        max: u64,
+    },
+    /// Valeur hors du domaine défini par le protocole (variante inconnue,
+    /// booléen de présence obligatoire à faux…).
+    #[error("{what}: invalid value {value}")]
+    InvalidValue { what: &'static str, value: i64 },
 }
 
 /// Binary reader for Minecraft Bedrock protocol.

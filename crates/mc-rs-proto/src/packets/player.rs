@@ -1,4 +1,59 @@
+use crate::io::reader::ProtoReadError;
 use crate::io::{ProtoReader, ProtoWriter};
+
+// ── Primitives Cereal (protocole 2168+) ──
+//
+// Depuis la conversion « Cereal » des paquets (changelog Mojang 2168), les
+// champs optionnels sont précédés d'un booléen de présence, et certains
+// optionnels sont « doubles » : un booléen externe toujours à vrai, puis le
+// booléen de présence et la valeur (gophertunnel `io.go` `DoubleOptionalFunc`,
+// CloudburstProtocol `readBoolean() && readBoolean()`).
+
+/// Taille maximale d'une liste générique (gophertunnel `maxSliceLength`).
+const MAX_LIST_LENGTH: u32 = 1024;
+/// Maximum d'actions par transaction, requête ou bloc d'actions (schémas
+/// Mojang 2169 : `maxItems: 100`).
+const MAX_ACTIONS: u32 = 100;
+/// Nombre de drapeaux PlayerAuthInput : identifiants 0 à 65 (gophertunnel
+/// `InputFlagCount`, 65 = InternalUpdate ajouté en 2168).
+const INPUT_FLAG_COUNT: u32 = 66;
+
+/// Lit un optionnel double (booléen externe, booléen de présence, valeur).
+fn read_double_optional<T>(
+    reader: &mut ProtoReader,
+    read: impl FnOnce(&mut ProtoReader) -> Result<T, ProtoReadError>,
+) -> Result<Option<T>, ProtoReadError> {
+    if !reader.read_bool()? || !reader.read_bool()? {
+        return Ok(None);
+    }
+    read(reader).map(Some)
+}
+
+/// Lit un booléen de présence que le protocole impose à vrai.
+fn expect_present(reader: &mut ProtoReader, what: &'static str) -> Result<(), ProtoReadError> {
+    if reader.read_bool()? {
+        Ok(())
+    } else {
+        Err(ProtoReadError::InvalidValue { what, value: 0 })
+    }
+}
+
+/// Lit un nombre d'éléments et le borne au maximum du protocole.
+fn read_count(
+    reader: &mut ProtoReader,
+    what: &'static str,
+    max: u32,
+) -> Result<u32, ProtoReadError> {
+    let count = reader.read_var_u32()?;
+    if count > max {
+        return Err(ProtoReadError::LimitExceeded {
+            what,
+            value: u64::from(count),
+            max: u64::from(max),
+        });
+    }
+    Ok(count)
+}
 
 // ── PlayerAuthInput (C→S, 0x90) ──
 
@@ -12,8 +67,12 @@ pub struct BlockAction {
 /// Item interaction data from PlayerAuthInput (UseItemTransactionData).
 #[derive(Clone, Debug)]
 pub struct ItemInteractionData {
-    pub action_type: u32, // 0=CLICK_BLOCK, 1=CLICK_AIR, 2=BREAK_BLOCK
+    /// 0 = CLICK_BLOCK, 1 = CLICK_AIR, 2 = BREAK_BLOCK, 3 = USE_AS_ATTACK
+    /// (VarInt32 zigzag sur le fil).
+    pub action_type: u32,
     pub block_position: [i32; 3],
+    /// Face cliquée (u8 sur le fil ; 255 est rendu comme -1, la valeur
+    /// « aucune face » des versions où le champ était un VarInt signé).
     pub face: i32,
     pub hotbar_slot: i32,
     pub player_position: [f32; 3],
@@ -44,8 +103,8 @@ pub enum StackRequestAction {
         source: SlotInfo,
         destination: SlotInfo,
     },
+    /// Échange complet de deux slots (pas de quantité sur le fil).
     Swap {
-        count: u8,
         source: SlotInfo,
         destination: SlotInfo,
     },
@@ -56,6 +115,17 @@ pub enum StackRequestAction {
     Destroy {
         count: u8,
         source: SlotInfo,
+    },
+    /// Consommation d'un ingrédient de craft (PMMP
+    /// `CraftingConsumeInputStackRequestAction`).
+    Consume {
+        count: u8,
+        source: SlotInfo,
+    },
+    /// Choix du résultat à produire pour une recette à sorties multiples
+    /// (PMMP `CraftingCreateSpecificResultStackRequestAction`).
+    Create {
+        results_slot: u8,
     },
     /// Décrément durabilité côté serveur quand le client casse un bloc.
     /// PMMP `MineBlockStackRequestAction`. Sans gestion durabilité, on
@@ -78,14 +148,56 @@ pub enum StackRequestAction {
         times: u8,
     },
     /// `CraftRecipeAuto` (action_type=13) : recipe + times + ingredients
-    /// list (ItemStack par ingredient). Utilisé par le recipe book quand
-    /// le joueur a coché "auto-craft from inventory".
+    /// list. Utilisé par le recipe book quand le joueur a coché
+    /// "auto-craft from inventory".
     CraftRecipeAuto {
         recipe_id: u32,
         times: u8,
     },
-    /// Other actions we don't handle yet.
+    /// Résultats de craft annoncés par le client, sans usage côté serveur
+    /// (PMMP `DeprecatedCraftingResultsStackRequestAction` : « no obvious use »).
+    CraftResultsDeprecated,
+    /// Actions décodées mais non gérées (identifiant legacy de l'action).
     Unknown(u8),
+}
+
+/// Identifiants legacy des actions ItemStackRequest (PMMP
+/// `ItemStackRequestActionType`, gophertunnel `StackRequestAction*`).
+mod stack_request_action_id {
+    pub const TAKE: u8 = 0;
+    pub const PLACE: u8 = 1;
+    pub const SWAP: u8 = 2;
+    pub const DROP: u8 = 3;
+    pub const DESTROY: u8 = 4;
+    pub const CONSUME: u8 = 5;
+    pub const CREATE: u8 = 6;
+    // 7 (PlaceInContainer) et 8 (TakeOutContainer) ne sont jamais envoyés et
+    // n'ont pas de variante Cereal.
+    pub const LAB_TABLE_COMBINE: u8 = 9;
+    pub const BEACON_PAYMENT: u8 = 10;
+    pub const MINE_BLOCK: u8 = 11;
+    pub const CRAFT_RECIPE: u8 = 12;
+    pub const CRAFT_RECIPE_AUTO: u8 = 13;
+    pub const CRAFT_CREATIVE: u8 = 14;
+    pub const CRAFT_RECIPE_OPTIONAL: u8 = 15;
+    pub const CRAFT_GRINDSTONE: u8 = 16;
+    pub const CRAFT_LOOM: u8 = 17;
+    pub const CRAFT_NON_IMPLEMENTED: u8 = 18;
+    pub const CRAFT_RESULTS_DEPRECATED: u8 = 19;
+}
+
+/// Index de variante Cereal → identifiant legacy : la liste des variantes
+/// omet les deux actions conteneur (7 et 8), d'où le décalage de 2 au-delà
+/// de CREATE (gophertunnel `stackRequestActionVariant`).
+fn stack_request_action_from_variant(variant: u32) -> Result<u8, ProtoReadError> {
+    match variant {
+        0..=6 => Ok(variant as u8),
+        7..=17 => Ok(variant as u8 + 2),
+        _ => Err(ProtoReadError::InvalidValue {
+            what: "stack request action variant",
+            value: i64::from(variant),
+        }),
+    }
 }
 
 /// An ItemStackRequest decoded from PlayerAuthInput.
@@ -109,6 +221,9 @@ pub struct PlayerAuthInput {
     pub block_actions: Vec<BlockAction>,
     pub item_interaction: Option<ItemInteractionData>,
     pub item_stack_request: Option<ItemStackRequest>,
+    /// Erreur rencontrée dans les blocs optionnels qui suivent le mouvement :
+    /// le mouvement reste exploitable, le reste du paquet est abandonné.
+    pub trailing_error: Option<String>,
 }
 
 /// Container/slot resync hint carried by InventoryTransaction when request_id != 0.
@@ -173,47 +288,50 @@ pub struct InventoryTransaction {
     pub data: InventoryTransactionData,
 }
 
-// PlayerAuthInput flag bits (from PMMP PlayerAuthInputFlags.php)
-const FLAG_PERFORM_ITEM_INTERACTION: usize = 34;
-const FLAG_PERFORM_BLOCK_ACTIONS: usize = 35;
-const FLAG_PERFORM_ITEM_STACK_REQUEST: usize = 36;
-
-/// Read a BitSet encoded as VarInt-style bytes (7 bits per byte, bit 7 = continuation).
-fn read_bitset(reader: &mut ProtoReader) -> Result<u128, crate::io::reader::ProtoReadError> {
-    let mut result: u128 = 0;
-    let mut shift = 0;
-    loop {
-        let b = reader.read_u8()?;
-        result |= ((b & 0x7F) as u128) << shift;
-        if (b & 0x80) == 0 {
-            break;
-        }
-        shift += 7;
-        if shift >= 128 {
-            break;
-        }
+/// Lit les drapeaux PlayerAuthInput : booléen de présence, puis liste des
+/// identifiants de drapeaux actifs (VarInt32 zigzag, 0 à 65).
+/// Réf : gophertunnel `input_flags.go` `InputFlagList`, CloudburstProtocol
+/// `PlayerAuthInputSerializer_v2168`.
+fn read_input_flags(reader: &mut ProtoReader) -> Result<u128, ProtoReadError> {
+    if !reader.read_bool()? {
+        return Ok(0);
     }
-    Ok(result)
+    let count = read_count(reader, "player auth input flags", INPUT_FLAG_COUNT)?;
+    let mut flags: u128 = 0;
+    for _ in 0..count {
+        let id = reader.read_var_i32()?;
+        if !(0..INPUT_FLAG_COUNT as i32).contains(&id) {
+            return Err(ProtoReadError::InvalidValue {
+                what: "player auth input flag",
+                value: i64::from(id),
+            });
+        }
+        flags |= 1u128 << id;
+    }
+    Ok(flags)
 }
 
-/// Skip an ItemStackWrapper in the reader.
-fn decode_item_stack_wrapper(
+/// Décode un `NetworkItemStackDescriptor` (protocole 2168+) : `i16` id,
+/// `u16` count, VarUInt32 aux, net id optionnel (booléen + VarInt32 unique,
+/// plus d'index de variante), VarUInt32 block runtime id, user data.
+/// Réf : gophertunnel `reader.go` `ItemInstance`, schéma Mojang
+/// `cerealizer_NetworkItemStackDescriptor___SerializedData.json`.
+pub fn decode_network_item_stack_descriptor(
     reader: &mut ProtoReader,
-) -> Result<ItemStackWrapper, crate::io::reader::ProtoReadError> {
-    let id = reader.read_var_i32()?;
-    if id == 0 {
-        return Ok(ItemStackWrapper::air());
-    }
+) -> Result<ItemStackWrapper, ProtoReadError> {
+    let id = i32::from(reader.read_i16_le()?);
     let count = reader.read_u16_le()?;
     let meta = reader.read_var_u32()?;
-    let has_net_id = reader.read_bool()?;
-    let stack_id = if has_net_id {
+    let stack_id = if reader.read_bool()? {
         reader.read_var_i32()?
     } else {
         0
     };
-    let block_runtime_id = reader.read_var_i32()?;
+    let block_runtime_id = reader.read_var_u32()? as i32;
     let extra_data = reader.read_byte_array()?;
+    if id == 0 {
+        return Ok(ItemStackWrapper::air());
+    }
     Ok(ItemStackWrapper::new(
         ItemStack {
             id,
@@ -226,29 +344,18 @@ fn decode_item_stack_wrapper(
     ))
 }
 
-/// Skip an ItemStackWrapper in the reader.
-fn skip_item_stack_wrapper(
-    reader: &mut ProtoReader,
-) -> Result<(), crate::io::reader::ProtoReadError> {
-    let _ = decode_item_stack_wrapper(reader)?;
-    Ok(())
-}
-
-/// Decode a NetworkInventoryAction from the reader.
+/// Decode a NetworkInventoryAction : source, identifiant de fenêtre et
+/// drapeaux en optionnels doubles, puis deux descripteurs d'item.
+/// Réf : gophertunnel `inventory.go` `InventoryAction.Marshal`.
 fn decode_network_inventory_action(
     reader: &mut ProtoReader,
-) -> Result<NetworkInventoryAction, crate::io::reader::ProtoReadError> {
+) -> Result<NetworkInventoryAction, ProtoReadError> {
     let source_type = reader.read_var_u32()?;
-    let (window_id, source_flags) = match source_type {
-        0 => (Some(reader.read_var_i32()?), None), // SOURCE_CONTAINER
-        2 => (None, Some(reader.read_var_u32()?)), // SOURCE_WORLD
-        3 => (None, None),                         // SOURCE_CREATIVE
-        99999 => (Some(reader.read_var_i32()?), None), // SOURCE_TODO
-        _ => (None, None),
-    };
+    let window_id = read_double_optional(reader, |r| r.read_i8())?.map(i32::from);
+    let source_flags = read_double_optional(reader, |r| r.read_var_u32())?;
     let inventory_slot = reader.read_var_u32()?;
-    let old_item = decode_item_stack_wrapper(reader)?;
-    let new_item = decode_item_stack_wrapper(reader)?;
+    let old_item = decode_network_item_stack_descriptor(reader)?;
+    let new_item = decode_network_item_stack_descriptor(reader)?;
 
     Ok(NetworkInventoryAction {
         source_type,
@@ -262,27 +369,24 @@ fn decode_network_inventory_action(
 
 fn decode_inventory_actions(
     reader: &mut ProtoReader,
-) -> Result<Vec<NetworkInventoryAction>, crate::io::reader::ProtoReadError> {
-    let action_count = reader.read_var_u32()?;
-    let mut actions = Vec::new();
-    for _ in 0..action_count.min(100) {
+) -> Result<Vec<NetworkInventoryAction>, ProtoReadError> {
+    let action_count = read_count(reader, "inventory actions", MAX_ACTIONS)?;
+    let mut actions = Vec::with_capacity(action_count as usize);
+    for _ in 0..action_count {
         actions.push(decode_network_inventory_action(reader)?);
     }
     Ok(actions)
 }
 
+/// Liste `LegacySetSlot` : conteneur (u8) + slots (tableau d'octets).
 fn decode_changed_slots_hack(
     reader: &mut ProtoReader,
-) -> Result<Vec<InventoryTransactionChangedSlots>, crate::io::reader::ProtoReadError> {
-    let changed_slots_count = reader.read_var_u32()?;
-    let mut changed_slots = Vec::new();
-    for _ in 0..changed_slots_count.min(32) {
+) -> Result<Vec<InventoryTransactionChangedSlots>, ProtoReadError> {
+    let changed_slots_count = read_count(reader, "legacy set item slots", MAX_LIST_LENGTH)?;
+    let mut changed_slots = Vec::with_capacity(changed_slots_count as usize);
+    for _ in 0..changed_slots_count {
         let container_id = reader.read_u8()?;
-        let slot_count = reader.read_var_u32()?;
-        let mut slots = Vec::new();
-        for _ in 0..slot_count.min(128) {
-            slots.push(reader.read_u8()?);
-        }
+        let slots = reader.read_byte_array()?;
         changed_slots.push(InventoryTransactionChangedSlots {
             container_id,
             changed_slots: slots,
@@ -291,40 +395,31 @@ fn decode_changed_slots_hack(
     Ok(changed_slots)
 }
 
+/// Données d'une transaction UseItem (partagées entre InventoryTransaction et
+/// PlayerAuthInput). Réf : gophertunnel `inventory.go`
+/// `UseItemTransactionData.Marshal`, schéma `ItemUseInventoryTransaction.json`.
 fn decode_use_item_transaction_data(
     reader: &mut ProtoReader,
-) -> Result<ItemInteractionData, crate::io::reader::ProtoReadError> {
-    let action_type = reader.read_var_u32()?;
-    let trigger_type = reader.read_var_u32()?;
-    let _ = trigger_type;
+) -> Result<ItemInteractionData, ProtoReadError> {
+    let action_type = reader.read_var_i32()? as u32;
+    let _trigger_type = reader.read_u8()?;
 
     // Bedrock `BlockPosition` = 3 VarInt SIGNED (PMMP CommonTypes::getBlockPosition
-    // + gophertunnel BlockPos). Lire Y comme unsigned donnait Y=zig-zag(vrai_Y)
-    // (ex: vrai_Y=68 → reçu comme 136), décalant toute la suite de la chaîne
-    // place → break.
+    // + gophertunnel BlockPos).
     let bx = reader.read_var_i32()?;
     let by = reader.read_var_i32()?;
     let bz = reader.read_var_i32()?;
 
-    let face = reader.read_var_i32()?;
+    let face = i32::from(reader.read_u8()? as i8);
     let hotbar_slot = reader.read_var_i32()?;
 
-    skip_item_stack_wrapper(reader)?; // item in hand
+    let _held_item = decode_network_item_stack_descriptor(reader)?;
 
-    let px = reader.read_f32_le()?;
-    let py = reader.read_f32_le()?;
-    let pz = reader.read_f32_le()?;
-
-    let cx = reader.read_f32_le()?;
-    let cy = reader.read_f32_le()?;
-    let cz = reader.read_f32_le()?;
+    let player_position = read_vec3(reader)?;
+    let click_position = read_vec3(reader)?;
 
     let block_runtime_id = reader.read_var_u32()?;
-    let client_prediction = reader.read_var_u32()?;
-    // Protocol 944 (PMMP UseItemTransactionData.php:98) : clientCooldownState u8
-    // ajouté après clientInteractPrediction. Sans ce read, on est décalé d'1
-    // byte → item_stack_request suivant se décode sur un mauvais offset →
-    // block_place silencieusement ignoré.
+    let client_prediction = u32::from(reader.read_u8()?);
     let _client_cooldown_state = reader.read_u8()?;
 
     Ok(ItemInteractionData {
@@ -332,32 +427,33 @@ fn decode_use_item_transaction_data(
         block_position: [bx, by, bz],
         face,
         hotbar_slot,
-        player_position: [px, py, pz],
-        click_position: [cx, cy, cz],
+        player_position,
+        click_position,
         block_runtime_id,
         client_prediction,
     })
 }
 
+fn read_vec3(reader: &mut ProtoReader) -> Result<[f32; 3], ProtoReadError> {
+    Ok([
+        reader.read_f32_le()?,
+        reader.read_f32_le()?,
+        reader.read_f32_le()?,
+    ])
+}
+
 fn decode_use_item_on_entity_transaction_data(
     reader: &mut ProtoReader,
-) -> Result<InventoryTransactionData, crate::io::reader::ProtoReadError> {
+    actions: Vec<NetworkInventoryAction>,
+) -> Result<InventoryTransactionData, ProtoReadError> {
     let actor_runtime_id = reader.read_var_u64()?;
-    let action_type = reader.read_var_u32()?;
+    let action_type = reader.read_var_i32()? as u32;
     let hotbar_slot = reader.read_var_i32()?;
-    let item_in_hand = decode_item_stack_wrapper(reader)?;
-    let player_position = [
-        reader.read_f32_le()?,
-        reader.read_f32_le()?,
-        reader.read_f32_le()?,
-    ];
-    let click_position = [
-        reader.read_f32_le()?,
-        reader.read_f32_le()?,
-        reader.read_f32_le()?,
-    ];
+    let item_in_hand = decode_network_item_stack_descriptor(reader)?;
+    let player_position = read_vec3(reader)?;
+    let click_position = read_vec3(reader)?;
     Ok(InventoryTransactionData::UseItemOnEntity {
-        actions: Vec::new(),
+        actions,
         actor_runtime_id,
         action_type,
         hotbar_slot,
@@ -369,17 +465,14 @@ fn decode_use_item_on_entity_transaction_data(
 
 fn decode_release_item_transaction_data(
     reader: &mut ProtoReader,
-) -> Result<InventoryTransactionData, crate::io::reader::ProtoReadError> {
-    let action_type = reader.read_var_u32()?;
+    actions: Vec<NetworkInventoryAction>,
+) -> Result<InventoryTransactionData, ProtoReadError> {
+    let action_type = reader.read_var_i32()? as u32;
     let hotbar_slot = reader.read_var_i32()?;
-    let item_in_hand = decode_item_stack_wrapper(reader)?;
-    let head_position = [
-        reader.read_f32_le()?,
-        reader.read_f32_le()?,
-        reader.read_f32_le()?,
-    ];
+    let item_in_hand = decode_network_item_stack_descriptor(reader)?;
+    let head_position = read_vec3(reader)?;
     Ok(InventoryTransactionData::ReleaseItem {
-        actions: Vec::new(),
+        actions,
         action_type,
         hotbar_slot,
         item_in_hand,
@@ -388,15 +481,20 @@ fn decode_release_item_transaction_data(
 }
 
 impl InventoryTransaction {
-    pub fn decode(reader: &mut ProtoReader) -> Result<Self, crate::io::reader::ProtoReadError> {
+    /// Réf : gophertunnel `packet/inventory_transaction.go`, PMMP
+    /// `InventoryTransactionPacket::decodePayload` (inchangé depuis 985 hors
+    /// descripteurs d'item).
+    pub fn decode(reader: &mut ProtoReader) -> Result<Self, ProtoReadError> {
         let request_id = reader.read_var_i32()?;
-        let changed_slots = if request_id != 0 {
+        let changed_slots = if reader.read_bool()? {
             decode_changed_slots_hack(reader)?
         } else {
             Vec::new()
         };
 
+        expect_present(reader, "inventory transaction type")?;
         let transaction_type = reader.read_var_u32()?;
+        expect_present(reader, "inventory transaction actions")?;
         let actions = decode_inventory_actions(reader)?;
 
         let data = match transaction_type {
@@ -406,28 +504,8 @@ impl InventoryTransaction {
                 actions,
                 data: decode_use_item_transaction_data(reader)?,
             },
-            3 => {
-                let mut data = decode_use_item_on_entity_transaction_data(reader)?;
-                if let InventoryTransactionData::UseItemOnEntity {
-                    actions: tx_actions,
-                    ..
-                } = &mut data
-                {
-                    *tx_actions = actions;
-                }
-                data
-            }
-            4 => {
-                let mut data = decode_release_item_transaction_data(reader)?;
-                if let InventoryTransactionData::ReleaseItem {
-                    actions: tx_actions,
-                    ..
-                } = &mut data
-                {
-                    *tx_actions = actions;
-                }
-                data
-            }
+            3 => decode_use_item_on_entity_transaction_data(reader, actions)?,
+            4 => decode_release_item_transaction_data(reader, actions)?,
             _ => InventoryTransactionData::Unknown {
                 transaction_type,
                 actions,
@@ -443,29 +521,30 @@ impl InventoryTransaction {
     }
 }
 
-/// Decode the ItemInteractionData from PlayerAuthInput.
+/// Transaction UseItem « empaquetée » de PlayerAuthInput
+/// (`PackedItemUseLegacyInventoryTransaction`, gophertunnel `reader.go`
+/// `PlayerInventoryAction`).
 fn decode_item_interaction(
     reader: &mut ProtoReader,
-) -> Result<ItemInteractionData, crate::io::reader::ProtoReadError> {
-    // Legacy request ID
-    let request_id = reader.read_var_i32()?;
-    if request_id != 0 {
+) -> Result<ItemInteractionData, ProtoReadError> {
+    let _legacy_request_id = reader.read_var_i32()?;
+    if reader.read_bool()? {
         let _ = decode_changed_slots_hack(reader)?;
     }
-
-    let _ = decode_inventory_actions(reader)?;
+    let _ = read_double_optional(reader, decode_inventory_actions)?;
     decode_use_item_transaction_data(reader)
 }
 
-/// Read a SlotInfo from the reader.
-fn read_slot_info(reader: &mut ProtoReader) -> Result<SlotInfo, crate::io::reader::ProtoReadError> {
+/// Read a SlotInfo : FullContainerName (u8 + u32 optionnel), slot, puis net id
+/// en `i32` LE fixe (gophertunnel `item_stack.go` `StackReqSlotInfo`,
+/// CloudburstProtocol `BedrockCodecHelper_v2168`).
+fn read_slot_info(reader: &mut ProtoReader) -> Result<SlotInfo, ProtoReadError> {
     let container_id = reader.read_u8()?;
-    let has_dynamic = reader.read_bool()?;
-    if has_dynamic {
+    if reader.read_bool()? {
         let _dynamic_id = reader.read_u32_le()?;
     }
     let slot_id = reader.read_u8()?;
-    let stack_id = reader.read_var_i32()?;
+    let stack_id = reader.read_i32_le()?;
     Ok(SlotInfo {
         container_id,
         slot_id,
@@ -473,151 +552,184 @@ fn read_slot_info(reader: &mut ProtoReader) -> Result<SlotInfo, crate::io::reade
     })
 }
 
-/// Decode an ItemStackRequest from the reader.
-fn decode_item_stack_request(
-    reader: &mut ProtoReader,
-) -> Result<ItemStackRequest, crate::io::reader::ProtoReadError> {
-    let request_id = reader.read_var_i32()?;
-    let action_count = reader.read_var_u32()?;
-    let mut actions = Vec::new();
+/// Ingrédient d'une action CraftRecipeAuto : variante (0 vide, 1 nom,
+/// 2 Molang, 3 tag), type legacy (même valeur), corps, puis `u16` quantité.
+/// Réf : gophertunnel `item_descriptor.go` `StackRequestItemDescriptorCount`.
+fn skip_stack_request_ingredient(reader: &mut ProtoReader) -> Result<(), ProtoReadError> {
+    let variant = reader.read_var_u32()?;
+    let _descriptor_type = reader.read_u8()?;
+    match variant {
+        0 => {}
+        1 => {
+            let _name = reader.read_string()?;
+            let _aux = reader.read_var_i32()?;
+        }
+        2 => {
+            let _expression = reader.read_string()?;
+            let _version = reader.read_i16_le()?;
+        }
+        3 => {
+            let _tag = reader.read_string()?;
+        }
+        other => {
+            return Err(ProtoReadError::InvalidValue {
+                what: "stack request ingredient descriptor",
+                value: i64::from(other),
+            })
+        }
+    }
+    let _count = reader.read_u16_le()?;
+    Ok(())
+}
 
-    for _ in 0..action_count.min(60) {
-        let action_type = reader.read_u8()?;
-        let action = match action_type {
-            0 => {
-                let count = reader.read_u8()?;
-                let source = read_slot_info(reader)?;
-                let destination = read_slot_info(reader)?;
+/// Item d'une action CraftResultsDeprecated : descripteur par nom (variante
+/// 0 vide ou 1 nom + aux), `i16` count, VarUInt32 block runtime id, user data.
+/// Réf : gophertunnel `reader.go` `StackRequestItem`.
+fn skip_stack_request_item(reader: &mut ProtoReader) -> Result<(), ProtoReadError> {
+    let variant = reader.read_var_u32()?;
+    let _legacy_variant = reader.read_u8()?;
+    match variant {
+        0 => {}
+        1 => {
+            let _identifier = reader.read_string()?;
+            let _aux = reader.read_var_i32()?;
+        }
+        other => {
+            return Err(ProtoReadError::InvalidValue {
+                what: "stack request item descriptor",
+                value: i64::from(other),
+            })
+        }
+    }
+    let _count = reader.read_i16_le()?;
+    let _block_runtime_id = reader.read_var_u32()?;
+    let _user_data = reader.read_byte_array()?;
+    Ok(())
+}
+
+/// Décode une action : index de variante Cereal (VarUInt32), identifiant
+/// legacy (u8, ignoré comme chez gophertunnel et CloudburstProtocol), corps.
+/// Tous les corps sont lus, y compris ceux des actions non gérées, pour que
+/// les actions suivantes et les chaînes de filtre restent alignées.
+fn decode_stack_request_action(
+    reader: &mut ProtoReader,
+) -> Result<StackRequestAction, ProtoReadError> {
+    use stack_request_action_id as id;
+
+    let action_id = stack_request_action_from_variant(reader.read_var_u32()?)?;
+    let _legacy_id = reader.read_u8()?;
+    let action = match action_id {
+        id::TAKE | id::PLACE => {
+            let count = reader.read_u8()?;
+            let source = read_slot_info(reader)?;
+            let destination = read_slot_info(reader)?;
+            if action_id == id::TAKE {
                 StackRequestAction::Take {
                     count,
                     source,
                     destination,
                 }
-            }
-            1 => {
-                let count = reader.read_u8()?;
-                let source = read_slot_info(reader)?;
-                let destination = read_slot_info(reader)?;
+            } else {
                 StackRequestAction::Place {
                     count,
                     source,
                     destination,
                 }
             }
-            2 => {
-                let count = reader.read_u8()?;
-                let source = read_slot_info(reader)?;
-                let destination = read_slot_info(reader)?;
-                StackRequestAction::Swap {
-                    count,
-                    source,
-                    destination,
-                }
+        }
+        id::SWAP => StackRequestAction::Swap {
+            source: read_slot_info(reader)?,
+            destination: read_slot_info(reader)?,
+        },
+        id::DROP => {
+            let count = reader.read_u8()?;
+            let source = read_slot_info(reader)?;
+            let _randomly = reader.read_bool()?;
+            StackRequestAction::Drop { count, source }
+        }
+        id::DESTROY => StackRequestAction::Destroy {
+            count: reader.read_u8()?,
+            source: read_slot_info(reader)?,
+        },
+        id::CONSUME => StackRequestAction::Consume {
+            count: reader.read_u8()?,
+            source: read_slot_info(reader)?,
+        },
+        id::CREATE => StackRequestAction::Create {
+            results_slot: reader.read_u8()?,
+        },
+        id::LAB_TABLE_COMBINE => StackRequestAction::Unknown(action_id),
+        id::BEACON_PAYMENT => {
+            let _primary_effect = reader.read_var_i32()?;
+            let _secondary_effect = reader.read_var_i32()?;
+            StackRequestAction::Unknown(action_id)
+        }
+        id::MINE_BLOCK => StackRequestAction::MineBlock {
+            hotbar_slot: reader.read_var_i32()?,
+            predicted_durability: reader.read_var_i32()?,
+            network_stack_id: reader.read_i32_le()?,
+        },
+        id::CRAFT_RECIPE => StackRequestAction::CraftRecipe {
+            recipe_id: reader.read_var_u32()?,
+            times: reader.read_u8()?,
+        },
+        id::CRAFT_RECIPE_AUTO => {
+            let recipe_id = reader.read_var_u32()?;
+            let times = reader.read_u8()?;
+            let ingredient_count = read_count(reader, "auto craft ingredients", MAX_LIST_LENGTH)?;
+            for _ in 0..ingredient_count {
+                skip_stack_request_ingredient(reader)?;
             }
-            3 => {
-                let count = reader.read_u8()?;
-                let source = read_slot_info(reader)?;
-                StackRequestAction::Drop { count, source }
-            }
-            4 => {
-                let count = reader.read_u8()?;
-                let source = read_slot_info(reader)?;
-                StackRequestAction::Destroy { count, source }
-            }
-            5 => {
-                // CraftingConsumeInput — skip
-                let _count = reader.read_u8()?;
-                read_slot_info(reader)?;
-                StackRequestAction::Unknown(5)
-            }
-            6 => {
-                let _slot = reader.read_u8()?;
-                StackRequestAction::Unknown(6)
-            }
-            11 => {
-                let hotbar_slot = reader.read_var_i32()?;
-                let predicted_durability = reader.read_var_i32()?;
-                let network_stack_id = reader.read_var_i32()?;
-                StackRequestAction::MineBlock {
-                    hotbar_slot,
-                    predicted_durability,
-                    network_stack_id,
-                }
-            }
-            12 => {
-                let recipe_id = reader.read_var_u32()?;
-                let times = reader.read_u8()?;
-                StackRequestAction::CraftRecipe { recipe_id, times }
-            }
-            13 => {
-                // PMMP CraftRecipeAutoStackRequestAction::read :
-                //   recipeId (VarU32) + repetitions (u8) + repetitions2 (u8 — Mojang dup)
-                //   ingredient_count (u8) + foreach: RecipeIngredient
-                // RecipeIngredient = descriptor_type (u8) + descriptor body + count (var_i32)
-                //   descriptor_type = 0=NONE, 1=INT_ID_META, 2=STRING_ID_META, 3=TAG, 4=MOLANG, 5=COMPLEX_ALIAS
-                let recipe_id = reader.read_var_u32()?;
-                let times = reader.read_u8()?;
-                let _times2 = reader.read_u8()?;
-                let ingredient_count = reader.read_u8()?;
-                for _ in 0..ingredient_count {
-                    let descriptor_type = reader.read_u8()?;
-                    match descriptor_type {
-                        1 => {
-                            // IntIdMeta : i16 LE id + (if id!=0) i16 LE meta
-                            let id = reader.read_i16_le()?;
-                            if id != 0 {
-                                let _meta = reader.read_i16_le()?;
-                            }
-                        }
-                        2 => {
-                            // StringIdMeta : string + u16 LE meta
-                            let _string_id = reader.read_string()?;
-                            let _meta = reader.read_u16_le()?;
-                        }
-                        3 => {
-                            // Tag : string
-                            let _tag = reader.read_string()?;
-                        }
-                        4 => {
-                            // Molang : string + u8 version
-                            let _expr = reader.read_string()?;
-                            let _version = reader.read_u8()?;
-                        }
-                        5 => {
-                            // ComplexAlias : string
-                            let _alias = reader.read_string()?;
-                        }
-                        _ => {}
-                    }
-                    let _count = reader.read_var_i32()?;
-                }
-                StackRequestAction::CraftRecipeAuto { recipe_id, times }
-            }
-            14 => {
-                // PMMP CreativeCreateStackRequestAction::read :
-                //   creativeItemId: VarU32
-                //   repetitions:    u8
-                // Sans le read du u8, les actions suivantes (Place/Take) se
-                // décodent 1 byte trop tôt → slot_info corrompu → items disparus.
-                let creative_item_network_id = reader.read_var_u32()?;
-                let _repetitions = reader.read_u8()?;
-                StackRequestAction::CraftCreative {
-                    creative_item_network_id,
-                }
-            }
-            other => StackRequestAction::Unknown(other),
-        };
-        actions.push(action);
-        if matches!(action_type, 6..=10 | 15..) {
-            // Unknown actions may have unparseable data, stop
-            if action_type > 14 {
-                break;
+            StackRequestAction::CraftRecipeAuto { recipe_id, times }
+        }
+        id::CRAFT_CREATIVE => {
+            let creative_item_network_id = reader.read_var_u32()?;
+            let _repetitions = reader.read_u8()?;
+            StackRequestAction::CraftCreative {
+                creative_item_network_id,
             }
         }
+        id::CRAFT_RECIPE_OPTIONAL => {
+            let _recipe_id = reader.read_var_u32()?;
+            let _filter_string_index = reader.read_i32_le()?;
+            StackRequestAction::Unknown(action_id)
+        }
+        id::CRAFT_GRINDSTONE => {
+            let _recipe_net_id = reader.read_i32_le()?;
+            let _repetitions = reader.read_u8()?;
+            let _cost = reader.read_var_i32()?;
+            StackRequestAction::Unknown(action_id)
+        }
+        id::CRAFT_LOOM => {
+            let _pattern = reader.read_string()?;
+            let _repetitions = reader.read_u8()?;
+            StackRequestAction::Unknown(action_id)
+        }
+        id::CRAFT_NON_IMPLEMENTED => StackRequestAction::Unknown(action_id),
+        id::CRAFT_RESULTS_DEPRECATED => {
+            let item_count = read_count(reader, "craft results", MAX_LIST_LENGTH)?;
+            for _ in 0..item_count {
+                skip_stack_request_item(reader)?;
+            }
+            let _times_crafted = reader.read_u8()?;
+            StackRequestAction::CraftResultsDeprecated
+        }
+        other => StackRequestAction::Unknown(other),
+    };
+    Ok(action)
+}
+
+/// Decode an ItemStackRequest. Réf : gophertunnel `item_stack.go`
+/// `ItemStackRequest.Marshal`, schéma `ItemStackRequest.json`.
+fn decode_item_stack_request(reader: &mut ProtoReader) -> Result<ItemStackRequest, ProtoReadError> {
+    let request_id = reader.read_var_i32()?;
+    let action_count = read_count(reader, "stack request actions", MAX_ACTIONS)?;
+    let mut actions = Vec::with_capacity(action_count as usize);
+    for _ in 0..action_count {
+        actions.push(decode_stack_request_action(reader)?);
     }
 
-    // Filter strings
-    let filter_count = reader.read_var_u32()?;
+    let filter_count = read_count(reader, "stack request filter strings", MAX_LIST_LENGTH)?;
     for _ in 0..filter_count {
         let _s = reader.read_string()?;
     }
@@ -629,8 +741,56 @@ fn decode_item_stack_request(
     })
 }
 
+/// Actions de bloc : position et face toujours présentes depuis 2168
+/// (gophertunnel `player.go` `PlayerBlockAction.Marshal`).
+fn decode_block_actions(reader: &mut ProtoReader) -> Result<Vec<BlockAction>, ProtoReadError> {
+    let count = read_count(reader, "player block actions", MAX_ACTIONS)?;
+    let mut block_actions = Vec::with_capacity(count as usize);
+    for _ in 0..count {
+        let action_type = reader.read_var_i32()?;
+        let bx = reader.read_var_i32()?;
+        let by = reader.read_var_i32()?;
+        let bz = reader.read_var_i32()?;
+        let face = reader.read_var_i32()?;
+        block_actions.push(BlockAction {
+            action_type,
+            position: [bx, by, bz],
+            face,
+        });
+    }
+    Ok(block_actions)
+}
+
+/// Blocs optionnels qui suivent le mouvement dans PlayerAuthInput.
+struct PlayerAuthInputTail {
+    item_interaction: Option<ItemInteractionData>,
+    item_stack_request: Option<ItemStackRequest>,
+    block_actions: Vec<BlockAction>,
+}
+
+/// Ordre 2169 (gophertunnel `packet/player_auth_input.go` `Marshal`) : cinq
+/// optionnels doubles (transaction UseItem, ItemStackRequest, actions de
+/// bloc, rotation de véhicule, véhicule prédit), puis vecteurs analogique,
+/// orientation caméra et mouvement brut (ignorés). La présence est portée
+/// par les booléens, plus par les drapeaux.
+fn decode_player_auth_input_tail(
+    reader: &mut ProtoReader,
+) -> Result<PlayerAuthInputTail, ProtoReadError> {
+    let item_interaction = read_double_optional(reader, decode_item_interaction)?;
+    let item_stack_request = read_double_optional(reader, decode_item_stack_request)?;
+    let block_actions = read_double_optional(reader, decode_block_actions)?.unwrap_or_default();
+    let _vehicle_rotation =
+        read_double_optional(reader, |r| Ok((r.read_f32_le()?, r.read_f32_le()?)))?;
+    let _client_predicted_vehicle = read_double_optional(reader, |r| r.read_var_i64())?;
+    Ok(PlayerAuthInputTail {
+        item_interaction,
+        item_stack_request,
+        block_actions,
+    })
+}
+
 impl PlayerAuthInput {
-    pub fn decode(reader: &mut ProtoReader) -> Result<Self, crate::io::reader::ProtoReadError> {
+    pub fn decode(reader: &mut ProtoReader) -> Result<Self, ProtoReadError> {
         let pitch = reader.read_f32_le()?;
         let yaw = reader.read_f32_le()?;
         let pos_x = reader.read_f32_le()?;
@@ -640,94 +800,27 @@ impl PlayerAuthInput {
         let move_vec_z = reader.read_f32_le()?;
         let head_yaw = reader.read_f32_le()?;
 
-        let input_flags = read_bitset(reader)?;
+        let input_flags = read_input_flags(reader)?;
 
         let _input_mode = reader.read_var_u32()?;
         let _play_mode = reader.read_var_u32()?;
-        let _interaction_mode = reader.read_var_u32()?;
+        let _interaction_model = reader.read_var_i32()?;
         let _interact_rot_x = reader.read_f32_le()?;
         let _interact_rot_y = reader.read_f32_le()?;
         let _tick = reader.read_var_u64()?;
-        let _delta_x = reader.read_f32_le()?;
-        let _delta_y = reader.read_f32_le()?;
-        let _delta_z = reader.read_f32_le()?;
+        let _delta = read_vec3(reader)?;
 
-        // Decode order must match PMMP: item_interaction, item_stack_request, block_actions
-
-        // Item interaction (bit 34) — decode fully
-        let item_interaction = if (input_flags >> FLAG_PERFORM_ITEM_INTERACTION) & 1 == 1 {
-            match decode_item_interaction(reader) {
-                Ok(data) => Some(data),
-                Err(_e) => {
-                    return Ok(Self {
-                        pitch,
-                        yaw,
-                        position: [pos_x, pos_y, pos_z],
-                        move_vec_x,
-                        move_vec_z,
-                        head_yaw,
-                        input_flags,
-                        block_actions: Vec::new(),
-                        item_interaction: None,
-                        item_stack_request: None,
-                    });
-                }
-            }
-        } else {
-            None
+        let (tail, trailing_error) = match decode_player_auth_input_tail(reader) {
+            Ok(tail) => (tail, None),
+            Err(e) => (
+                PlayerAuthInputTail {
+                    item_interaction: None,
+                    item_stack_request: None,
+                    block_actions: Vec::new(),
+                },
+                Some(e.to_string()),
+            ),
         };
-
-        // Item stack request (bit 36) — decode
-        let item_stack_request = if (input_flags >> FLAG_PERFORM_ITEM_STACK_REQUEST) & 1 == 1 {
-            match decode_item_stack_request(reader) {
-                Ok(req) => Some(req),
-                Err(_e) => {
-                    return Ok(Self {
-                        pitch,
-                        yaw,
-                        position: [pos_x, pos_y, pos_z],
-                        move_vec_x,
-                        move_vec_z,
-                        head_yaw,
-                        input_flags,
-                        block_actions: Vec::new(),
-                        item_interaction,
-                        item_stack_request: None,
-                    });
-                }
-            }
-        } else {
-            None
-        };
-
-        // Block actions (bit 35)
-        let mut block_actions = Vec::new();
-        if (input_flags >> FLAG_PERFORM_BLOCK_ACTIONS) & 1 == 1 {
-            let count = reader.read_var_i32().unwrap_or(0);
-            for _ in 0..count.min(100) {
-                let Ok(action_type) = reader.read_var_i32() else {
-                    break;
-                };
-                if action_type == 2 {
-                    // STOP_BREAK — no position data
-                    block_actions.push(BlockAction {
-                        action_type,
-                        position: [0, 0, 0],
-                        face: 0,
-                    });
-                } else {
-                    let bx = reader.read_var_i32().unwrap_or(0);
-                    let by = reader.read_var_i32().unwrap_or(0);
-                    let bz = reader.read_var_i32().unwrap_or(0);
-                    let face = reader.read_var_i32().unwrap_or(0);
-                    block_actions.push(BlockAction {
-                        action_type,
-                        position: [bx, by, bz],
-                        face,
-                    });
-                }
-            }
-        }
 
         Ok(Self {
             pitch,
@@ -737,9 +830,10 @@ impl PlayerAuthInput {
             move_vec_z,
             head_yaw,
             input_flags,
-            block_actions,
-            item_interaction,
-            item_stack_request,
+            block_actions: tail.block_actions,
+            item_interaction: tail.item_interaction,
+            item_stack_request: tail.item_stack_request,
+            trailing_error,
         })
     }
 }
@@ -771,10 +865,16 @@ impl MovePlayer {
         w.write_u8(self.mode);
         w.write_bool(self.on_ground);
         w.write_var_u64(self.riding_runtime_id);
+        // Protocole 2168 : données de téléportation optionnelles (booléen de
+        // présence), présentes ssi mode == TELEPORT (gophertunnel
+        // `move_player.go` `OptionalMarshaler(TeleportData)`, CloudburstProtocol
+        // `MovePlayerSerializer_v2168`).
         if self.mode == 2 {
-            // Teleport: cause + source entity type
+            w.write_bool(true);
             w.write_i32_le(0); // cause = unknown
             w.write_i32_le(0); // source entity type
+        } else {
+            w.write_bool(false);
         }
         w.write_var_u64(self.tick);
         w.into_bytes()
@@ -902,6 +1002,9 @@ impl Transfer {
         w.write_string(&self.address);
         w.write_u16_le(self.port);
         w.write_bool(self.reload_world);
+        // Protocole 2168 : GatheringsConfiguration optionnelle, absente
+        // (gophertunnel `transfer.go`, CloudburstProtocol `TransferSerializer_v2168`).
+        w.write_bool(false);
         w.into_bytes()
     }
 }
@@ -995,6 +1098,9 @@ pub struct SerializedSkin {
     pub persona: bool,
     pub persona_cape_on_classic: bool,
     pub primary_user: bool,
+    /// Hash d'apparence calculé par le client (claim `ProfileHash` du login,
+    /// protocole 2168), clé de cache des images de profil.
+    pub profile_hash: String,
 }
 
 impl Default for SerializedSkin {
@@ -1020,6 +1126,7 @@ impl Default for SerializedSkin {
             persona: false,
             persona_cape_on_classic: false,
             primary_user: false,
+            profile_hash: String::new(),
         }
     }
 }
@@ -1043,14 +1150,22 @@ pub struct PlayerList {
 }
 
 impl PlayerList {
+    pub const ACTION_ADD: u8 = 0;
+    pub const ACTION_REMOVE: u8 = 1;
+
+    /// Protocole 2168 : plus d'octet d'action global ni de liste finale de
+    /// booléens « skin vérifiée ». Chaque entrée est une variante taguée :
+    /// index de variante (VarUInt32, Remove = 0, Add = 1) puis octet d'action
+    /// legacy (Add = 0, Remove = 1), les deux numérotations sont inversées.
+    /// Réf : gophertunnel `player.go` `playerListAction`, CloudburstProtocol
+    /// `PlayerListSerializer_v2168`, schéma `PlayerListPacketPayload.json`.
     pub fn encode(&self) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(256);
-        w.write_u8(self.action);
         w.write_var_u32(self.entries.len() as u32);
-
-        if self.action == 0 {
-            // Add entries
-            for entry in &self.entries {
+        for entry in &self.entries {
+            if self.action == Self::ACTION_ADD {
+                w.write_var_u32(1); // variante Add
+                w.write_u8(Self::ACTION_ADD);
                 w.write_raw(&entry.uuid);
                 w.write_var_i64(entry.entity_id);
                 w.write_string(&entry.username);
@@ -1061,25 +1176,38 @@ impl PlayerList {
                 w.write_bool(entry.is_teacher);
                 w.write_bool(entry.is_host);
                 w.write_bool(entry.is_subclient);
-                // Protocol 944 : ARGB color u32 LE (PMMP PlayerListPacket.php:108,
-                // ajouté dans la refonte 1.26.10). Default white = 0xFFFFFFFF.
-                w.write_u32_le(0xFFFFFFFF);
-            }
-            // Verified skins (one per entry)
-            for _ in &self.entries {
-                w.write_bool(true);
-            }
-        } else {
-            // Remove entries — just UUIDs
-            for entry in &self.entries {
+                // Couleur du joueur, ARGB (blanc opaque).
+                w.write_u32_le(0xFFFF_FFFF);
+            } else {
+                w.write_var_u32(0); // variante Remove
+                w.write_u8(Self::ACTION_REMOVE);
                 w.write_raw(&entry.uuid);
             }
         }
-
         w.into_bytes()
     }
 }
 
+/// Couleur de peau du claim de login (`"#rrggbb"` ou `"#aarrggbb"`) vers
+/// l'entier ARGB du protocole 2168. CloudburstProtocol écrit
+/// `Color.getRGB()` (0xAARRGGBB) en little-endian ; toute valeur illisible
+/// (le défaut Steve `"#0"`) donne 0.
+fn skin_color_argb(color: &str) -> i32 {
+    let hex = color.strip_prefix('#').unwrap_or(color);
+    let value = match hex.len() {
+        6 => u32::from_str_radix(hex, 16).map(|rgb| 0xFF00_0000 | rgb),
+        8 => u32::from_str_radix(hex, 16),
+        _ => return 0,
+    };
+    value.map(|argb| argb as i32).unwrap_or(0)
+}
+
+/// SerializedSkin, protocole 2169 : compteurs d'animations, de pièces persona
+/// et de teintes en VarUInt32, taille de bras en u8, couleur en i32 ARGB, puis
+/// drapeau de confiance (chaîne `"true"`/`"false"`, déplacé depuis PlayerList)
+/// et hash de profil. Réf : schéma `SerializedSkin.json` (ordinaux 0 à 21),
+/// CloudburstProtocol `BedrockCodecHelper_v2168` `writeSkin`, gophertunnel
+/// `skin.go`.
 fn write_serialized_skin(w: &mut ProtoWriter, skin: &SerializedSkin) {
     w.write_string(&skin.skin_id);
     w.write_string(&skin.play_fab_id);
@@ -1089,8 +1217,8 @@ fn write_serialized_skin(w: &mut ProtoWriter, skin: &SerializedSkin) {
     w.write_u32_le(skin.skin_height);
     w.write_byte_array(&skin.skin_data);
 
-    // Animations — empty (extension future : itérer skin.animations)
-    w.write_u32_le(0);
+    // Animations : aucune.
+    w.write_var_u32(0);
 
     // Cape image
     w.write_u32_le(skin.cape_width);
@@ -1103,20 +1231,26 @@ fn write_serialized_skin(w: &mut ProtoWriter, skin: &SerializedSkin) {
 
     w.write_string(&skin.cape_id);
     w.write_string(&skin.full_skin_id);
-    w.write_string(&skin.arm_size);
-    w.write_string(&skin.skin_color);
+    // persona::ArmSize : 0 = Slim, 1 = Wide.
+    w.write_u8(if skin.arm_size.eq_ignore_ascii_case("slim") {
+        0
+    } else {
+        1
+    });
+    w.write_i32_le(skin_color_argb(&skin.skin_color));
 
-    // Persona pieces — empty (extension future)
-    w.write_u32_le(0);
-    // Persona tint colors — empty
-    w.write_u32_le(0);
+    // Pièces persona et teintes : aucune.
+    w.write_var_u32(0);
+    w.write_var_u32(0);
 
     w.write_bool(skin.premium);
     w.write_bool(skin.persona);
     w.write_bool(skin.persona_cape_on_classic);
     w.write_bool(skin.primary_user);
+    w.write_bool(false); // overrides player appearance
 
-    w.write_bool(false); // override_appearance (new in 1.26.x — false par défaut)
+    w.write_string("true"); // TrustedSkinFlag
+    w.write_string(&skin.profile_hash);
 }
 
 // ── AddPlayer (S→C, 0x0C) ──
@@ -1138,6 +1272,8 @@ pub struct AddPlayer {
 }
 
 impl AddPlayer {
+    /// Réf : schéma `AddPlayerPacketPayload.json`, gophertunnel
+    /// `packet/add_player.go`, PMMP `AddPlayerPacket` + `Human::sendSpawnPacket`.
     pub fn encode(&self) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(512);
         w.write_raw(&self.uuid);
@@ -1156,43 +1292,38 @@ impl AddPlayer {
         w.write_f32_le(self.pitch);
         w.write_f32_le(self.yaw);
         w.write_f32_le(self.head_yaw);
-        // Held item (air = empty)
-        w.write_var_i32(0); // runtime_id = 0 = air/empty
-                            // Gamemode
+        // Item tenu : NetworkItemStackDescriptor depuis 2168, sans net id
+        // (changelog Mojang 2168, `getStrippedNetworkItem`).
+        ItemStackWrapper::air().encode_descriptor(&mut w);
         w.write_var_i32(self.gamemode);
-        // Entity metadata (5 entries)
-        w.write_var_u32(5);
-        // FLAGS (key=0, type=7=VarLong, value=0)
+        // Métadonnées (mêmes clés que SetActorData : PMMP
+        // `EntityMetadataProperties` SCALE = 38, BOUNDING_BOX_* = 53/54).
+        write_actor_metadata(
+            &mut w,
+            &[
+                (0, 7, MetadataValue::Long(0)),
+                (4, 4, MetadataValue::String(self.username.clone())),
+                (38, 3, MetadataValue::Float(1.0)),
+                (53, 3, MetadataValue::Float(0.6)),
+                (54, 3, MetadataValue::Float(1.8)),
+            ],
+        );
+        // PropertySyncData (entiers, flottants) : vide.
         w.write_var_u32(0);
-        w.write_var_u32(7);
-        w.write_var_i64(0);
-        // NAMETAG (key=4, type=4=String)
-        w.write_var_u32(4);
-        w.write_var_u32(4);
-        w.write_string(&self.username);
-        // SCALE (key=23/0x17, type=3=Float, value=1.0)
-        w.write_var_u32(0x17);
-        w.write_var_u32(3);
-        w.write_f32_le(1.0);
-        // BOUNDING_BOX_WIDTH (key=38/0x26, type=3=Float, value=0.6)
-        w.write_var_u32(0x26);
-        w.write_var_u32(3);
-        w.write_f32_le(0.6);
-        // BOUNDING_BOX_HEIGHT (key=39/0x27, type=3=Float, value=1.8)
-        w.write_var_u32(0x27);
-        w.write_var_u32(3);
-        w.write_f32_le(1.8);
-        // AbilityData
-        w.write_u8(self.command_permission);
-        w.write_u8(self.permission_level);
+        w.write_var_u32(0);
+        // AbilitiesData : identifiant, permissions joueur puis commandes.
         w.write_i64_le(self.entity_unique_id);
-        // 1 ability layer (Base)
+        w.write_u8(self.permission_level);
+        w.write_u8(self.command_permission);
+        // Une couche de base, capacités toutes définies et fausses, vitesses
+        // nulles, comme PMMP `Human::sendSpawnPacket`.
         w.write_var_u32(1);
         w.write_u16_le(1); // layer type = Base
-        w.write_u32_le(0x1BFFF); // abilities set
-        w.write_u32_le(0x18063); // abilities values (creative defaults)
-        w.write_f32_le(0.05); // fly speed
-        w.write_f32_le(0.1); // walk speed
+        w.write_u32_le(ability::ALL);
+        w.write_u32_le(0);
+        w.write_f32_le(0.0); // fly speed
+        w.write_f32_le(0.0); // vertical fly speed
+        w.write_f32_le(0.0); // walk speed
                              // Entity links (none)
         w.write_var_u32(0);
         // Device ID + OS
@@ -1286,7 +1417,9 @@ impl AddItemActor {
         let mut w = ProtoWriter::with_capacity(128);
         w.write_var_i64(self.entity_unique_id);
         w.write_var_u64(self.entity_runtime_id);
-        self.item.encode(&mut w);
+        // Protocole 2168 : NetworkItemStackDescriptor (schéma
+        // `AddItemActorPacketPayload.json`).
+        self.item.encode_descriptor(&mut w);
         w.write_f32_le(self.position[0]);
         w.write_f32_le(self.position[1]);
         w.write_f32_le(self.position[2]);
@@ -1363,7 +1496,7 @@ impl SetActorMotion {
     }
 }
 
-// ── UpdateAbilities (S→C, 0x12B) ──
+// ── UpdateAbilities (S→C, 0xBB) ──
 
 pub struct UpdateAbilities {
     pub entity_id: i64,
@@ -1435,7 +1568,8 @@ impl UpdateAbilities {
         w.write_u8(self.permission_level);
         w.write_u8(self.command_permission);
 
-        w.write_u8(self.layers.len() as u8);
+        // Nombre de couches en VarUInt32 (gophertunnel `ability.go` `Slice`).
+        w.write_var_u32(self.layers.len() as u32);
         for layer in &self.layers {
             w.write_u16_le(layer.layer_type);
             w.write_u32_le(layer.abilities_set);
@@ -1697,7 +1831,11 @@ fn write_actor_metadata(w: &mut ProtoWriter, metadata: &[(u32, u32, MetadataValu
     ordered.sort_by_key(|(key, _, _)| *key);
     for (key, data_type, value) in ordered {
         w.write_var_u32(*key);
+        // Protocole 2168 : index de variante Cereal puis champ `Type` de la
+        // charge utile, même valeur sur un octet (gophertunnel `writer.go`
+        // `EntityMetadata`, CloudburstProtocol `BedrockCodecHelper_v2168`).
         w.write_var_u32(*data_type);
+        w.write_u8(*data_type as u8);
         match value {
             MetadataValue::Byte(v) => w.write_u8(*v),
             MetadataValue::Short(v) => w.write_i16_le(*v),
@@ -1869,67 +2007,34 @@ impl ItemStackWrapper {
         Self { stack_id, item }
     }
 
-    /// Encode to network bytes.
-    ///
-    /// Mirrors PMMP `ItemStackWrapper::write()` — the `stack_id` field is
-    /// authoritative: 0 means "no net id" (air or legacy), non-zero means
-    /// the server-assigned unique stack ID (set by `InventoryManager`).
-    pub fn encode(&self, w: &mut ProtoWriter) {
-        w.write_var_i32(self.item.id);
-        if self.item.id == 0 {
+    /// Encode as `NetworkItemStackDescriptor` (protocole 2168+) : `i16` id,
+    /// `u16` count, VarUInt32 aux, net id optionnel (booléen + VarInt32, plus
+    /// d'index de variante), VarUInt32 block runtime id, user data. L'air est
+    /// entièrement à zéro (« Send fixed Id of 0 for invalid item »).
+    /// Réf : gophertunnel `writer.go` `ItemInstance`, CloudburstProtocol
+    /// `BedrockCodecHelper_v2168` `writeNetworkItemStackDescriptor`.
+    pub fn encode_descriptor(&self, w: &mut ProtoWriter) {
+        if self.item.is_air() {
+            w.write_i16_le(0);
+            w.write_u16_le(0);
+            w.write_var_u32(0);
+            w.write_bool(false);
+            w.write_var_u32(0);
+            w.write_byte_array(&[]);
             return;
         }
-        w.write_u16_le(self.item.count);
-        w.write_var_u32(self.item.meta);
-        let stack_id = if self.item.is_air() { 0 } else { self.stack_id };
-        let has_net_id = stack_id != 0;
-        w.write_bool(has_net_id);
-        if has_net_id {
-            w.write_var_i32(stack_id);
-        }
-        w.write_var_i32(self.item.block_runtime_id);
-        let extra_data = if self.item.extra_data.is_empty() {
-            minimal_item_extra_data(self.item.id)
-        } else {
-            self.item.extra_data.clone()
-        };
-        w.write_byte_array(&extra_data);
-    }
-
-    /// Encode as `NetworkItemStackDescriptor` — the **new** format introduced
-    /// in protocol 975 (Bedrock 1.26.20), used ONLY by `InventorySlotPacket`
-    /// and `MobEquipmentPacket`. `InventoryContentPacket`, `AddPlayer`,
-    /// `AddItemActor` and inventory transactions still use the legacy
-    /// [`Self::encode`].
-    ///
-    /// Port fidèle de PMMP `CommonTypes::putNetworkItemStackDescriptor`
-    /// (`.reference/BedrockProtocol` tag `57.1.0+bedrock-1.26.20`) :
-    /// `LE i16 id` + `LE u16 count` + `VarU32 meta` + `bool hasNetId`
-    /// (+ `VarU32 variant` + `VarI32 stackId` si présent) + `VarU32
-    /// blockRuntimeId` + `string rawExtraData` — plus de court-circuit sur
-    /// id==0, blockRuntimeId et extraData TOUJOURS écrits.
-    pub fn encode_descriptor(&self, w: &mut ProtoWriter) {
         w.write_i16_le(self.item.id as i16);
         w.write_u16_le(self.item.count);
         w.write_var_u32(self.item.meta);
-        let stack_id = if self.item.is_air() { 0 } else { self.stack_id };
-        let has_net_id = stack_id != 0;
-        w.write_bool(has_net_id);
-        if has_net_id {
-            w.write_var_u32(0); // stackId variant (PMMP getStackIdVariant, 0 = défaut)
-            w.write_var_i32(stack_id);
+        w.write_bool(self.stack_id != 0);
+        if self.stack_id != 0 {
+            w.write_var_i32(self.stack_id);
         }
         w.write_var_u32(self.item.block_runtime_id as u32);
-        if self.item.is_air() {
-            // PMMP ItemStack::null() → rawExtraData = "" (string vide).
-            w.write_byte_array(&[]);
+        if self.item.extra_data.is_empty() {
+            w.write_byte_array(&minimal_item_extra_data(self.item.id));
         } else {
-            let extra_data = if self.item.extra_data.is_empty() {
-                minimal_item_extra_data(self.item.id)
-            } else {
-                self.item.extra_data.clone()
-            };
-            w.write_byte_array(&extra_data);
+            w.write_byte_array(&self.item.extra_data);
         }
     }
 }
@@ -1954,23 +2059,33 @@ fn minimal_item_extra_data(_item_id: i32) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_item_stack_wrapper, minimal_item_extra_data, ItemStack, ItemStackWrapper};
-    use crate::io::{ProtoReader, ProtoWriter};
+    use super::*;
 
     #[test]
-    fn item_stack_wrapper_writes_minimal_valid_extra_data_for_basic_items() {
-        let stack = ItemStackWrapper::legacy(ItemStack::new(3, 1, 9853));
+    fn item_descriptor_round_trips_without_variant_index() {
+        let stack = ItemStackWrapper::new(ItemStack::new(3, 1, 9853), 7);
         let mut writer = ProtoWriter::new();
-        stack.encode(&mut writer);
-
+        stack.encode_descriptor(&mut writer);
         let bytes = writer.into_bytes();
-        let mut reader = ProtoReader::new(&bytes);
-        let decoded = decode_item_stack_wrapper(&mut reader).expect("wrapper should decode");
+        // i16 id, u16 count, aux 0, présence, net id 7 (zigzag 14), sans
+        // index de variante.
+        assert_eq!(&bytes[..7], &[3, 0, 1, 0, 0, 1, 14]);
 
+        let mut reader = ProtoReader::new(&bytes);
+        let decoded = decode_network_item_stack_descriptor(&mut reader).unwrap();
         assert_eq!(decoded.item.id, 3);
         assert_eq!(decoded.item.count, 1);
+        assert_eq!(decoded.stack_id, 7);
         assert_eq!(decoded.item.block_runtime_id, 9853);
-        assert_eq!(decoded.item.extra_data, vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(decoded.item.extra_data, vec![0; 10]);
+        assert_eq!(reader.remaining(), 0);
+    }
+
+    #[test]
+    fn air_descriptor_is_all_zero() {
+        let mut writer = ProtoWriter::new();
+        ItemStackWrapper::air().encode_descriptor(&mut writer);
+        assert_eq!(writer.into_bytes(), vec![0, 0, 0, 0, 0, 0, 0, 0]);
     }
 
     #[test]
@@ -1980,6 +2095,129 @@ mod tests {
         assert_eq!(extra[0..2], [0, 0]); // no NBT
         assert_eq!(extra[2..6], [0, 0, 0, 0]); // canPlace count
         assert_eq!(extra[6..10], [0, 0, 0, 0]); // canBreak count
+    }
+
+    #[test]
+    fn metadata_entry_repeats_type_byte() {
+        let mut writer = ProtoWriter::new();
+        write_actor_metadata(&mut writer, &[(38, 3, MetadataValue::Float(1.0))]);
+        assert_eq!(
+            writer.into_bytes(),
+            vec![1, 38, 3, 3, 0x00, 0x00, 0x80, 0x3F]
+        );
+    }
+
+    #[test]
+    fn skin_colour_parses_hex_claims() {
+        assert_eq!(skin_color_argb("#b37b62"), 0xFFB3_7B62_u32 as i32);
+        assert_eq!(skin_color_argb("#80b37b62"), 0x80B3_7B62_u32 as i32);
+        assert_eq!(skin_color_argb("#0"), 0);
+    }
+
+    #[test]
+    fn player_list_remove_uses_tagged_entries() {
+        let entry = PlayerListAdd {
+            uuid: [9; 16],
+            entity_id: 1,
+            username: String::new(),
+            xuid: String::new(),
+            platform_chat_id: String::new(),
+            build_platform: 0,
+            skin: SerializedSkin::default(),
+            is_teacher: false,
+            is_host: false,
+            is_subclient: false,
+        };
+        let bytes = PlayerList {
+            action: PlayerList::ACTION_REMOVE,
+            entries: vec![entry],
+        }
+        .encode();
+        let mut expected = vec![1, 0, 1];
+        expected.extend([9; 16]);
+        assert_eq!(bytes, expected);
+    }
+
+    #[test]
+    fn inventory_transaction_normal_decodes_2169_layout() {
+        let mut w = ProtoWriter::new();
+        w.write_var_i32(0); // legacy request id
+        w.write_bool(false); // pas de legacy slots
+        w.write_bool(true); // présence du type
+        w.write_var_u32(0); // Normal
+        w.write_bool(true); // présence des actions
+        w.write_var_u32(1);
+        w.write_var_u32(0); // source Container
+        w.write_bool(true);
+        w.write_bool(true);
+        w.write_i8(-2); // window id
+        w.write_bool(true);
+        w.write_bool(false); // pas de drapeaux
+        w.write_var_u32(4); // slot
+        ItemStackWrapper::air().encode_descriptor(&mut w);
+        ItemStackWrapper::new(ItemStack::new(3, 2, 0), 5).encode_descriptor(&mut w);
+        let bytes = w.into_bytes();
+
+        let tx = InventoryTransaction::decode(&mut ProtoReader::new(&bytes)).unwrap();
+        let InventoryTransactionData::Normal { actions } = tx.data else {
+            panic!("expected Normal");
+        };
+        assert_eq!(actions[0].window_id, Some(-2));
+        assert_eq!(actions[0].source_flags, None);
+        assert_eq!(actions[0].inventory_slot, 4);
+        assert_eq!(actions[0].new_item.item.count, 2);
+    }
+
+    #[test]
+    fn player_auth_input_reads_flag_list_and_double_optionals() {
+        let mut w = ProtoWriter::new();
+        for _ in 0..8 {
+            w.write_f32_le(0.0); // rotation, position, move vector, head yaw
+        }
+        w.write_bool(true);
+        w.write_var_u32(2);
+        w.write_var_i32(25); // START_SPRINTING
+        w.write_var_i32(65); // InternalUpdate
+        w.write_var_u32(0); // input mode
+        w.write_var_u32(0); // play mode
+        w.write_var_i32(0); // interaction model
+        w.write_f32_le(0.0);
+        w.write_f32_le(0.0);
+        w.write_var_u64(1); // tick
+        for _ in 0..3 {
+            w.write_f32_le(0.0); // delta
+        }
+        w.write_bool(true);
+        w.write_bool(false); // pas de transaction UseItem
+        w.write_bool(true);
+        w.write_bool(false); // pas d'ItemStackRequest
+        w.write_bool(true);
+        w.write_bool(true); // actions de bloc
+        w.write_var_u32(1);
+        w.write_var_i32(18); // PREDICT_DESTROY_BLOCK
+        w.write_var_i32(1);
+        w.write_var_i32(64);
+        w.write_var_i32(-3);
+        w.write_var_i32(1);
+        for _ in 0..2 {
+            w.write_bool(true);
+            w.write_bool(false); // véhicule
+        }
+        let bytes = w.into_bytes();
+
+        let pai = PlayerAuthInput::decode(&mut ProtoReader::new(&bytes)).unwrap();
+        assert_eq!(pai.trailing_error, None);
+        assert_eq!(pai.input_flags, (1u128 << 25) | (1u128 << 65));
+        assert_eq!(pai.block_actions.len(), 1);
+        assert_eq!(pai.block_actions[0].position, [1, 64, -3]);
+    }
+
+    #[test]
+    fn stack_request_maps_variant_indices() {
+        assert_eq!(stack_request_action_from_variant(6).unwrap(), 6);
+        assert_eq!(stack_request_action_from_variant(7).unwrap(), 9);
+        assert_eq!(stack_request_action_from_variant(17).unwrap(), 19);
+        assert!(stack_request_action_from_variant(18).is_err());
     }
 }
 
@@ -2017,18 +2255,16 @@ impl InventoryContent {
         slot_count: u32,
         full_container_name: &FullContainerName,
     ) -> Vec<u8> {
-        let mut w = ProtoWriter::with_capacity(128);
-        w.write_var_u32(window_id);
-        w.write_var_u32(slot_count);
-        for _ in 0..slot_count {
-            w.write_var_i32(0); // air
-        }
-        full_container_name.encode(&mut w);
-        ItemStackWrapper::air().encode(&mut w);
-        w.into_bytes()
+        let air = vec![ItemStackWrapper::air(); slot_count as usize];
+        Self::encode_items(window_id, &air, full_container_name)
     }
 
     /// Encode inventory with actual items.
+    ///
+    /// Layout (PMMP `InventoryContentPacket::encodePayload` 1001 = gophertunnel
+    /// `packet/inventory_content.go` 1.26.45) : VarUInt32 windowId, VarUInt32
+    /// count + NetworkItemStackDescriptor par slot, FullContainerName, puis
+    /// descripteur de l'item de stockage (air).
     pub fn encode_items(
         window_id: u32,
         items: &[ItemStackWrapper],
@@ -2038,10 +2274,10 @@ impl InventoryContent {
         w.write_var_u32(window_id);
         w.write_var_u32(items.len() as u32);
         for item in items {
-            item.encode(&mut w);
+            item.encode_descriptor(&mut w);
         }
         full_container_name.encode(&mut w);
-        ItemStackWrapper::air().encode(&mut w);
+        ItemStackWrapper::air().encode_descriptor(&mut w);
         w.into_bytes()
     }
 }
@@ -2058,14 +2294,12 @@ impl InventorySlot {
         item: &ItemStackWrapper,
         full_container_name: &FullContainerName,
     ) -> Vec<u8> {
-        // Protocol 975 (PMMP `InventorySlotPacket::encodePayload`,
-        // tag 57.1.0+bedrock-1.26.20) :
+        // Layout (PMMP `InventorySlotPacket::encodePayload`, gophertunnel
+        // `packet/inventory_slot.go`) :
         //   VarU32 windowId + VarU32 inventorySlot
         //   writeOptional(containerName)  → bool + FullContainerName::write
         //   writeOptional(storage)        → bool (+ descriptor si présent)
         //   NetworkItemStackDescriptor item
-        // Avant 975 : containerName et storage étaient écrits sans préfixe
-        // Optional, et les items utilisaient l'ancien ItemStackWrapper.
         let mut w = ProtoWriter::with_capacity(64);
         w.write_var_u32(window_id);
         w.write_var_u32(slot);
@@ -2086,11 +2320,9 @@ pub struct MobEquipment;
 impl MobEquipment {
     /// Encode empty hand (air item).
     ///
-    /// Protocol 975 (PMMP `MobEquipmentPacket::encodePayload`,
-    /// tag 57.1.0+bedrock-1.26.20) : `actorRuntimeId` + `NetworkItemStack
-    /// Descriptor item` + `Byte inventorySlot` + `Byte hotbarSlot` + `Byte
-    /// windowId`. L'item air n'est PLUS court-circuité (`VarI32 0`) : il
-    /// faut un descriptor complet.
+    /// Layout (PMMP `MobEquipmentPacket::encodePayload`) : `actorRuntimeId` +
+    /// `NetworkItemStackDescriptor item` + `Byte inventorySlot` + `Byte
+    /// hotbarSlot` + `Byte windowId`.
     pub fn encode_empty(runtime_entity_id: u64) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(16);
         w.write_var_u64(runtime_entity_id);

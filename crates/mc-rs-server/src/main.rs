@@ -1856,23 +1856,19 @@ async fn main() {
                     let prepared = conn.prepare_for_send(open_bytes);
                     raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, true);
                     // InventoryContent : 27 slots du chest.
-                    let mut content_writer = mc_rs_proto::io::ProtoWriter::with_capacity(64);
-                    content_writer.write_var_u32(window_id as u32);
-                    content_writer.write_var_u32(data.slots.len() as u32);
-                    for slot in &data.slots {
-                        let wrapper = mc_rs_proto::packets::player::ItemStackWrapper::legacy(
-                            slot.clone(),
-                        );
-                        wrapper.encode(&mut content_writer);
-                    }
-                    // FullContainerName + storage stack id
-                    content_writer.write_u8(0); // container_name_id
-                    content_writer.write_bool(false); // dynamic_id
-                    content_writer.write_var_i32(0); // storage_stack_id
-                    let bytes = conn.encode_compressed_packet(
-                        packet_id::INVENTORY_CONTENT,
-                        content_writer.as_bytes(),
+                    let items: Vec<_> = data
+                        .slots
+                        .iter()
+                        .cloned()
+                        .map(mc_rs_proto::packets::player::ItemStackWrapper::legacy)
+                        .collect();
+                    let content = mc_rs_proto::packets::player::InventoryContent::encode_items(
+                        window_id as u32,
+                        &items,
+                        &mc_rs_proto::packets::player::FullContainerName::new(0),
                     );
+                    let bytes =
+                        conn.encode_compressed_packet(packet_id::INVENTORY_CONTENT, &content);
                     let prepared = conn.prepare_for_send(bytes);
                     raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, true);
                     tracing::info!(

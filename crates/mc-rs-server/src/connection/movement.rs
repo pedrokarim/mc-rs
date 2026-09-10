@@ -13,9 +13,28 @@ use super::Connection;
 
 impl Connection {
     pub(super) fn handle_player_auth_input(&mut self, reader: &mut ProtoReader) -> Vec<Vec<u8>> {
-        let Ok(pkt) = PlayerAuthInput::decode(reader) else {
-            return Vec::new();
+        // PlayerAuthInput arrive à chaque tick : la première erreur de décodage
+        // du processus est journalisée en warn (diagnostic de format face à un
+        // client réel), les suivantes en debug.
+        static PAI_ERROR_REPORTED: std::sync::atomic::AtomicBool =
+            std::sync::atomic::AtomicBool::new(false);
+        let report = |what: &str, err: &dyn std::fmt::Display| {
+            if !PAI_ERROR_REPORTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                tracing::warn!("[{}] PlayerAuthInput {}: {}", self.addr, what, err);
+            } else {
+                tracing::debug!("[{}] PlayerAuthInput {}: {}", self.addr, what, err);
+            }
         };
+        let pkt = match PlayerAuthInput::decode(reader) {
+            Ok(pkt) => pkt,
+            Err(e) => {
+                report("decode failed", &e);
+                return Vec::new();
+            }
+        };
+        if let Some(err) = &pkt.trailing_error {
+            report("optional blocks dropped", err);
+        }
 
         // Validate position (anti-cheat basics)
         if !pkt.position[0].is_finite()

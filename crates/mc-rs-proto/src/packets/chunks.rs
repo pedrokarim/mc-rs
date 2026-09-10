@@ -17,8 +17,15 @@ impl LevelChunk {
         w.write_var_i32(self.chunk_x);
         w.write_var_i32(self.chunk_z);
         w.write_var_i32(self.dimension_id);
+        // Protocole 2168 : nombre de sous-chunks sans sentinelle, limite de
+        // requête client optionnelle (absente : pas de mode requête), liste des
+        // blobs de cache toujours présente (vide sans cache).
+        // Réf : gophertunnel `packet/level_chunk.go`, CloudburstProtocol
+        // `LevelChunkSerializer_v2168`, schéma `LevelChunkPacketPayload.json`.
         w.write_var_u32(self.sub_chunk_count);
+        w.write_bool(false);
         w.write_bool(self.cache_enabled);
+        w.write_var_u32(0);
         w.write_byte_array(&self.payload);
         w.into_bytes()
     }

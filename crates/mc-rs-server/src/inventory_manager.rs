@@ -1202,6 +1202,32 @@ impl InventoryManager {
                         had_error = true;
                     }
                 }
+                StackRequestAction::Consume { count, source } => {
+                    // PMMP `CraftingConsumeInputStackRequestAction` : retire
+                    // l'ingrédient du slot source ; l'équilibre du craft est
+                    // vérifié par le matching de recette (CraftRecipe).
+                    let src = match self.resolve_slot_info(source) {
+                        Some(v) => v,
+                        None => {
+                            had_error = true;
+                            continue;
+                        }
+                    };
+                    record(&mut touched, &mut touched_logical, source, src.0, src.1);
+                    if self.remove_items(inv, src, *count as u16).is_none() {
+                        had_error = true;
+                    }
+                }
+                StackRequestAction::Create { .. } => {
+                    // PMMP `CraftingCreateSpecificResultStackRequestAction` :
+                    // choisit le résultat d'une recette à sorties multiples.
+                    // Nos recettes n'ont qu'un résultat, déjà posé par
+                    // CraftRecipe dans `pending_creative_item`.
+                }
+                StackRequestAction::CraftResultsDeprecated => {
+                    // PMMP : « no obvious use », le serveur ne fait pas
+                    // confiance aux résultats annoncés par le client.
+                }
                 StackRequestAction::Unknown(code) => {
                     // PMMP throw `ItemStackRequestProcessException`. Côté Rust,
                     // on garde la session vivante mais on demande un full
@@ -1322,7 +1348,7 @@ impl InventoryManager {
                 count: wrapper.item.count as u8,
                 stack_id,
                 custom_name: String::new(),
-                filtered_custom_name: String::new(),
+                filtered_custom_name: None,
                 durability_correction: 0,
             };
             if let Some(c) = by_container

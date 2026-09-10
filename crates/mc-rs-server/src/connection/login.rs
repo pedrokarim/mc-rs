@@ -226,36 +226,30 @@ impl Connection {
         &mut self,
         reader: &mut ProtoReader,
     ) -> Vec<Vec<u8>> {
-        let Ok(status) = reader.read_u8() else {
-            return Vec::new();
-        };
-        // Le client envoie aussi la liste des pack IDs qu'il veut DL
-        // (string array). Chaque ID a la forme "<uuid>_<version>".
-        let pack_count = reader.read_u16_le().unwrap_or(0);
-        let mut requested_packs: Vec<String> = Vec::with_capacity(pack_count as usize);
-        for _ in 0..pack_count {
-            if let Ok(id) = reader.read_string() {
-                requested_packs.push(id);
+        use mc_rs_proto::packets::login::ResourcePackClientResponse;
+
+        let response = match ResourcePackClientResponse::decode(reader) {
+            Ok(response) => response,
+            Err(e) => {
+                warn!(
+                    "[{}] Failed to decode ResourcePackClientResponse: {}",
+                    self.addr, e
+                );
+                return Vec::new();
             }
-        }
+        };
+        debug!("[{}] ResourcePackClientResponse: {:?}", self.addr, response);
 
-        debug!(
-            "[{}] ResourcePackClientResponse: status={} requested={}",
-            self.addr,
-            status,
-            requested_packs.len()
-        );
-
-        match status {
-            // 1 = REFUSED → le client ne veut pas du serveur, il se déco.
-            1 => {
+        match response {
+            // Le client refuse les packs, il se déconnecte.
+            ResourcePackClientResponse::Cancel => {
                 info!("[{}] Resource packs refused — disconnecting", self.addr);
                 Vec::new()
             }
-            // 2 = SEND_PACKS — pour chaque pack demandé, envoyer
+            // Pour chaque pack demandé ("<uuid>_<version>"), envoyer
             // ResourcePackDataInfo. Le client suivra avec
             // ResourcePackChunkRequest pour chaque chunk.
-            2 => {
+            ResourcePackClientResponse::Downloading(requested_packs) => {
                 info!(
                     "[{}] Client requesting {} resource packs",
                     self.addr,
@@ -281,28 +275,19 @@ impl Connection {
                 }
                 out
             }
-            3 => {
-                // HAVE_ALL_PACKS -> send ResourcePackStack
+            ResourcePackClientResponse::DownloadingFinished => {
                 info!(
-                    "[{}] HAVE_ALL_PACKS — sending ResourcePackStack ({} packs)",
+                    "[{}] Downloads finished — sending ResourcePackStack ({} packs)",
                     self.addr,
                     self.resource_packs.len()
                 );
                 self.send_resource_pack_stack()
             }
-            4 => {
-                // COMPLETED -> transition to PreSpawn
+            ResourcePackClientResponse::ResourcePackStackFinished => {
                 info!("[{}] Resource packs completed", self.addr);
                 self.state = ConnectionState::PreSpawn;
                 debug!("[{}] -> PreSpawn state", self.addr);
                 self.send_pre_spawn_packets()
-            }
-            _ => {
-                debug!(
-                    "[{}] Unexpected resource pack status: {}",
-                    self.addr, status
-                );
-                Vec::new()
             }
         }
     }
@@ -366,7 +351,9 @@ impl Connection {
         writer.write_i64_le(0);
         writer.write_i64_le(0);
         writer.write_string(""); // worldTemplateVersion
-        writer.write_u16_le(packs.len() as u16); // count
+                                 // Nombre de packs en VarUInt32 depuis 2168 (u16 LE auparavant ;
+                                 // gophertunnel `resource_packs_info.go` `Slice`).
+        writer.write_var_u32(packs.len() as u32);
 
         for pack in packs {
             // PMMP putUUID = 2 x i64_le reversed des bytes UUID. On encode

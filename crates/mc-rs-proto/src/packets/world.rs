@@ -1,7 +1,9 @@
 use crate::io::ProtoWriter;
 
 // ── StartGame (S→C, 0x0B) ──
-// Aligned EXACTLY with PocketMine-MP StartGamePacket.php (protocol 924)
+// Protocole 2169 : ordre des champs du schéma Mojang `StartGamePacketPayload.json`
+// + `LevelSettings.json`, identique à gophertunnel `packet/start_game.go` et
+// CloudburstProtocol `StartGameSerializer_v2168`.
 
 pub struct StartGame {
     // ── Top-level fields ──
@@ -27,7 +29,8 @@ pub struct StartGame {
     pub created_in_editor: bool,
     pub exported_from_editor: bool,
     pub day_cycle_lock_time: i32,
-    pub edu_offer: i32,
+    /// VarUInt32 depuis 2168 (Education Edition Offer).
+    pub edu_offer: u32,
     pub edu_features: bool,
     pub edu_product_uuid: String,
     pub rain_level: f32,
@@ -44,7 +47,8 @@ pub struct StartGame {
     pub experiments_previously_toggled: bool,
     pub bonus_chest: bool,
     pub start_with_map: bool,
-    pub default_player_permission: i32,
+    /// Un octet brut depuis 2168 (1 = MEMBER).
+    pub default_player_permission: u8,
     pub server_chunk_tick_radius: i32,
     pub has_locked_behavior_pack: bool,
     pub has_locked_resource_pack: bool,
@@ -102,9 +106,6 @@ pub struct StartGame {
     // NetworkPermissions
     pub disable_client_sounds: bool,
 
-    /// Protocol 995 (bedrock 1.26.30) : le serveur logue-t-il le chat.
-    pub is_logging_chat: bool,
-
     // ServerJoinInformation: Optional (we write false = not present)
 
     // ServerTelemetryData
@@ -155,7 +156,7 @@ impl StartGame {
         w.write_bool(self.created_in_editor);
         w.write_bool(self.exported_from_editor);
         w.write_var_i32(self.day_cycle_lock_time);
-        w.write_var_i32(self.edu_offer);
+        w.write_var_u32(self.edu_offer);
         w.write_bool(self.edu_features);
         w.write_string(&self.edu_product_uuid);
         w.write_f32_le(self.rain_level);
@@ -184,7 +185,7 @@ impl StartGame {
 
         w.write_bool(self.bonus_chest);
         w.write_bool(self.start_with_map);
-        w.write_var_i32(self.default_player_permission);
+        w.write_u8(self.default_player_permission);
         w.write_i32_le(self.server_chunk_tick_radius);
         w.write_bool(self.has_locked_behavior_pack);
         w.write_bool(self.has_locked_resource_pack);
@@ -264,12 +265,9 @@ impl StartGame {
         // NetworkPermissions
         w.write_bool(self.disable_client_sounds);
 
-        // Protocol 995 (bedrock 1.26.30) : isLoggingChat.
-        w.write_bool(self.is_logging_chat);
+        // (isLoggingChat, ajouté en 995, a été retiré en 2168.)
 
-        // ServerJoinInformation: Optional — write false (not present).
-        // (Protocol 999 a rendu experienceName/worldName optionnels DANS ce type,
-        // mais on écrit l'optional externe absent → rien à encoder à l'intérieur.)
+        // ServerJoinInformation : optionnel, absent.
         w.write_bool(false);
 
         // ServerTelemetryData
@@ -364,7 +362,6 @@ impl StartGame {
             enable_client_side_chunk_generation: false,
             block_network_ids_are_hashes: false,
             disable_client_sounds: true,
-            is_logging_chat: false,
             server_id: String::new(),
             scenario_id: String::new(),
             world_id: String::new(),
@@ -382,34 +379,12 @@ pub enum GameRule {
 }
 
 impl GameRule {
-    /// Encodage StartGame : IntGameRule utilise VarInt (PMMP encode($out, true)).
+    /// Encodage unique depuis 2168 (StartGame et GameRulesChanged) : nom,
+    /// modifiable, index de variante (1 bool, 2 entier, 3 flottant), valeur ;
+    /// l'entier est un `u32` LE fixe. Réf : schéma `GameRule.json`,
+    /// gophertunnel `writer.go` `GameRule` (l'ancien `GameRuleLegacy` à
+    /// VarUInt32 de StartGame a disparu).
     pub fn encode(&self, w: &mut ProtoWriter) {
-        match self {
-            Self::Bool(name, editable, value) => {
-                w.write_string(name);
-                w.write_bool(*editable);
-                w.write_var_u32(1);
-                w.write_bool(*value);
-            }
-            Self::Int(name, editable, value) => {
-                w.write_string(name);
-                w.write_bool(*editable);
-                w.write_var_u32(2);
-                w.write_var_i32(*value);
-            }
-            Self::Float(name, editable, value) => {
-                w.write_string(name);
-                w.write_bool(*editable);
-                w.write_var_u32(3);
-                w.write_f32_le(*value);
-            }
-        }
-    }
-
-    /// Encodage hors-StartGame (utilisé par `GameRulesChangedPacket`) :
-    /// IntGameRule passe en LE u32 au lieu de VarInt — voir PMMP
-    /// `IntGameRule::encode` qui swap selon `$isStartGame`.
-    pub fn encode_non_start_game(&self, w: &mut ProtoWriter) {
         match self {
             Self::Bool(name, editable, value) => {
                 w.write_string(name);
@@ -445,7 +420,7 @@ impl GameRulesChanged {
         let mut w = ProtoWriter::with_capacity(64);
         w.write_var_u32(self.rules.len() as u32);
         for rule in &self.rules {
-            rule.encode_non_start_game(&mut w);
+            rule.encode(&mut w);
         }
         w.into_bytes()
     }
@@ -474,6 +449,11 @@ impl PlaySound {
         w.write_var_i32((self.position[2] * 8.0) as i32);
         w.write_f32_le(self.volume);
         w.write_f32_le(self.pitch);
+        // Protocole 2168 : nombre de boucles (VarInt32, 0 = jouer une fois ;
+        // gophertunnel `play_sound.go`, schéma `PlaySoundPacketPayload.json`),
+        // puis handle de son serveur optionnel (975), absent.
+        w.write_var_i32(0);
+        w.write_bool(false);
         w.into_bytes()
     }
 }
@@ -1123,7 +1103,10 @@ impl LevelEvent {
 // ── LevelSoundEvent (S→C, 0x7B) ──
 
 pub struct LevelSoundEvent {
-    pub sound: u32,
+    /// Nom de l'événement sonore (`"break"`, `"place"`…). Chaîne sur le fil
+    /// depuis le protocole 993 (PMMP `LevelSoundEventPacket`, gophertunnel
+    /// `level_sound_event.go`) : l'ancien identifiant numérique n'existe plus.
+    pub sound: &'static str,
     pub position: [f32; 3],
     pub extra_data: i32,
     pub entity_type: String,
@@ -1133,19 +1116,19 @@ pub struct LevelSoundEvent {
 }
 
 impl LevelSoundEvent {
-    pub const HIT: u32 = 1;
-    pub const BREAK: u32 = 5;
-    pub const PLACE: u32 = 6;
-    // IDs autoritatifs : BedrockProtocol `types/LevelSoundEvent.php`.
-    pub const AMBIENT: u32 = 10;
-    pub const DEATH: u32 = 14;
-    pub const HURT: u32 = 17;
-    pub const ATTACK: u32 = 41;
-    pub const EXPLODE: u32 = 48;
-    pub const SHOOT: u32 = 54;
+    // Noms autoritatifs : BedrockProtocol `types/LevelSoundEvent.php`.
+    pub const HIT: &'static str = "hit";
+    pub const BREAK: &'static str = "break";
+    pub const PLACE: &'static str = "place";
+    pub const AMBIENT: &'static str = "ambient";
+    pub const DEATH: &'static str = "death";
+    pub const HURT: &'static str = "hurt";
+    pub const ATTACK: &'static str = "attack";
+    pub const EXPLODE: &'static str = "explode";
+    pub const SHOOT: &'static str = "shoot";
 
     /// Create a non-actor block sound event.
-    pub fn block_sound(sound: u32, position: [f32; 3], block_runtime_id: i32) -> Self {
+    pub fn block_sound(sound: &'static str, position: [f32; 3], block_runtime_id: i32) -> Self {
         Self {
             sound,
             position,
@@ -1158,7 +1141,7 @@ impl LevelSoundEvent {
     }
 
     /// Son « monde » non lié à une entité ni un bloc (ex explosion).
-    pub fn world_sound(sound: u32, position: [f32; 3]) -> Self {
+    pub fn world_sound(sound: &'static str, position: [f32; 3]) -> Self {
         Self {
             sound,
             position,
@@ -1173,7 +1156,7 @@ impl LevelSoundEvent {
     /// Son émis par une entité (mob) : `entity_type` = identifiant réseau
     /// (ex `minecraft:zombie`), nécessaire pour que le client joue le bon son.
     pub fn actor_sound(
-        sound: u32,
+        sound: &'static str,
         position: [f32; 3],
         entity_type: impl Into<String>,
         actor_unique_id: i64,
@@ -1192,7 +1175,7 @@ impl LevelSoundEvent {
 
     pub fn encode(&self) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(32);
-        w.write_var_u32(self.sound);
+        w.write_string(self.sound);
         w.write_f32_le(self.position[0]);
         w.write_f32_le(self.position[1]);
         w.write_f32_le(self.position[2]);
@@ -1201,12 +1184,8 @@ impl LevelSoundEvent {
         w.write_bool(self.is_baby_mob);
         w.write_bool(self.disable_relative_volume);
         w.write_i64_le(self.actor_unique_id);
-        // Protocol 975 (PMMP `LevelSoundEventPacket`,
-        // tag 57.1.0+bedrock-1.26.20) : nouveau champ trailing
-        // `writeOptional(firePosition, putVector3)`. mc-rs n'émet jamais de
-        // fire position → Optional(false) = 1 octet. Sans ça le client
-        // décode 1 octet trop court → batch corrompu → crash au 1er son de
-        // bloc (break/place).
+        // Protocole 975 : position de tir optionnelle
+        // (`writeOptional(firePosition)`), jamais émise → absente.
         w.write_bool(false);
         w.into_bytes()
     }
@@ -1220,7 +1199,8 @@ pub struct ItemStackResponseSlot {
     pub count: u8,
     pub stack_id: i32,
     pub custom_name: String,
-    pub filtered_custom_name: String,
+    /// Nom filtré (optionnel depuis 2168).
+    pub filtered_custom_name: Option<String>,
     pub durability_correction: i32,
 }
 
@@ -1240,28 +1220,53 @@ pub struct ItemStackResponse {
 }
 
 impl ItemStackResponse {
+    pub const RESULT_OK: u8 = 0;
+    pub const RESULT_ERROR: u8 = 1;
+
+    /// Layout 2168 (schémas `ItemStackResponseInfo.json`,
+    /// `ItemStackResponseSlotInfo.json` ; gophertunnel `item_stack.go`,
+    /// CloudburstProtocol `ItemStackResponseSerializer_v2168`) :
+    /// - conteneurs en optionnel double, présents ssi le résultat est un succès
+    ///   (invariant Mojang), même quand la liste est vide ;
+    /// - net id de slot en optionnel double, présent ssi la quantité est non
+    ///   nulle (invariant Mojang) ;
+    /// - nom filtré en optionnel simple.
     pub fn encode(&self) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(128);
         w.write_var_u32(self.entries.len() as u32);
         for entry in &self.entries {
             w.write_u8(entry.result);
             w.write_var_i32(entry.request_id);
-            if entry.result == 0 {
-                w.write_var_u32(entry.containers.len() as u32);
-                for container in &entry.containers {
-                    // FullContainerName
-                    w.write_u8(container.container_id);
-                    w.write_bool(false); // no dynamic ID
-                    w.write_var_u32(container.slots.len() as u32);
-                    for slot in &container.slots {
-                        w.write_u8(slot.slot);
-                        w.write_u8(slot.hotbar_slot);
-                        w.write_u8(slot.count);
+            let success = entry.result == Self::RESULT_OK;
+            w.write_bool(true);
+            w.write_bool(success);
+            if !success {
+                continue;
+            }
+            w.write_var_u32(entry.containers.len() as u32);
+            for container in &entry.containers {
+                // FullContainerName
+                w.write_u8(container.container_id);
+                w.write_bool(false); // no dynamic ID
+                w.write_var_u32(container.slots.len() as u32);
+                for slot in &container.slots {
+                    w.write_u8(slot.slot);
+                    w.write_u8(slot.hotbar_slot);
+                    w.write_u8(slot.count);
+                    w.write_bool(true);
+                    w.write_bool(slot.count > 0);
+                    if slot.count > 0 {
                         w.write_var_i32(slot.stack_id);
-                        w.write_string(&slot.custom_name);
-                        w.write_string(&slot.filtered_custom_name);
-                        w.write_var_i32(slot.durability_correction);
                     }
+                    w.write_string(&slot.custom_name);
+                    match &slot.filtered_custom_name {
+                        Some(filtered) => {
+                            w.write_bool(true);
+                            w.write_string(filtered);
+                        }
+                        None => w.write_bool(false),
+                    }
+                    w.write_var_i32(slot.durability_correction);
                 }
             }
         }
@@ -1272,18 +1277,18 @@ impl ItemStackResponse {
     pub fn ok(request_id: i32, containers: Vec<ItemStackResponseContainer>) -> Self {
         Self {
             entries: vec![ItemStackResponseEntry {
-                result: 0,
+                result: Self::RESULT_OK,
                 request_id,
                 containers,
             }],
         }
     }
 
-    /// Create an error response for a request.
+    /// Create an error response for a request (`ItemStackNetResult::Error`).
     pub fn error(request_id: i32) -> Self {
         Self {
             entries: vec![ItemStackResponseEntry {
-                result: 2, // generic error
+                result: Self::RESULT_ERROR,
                 request_id,
                 containers: Vec::new(),
             }],
@@ -1334,6 +1339,23 @@ mod tests {
             "ContainerOpen bytes diverge : got {:02X?}, expected {:02X?}",
             bytes, expected
         );
+    }
+
+    #[test]
+    fn item_stack_response_presence_follows_result() {
+        let ok = ItemStackResponse::ok(-3, Vec::new()).encode();
+        // 1 réponse, résultat 0, requête -3 (zigzag 5), optionnel double présent, 0 conteneur.
+        assert_eq!(ok, vec![1, 0, 5, 1, 1, 0]);
+        let err = ItemStackResponse::error(-3).encode();
+        assert_eq!(err, vec![1, 1, 5, 1, 0]);
+    }
+
+    #[test]
+    fn start_game_ends_with_join_info_and_telemetry() {
+        // Sans isLoggingChat (retiré en 2168) : NetworkPermissions (1), join
+        // info absente (1), 4 chaînes vides.
+        let bytes = StartGame::default_with_id(1, [0.0, 64.0, 0.0]).encode();
+        assert_eq!(&bytes[bytes.len() - 6..], &[1, 0, 0, 0, 0, 0]);
     }
 
     /// Edge case : Y=0 (fond du monde). Avec VarU32 c'était `0x00`, avec VarI32 c'est aussi `0x00`.

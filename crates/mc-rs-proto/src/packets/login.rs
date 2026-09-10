@@ -110,12 +110,15 @@ pub struct Disconnect {
     pub message: Option<String>,
 }
 
+/// Sous-ensemble de `DisconnectFailReason` (schéma Mojang 2169,
+/// `__protocoldoc.json`) : 1 et 2 y désignent « pas d'Internet » et « pas de
+/// permission », pas l'arrêt ni l'expulsion.
 #[derive(Debug, Clone, Copy)]
 #[repr(i32)]
 pub enum DisconnectReason {
     Unknown = 0,
-    ServerShutdown = 1,
-    Kicked = 2,
+    Kicked = 55,
+    ServerShutdown = 68,
 }
 
 impl Disconnect {
@@ -133,6 +136,62 @@ impl Disconnect {
             }
         }
         writer.into_bytes()
+    }
+}
+
+// ── ResourcePackClientResponse (C→S, 0x08) ──
+
+/// Réponse du client pendant la négociation des packs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResourcePackClientResponse {
+    /// Le client refuse les packs (il se déconnecte).
+    Cancel,
+    /// Le client demande le téléchargement des packs listés (`<uuid>_<version>`).
+    Downloading(Vec<String>),
+    /// Téléchargements terminés : le serveur envoie ResourcePackStack.
+    DownloadingFinished,
+    /// Pile appliquée : le serveur passe à la phase de spawn.
+    ResourcePackStackFinished,
+}
+
+impl ResourcePackClientResponse {
+    /// Protocole 2168 : variante taguée. Index VarUInt32 (0 cancel,
+    /// 1 downloading, 2 downloadingfinished, 3 resourcepackstackfinished), nom
+    /// de la réponse en chaîne, puis la liste des packs pour « downloading »
+    /// uniquement. La numérotation a glissé d'un cran par rapport à l'octet de
+    /// statut 1001 (1 refused … 4 completed).
+    /// Réf : gophertunnel `packet/resource_pack_client_response.go`,
+    /// CloudburstProtocol `ResourcePackClientResponseSerializer_v2168`, schéma
+    /// `ResourcePackClientResponsePacketPayload.json`.
+    pub fn decode(reader: &mut ProtoReader) -> Result<Self, crate::io::reader::ProtoReadError> {
+        let index = reader.read_var_u32()?;
+        let _name = reader.read_string()?;
+        Ok(match index {
+            0 => Self::Cancel,
+            1 => {
+                let count = reader.read_var_u32()?;
+                if count > 65_535 {
+                    return Err(crate::io::reader::ProtoReadError::LimitExceeded {
+                        what: "resource pack response packs",
+                        value: u64::from(count),
+                        max: 65_535,
+                    });
+                }
+                let mut packs = Vec::with_capacity(count as usize);
+                for _ in 0..count {
+                    packs.push(reader.read_string()?);
+                }
+                Self::Downloading(packs)
+            }
+            2 => Self::DownloadingFinished,
+            3 => Self::ResourcePackStackFinished,
+            other => {
+                return Err(crate::io::reader::ProtoReadError::InvalidValue {
+                    what: "resource pack client response",
+                    value: i64::from(other),
+                })
+            }
+        })
     }
 }
 
@@ -182,6 +241,29 @@ impl Login {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resource_pack_client_response_decodes_tagged_variants() {
+        let mut w = ProtoWriter::new();
+        w.write_var_u32(1);
+        w.write_string("downloading");
+        w.write_var_u32(1);
+        w.write_string("uuid_1.0.0");
+        let bytes = w.into_bytes();
+        assert_eq!(
+            ResourcePackClientResponse::decode(&mut ProtoReader::new(&bytes)).unwrap(),
+            ResourcePackClientResponse::Downloading(vec!["uuid_1.0.0".into()])
+        );
+
+        let mut w = ProtoWriter::new();
+        w.write_var_u32(3);
+        w.write_string("resourcepackstackfinished");
+        let bytes = w.into_bytes();
+        assert_eq!(
+            ResourcePackClientResponse::decode(&mut ProtoReader::new(&bytes)).unwrap(),
+            ResourcePackClientResponse::ResourcePackStackFinished
+        );
+    }
 
     #[test]
     fn test_network_settings_encode() {

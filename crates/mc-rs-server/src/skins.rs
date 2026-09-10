@@ -19,6 +19,9 @@ pub struct Skin {
     pub arm_size: String,
     pub skin_color: String,
     pub animations: Vec<SkinAnimation>,
+    /// Claim `ProfileHash` du login (protocole 2168), renvoyé tel quel dans
+    /// le SerializedSkin.
+    pub profile_hash: String,
 }
 
 #[derive(Debug, Clone)]
@@ -60,6 +63,7 @@ impl Skin {
             arm_size: "wide".into(),
             skin_color: "#0".into(),
             animations: Vec::new(),
+            profile_hash: String::new(),
         }
     }
 
@@ -105,6 +109,7 @@ impl Skin {
             arm_size: s("ArmSize").to_string(),
             skin_color: s("SkinColor").to_string(),
             animations: Vec::new(),
+            profile_hash: s("ProfileHash").to_string(),
         })
     }
 
@@ -135,6 +140,7 @@ impl Skin {
             persona: self.persona,
             persona_cape_on_classic: self.cape_on_classic,
             primary_user: true,
+            profile_hash: self.profile_hash.clone(),
         }
     }
 }
