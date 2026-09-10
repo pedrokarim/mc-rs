@@ -3,17 +3,27 @@
 ## Projet
 
 Réécriture complète de PocketMine-MP (serveur Minecraft Bedrock PHP) en Rust.
-Protocol version 1001 (Minecraft Bedrock 1.26.30).
+Protocol version 2169 (Minecraft Bedrock 1.26.45). Source unique : `CURRENT_PROTOCOL` /
+`MINECRAFT_VERSION` dans `crates/mc-rs-proto/src/lib.rs` (ne jamais recopier la valeur ailleurs).
 
 ## Référence
 
-Le code source de PocketMine-MP est dans `.reference/PocketMine-MP/`. C'est LA référence pour tout.
+Le code source de PocketMine-MP est dans `.reference/PocketMine-MP/`. Il reste LA référence pour la logique
+serveur (handlers, inventaires, gameplay).
 - Code serveur : `.reference/PocketMine-MP/src/`
 - Protocole : `.reference/PocketMine-MP/vendor/pocketmine/bedrock-protocol/src/`
 - RakLib : `.reference/PocketMine-MP/vendor/pocketmine/raklib/src/`
 - Données : `.reference/PocketMine-MP/vendor/pocketmine/bedrock-data/`
 
-**RÈGLE ABSOLUE** : Toujours vérifier le format des paquets dans le code PMMP avant d'implémenter. Ne jamais deviner un format binaire.
+**Fin de support de PocketMine-MP (2026-07-09)** : PMMP et BedrockData s'arrêtent au protocole 1001
+(1.26.30). Pour les formats au-delà, les références sont, croisées entre elles : changelogs et schémas JSON
+Mojang (`.reference/bedrock-protocol-docs`, tag de la release), gophertunnel (`git diff` entre tags ;
+le dépôt local a des modifications personnelles, ne pas y faire de pull) et CloudburstProtocol
+(`bedrock-codec/.../codec/vNNNN/`). Données de jeu : dragonfly. Détails et procédure :
+[`new-docs/31-PROTOCOL-2169.md`](new-docs/31-PROTOCOL-2169.md).
+
+**RÈGLE ABSOLUE** : Toujours vérifier le format des paquets dans les références avant d'implémenter (PMMP
+jusqu'à 1001, puis Mojang + gophertunnel + CloudburstProtocol). Ne jamais deviner un format binaire.
 
 ## Architecture
 
@@ -117,6 +127,12 @@ powershell -Command "Get-Process mc-rs-server -ErrorAction SilentlyContinue | St
 - UpdateAbilities : bit 19 (VERTICAL_FLY_SPEED) DOIT être dans abilities_set
 - BiomeDefinitionList protocol 924 : custom format (2x VarUInt32), PAS du NBT
 - Le serveur tourne à 100 TPS (10ms/tick), le game tick à 20 TPS (1 game tick = 5 server ticks)
+- Données 1.26.40 (palette, items, créatif) : dragonfly v0.11.4, dans `crates/mc-rs-server/data/`.
+  Les sous-chunks sont sauvegardés avec des runtime IDs bruts : tout changement de palette exige de relancer
+  `generate_block_registry` puis `generate_data_migrations` (migration appliquée à l'ouverture du monde,
+  marqueur LevelDB `mcrs:palette_fingerprint`)
+- Protocole 2168+ (« Cereal ») : optionnels précédés d'un booléen, parfois « doubles » (booléen externe
+  toujours vrai + présence), variantes taguées par un index VarUInt32
 
 ## Communication
 

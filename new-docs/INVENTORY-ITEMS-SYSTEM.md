@@ -44,7 +44,7 @@ Ce système ne fonctionne pas et n'a JAMAIS fonctionné de bout en bout depuis l
 | `crates/mc-rs-server/src/connection/movement.rs` | Block break (action_type=26) → spawn item entity | ✅ Spawn fonctionnel, drop déclenché |
 | `crates/mc-rs-server/src/item_entities.rs` | `ItemEntityManager`, physique, scatter/throw | ⚠ Items rendus en ombre côté client |
 | `crates/mc-rs-server/src/entity.rs` | `item_metadata()` pour AddItemActor | ⚠ Probablement incomplet |
-| `crates/mc-rs-server/src/item_registry.rs` | Registre items (string ↔ network_id) | ✅ Marche, `required_item_list.json` à jour pour 1.26.10 |
+| `crates/mc-rs-server/src/item_registry.rs` | Registre items (string ↔ network_id) | ✅ Marche, table `data/vanilla_items.nbt` 1.26.40 (dragonfly v0.11.4) |
 | `crates/mc-rs-proto/src/packets/player.rs` | `ItemStack`, `ItemStackWrapper`, `FullContainerName`, `InventoryContent`, `InventorySlot`, `MobEquipment` | ⚠ Encodage byte-correct mais legacy stack_id=1 hardcodé |
 | `crates/mc-rs-proto/src/packets/world.rs` | `ContainerOpen`, `ContainerClose` | ⚠ Format byte-correct mais flow d'ouverture incomplet |
 

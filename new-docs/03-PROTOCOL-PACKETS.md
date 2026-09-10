@@ -19,11 +19,13 @@ Header (premier VarUInt32 du paquet) :
   Bits 12-13: Target sub-client ID (2 bits)
 ```
 
-### Protocole version 924
+### Version de protocole
 
-- **542 types de paquets** définis
-- Version Minecraft : `1.26.0`
-- Définis dans `ProtocolInfo.php`
+- Protocole courant : **2169** (Bedrock 1.26.45), défini par `CURRENT_PROTOCOL` dans
+  `crates/mc-rs-proto/src/lib.rs`.
+- Cette page décrit l’architecture historique (protocole 924, PMMP). Les formats en vigueur, la liste des
+  changements 2168/2169 et la procédure de montée de version sont dans
+  [`31-PROTOCOL-2169.md`](31-PROTOCOL-2169.md).
 
 ### Types de sérialisation
 

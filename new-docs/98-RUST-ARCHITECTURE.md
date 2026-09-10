@@ -9,7 +9,7 @@ mc-rs/
 ├── crates/
 │   ├── mc-rs-server/             → Exécutable principal + boucle de jeu + state machine
 │   │   └── data/
-│   │       └── entity_identifiers.nbt  → NBT blob de PMMP
+│   │       └── entity_identifiers.nbt  → NBT blob (CloudburstMC/Data v2168)
 │   ├── mc-rs-proto/              → Protocole MCPE (paquets, binary IO, batch codec)
 │   ├── mc-rs-raknet/             → Transport RakNet (UDP, sessions, reliability)
 │   ├── mc-rs-crypto/             → AES-256-CTR fakeGCM, ECDSA P-384, JWT
