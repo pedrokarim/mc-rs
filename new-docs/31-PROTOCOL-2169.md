@@ -94,8 +94,10 @@ même format que PMMP) :
 | `creative_items.nbt` | dragonfly `server/item/creative/creative_items.nbt` | Lu directement par `creative_content.rs` |
 | `entity_identifiers.nbt` | CloudburstMC/Data `entity_identifiers.dat` @ `040a6cc` | `minecraft:cushion` absent de toutes les sources disponibles |
 
-Les recettes, biomes, entités et tables de butin viennent toujours de bedrock-samples 1.26.10.4 : leur mise à
-jour vers `v1.26.40.05` est un chantier séparé (données de gameplay, sans lien avec le format réseau).
+Les recettes sont régénérées depuis bedrock-samples `v1.26.40.05` par `scripts/import_recipes.py` (voir
+`30-VANILLA-DATA-IMPORT.md`) ; bedrock-samples 1.26.40.5 ne contient aucune recette poplar ni cushion. Biomes,
+entités, règles d’apparition et tables de butin viennent toujours de 1.26.10.4 (données de gameplay, sans lien
+avec le format réseau).
 
 ### Migration des données sauvegardées
 

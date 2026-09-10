@@ -494,6 +494,7 @@ mod item_registry;
 pub mod item_stack_merge;
 #[allow(dead_code)]
 pub mod item_tags;
+mod item_upgrade;
 pub mod items_vanilla;
 #[allow(dead_code)]
 pub mod jigsaw;

@@ -35,13 +35,15 @@ Intégration complète des **données canoniques Mojang** (`bedrock-samples` v1.
   - `total_table_count()` ≥ 176
 
 ### `recipes_vanilla` (bedrock-samples)
-- **Source** : `behavior_pack/recipes/*.json` (1686 recettes ; 85 ignorées : brewing/smithing non supportés)
-- **Data** : `data/recipes/vanilla.json` (450KB consolidé)
-- **Contenu enregistré** :
-  - **939 `recipe_shaped`** (pattern 2D + key)
-  - **513 `recipe_shapeless`** (liste d'ingrédients)
+- **Source** : `behavior_pack/recipes/*.json`, **1.26.40.5 depuis le 2026-09-10** (1756 fichiers ; 85 ignorés : brewing/smithing non supportés)
+- **Génération** : `python scripts/import_recipes.py v1.26.40.05` (lit le tag git de `.reference/bedrock-samples`, sans checkout) ; `--check` compare au fichier en place. Le script reproduit à l’identique l’import 1.26.10.4 d’origine.
+- **Data** : `data/recipes/vanilla.json` (consolidé)
+- **Contenu** :
+  - **965 `recipe_shaped`** (pattern 2D + key)
+  - **557 `recipe_shapeless`** (liste d'ingrédients)
   - **149 `recipe_furnace`** (1 input → 1 output)
-- **Tags** : résolution statique des 10 tags utilisés par vanilla (`planks`, `logs`, `wool`, `metal_nuggets`, `coals`, `stone_crafting_materials`, `stone_tool_materials`, `soul_fire_base_blocks`, `egg`, `wooden_slabs`).
+  - Nouveautés 1.26.40 : familles cinabre et soufre (dont tailleur de pierre). Aucune recette poplar ni cushion dans bedrock-samples 1.26.40.5.
+- **Tags** : résolution statique des tags utilisés comme ingrédients (`planks`, `logs`, `logs_that_burn`, `wool`, `metal_nuggets`, `coals`, `stone_crafting_materials`, `stone_tool_materials`, `soul_fire_base_blocks`, `egg`, `wooden_slabs`). Les tags de dragonfly et Nukkit n’incluent pas encore le bois poplar : il n’est donc pas ajouté.
 - **API** : `recipes_vanilla::register_all(&mut CraftingManager) -> (shaped, shapeless, furnace)`.
 - **Intégration** : appelé au boot dans `main.rs` ; le `CraftingManager` global est passé dans `process_peer_events`.
 
