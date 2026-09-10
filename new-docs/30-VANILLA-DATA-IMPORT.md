@@ -11,11 +11,11 @@ Intégration complète des **données canoniques Mojang** (`bedrock-samples` v1.
 
 ## Modules ajoutés
 
-### `creative_content` (PMMP JSON)
-- **Source** : `bedrock-data/creative/{construction,nature,equipment,items}.json`
-- **Data** : `data/creative/*.json` (4 fichiers, 4 catégories vanilla)
-- **Contenu** : 4 onglets Construction/Nature/Equipment/Items avec **~150 sous-groupes** (planks, walls, stairs, banners, beds, etc.) et leurs icônes vanilla.
-- **API** : `creative_content::groups() -> Vec<CreativeGroupEntry>` + `items() -> Vec<CreativeItemEntry>` + `item_name_by_entry_id(entry_id)`.
+### `creative_content` (dragonfly NBT, depuis le 2026-09-10)
+- **Source** : dragonfly v0.11.4 `server/item/creative/creative_items.nbt` (Bedrock 1.26.40) ; remplace les JSON PMMP 1.26.10, PMMP étant en fin de support.
+- **Data** : `data/creative_items.nbt` (NBT réseau `{groups, items}`)
+- **Contenu** : 123 groupes et 1 875 entrées, avec meta et NBT (livres enchantés, bannières, fusées…).
+- **API** : `creative_content::groups()` + `items()` + `item_name_by_entry_id(entry_id)` + `item_stack_by_entry_id(entry_id, count)` (utilisé par CraftCreative).
 
 ### `loot_table` (bedrock-samples)
 - **Sources** :
@@ -98,8 +98,8 @@ Intégration complète des **données canoniques Mojang** (`bedrock-samples` v1.
 | Catégorie | Éléments chargés |
 |---|---|
 | Loot tables | 176 (122 mobs + 29 chests + 25 autres) |
-| Recipes | 1601 (939 + 513 + 149) |
-| Creative subgroups | ~150 avec icônes |
+| Recipes | 1671 dans le fichier (965 + 557 + 149), 1653 enregistrées (18 cuissons de feu de camp ou dépréciées ignorées) |
+| Creative | 123 groupes, 1 875 entrées |
 | Spawn rules | 56 mobs |
 | Biomes | 87 |
 | Trading tables | 24 (villagers + piglins) |
@@ -116,7 +116,7 @@ Intégration complète des **données canoniques Mojang** (`bedrock-samples` v1.
 | Data | Consommateur runtime |
 |---|---|
 | `creative_content` | ✅ Envoyé dans CreativeContent (0x91) au PreSpawn |
-| `recipes_vanilla` | ✅ 1601 recettes registrées dans RECIPE_DB OnceLock + matching Craft3x3/Craft2x2 |
+| `recipes_vanilla` | ✅ 1653 recettes enregistrées + matching Craft3x3/Craft2x2. Les noms Mojang sans espace de noms ou legacy (`coal:1`, `emptymap`, `chain`…) sont migrés par `item_upgrade` (port de PMMP `ItemIdMetaUpgrader`, schémas `pmmp/BedrockItemUpgradeSchema` consolidés par `scripts/import_item_upgrade_schema.py`) ; chaque recette ignorée est journalisée avec sa raison |
 | `loot_table::roll_entity_loot` | ✅ Wired dans `mob_entities::apply_attack` (drops mobs vanilla) |
 | `loot_table::roll_chest_loot` | ✅ API exposée pour générateur de structures (data prête) |
 | `spawn_rules_vanilla` | ✅ `mob_spawner.rs` consulte `spawn_weight` + `brightness_range` chaque game tick |
