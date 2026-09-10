@@ -161,6 +161,21 @@ impl AttributeMap {
             .unwrap_or_else(|| panic!("Attribute {id} not registered"))
     }
 
+    /// Tous les attributs, marqués synchronisés : envoi complet du pré-spawn,
+    /// PMMP `PreSpawnPacketHandler` (`syncAttributes(getAttributeMap()->getAll())`).
+    /// Ne pas se contenter des attributs désynchronisés à cet endroit : leurs
+    /// drapeaux peuvent avoir été consommés avant le spawn, et le client
+    /// affiche alors une barre de faim vide.
+    pub fn sync_all(&mut self) -> Vec<Attribute> {
+        let mut out = Vec::with_capacity(self.attrs.len());
+        for attr in self.attrs.values_mut() {
+            attr.mark_synchronized();
+            out.push(attr.clone());
+        }
+        out.sort_by(|a, b| a.id.cmp(&b.id));
+        out
+    }
+
     /// Retourne les attributs désynchronisés (à envoyer via UpdateAttributes),
     /// et les marque comme synchronisés.
     pub fn drain_desync(&mut self) -> Vec<Attribute> {
@@ -172,6 +187,24 @@ impl AttributeMap {
             }
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod sync_all_tests {
+    use super::*;
+
+    #[test]
+    fn sync_all_returns_every_attribute_even_already_synchronized() {
+        let mut map = AttributeMap::default_for_player();
+        let total = map.attrs.len();
+        // Simule une boucle de tick qui a déjà consommé les drapeaux.
+        let _ = map.drain_desync();
+        assert!(map.drain_desync().is_empty());
+        let all = map.sync_all();
+        assert_eq!(all.len(), total);
+        assert!(all.iter().any(|a| a.id == ids::HUNGER));
+        assert!(map.drain_desync().is_empty());
     }
 }
 

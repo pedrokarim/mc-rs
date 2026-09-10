@@ -159,12 +159,11 @@ impl Connection {
         // garde ses définitions vanilla. dragonfly envoie la liste complète ;
         // à faire si des biomes personnalisés sont un jour nécessaires.
 
-        // 5. UpdateAttributes — format protocol 944 corrigé (6 floats/attr)
-        let desync = self.attributes.drain_desync();
-        if !desync.is_empty() {
-            let payload = encode_update_attrs_inline(self.entity_runtime_id, &desync);
-            responses.push(self.encode_compressed_packet(packet_id::UPDATE_ATTRIBUTES, &payload));
-        }
+        // 5. UpdateAttributes : tous les attributs, comme PMMP (voir
+        //    `AttributeMap::sync_all`).
+        let all_attributes = self.attributes.sync_all();
+        let payload = encode_update_attrs_inline(self.entity_runtime_id, &all_attributes);
+        responses.push(self.encode_compressed_packet(packet_id::UPDATE_ATTRIBUTES, &payload));
 
         // 6. AvailableCommands (PMMP PreSpawnPacketHandler.php:134-135 :
         //    syncAvailableCommands AVANT abilities). Envoi minimal — la liste

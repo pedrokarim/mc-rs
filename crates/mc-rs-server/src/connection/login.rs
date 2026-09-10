@@ -367,8 +367,10 @@ impl Connection {
         writer.write_bool(self.config.resource_pack_must_accept); // must_accept depuis server.toml
         writer.write_bool(false); // has_addons
         writer.write_bool(false); // has_scripts
-        writer.write_bool(false); // force_disable_vibrant_visuals
-                                  // worldTemplateId (nil UUID = 2 x i64_le zero)
+                                  // force_disable_vibrant_visuals : le monde n'est pas conçu pour Vibrant
+                                  // Visuals (rendu jugé mauvais en jeu), on impose le rendu classique.
+        writer.write_bool(true);
+        // worldTemplateId (nil UUID = 2 x i64_le zero)
         writer.write_i64_le(0);
         writer.write_i64_le(0);
         writer.write_string(""); // worldTemplateVersion
