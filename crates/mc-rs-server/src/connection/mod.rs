@@ -47,6 +47,46 @@ pub(super) const CHUNKS_PER_TICK: usize = 4;
 pub(super) const PLAYER_INVENTORY_SCREEN_ID: u8 = 1;
 pub(super) const PLAYER_INVENTORY_WINDOW_TYPE: u8 = 0xFF;
 
+/// Convertit le mode de jeu interne (`Connection::gamemode` : 0 survie,
+/// 1 créatif, 2 aventure, 3 spectateur) en valeur `GameType` du protocole.
+///
+/// Seul point de passage pour tout `GameType` écrit sur le fil
+/// (SetPlayerGameType, StartGame joueur et monde, AddPlayer). L'enum 2169 ne
+/// contient plus que -1 Undefined, 0 Survival, 1 Creative, 2 Adventure,
+/// 5 Default et 6 Spectator : les anciens 3/4 (SURVIVAL_VIEWER /
+/// CREATIVE_VIEWER) ont disparu, envoyer notre 3 interne serait invalide.
+///
+/// Choix : on suit PMMP `TypeConverter::coreGameModeToProtocol`, qui envoie le
+/// spectateur comme CREATIVE (1) ; le comportement spectateur passe par
+/// UpdateAbilities (`default_spectator`) et SetActorData. Le Spectator natif
+/// (6) n'est pas utilisé, PMMP ne le gère pas non plus (« TODO: native
+/// spectator support »). Valeur inconnue : survie par prudence.
+pub fn protocol_game_type(internal_game_mode: i32) -> i32 {
+    const SURVIVAL: i32 = 0;
+    const CREATIVE: i32 = 1;
+    const ADVENTURE: i32 = 2;
+    match internal_game_mode {
+        1 | 3 => CREATIVE,
+        2 => ADVENTURE,
+        _ => SURVIVAL,
+    }
+}
+
+#[cfg(test)]
+mod game_type_tests {
+    use super::protocol_game_type;
+
+    #[test]
+    fn maps_internal_modes_like_pmmp() {
+        assert_eq!(protocol_game_type(0), 0);
+        assert_eq!(protocol_game_type(1), 1);
+        assert_eq!(protocol_game_type(2), 2);
+        // Spectateur → CREATIVE (PMMP), jamais 3/4 (absents de l'enum 2169).
+        assert_eq!(protocol_game_type(3), 1);
+        assert_eq!(protocol_game_type(42), 0);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PendingEntityAttack {
     pub target_runtime_id: u64,

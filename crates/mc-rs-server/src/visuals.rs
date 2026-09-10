@@ -56,71 +56,137 @@ impl SpawnParticleEffect {
 
 /// PMMP `BossEventPacket::TYPE_*` constants.
 pub mod boss_event_type {
-    pub const SHOW: u32 = 0;
-    pub const REGISTER_PLAYER: u32 = 1;
-    pub const HIDE: u32 = 2;
-    pub const UNREGISTER_PLAYER: u32 = 3;
-    pub const HEALTH_PERCENT: u32 = 4;
-    pub const TITLE: u32 = 5;
-    pub const PROPERTIES: u32 = 6;
-    pub const TEXTURE: u32 = 7;
-    pub const QUERY: u32 = 8;
+    pub const SHOW: u8 = 0;
+    pub const REGISTER_PLAYER: u8 = 1;
+    pub const HIDE: u8 = 2;
+    pub const UNREGISTER_PLAYER: u8 = 3;
+    pub const HEALTH_PERCENT: u8 = 4;
+    pub const TITLE: u8 = 5;
+    pub const PROPERTIES: u8 = 6;
+    pub const TEXTURE: u8 = 7;
+    pub const QUERY: u8 = 8;
 }
 
-/// PMMP `BossEventPacket::COLOR_*` (pass-through au client pour teinture UI).
+/// PMMP `types/BossBarColor` (= gophertunnel `BossEventColour*`). Le 6 est
+/// REBECCA_PURPLE, le blanc est 7.
 pub mod boss_color {
-    pub const PINK: u32 = 0;
-    pub const BLUE: u32 = 1;
-    pub const RED: u32 = 2;
-    pub const GREEN: u32 = 3;
-    pub const YELLOW: u32 = 4;
-    pub const PURPLE: u32 = 5;
-    pub const WHITE: u32 = 6;
+    pub const PINK: u8 = 0;
+    pub const BLUE: u8 = 1;
+    pub const RED: u8 = 2;
+    pub const GREEN: u8 = 3;
+    pub const YELLOW: u8 = 4;
+    pub const PURPLE: u8 = 5;
+    pub const REBECCA_PURPLE: u8 = 6;
+    pub const WHITE: u8 = 7;
 }
 
-/// Show a new boss bar. Combine PMMP `BossEvent::show()`.
+/// Port de `BossEventPacket` (protocoles 1001 et 2169). Depuis le protocole
+/// 984, les 8 champs sont TOUJOURS écrits, quel que soit le type d'événement
+/// (plus de champs conditionnels ni de `darkenScreen`) : les champs inutiles
+/// gardent leur valeur par défaut, comme les constructeurs statiques de PMMP.
+///
+/// Réf : BedrockProtocol `BossEventPacket::encodePayload` ; gophertunnel
+/// `packet/boss_event.go` `Marshal`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BossEvent {
+    pub boss_actor_unique_id: i64,
+    /// Utile pour REGISTER_PLAYER / UNREGISTER_PLAYER / QUERY ; 0 sinon.
+    pub player_actor_unique_id: i64,
+    pub event_type: u8,
+    pub title: String,
+    pub filtered_title: String,
+    pub health_percent: f32,
+    pub color: u8,
+    pub overlay: u8,
+}
+
+impl BossEvent {
+    /// PMMP `BossEventPacket::base()` : valeurs par défaut des champs.
+    fn base(boss_actor_unique_id: i64, event_type: u8) -> Self {
+        Self {
+            boss_actor_unique_id,
+            player_actor_unique_id: 0,
+            event_type,
+            title: String::new(),
+            filtered_title: String::new(),
+            health_percent: 0.0,
+            color: boss_color::PINK,
+            overlay: 0,
+        }
+    }
+
+    /// PMMP `BossEventPacket::show()` (overlay 0 = barre pleine).
+    pub fn show(boss_actor_unique_id: i64, title: &str, health_percent: f32, color: u8) -> Self {
+        Self {
+            title: title.to_string(),
+            filtered_title: title.to_string(),
+            health_percent,
+            color,
+            ..Self::base(boss_actor_unique_id, boss_event_type::SHOW)
+        }
+    }
+
+    /// PMMP `BossEventPacket::hide()`.
+    pub fn hide(boss_actor_unique_id: i64) -> Self {
+        Self::base(boss_actor_unique_id, boss_event_type::HIDE)
+    }
+
+    /// PMMP `BossEventPacket::healthPercent()`.
+    pub fn health_percent(boss_actor_unique_id: i64, health_percent: f32) -> Self {
+        Self {
+            health_percent,
+            ..Self::base(boss_actor_unique_id, boss_event_type::HEALTH_PERCENT)
+        }
+    }
+
+    /// PMMP `BossEventPacket::title()`.
+    pub fn title(boss_actor_unique_id: i64, title: &str) -> Self {
+        Self {
+            title: title.to_string(),
+            filtered_title: title.to_string(),
+            ..Self::base(boss_actor_unique_id, boss_event_type::TITLE)
+        }
+    }
+
+    /// `ActorUniqueId` (VarInt64 zigzag) ×2, u8 type, 2 strings, f32 LE,
+    /// u8 couleur, u8 overlay.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = ProtoWriter::with_capacity(32 + self.title.len() + self.filtered_title.len());
+        w.write_var_i64(self.boss_actor_unique_id);
+        w.write_var_i64(self.player_actor_unique_id);
+        w.write_u8(self.event_type);
+        w.write_string(&self.title);
+        w.write_string(&self.filtered_title);
+        w.write_f32_le(self.health_percent);
+        w.write_u8(self.color);
+        w.write_u8(self.overlay);
+        w.into_bytes()
+    }
+}
+
+/// Montre une barre de boss (payload prêt à envoyer).
 pub fn boss_show(
     boss_actor_unique_id: i64,
     title: &str,
     health_percent: f32,
-    color: u32,
+    color: u8,
 ) -> Vec<u8> {
-    let mut w = ProtoWriter::with_capacity(64);
-    w.write_var_i64(boss_actor_unique_id);
-    w.write_var_u32(boss_event_type::SHOW);
-    w.write_string(title);
-    w.write_string(""); // filtered title
-    w.write_f32_le(health_percent);
-    // Fall-through PROPERTIES
-    w.write_u16_le(0); // darken_screen = false
-                       // TEXTURE
-    w.write_var_u32(color);
-    w.write_var_u32(0); // overlay
-    w.into_bytes()
+    BossEvent::show(boss_actor_unique_id, title, health_percent, color).encode()
 }
 
+/// Retire la barre de boss.
 pub fn boss_hide(boss_actor_unique_id: i64) -> Vec<u8> {
-    let mut w = ProtoWriter::with_capacity(8);
-    w.write_var_i64(boss_actor_unique_id);
-    w.write_var_u32(boss_event_type::HIDE);
-    w.into_bytes()
+    BossEvent::hide(boss_actor_unique_id).encode()
 }
 
+/// Met à jour le pourcentage de santé de la barre.
 pub fn boss_update_health(boss_actor_unique_id: i64, health_percent: f32) -> Vec<u8> {
-    let mut w = ProtoWriter::with_capacity(16);
-    w.write_var_i64(boss_actor_unique_id);
-    w.write_var_u32(boss_event_type::HEALTH_PERCENT);
-    w.write_f32_le(health_percent);
-    w.into_bytes()
+    BossEvent::health_percent(boss_actor_unique_id, health_percent).encode()
 }
 
+/// Met à jour le titre de la barre.
 pub fn boss_update_title(boss_actor_unique_id: i64, title: &str) -> Vec<u8> {
-    let mut w = ProtoWriter::with_capacity(32 + title.len());
-    w.write_var_i64(boss_actor_unique_id);
-    w.write_var_u32(boss_event_type::TITLE);
-    w.write_string(title);
-    w.write_string(""); // filtered title
-    w.into_bytes()
+    BossEvent::title(boss_actor_unique_id, title).encode()
 }
 
 /// Packet IDs (for caller's `encode_compressed_packet`).
@@ -149,10 +215,46 @@ mod tests {
     }
 
     #[test]
-    fn boss_show_contains_title() {
-        let bytes = boss_show(-1, "Ender Dragon", 1.0, boss_color::PURPLE);
-        let title_start = bytes.iter().position(|&b| b == b'E').unwrap();
-        let title_bytes = &bytes[title_start..title_start + 12];
-        assert_eq!(title_bytes, b"Ender Dragon");
+    fn boss_show_writes_all_fields() {
+        // boss -1 (zigzag 0x01), joueur 0, type SHOW, titre et titre filtré
+        // identiques (PMMP `show()`), santé 1.0, couleur PURPLE, overlay 0.
+        let mut expected = vec![0x01, 0x00, 0x00, 0x06];
+        expected.extend_from_slice(b"Wither");
+        expected.push(0x06);
+        expected.extend_from_slice(b"Wither");
+        expected.extend_from_slice(&1.0f32.to_le_bytes());
+        expected.extend_from_slice(&[boss_color::PURPLE, 0x00]);
+        assert_eq!(boss_show(-1, "Wither", 1.0, boss_color::PURPLE), expected);
+    }
+
+    #[test]
+    fn boss_hide_keeps_default_fields() {
+        // Même HIDE écrit les 8 champs : id(1)=0x02, joueur 0, type 2, deux
+        // strings vides, f32 0.0, couleur PINK, overlay 0.
+        assert_eq!(
+            boss_hide(1),
+            vec![0x02, 0x00, 0x02, 0x00, 0x00, 0, 0, 0, 0, 0x00, 0x00]
+        );
+    }
+
+    #[test]
+    fn boss_update_health_and_title() {
+        let mut expected = vec![0x02, 0x00, boss_event_type::HEALTH_PERCENT, 0x00, 0x00];
+        expected.extend_from_slice(&0.5f32.to_le_bytes());
+        expected.extend_from_slice(&[0x00, 0x00]);
+        assert_eq!(boss_update_health(1, 0.5), expected);
+
+        let mut expected = vec![0x02, 0x00, boss_event_type::TITLE, 0x02];
+        expected.extend_from_slice(b"Ab");
+        expected.push(0x02);
+        expected.extend_from_slice(b"Ab");
+        expected.extend_from_slice(&[0, 0, 0, 0, 0x00, 0x00]);
+        assert_eq!(boss_update_title(1, "Ab"), expected);
+    }
+
+    #[test]
+    fn boss_colors_match_protocol() {
+        assert_eq!(boss_color::REBECCA_PURPLE, 6);
+        assert_eq!(boss_color::WHITE, 7);
     }
 }

@@ -1,14 +1,17 @@
 //! Boss bar — wither/dragon/custom bars.
 
+/// Valeurs réseau de PMMP `types/BossBarColor` (cf `visuals::boss_color`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum BossBarColor {
-    Pink,
-    Blue,
-    Red,
-    Green,
-    Yellow,
-    Purple,
-    White,
+    Pink = 0,
+    Blue = 1,
+    Red = 2,
+    Green = 3,
+    Yellow = 4,
+    Purple = 5,
+    RebeccaPurple = 6,
+    White = 7,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1461,7 +1461,12 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
 
     fn boss_show(&mut self, title: &str, health_percent: f32) {
         // Server boss = id -1 (PMMP convention pour boss "fictif" non lié à entity).
-        let bytes = crate::visuals::boss_show(-1, title, health_percent.clamp(0.0, 1.0), 5);
+        let bytes = crate::visuals::boss_show(
+            -1,
+            title,
+            health_percent.clamp(0.0, 1.0),
+            crate::visuals::boss_color::PURPLE,
+        );
         self.broadcast_compressed(packet_id::BOSS_EVENT, &bytes);
     }
     fn boss_hide(&mut self) {

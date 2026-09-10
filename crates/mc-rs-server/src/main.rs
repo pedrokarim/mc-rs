@@ -1758,7 +1758,9 @@ async fn main() {
                     writer.write_var_i32(upd.position.0);
                     writer.write_var_i32(upd.position.1);
                     writer.write_var_i32(upd.position.2);
-                    writer.write_byte_array(&upd.nbt);
+                    // NBT réseau brut, SANS préfixe de longueur (BedrockProtocol
+                    // `BlockActorDataPacket` : `writeByteArray` ; gophertunnel `io.NBT`).
+                    writer.write_raw(&upd.nbt);
                     let payload = writer.into_bytes();
                     for (addr, conn) in connections.iter_mut() {
                         if !conn.is_in_game() {
@@ -2529,11 +2531,11 @@ async fn main() {
                                 .find(|a| a.name == "minecraft:health")
                                 .map(|a| (a.current / a.max.max(1.0)).clamp(0.0, 1.0))
                                 .unwrap_or(1.0);
-                            crate::combat_packets::boss_show(
+                            crate::visuals::boss_show(
                                 m.base.entity_unique_id,
                                 m.kind.display_name(),
                                 hp,
-                                m.kind.boss_bar_color(),
+                                m.kind.boss_bar_color() as u8,
                             )
                         })
                         .collect();
@@ -2547,7 +2549,7 @@ async fn main() {
                     }
                     // Boss disparus → HIDE.
                     for old in shown_bosses.difference(&current_bosses) {
-                        let bytes = crate::combat_packets::boss_hide(*old);
+                        let bytes = crate::visuals::boss_hide(*old);
                         broadcast_packet_all(
                             &mut connections,
                             &mut raknet,
@@ -3494,7 +3496,7 @@ fn process_peer_events(
                             pitch: 0.0,
                             yaw: 0.0,
                             head_yaw: 0.0,
-                            gamemode: player_gamemode,
+                            gamemode: crate::connection::protocol_game_type(player_gamemode),
                             entity_unique_id: entity_id,
                             permission_level: if is_op { 2 } else { 1 },
                             command_permission: if is_op { 1 } else { 0 },

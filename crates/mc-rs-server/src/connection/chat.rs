@@ -101,9 +101,10 @@ impl Connection {
         self.gamemode = mode;
         let mut responses = Vec::new();
 
-        // 1. SetPlayerGameType -- single VarInt32
+        // 1. SetPlayerGameType -- single VarInt32 (valeur protocole, le
+        // spectateur interne 3 part en CREATIVE comme chez PMMP).
         let mut gt_writer = mc_rs_proto::io::ProtoWriter::with_capacity(4);
-        gt_writer.write_var_i32(mode);
+        gt_writer.write_var_i32(super::protocol_game_type(mode));
         responses.push(
             self.encode_compressed_packet(packet_id::SET_PLAYER_GAME_TYPE, gt_writer.as_bytes()),
         );
@@ -159,7 +160,7 @@ impl Connection {
                 pitch: self.pitch,
                 yaw: self.yaw,
                 head_yaw: self.head_yaw,
-                gamemode: mode,
+                gamemode: super::protocol_game_type(mode),
                 entity_unique_id: self.entity_runtime_id as i64,
                 permission_level: 1,
                 command_permission: 0,

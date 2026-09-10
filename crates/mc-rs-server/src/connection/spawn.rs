@@ -131,8 +131,9 @@ impl Connection {
         // StartGame
         let mut start_game =
             StartGame::default_with_id(self.entity_runtime_id as i64, self.position);
-        start_game.player_gamemode = self.gamemode;
-        start_game.world_gamemode = self.world_gamemode;
+        // Valeurs protocole (PMMP PreSpawnPacketHandler : coreGameModeToProtocol).
+        start_game.player_gamemode = super::protocol_game_type(self.gamemode);
+        start_game.world_gamemode = super::protocol_game_type(self.world_gamemode);
         start_game.difficulty = self.current_difficulty;
         start_game.world_name = self.config.world_name.clone();
         start_game.generator = self.config.generator_id;
