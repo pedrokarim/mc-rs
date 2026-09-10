@@ -275,14 +275,16 @@ impl BedrockClient {
                 if self.state == LoginState::Encrypted {
                     self.state = LoginState::ResourcePacks;
                 }
-                // HAVE_ALL_PACKS (on ne télécharge aucun pack).
-                self.send_resource_pack_response(3);
-                trace!("ResourcePacksInfo → réponse HAVE_ALL_PACKS");
+                // « downloadingfinished » (ex-HAVE_ALL_PACKS) : on ne télécharge
+                // aucun pack, le serveur répond par ResourcePackStack.
+                self.send_resource_pack_response(PackResponse::DownloadingFinished);
+                trace!("ResourcePacksInfo → réponse downloadingfinished");
             }
             packet_id::RESOURCE_PACK_STACK => {
-                // COMPLETED → le serveur enchaîne sur PreSpawn (StartGame…).
-                self.send_resource_pack_response(4);
-                trace!("ResourcePackStack → réponse COMPLETED");
+                // « resourcepackstackfinished » (ex-COMPLETED) → le serveur
+                // enchaîne sur PreSpawn (StartGame…).
+                self.send_resource_pack_response(PackResponse::ResourcePackStackFinished);
+                trace!("ResourcePackStack → réponse resourcepackstackfinished");
             }
             packet_id::START_GAME => {
                 self.parse_start_game(payload);
@@ -370,13 +372,11 @@ impl BedrockClient {
         Ok(())
     }
 
-    /// Envoie ResourcePackClientResponse avec le `status` donné, 0 packs.
-    /// (3 = HAVE_ALL_PACKS, 4 = COMPLETED.)
-    fn send_resource_pack_response(&mut self, status: u8) {
-        let mut w = ProtoWriter::with_capacity(4);
-        w.write_u8(status);
-        w.write_u16_le(0); // aucun pack demandé
-        self.send(packet_id::RESOURCE_PACK_CLIENT_RESPONSE, &w.into_bytes());
+    /// Envoie ResourcePackClientResponse avec la réponse donnée (aucun pack
+    /// demandé : le bot ne télécharge jamais rien).
+    fn send_resource_pack_response(&mut self, response: PackResponse) {
+        let payload = encode_resource_pack_client_response(response, &[]);
+        self.send(packet_id::RESOURCE_PACK_CLIENT_RESPONSE, &payload);
     }
 
     /// Envoie RequestChunkRadius.
@@ -400,8 +400,9 @@ impl BedrockClient {
     /// plus fréquent d'un vrai client (≈20/s) : il pilote le suivi de position,
     /// le chunk loading dynamique et les broadcasts de mouvement côté serveur.
     ///
-    /// `delta` = déplacement depuis le tick précédent. Aucun flag d'action
-    /// (bits 34/35/36) n'est posé, donc le paquet s'arrête après le delta.
+    /// `delta` = déplacement depuis le tick précédent. `input_flags` = masque
+    /// des flags PlayerAuthInput (bit n = flag n, n < 66). Aucune action
+    /// (transaction, requête de stack, actions de bloc, véhicule) n'est jointe.
     #[allow(clippy::too_many_arguments)]
     pub fn send_player_auth_input(
         &mut self,
@@ -414,26 +415,17 @@ impl BedrockClient {
         input_flags: u128,
     ) {
         self.game_tick += 1;
-        let mut w = ProtoWriter::with_capacity(80);
-        w.write_f32_le(pitch);
-        w.write_f32_le(yaw);
-        w.write_f32_le(pos[0]);
-        w.write_f32_le(pos[1]);
-        w.write_f32_le(pos[2]);
-        w.write_f32_le(move_vec[0]);
-        w.write_f32_le(move_vec[1]);
-        w.write_f32_le(head_yaw);
-        write_bitset(&mut w, input_flags);
-        w.write_var_u32(1); // input_mode = Mouse
-        w.write_var_u32(0); // play_mode = Normal
-        w.write_var_u32(0); // interaction_mode = Touch/None
-        w.write_f32_le(0.0); // interact_rotation_x
-        w.write_f32_le(0.0); // interact_rotation_y
-        w.write_var_u64(self.game_tick);
-        w.write_f32_le(delta[0]);
-        w.write_f32_le(delta[1]);
-        w.write_f32_le(delta[2]);
-        self.send(packet_id::PLAYER_AUTH_INPUT, &w.into_bytes());
+        let payload = encode_player_auth_input(&AuthInput {
+            pos,
+            pitch,
+            yaw,
+            head_yaw,
+            move_vec,
+            delta,
+            input_flags,
+            tick: self.game_tick,
+        });
+        self.send(packet_id::PLAYER_AUTH_INPUT, &payload);
     }
 
     /// Envoie un message de chat (broadcast serveur à tous les joueurs).
@@ -477,20 +469,154 @@ impl BedrockClient {
     }
 }
 
-/// Écrit un bitset u128 au format PlayerAuthInput (7 bits/octet, bit 7 =
-/// continuation). Miroir de `read_bitset` côté proto. `0` → un seul octet.
-fn write_bitset(w: &mut ProtoWriter, mut v: u128) {
-    loop {
-        let mut byte = (v & 0x7F) as u8;
-        v >>= 7;
-        if v != 0 {
-            byte |= 0x80;
-        }
-        w.write_u8(byte);
-        if v == 0 {
-            break;
+/// Réponse du client à la séquence de packs de ressources (protocole 2169).
+///
+/// Variante étiquetée : l'index VarUInt32 vaut la valeur de l'énumération,
+/// suivi du nom en minuscules. Réf. gophertunnel
+/// `packet/resource_pack_client_response.go` (constantes `iota` depuis 0) et
+/// Cloudburst `ResourcePackClientResponseSerializer_v2168` (`ordinal() - 1`).
+/// Correspondance avec l'ancien u8 (1001) : REFUSED(1) → 0, SEND_PACKS(2) → 1,
+/// HAVE_ALL_PACKS(3) → 2, COMPLETED(4) → 3.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PackResponse {
+    /// Refus des packs (ex-REFUSED).
+    Cancel = 0,
+    /// Demande de téléchargement des packs listés (ex-SEND_PACKS).
+    Downloading = 1,
+    /// Tous les packs sont présents (ex-HAVE_ALL_PACKS).
+    DownloadingFinished = 2,
+    /// Pile de packs appliquée, prêt pour StartGame (ex-COMPLETED).
+    ResourcePackStackFinished = 3,
+}
+
+impl PackResponse {
+    /// Nom transmis après l'index (énumération sans « Enum-as-Value » dans le
+    /// schéma Mojang, donc sérialisée en chaîne).
+    pub fn wire_name(self) -> &'static str {
+        match self {
+            PackResponse::Cancel => "cancel",
+            PackResponse::Downloading => "downloading",
+            PackResponse::DownloadingFinished => "downloadingfinished",
+            PackResponse::ResourcePackStackFinished => "resourcepackstackfinished",
         }
     }
+}
+
+/// Encode ResourcePackClientResponse (payload seul, protocole 2169) :
+/// `VarUInt32 index + string nom`, puis **uniquement** pour `Downloading` :
+/// `VarUInt32 n + n × string` (`"<uuid>_<version>"`). `packs` est ignoré pour
+/// les autres réponses, comme chez gophertunnel et Cloudburst.
+pub fn encode_resource_pack_client_response(response: PackResponse, packs: &[String]) -> Vec<u8> {
+    let name = response.wire_name();
+    let mut w = ProtoWriter::with_capacity(name.len() + 4);
+    w.write_var_u32(response as u32);
+    w.write_string(name);
+    if response == PackResponse::Downloading {
+        w.write_var_u32(packs.len() as u32);
+        for pack in packs {
+            w.write_string(pack);
+        }
+    }
+    w.into_bytes()
+}
+
+/// Nombre de flags PlayerAuthInput connus en 2169 (0..=65, `InternalUpdate`
+/// = 65 étant le dernier). Réf. gophertunnel `InputFlagCount`.
+pub const INPUT_FLAG_COUNT: u32 = 66;
+
+/// Champs d'un PlayerAuthInput « mouvement seul » tel qu'émis par le bot.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AuthInput {
+    /// Position rapportée par le client.
+    pub pos: [f32; 3],
+    pub pitch: f32,
+    pub yaw: f32,
+    pub head_yaw: f32,
+    /// Vecteur de déplacement (X/Z issus de ZQSD).
+    pub move_vec: [f32; 2],
+    /// Déplacement depuis le tick précédent.
+    pub delta: [f32; 3],
+    /// Masque des flags : bit n = flag n (seuls les bits < 66 sont émis).
+    pub input_flags: u128,
+    /// Tick client.
+    pub tick: u64,
+}
+
+/// Encode un PlayerAuthInput (payload seul) au format 2169.
+///
+/// Ordre exact de gophertunnel `packet/player_auth_input.go` `Marshal` (et de
+/// Cloudburst `PlayerAuthInputSerializer_v2168.serialize`) :
+///
+/// ```text
+/// f32 pitch, f32 yaw, Vec3 position, Vec2 moveVector, f32 headYaw,
+/// InputData (bool présent + VarUInt32 n + n × VarInt32 id),
+/// VarUInt32 inputMode, VarUInt32 playMode, VarInt32 interactionModel,
+/// f32 interactPitch, f32 interactYaw, VarUInt64 tick, Vec3 delta,
+/// 5 × double optionnel (01 00 si absent) : transaction d'usage d'objet,
+///   requête de stack, actions de bloc, rotation de véhicule, véhicule prédit,
+/// Vec2 analogMoveVector, Vec3 cameraOrientation, Vec2 rawMoveVector
+/// ```
+pub fn encode_player_auth_input(input: &AuthInput) -> Vec<u8> {
+    let mut w = ProtoWriter::with_capacity(96);
+    w.write_f32_le(input.pitch);
+    w.write_f32_le(input.yaw);
+    w.write_f32_le(input.pos[0]);
+    w.write_f32_le(input.pos[1]);
+    w.write_f32_le(input.pos[2]);
+    w.write_f32_le(input.move_vec[0]);
+    w.write_f32_le(input.move_vec[1]);
+    w.write_f32_le(input.head_yaw);
+    write_input_flags(&mut w, input.input_flags);
+    w.write_var_u32(1); // input_mode = Mouse
+    w.write_var_u32(0); // play_mode = Normal
+    w.write_var_i32(0); // interaction_model = Touch (VarInt32 zigzag en 2169)
+    w.write_f32_le(0.0); // interact_pitch
+    w.write_f32_le(0.0); // interact_yaw
+    w.write_var_u64(input.tick);
+    w.write_f32_le(input.delta[0]);
+    w.write_f32_le(input.delta[1]);
+    w.write_f32_le(input.delta[2]);
+    // Les 5 blocs optionnels « doubles » : optionnel externe toujours présent
+    // (1), optionnel interne absent (0). Réf. gophertunnel `DoubleOptionalFunc`.
+    for _ in 0..5 {
+        w.write_bool(true);
+        w.write_bool(false);
+    }
+    // Clavier/souris : pas de stick analogique.
+    w.write_f32_le(0.0);
+    w.write_f32_le(0.0);
+    let camera = direction_vector(input.pitch, input.yaw);
+    w.write_f32_le(camera[0]);
+    w.write_f32_le(camera[1]);
+    w.write_f32_le(camera[2]);
+    // Vecteur brut = vecteur de déplacement (pas de modificateur appliqué).
+    w.write_f32_le(input.move_vec[0]);
+    w.write_f32_le(input.move_vec[1]);
+    w.into_bytes()
+}
+
+/// Écrit la liste des flags PlayerAuthInput au format 2169 : `bool présent`
+/// (toujours 1, comme Cloudburst), `VarUInt32 n`, puis `n × VarInt32` (zigzag)
+/// des ids par ordre croissant. Réf. gophertunnel `InputFlagList`. Les bits
+/// hors `0..66` sont ignorés : le serveur rejetterait l'id.
+fn write_input_flags(w: &mut ProtoWriter, flags: u128) {
+    let ids: Vec<i32> = (0..INPUT_FLAG_COUNT)
+        .filter(|&bit| flags & (1u128 << bit) != 0)
+        .map(|bit| bit as i32)
+        .collect();
+    w.write_bool(true);
+    w.write_var_u32(ids.len() as u32);
+    for id in ids {
+        w.write_var_i32(id);
+    }
+}
+
+/// Vecteur de regard normalisé à partir de pitch/yaw en degrés. Formule de
+/// PMMP `Entity::getDirectionVector` (sert d'orientation caméra).
+fn direction_vector(pitch: f32, yaw: f32) -> [f32; 3] {
+    let (pitch, yaw) = (pitch.to_radians(), yaw.to_radians());
+    let xz = pitch.cos();
+    [-xz * yaw.sin(), -pitch.sin(), xz * yaw.cos()]
 }
 
 /// Encode le paquet Login (payload uniquement, sans header de paquet).
@@ -535,5 +661,112 @@ mod tests {
         let identity = jwt::extract_login_identity(&login.chain_data).unwrap();
         assert_eq!(identity.display_name, "RoundTrip");
         assert!(!identity.authenticated);
+    }
+
+    #[test]
+    fn test_resource_pack_response_downloading_finished() {
+        let payload = encode_resource_pack_client_response(PackResponse::DownloadingFinished, &[]);
+        let mut expected = vec![0x02, 19];
+        expected.extend_from_slice(b"downloadingfinished");
+        assert_eq!(payload, expected);
+    }
+
+    #[test]
+    fn test_resource_pack_response_stack_finished_ignores_packs() {
+        // La liste n'est émise que pour « downloading ».
+        let payload = encode_resource_pack_client_response(
+            PackResponse::ResourcePackStackFinished,
+            &["x_1.0.0".to_string()],
+        );
+        let mut expected = vec![0x03, 25];
+        expected.extend_from_slice(b"resourcepackstackfinished");
+        assert_eq!(payload, expected);
+    }
+
+    #[test]
+    fn test_resource_pack_response_downloading_lists_packs() {
+        let packs = ["a_1.0.0".to_string(), "b_2.0.0".to_string()];
+        let payload = encode_resource_pack_client_response(PackResponse::Downloading, &packs);
+        let mut r = ProtoReader::new(&payload);
+        assert_eq!(r.read_var_u32().unwrap(), 1);
+        assert_eq!(r.read_string().unwrap(), "downloading");
+        assert_eq!(r.read_var_u32().unwrap(), 2);
+        assert_eq!(r.read_string().unwrap(), "a_1.0.0");
+        assert_eq!(r.read_string().unwrap(), "b_2.0.0");
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_player_auth_input_layout_2169() {
+        // Flags 25 (StartSprinting) et 65 (InternalUpdate, nouveau en 2169) ;
+        // le bit 70 est hors plage et doit être ignoré.
+        let flags = (1u128 << 25) | (1u128 << 65) | (1u128 << 70);
+        let input = AuthInput {
+            pos: [1.0, 2.0, 3.0],
+            pitch: 0.0,
+            yaw: 90.0,
+            head_yaw: 90.0,
+            move_vec: [0.0, 1.0],
+            delta: [0.5, 0.0, -0.5],
+            input_flags: flags,
+            tick: 300,
+        };
+        let payload = encode_player_auth_input(&input);
+
+        // Tête : pitch, yaw, position, moveVector, headYaw = 8 × f32 LE.
+        assert_eq!(&payload[0..4], &0.0f32.to_le_bytes());
+        assert_eq!(&payload[4..8], &90.0f32.to_le_bytes());
+        assert_eq!(&payload[28..32], &90.0f32.to_le_bytes());
+        // InputData : présent, 2 ids, zigzag(25) = 50, zigzag(65) = 130 (82 01),
+        // puis inputMode = 1 (Mouse).
+        assert_eq!(&payload[32..38], &[0x01, 0x02, 50, 0x82, 0x01, 0x01]);
+
+        let mut r = ProtoReader::new(&payload);
+        for expected in [0.0, 90.0, 1.0, 2.0, 3.0, 0.0, 1.0, 90.0] {
+            assert_eq!(r.read_f32_le().unwrap(), expected);
+        }
+        assert!(r.read_bool().unwrap());
+        assert_eq!(r.read_var_u32().unwrap(), 2);
+        assert_eq!(r.read_var_i32().unwrap(), 25);
+        assert_eq!(r.read_var_i32().unwrap(), 65);
+        assert_eq!(r.read_var_u32().unwrap(), 1); // inputMode = Mouse
+        assert_eq!(r.read_var_u32().unwrap(), 0); // playMode = Normal
+        assert_eq!(r.read_var_i32().unwrap(), 0); // interactionModel
+        assert_eq!(r.read_f32_le().unwrap(), 0.0);
+        assert_eq!(r.read_f32_le().unwrap(), 0.0);
+        assert_eq!(r.read_var_u64().unwrap(), 300);
+        for expected in [0.5, 0.0, -0.5] {
+            assert_eq!(r.read_f32_le().unwrap(), expected);
+        }
+        // 5 doubles optionnels : 01 00.
+        for _ in 0..5 {
+            assert!(r.read_bool().unwrap());
+            assert!(!r.read_bool().unwrap());
+        }
+        // analogMoveVector
+        assert_eq!(r.read_f32_le().unwrap(), 0.0);
+        assert_eq!(r.read_f32_le().unwrap(), 0.0);
+        // cameraOrientation (yaw 90 → -X, cf. PMMP getDirectionVector)
+        let camera = [
+            r.read_f32_le().unwrap(),
+            r.read_f32_le().unwrap(),
+            r.read_f32_le().unwrap(),
+        ];
+        assert!((camera[0] + 1.0).abs() < 1e-6);
+        assert!(camera[1].abs() < 1e-6);
+        assert!(camera[2].abs() < 1e-6);
+        // rawMoveVector = moveVector
+        assert_eq!(r.read_f32_le().unwrap(), 0.0);
+        assert_eq!(r.read_f32_le().unwrap(), 1.0);
+        assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn test_player_auth_input_without_flags() {
+        let payload = encode_player_auth_input(&AuthInput::default());
+        // Flags : présent + liste vide (01 00), puis inputMode 1.
+        assert_eq!(&payload[32..35], &[0x01, 0x00, 0x01]);
+        // 8 f32 + 01 00 + 3 varints + 2 f32 + tick + 3 f32 + 5 × 01 00 + 7 f32.
+        assert_eq!(payload.len(), 32 + 2 + 3 + 8 + 1 + 12 + 10 + 28);
     }
 }

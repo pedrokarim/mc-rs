@@ -20,6 +20,7 @@ use mc_rs_proto::packets::packet_id;
 use mc_rs_raknet::consts::RAKNET_PROTOCOL_VERSION;
 use mc_rs_raknet::protocol::offline::*;
 
+use crate::bedrock::{encode_player_auth_input, AuthInput};
 use crate::net::RakClient;
 
 /// Résultat d'un probe de robustesse.
@@ -232,23 +233,11 @@ async fn wrong_state_packet(target: SocketAddr) -> String {
     let Ok(mut rak) = RakClient::open(target, 1400).await else {
         return "connexion RakNet KO".into();
     };
-    // PlayerAuthInput minimal, cadré comme un batch SessionStart (sans octet
-    // d'algo, non chiffré) : 0xFE + varint(len) + paquet.
-    let mut w = ProtoWriter::with_capacity(64);
-    for _ in 0..8 {
-        w.write_f32_le(0.0);
-    }
-    w.write_u8(0x00); // bitset input_flags = 0
-    for _ in 0..3 {
-        w.write_var_u32(0);
-    }
-    w.write_f32_le(0.0);
-    w.write_f32_le(0.0);
-    w.write_var_u64(0);
-    for _ in 0..3 {
-        w.write_f32_le(0.0);
-    }
-    let pkt = codec::encode_packet(packet_id::PLAYER_AUTH_INPUT, &w.into_bytes());
+    // PlayerAuthInput minimal mais bien formé (layout 2169, même encodeur que
+    // les bots), cadré comme un batch SessionStart (sans octet d'algo, non
+    // chiffré) : 0xFE + varint(len) + paquet.
+    let payload = encode_player_auth_input(&AuthInput::default());
+    let pkt = codec::encode_packet(packet_id::PLAYER_AUTH_INPUT, &payload);
 
     let mut batch = vec![0xFE];
     let mut inner = ProtoWriter::with_capacity(pkt.len() + 5);
