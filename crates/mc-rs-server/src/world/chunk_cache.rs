@@ -226,9 +226,16 @@ impl ChunkCache {
                     for (_y_idx, data) in &stored_sub_chunks {
                         payload.extend_from_slice(data);
                     }
-                    let biome_data = storage
+                    let mut biome_data = storage
                         .load_biome_data(dim, cx, cz)
                         .unwrap_or_else(fallback_biome_data);
+                    // Biomes sauvegardés avec l'ancien format (sections de 64
+                    // cases) : convertis une fois et réécrits sur disque.
+                    if let Some(upgraded) = chunk_serializer::upgrade_legacy_biome_data(&biome_data)
+                    {
+                        storage.save_biome_data(dim, cx, cz, &upgraded);
+                        biome_data = upgraded;
+                    }
                     payload.extend_from_slice(&biome_data);
                     payload.push(0); // border blocks
 

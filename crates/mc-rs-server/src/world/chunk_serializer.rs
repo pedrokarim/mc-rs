@@ -34,10 +34,19 @@ pub fn serialize_biome_section_single(biome_id: u32) -> Vec<u8> {
     serialize_biome_section(&[biome_id; 64])
 }
 
-/// Serialize a single 4x4x4 biome section.
+/// Serialize a biome section from 4x4x4 cells (index `(x << 4) | (z << 2) | y`).
+///
+/// Sur le fil, une section de biomes est un stockage palettisé de 4 096 cases
+/// (16×16×16), exactement comme les blocs : chaque cellule 4×4×4 est donc
+/// étendue aux 64 blocs qu'elle couvre (index `(x << 8) | (z << 4) | y`).
+/// Réf : dragonfly `chunk/decode.go` `decodePalettedStorage` (même
+/// `paletteSize.uint32s()` sur 4 096 indices pour blocs et biomes).
+/// Écrire seulement 64 cases ne passait que pour les sections à biome unique
+/// (sans tableau d'indices) : une section mixte était 64 fois trop courte et
+/// le client 1.26.45 coupait la connexion (`BadPacket`, code « Block »).
 pub fn serialize_biome_section(biomes: &[u32; 64]) -> Vec<u8> {
     let mut palette = Vec::new();
-    let mut palette_indices = [0u32; 64];
+    let mut cell_indices = [0u32; 64];
 
     for (i, &biome) in biomes.iter().enumerate() {
         let idx = if let Some(pos) = palette.iter().position(|&b| b == biome) {
@@ -46,12 +55,164 @@ pub fn serialize_biome_section(biomes: &[u32; 64]) -> Vec<u8> {
             palette.push(biome);
             (palette.len() - 1) as u32
         };
-        palette_indices[i] = idx;
+        cell_indices[i] = idx;
+    }
+
+    let mut palette_indices = [0u32; 4096];
+    for (i, slot) in palette_indices.iter_mut().enumerate() {
+        let (x, z, y) = (i >> 8, (i >> 4) & 0xF, i & 0xF);
+        *slot = cell_indices[((x >> 2) << 4) | ((z >> 2) << 2) | (y >> 2)];
     }
 
     let mut w = ProtoWriter::with_capacity(4);
     serialize_paletted_storage(&mut w, &palette_indices, &palette);
     w.into_bytes()
+}
+
+/// Une section de biomes relue depuis un blob sérialisé.
+enum ParsedBiomeSection {
+    /// Octet `0xFF` : même stockage que la section précédente.
+    SameAsPrevious,
+    /// Biomes des 64 cellules 4×4×4 (seulement pour le format hérité).
+    Cells(Box<[u32; 64]>),
+    /// Section valide au format courant (contenu non décodé).
+    Current,
+}
+
+/// Relit une suite de sections de biomes dont les stockages palettisés
+/// couvrent `cell_count` cases (64 : format hérité, 4 096 : format réseau).
+/// Retourne `None` si le blob n'est pas consommé exactement.
+fn parse_biome_sections(data: &[u8], cell_count: usize) -> Option<Vec<ParsedBiomeSection>> {
+    let mut reader = ProtoReader::new(data);
+    let mut sections = Vec::new();
+    while reader.remaining() > 0 {
+        let header = reader.read_u8().ok()?;
+        if header == 0xFF {
+            if sections.is_empty() {
+                return None;
+            }
+            sections.push(ParsedBiomeSection::SameAsPrevious);
+            continue;
+        }
+        let bits = (header >> 1) as usize;
+        if bits == 0 {
+            let value = reader.read_var_i32().ok()? as u32;
+            sections.push(if cell_count == 64 {
+                ParsedBiomeSection::Cells(Box::new([value; 64]))
+            } else {
+                ParsedBiomeSection::Current
+            });
+            continue;
+        }
+        if !matches!(bits, 1..=6 | 8 | 16) {
+            return None;
+        }
+        let per_word = 32 / bits;
+        let words = (0..cell_count.div_ceil(per_word))
+            .map(|_| reader.read_u32_le().ok())
+            .collect::<Option<Vec<u32>>>()?;
+        let palette_len = reader.read_var_i32().ok()?;
+        if palette_len <= 0 || palette_len as usize > (1 << bits.min(16)) {
+            return None;
+        }
+        let palette = (0..palette_len)
+            .map(|_| reader.read_var_i32().ok().map(|v| v as u32))
+            .collect::<Option<Vec<u32>>>()?;
+        if cell_count != 64 {
+            sections.push(ParsedBiomeSection::Current);
+            continue;
+        }
+        let mask = (1u32 << bits) - 1;
+        let mut cells = [0u32; 64];
+        for (k, cell) in cells.iter_mut().enumerate() {
+            let index = (words[k / per_word] >> ((k % per_word) * bits)) & mask;
+            *cell = *palette.get(index as usize)?;
+        }
+        sections.push(ParsedBiomeSection::Cells(Box::new(cells)));
+    }
+    Some(sections)
+}
+
+/// Convertit des biomes sauvegardés avant la correction du format (sections
+/// de 64 cases au lieu de 4 096, cf. [`serialize_biome_section`]) vers le
+/// format réseau. Retourne `None` si le blob est déjà au format courant ou
+/// n'est lisible dans aucun des deux formats (laissé tel quel).
+pub fn upgrade_legacy_biome_data(data: &[u8]) -> Option<Vec<u8>> {
+    if parse_biome_sections(data, 4096).is_some() {
+        return None;
+    }
+    let sections = parse_biome_sections(data, 64)?;
+    let mut out = Vec::with_capacity(data.len());
+    for section in sections {
+        match section {
+            ParsedBiomeSection::SameAsPrevious => out.push(0xFF),
+            ParsedBiomeSection::Cells(cells) => out.extend(serialize_biome_section(&cells)),
+            ParsedBiomeSection::Current => return None,
+        }
+    }
+    Some(out)
+}
+
+#[cfg(test)]
+mod biome_section_tests {
+    use super::{parse_biome_sections, serialize_biome_section, upgrade_legacy_biome_data};
+
+    /// Section au format hérité (64 cases) : 1 bit par case, 2 mots.
+    fn legacy_mixed_section() -> Vec<u8> {
+        let mut bytes = vec![(1 << 1) | 1];
+        // Case 0 → index 1 (biome 27), le reste → index 0 (biome 6).
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+        bytes.extend_from_slice(&[4, 12, 54]); // palette : 2 entrées, 6 et 27
+        bytes
+    }
+
+    #[test]
+    fn legacy_biome_data_is_upgraded_to_4096_cells() {
+        let mut legacy = legacy_mixed_section();
+        legacy.push(0xFF); // section suivante identique
+        let upgraded = upgrade_legacy_biome_data(&legacy).expect("format hérité reconnu");
+        let mut cells = [6u32; 64];
+        cells[0] = 27;
+        let mut expected = serialize_biome_section(&cells);
+        expected.push(0xFF);
+        assert_eq!(upgraded, expected);
+        assert!(parse_biome_sections(&upgraded, 4096).is_some());
+    }
+
+    #[test]
+    fn current_biome_data_is_left_untouched() {
+        let mut cells = [6u32; 64];
+        cells[5] = 188;
+        let mut current = serialize_biome_section(&cells);
+        current.extend(serialize_biome_section(&[6; 64]));
+        assert_eq!(upgrade_legacy_biome_data(&current), None);
+    }
+
+    #[test]
+    fn unreadable_biome_data_is_left_untouched() {
+        assert_eq!(upgrade_legacy_biome_data(&[0x03, 0x00]), None);
+    }
+
+    #[test]
+    fn mixed_biome_section_covers_4096_cells() {
+        // Deux biomes : 1 bit par case, 4 096 cases → 128 mots de 32 bits.
+        let mut cells = [6u32; 64];
+        cells[0] = 27;
+        let bytes = serialize_biome_section(&cells);
+        assert_eq!(bytes[0], (1 << 1) | 1);
+        // en-tête + 128 × 4 octets + taille de palette (2) + 2 entrées.
+        assert_eq!(bytes.len(), 1 + 128 * 4 + 1 + 2);
+        // La cellule 0 couvre les blocs x, y, z de 0 à 3 : le premier mot a ses
+        // 4 bits bas (y = 0..3 pour x = z = 0) à l'index 0 (biome 27).
+        assert_eq!(bytes[1] & 0x0F, 0);
+    }
+
+    #[test]
+    fn single_biome_section_stays_compact() {
+        let bytes = serialize_biome_section(&[6; 64]);
+        assert_eq!(bytes, vec![1, 12]);
+    }
 }
 
 /// Serialize all biome sections for a chunk from its 16x16 biome columns.
