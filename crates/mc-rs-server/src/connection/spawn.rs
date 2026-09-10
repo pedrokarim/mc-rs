@@ -220,10 +220,9 @@ impl Connection {
         let mob_eq = MobEquipment::encode_item(self.entity_runtime_id, &held_wrapper, held_slot);
         responses.push(self.encode_compressed_packet(packet_id::MOB_EQUIPMENT, &mob_eq));
 
-        // 12. CreativeContent — classification vanilla EXACTE chargée depuis
-        //     `data/creative/{construction,nature,equipment,items}.json`
-        //     (copiés depuis bedrock-data de PMMP). Chaque fichier définit
-        //     les sous-groupes avec leurs icônes et noms i18n.
+        // 12. CreativeContent — inventaire créatif vanilla 1.26.40 chargé
+        //     depuis `data/creative_items.nbt` (dragonfly v0.11.4) : groupes
+        //     avec icônes et noms i18n, entrées numérotées dans l'ordre.
         let creative_groups = crate::creative_content::groups();
         let creative_items = crate::creative_content::items();
         let (n_groups, n_items) = crate::creative_content::stats();

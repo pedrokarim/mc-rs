@@ -2535,7 +2535,7 @@ async fn main() {
                                 m.base.entity_unique_id,
                                 m.kind.display_name(),
                                 hp,
-                                m.kind.boss_bar_color() as u8,
+                                m.kind.boss_bar_color(),
                             )
                         })
                         .collect();

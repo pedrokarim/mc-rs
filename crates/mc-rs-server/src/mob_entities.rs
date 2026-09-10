@@ -1231,8 +1231,9 @@ impl MobKind {
         }
     }
 
-    /// Couleur de la barre de boss (cf `combat_packets::boss_event`).
-    pub fn boss_bar_color(self) -> u32 {
+    /// Couleur de la barre de boss, valeur `BossBarColor` du paquet BossEvent
+    /// (0 rose … 5 violet, 6 violet Rebecca, 7 blanc ; cf `visuals::BossEvent`).
+    pub fn boss_bar_color(self) -> u8 {
         match self {
             Self::Wither => 5,      // violet
             Self::EnderDragon => 0, // rose/magenta

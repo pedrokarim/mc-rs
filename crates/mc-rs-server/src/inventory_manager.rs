@@ -1146,26 +1146,21 @@ impl InventoryManager {
                 StackRequestAction::CraftCreative {
                     creative_item_network_id,
                 } => {
-                    // L'entry_id envoyé par le client = item_runtime_id (on
-                    // encode l'inventaire créatif avec entry_id == item_id
-                    // dans spawn.rs pour cette raison).
-                    let item_id = *creative_item_network_id as i32;
-                    if let Some(name) = crate::item_registry::item_name_by_id(item_id) {
-                        let brid = {
-                            let b = &*crate::world::block_registry::BLOCKS;
-                            let candidate = b.get(name);
-                            if candidate != b.air {
-                                candidate as i32
-                            } else {
-                                0
-                            }
-                        };
-                        self.pending_creative_item = Some(ItemStack::new(item_id, 64, brid));
+                    // L'identifiant envoyé est l'index d'entrée de
+                    // CreativeContent (PMMP `CreativeInventory::getItem`), pas
+                    // un ID d'item : plusieurs entrées partagent un même item
+                    // (variantes de meta, livres enchantés…).
+                    if let Some(stack) = crate::creative_content::item_stack_by_entry_id(
+                        *creative_item_network_id,
+                        64,
+                    ) {
                         tracing::debug!(
-                            "CraftCreative: pending item={} ({}) stack=64",
-                            item_id,
-                            name
+                            "CraftCreative: pending entry={} item={} meta={} stack=64",
+                            creative_item_network_id,
+                            stack.id,
+                            stack.meta
                         );
+                        self.pending_creative_item = Some(stack);
                     } else {
                         tracing::debug!(
                             "CraftCreative: unknown creative_item_network_id={}",
