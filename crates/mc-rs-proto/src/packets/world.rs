@@ -738,34 +738,131 @@ impl AvailableCommands {
 pub struct CraftingData;
 
 impl CraftingData {
+    /// Nombre de vecteurs précédant `clearRecipes` en 2169 : 8 vecteurs de
+    /// recettes typés (shaped, shapeless, multi, user-data shapeless,
+    /// shapeless chemistry, shaped chemistry, smithing transform, smithing
+    /// trim), puis potions, conteneurs de potion et material reducers
+    /// (gophertunnel `packet/crafting_data.go` Marshal, Cloudburst
+    /// `CraftingDataSerializer_v2168::serialize`).
+    pub const VECTOR_COUNT: usize = 11;
+
+    /// Paquet sans aucune recette : 11 compteurs `VarUInt32` à 0 puis
+    /// `clearRecipes = true`.
     pub fn encode_empty() -> Vec<u8> {
-        let mut w = ProtoWriter::with_capacity(32);
-        w.write_var_u32(0); // recipes count
-        w.write_var_u32(0); // potion type recipes count
-        w.write_var_u32(0); // potion container recipes count
-        w.write_var_u32(0); // material reducer recipes count
-        w.write_bool(true); // clear recipes
+        let mut w = ProtoWriter::with_capacity(16);
+        for _ in 0..Self::VECTOR_COUNT {
+            w.write_var_u32(0);
+        }
+        w.write_bool(true); // clearRecipes
         w.into_bytes()
     }
 }
 
-// ── CreativeContent (S→C, 0x91) ──
+// ── NetworkItemInstanceDescriptor (CraftingData, CreativeContent) ──
 
-/// Entry pour un groupe de l'inventaire créatif (catégorie).
-pub struct CreativeGroupEntry<'a> {
-    pub category_id: i32,
-    pub category_name: &'a str,
-    /// Icône du groupe — encodé via `ItemStackWithoutStackId` (pas de net_id,
-    /// pas de extra_data ItemStackExtraData).
-    pub icon_item_id: i32,
+/// Écrit un item au format `NetworkItemInstanceDescriptor` 2169
+/// (JSON Mojang `NetworkItemInstanceDescriptorData.json`, gophertunnel
+/// `writer.go` `Item`, Cloudburst `BedrockCodecHelper_v2168::writeItemInstance`) :
+/// ```text
+/// id               VarInt32 (zigzag)
+/// count            u16 LE
+/// aux (meta)       VarUInt32
+/// blockRuntimeId   VarInt32 (zigzag, contrairement au NetworkItemStackDescriptor)
+/// userData         VarUInt32 longueur + octets
+/// ```
+/// Plus de court-circuit sur l'air depuis 2168 : l'air s'écrit en entier,
+/// `00 00 00 00 00 00` (tous les champs à 0, blob vide), exactement comme
+/// gophertunnel écrit un `ItemStack{}`.
+///
+/// `user_data` est le blob déjà construit (cf. [`item_user_data`]) ; vide pour
+/// un item non-air = blob minimal sans NBT. Le blob d'un bouclier doit être
+/// fourni par l'appelant (il porte un `blockingTick` en plus).
+pub fn write_item_instance(
+    w: &mut ProtoWriter,
+    item_id: i32,
+    count: u16,
+    meta: u32,
+    block_runtime_id: i32,
+    user_data: &[u8],
+) {
+    if item_id == 0 {
+        w.write_var_i32(0);
+        w.write_u16_le(0);
+        w.write_var_u32(0);
+        w.write_var_i32(0);
+        w.write_var_u32(0); // userData vide
+        return;
+    }
+    w.write_var_i32(item_id);
+    w.write_u16_le(count);
+    w.write_var_u32(meta);
+    w.write_var_i32(block_runtime_id);
+    if user_data.is_empty() {
+        w.write_byte_array(&item_user_data(None, false));
+    } else {
+        w.write_byte_array(user_data);
+    }
 }
 
-/// Entry pour un item de l'inventaire créatif.
-pub struct CreativeItemEntry {
-    pub entry_id: u32, // creative_item_net_id (utilisé par client pour CraftCreative)
+/// Construit le blob `userData` d'un item non-air (inchangé 1001 → 2169 ;
+/// PMMP `ItemStackExtraData::write`, gophertunnel `writer.go` `itemUserData`,
+/// Cloudburst `writeItemInstance`) :
+/// ```text
+/// i16 LE  marqueur NBT : 0 = pas de NBT ; -1 = suivi de u8 version (1) puis
+///         d'un compound NBT little-endian DISQUE (pas le format réseau)
+/// u32 LE  nombre de canPlaceOn (toujours 0 ici)
+/// u32 LE  nombre de canBreak (toujours 0 ici)
+/// [bouclier uniquement] i64 LE blockingTick
+/// ```
+/// `nbt_le` = compound racine déjà sérialisé en NBT little-endian disque.
+pub fn item_user_data(nbt_le: Option<&[u8]>, is_shield: bool) -> Vec<u8> {
+    let nbt_len = nbt_le.map_or(0, <[u8]>::len);
+    let mut w = ProtoWriter::with_capacity(19 + nbt_len);
+    match nbt_le {
+        Some(nbt) if !nbt.is_empty() => {
+            w.write_i16_le(-1);
+            w.write_u8(1); // version du format userData
+            w.write_raw(nbt);
+        }
+        _ => w.write_i16_le(0),
+    }
+    w.write_u32_le(0); // canPlaceOn
+    w.write_u32_le(0); // canBreak
+    if is_shield {
+        w.write_i64_le(0); // blockingTick
+    }
+    w.into_bytes()
+}
+
+// ── CreativeContent (S→C, 0x91) ──
+
+/// Groupe de l'inventaire créatif (sous-groupe repliable d'un onglet).
+pub struct CreativeGroupEntry<'a> {
+    /// Onglet : 1 Construction, 2 Nature, 3 Equipment, 4 Items,
+    /// 5 ItemCommandOnly (gophertunnel `creative.go`). Octet unique en 2169.
+    pub category_id: u8,
+    /// Clé de traduction du groupe ; vide pour un groupe anonyme.
+    pub category_name: &'a str,
+    /// Icône du groupe (0 = air, groupe anonyme).
+    pub icon_item_id: i32,
+    pub icon_meta: u32,
+    pub icon_block_runtime_id: i32,
+    /// Blob `userData` de l'icône (cf. [`item_user_data`]).
+    pub icon_user_data: &'a [u8],
+}
+
+/// Item de l'inventaire créatif.
+pub struct CreativeItemEntry<'a> {
+    /// `creativeItemNetworkId`, renvoyé par le client dans l'action CraftCreative.
+    pub entry_id: u32,
     pub item_id: i32,
+    /// Aux value (variante : flèches à effet, bannières colorées…).
+    pub meta: u32,
     pub block_runtime_id: i32,
-    pub group_id: u32, // index dans le tableau de groupes
+    /// Blob `userData` (cf. [`item_user_data`]), NBT éventuelle comprise.
+    pub user_data: &'a [u8],
+    /// Index dans le tableau de groupes.
+    pub group_id: u32,
 }
 
 pub struct CreativeContent;
@@ -781,34 +878,46 @@ impl CreativeContent {
 
     /// Encode un CreativeContent avec groupes + items.
     ///
-    /// Format PMMP (`CreativeContentPacket::encodePayload`) :
+    /// Format 2169 (JSON Mojang `CreativeContentPacketPayload`,
+    /// `CreativeGroupInfoPayload`, `CreativeItemEntryPayload` ; gophertunnel
+    /// `creative.go` ; Cloudburst `CreativeContentSerializer_v2168`) :
     /// ```text
     /// groups_count (VarU32)
-    /// for each group: category_id (i32 LE) + category_name (string) + icon (ItemStackWithoutStackId)
+    /// for each group: category (u8) + name (string) + icon (NetworkItemInstanceDescriptor)
     /// items_count (VarU32)
-    /// for each item: entry_id (VarU32) + item (ItemStackWithoutStackId) + group_id (VarU32)
+    /// for each item: entry_id (VarU32) + item (NetworkItemInstanceDescriptor) + group_index (VarU32)
     /// ```
-    ///
-    /// `ItemStackWithoutStackId` = même format que `ItemStackWrapper` MAIS :
-    /// - PAS de `has_net_id` bool
-    /// - PAS de `stack_id` varint
-    /// - sinon id/count/meta/block_rid/extra_data identique
+    /// La catégorie était un `i32 LE` jusqu'au protocole 1001.
     pub fn encode(groups: &[CreativeGroupEntry], items: &[CreativeItemEntry]) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(16384);
 
         // Groupes.
         w.write_var_u32(groups.len() as u32);
         for g in groups {
-            w.write_i32_le(g.category_id);
+            w.write_u8(g.category_id);
             w.write_string(g.category_name);
-            write_item_stack_without_id(&mut w, g.icon_item_id, 1, 0);
+            write_item_instance(
+                &mut w,
+                g.icon_item_id,
+                1,
+                g.icon_meta,
+                g.icon_block_runtime_id,
+                g.icon_user_data,
+            );
         }
 
         // Items.
         w.write_var_u32(items.len() as u32);
         for item in items {
             w.write_var_u32(item.entry_id);
-            write_item_stack_without_id(&mut w, item.item_id, 1, item.block_runtime_id);
+            write_item_instance(
+                &mut w,
+                item.item_id,
+                1,
+                item.meta,
+                item.block_runtime_id,
+                item.user_data,
+            );
             w.write_var_u32(item.group_id);
         }
 
@@ -816,24 +925,83 @@ impl CreativeContent {
     }
 }
 
-/// Encode un `ItemStackWithoutStackId` : id + count + meta + block_rid + extra_data.
-/// Pas de has_net_id/stack_id (contrairement à ItemStackWrapper).
-fn write_item_stack_without_id(
-    w: &mut ProtoWriter,
-    item_id: i32,
-    count: u16,
-    block_runtime_id: i32,
-) {
-    w.write_var_i32(item_id);
-    if item_id == 0 {
-        return;
+#[cfg(test)]
+mod item_instance_tests {
+    use super::*;
+
+    const MINIMAL_BLOB: [u8; 10] = [0; 10];
+
+    #[test]
+    fn crafting_data_empty_has_eleven_vectors_then_clear_flag() {
+        let mut expected = vec![0u8; CraftingData::VECTOR_COUNT];
+        expected.push(1);
+        assert_eq!(CraftingData::encode_empty(), expected);
     }
-    w.write_u16_le(count);
-    w.write_var_u32(0); // meta = 0
-    w.write_var_i32(block_runtime_id);
-    // extra_data minimal : 2 bytes NBT_len=0 + 4 canPlace + 4 canDestroy
-    let extra = [0u8; 10];
-    w.write_byte_array(&extra);
+
+    /// Air 2169 : tous les champs écrits (plus de court-circuit après l'id).
+    #[test]
+    fn air_item_instance_is_written_in_full() {
+        let mut w = ProtoWriter::new();
+        write_item_instance(&mut w, 0, 1, 7, 42, &[1, 2, 3]);
+        assert_eq!(w.into_bytes(), vec![0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    }
+
+    /// id 5 → zigzag 0x0A ; block runtime id -1 → zigzag 0x01 (VarInt32 signé).
+    #[test]
+    fn item_instance_uses_zigzag_block_runtime_id_and_minimal_blob() {
+        let mut w = ProtoWriter::new();
+        write_item_instance(&mut w, 5, 1, 3, -1, &[]);
+        let mut expected = vec![0x0A, 0x01, 0x00, 0x03, 0x01, 0x0A];
+        expected.extend_from_slice(&MINIMAL_BLOB);
+        assert_eq!(w.into_bytes(), expected);
+    }
+
+    #[test]
+    fn user_data_blob_layouts() {
+        assert_eq!(item_user_data(None, false), MINIMAL_BLOB.to_vec());
+
+        let shield = item_user_data(None, true);
+        assert_eq!(shield.len(), 18);
+        assert!(shield.iter().all(|&b| b == 0));
+
+        let nbt = [0x0A, 0x00, 0x00, 0x00]; // compound racine vide, NBT LE disque
+        let blob = item_user_data(Some(&nbt), false);
+        assert_eq!(&blob[..3], &[0xFF, 0xFF, 0x01]);
+        assert_eq!(&blob[3..7], &nbt);
+        assert_eq!(&blob[7..], &[0u8; 8]);
+    }
+
+    #[test]
+    fn creative_content_group_category_is_a_single_byte() {
+        let groups = [CreativeGroupEntry {
+            category_id: 3,
+            category_name: "g",
+            icon_item_id: 0,
+            icon_meta: 0,
+            icon_block_runtime_id: 0,
+            icon_user_data: &[],
+        }];
+        let items = [CreativeItemEntry {
+            entry_id: 0,
+            item_id: 5,
+            meta: 2,
+            block_runtime_id: 0,
+            user_data: &[],
+            group_id: 0,
+        }];
+        let mut expected = vec![
+            0x01, // 1 groupe
+            0x03, // catégorie u8
+            0x01, b'g', // nom
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // icône air complète
+            0x01, // 1 item
+            0x00, // entry id
+            0x0A, 0x01, 0x00, 0x02, 0x00, 0x0A, // id, count, meta, brid, longueur blob
+        ];
+        expected.extend_from_slice(&MINIMAL_BLOB);
+        expected.push(0x00); // group index
+        assert_eq!(CreativeContent::encode(&groups, &items), expected);
+    }
 }
 
 // ── ItemRegistry (S→C, 0x161) — empty ──

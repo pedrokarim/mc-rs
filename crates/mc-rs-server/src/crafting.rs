@@ -11,6 +11,9 @@ use std::sync::OnceLock;
 
 use mc_rs_proto::io::ProtoWriter;
 use mc_rs_proto::packets::player::ItemStack;
+use mc_rs_proto::packets::world::{item_user_data, write_item_instance};
+
+use crate::item_registry;
 
 pub static RECIPE_DB: OnceLock<CraftingManager> = OnceLock::new();
 
@@ -19,21 +22,34 @@ pub static RECIPE_DB: OnceLock<CraftingManager> = OnceLock::new();
 /// PreSpawn (cf. `connection/spawn.rs`).
 pub static CRAFTING_DATA_PAYLOAD: OnceLock<Vec<u8>> = OnceLock::new();
 
-// ── Constantes wire CraftingDataPacket (PMMP `CraftingDataPacket`) ──
-/// `ENTRY_SHAPELESS` — utilisé aussi pour les recettes de four (PMMP les envoie
-/// en shapeless avec le block name "furnace"/"blast_furnace"/"smoker").
-const ENTRY_SHAPELESS: i32 = 0;
-const ENTRY_SHAPED: i32 = 1;
+// ── Constantes wire CraftingDataPacket 2169 ──
 
-// ── ItemDescriptorType (PMMP `ItemDescriptorType`) ──
-const DESC_INT_ID_META: u8 = 1;
-const DESC_TAG: u8 = 3;
+/// Meta joker d'un ingrédient (PMMP `TypeConverter::RECIPE_INPUT_WILDCARD_META`).
+/// gophertunnel et Cloudburst écrivent aussi 32767 comme aux des descripteurs
+/// vide et `item_tag`.
+const RECIPE_INPUT_WILDCARD_META: i32 = 0x7fff;
 
-/// Meta wildcard côté recette (PMMP `TypeConverter::RECIPE_INPUT_WILDCARD_META`).
-const RECIPE_INPUT_WILDCARD_META: i16 = 0x7fff;
+/// Variante du descripteur d'ingrédient : 0 = invalide (slot vide), 1 = typé
+/// par nom (gophertunnel `writer.go` `ItemDescriptorCount`, Cloudburst
+/// `BedrockCodecHelper_v2168::writeIngredient` : `min(type, 1)`).
+const DESCRIPTOR_VARIANT_INVALID: u32 = 0;
+const DESCRIPTOR_VARIANT_TYPED: u32 = 1;
+
+/// Noms sérialisés des types de descripteur (Cloudburst `ItemDescriptorType`,
+/// gophertunnel `itemDescriptorType`).
+const DESCRIPTOR_NAME_ITEM: &str = "name";
+const DESCRIPTOR_NAME_TAG: &str = "item_tag";
+
+/// `RecipeUnlockingRequirement` : contexte AlwaysUnlocked (gophertunnel
+/// `RecipeUnlockContextAlwaysUnlocked`).
+const UNLOCK_CONTEXT_ALWAYS_UNLOCKED: i32 = 1;
 
 /// Priorité de recette (PMMP `CraftingDataCache` hardcode 50 partout).
 const RECIPE_PRIORITY: i32 = 50;
+
+/// Premier `recipeNetId` : le client rejette l'id 0 depuis 1.21.100 (PMMP
+/// `CraftingDataCache::RECIPE_ID_OFFSET`).
+const RECIPE_NET_ID_OFFSET: u32 = 1;
 
 /// Ingrédient de recette. Peut matcher exactement, avec meta wildcard, ou via
 /// un tag d'items Bedrock (`minecraft:planks`, `minecraft:logs`, …).
@@ -280,73 +296,126 @@ impl CraftingManager {
         self.smoker.iter().find(|r| r.matches(stack))
     }
 
-    /// Encode le payload complet du paquet `CraftingData` (S→C).
-    ///
-    /// Port fidèle de PMMP `CraftingDataCache::buildCraftingDataCache` +
-    /// `CraftingDataPacket::encodePayload` (BedrockProtocol tag
-    /// `57.1.0+bedrock-1.26.20`) :
+    /// Encode le payload complet du paquet `CraftingData` (S→C), format 2169
+    /// (JSON Mojang `CraftingDataPacketPayload`, gophertunnel
+    /// `packet/crafting_data.go`, Cloudburst `CraftingDataSerializer_v2168`) :
     /// ```text
-    /// recipe_count (VarU32)
-    /// for each recipe: type_id (VarI32) + <recipe payload>
-    /// potion_type_recipes_count   (VarU32) = 0
-    /// potion_container_recipes    (VarU32) = 0
-    /// material_reducer_recipes    (VarU32) = 0
-    /// clean_recipes (bool) = true
+    /// shaped              VarU32 n + n × ShapedRecipe      (vecteur 0)
+    /// shapeless           VarU32 n + n × ShapelessRecipe   (vecteur 1)
+    /// multi               VarU32 0                         (vecteur 2)
+    /// user-data shapeless VarU32 0                         (vecteur 3)
+    /// shapeless chemistry VarU32 0                         (vecteur 4)
+    /// shaped chemistry    VarU32 0                         (vecteur 5)
+    /// smithing transform  VarU32 0                         (vecteur 6)
+    /// smithing trim       VarU32 0                         (vecteur 7)
+    /// potion mixes        VarU32 0
+    /// container mixes     VarU32 0
+    /// material reducers   VarU32 0
+    /// clearRecipes        bool = true
     /// ```
+    /// Plus d'id de type par recette : chaque type a son vecteur. Il n'y a
+    /// pas de vecteur de four : les recettes de four partent en shapeless
+    /// mono-ingrédient avec le tag du four, comme PMMP le faisait déjà
+    /// (`CraftingDataCache` itère chaque `FurnaceType`).
     ///
-    /// - shaped → `ENTRY_SHAPED`, block "crafting_table", symmetric=true.
-    /// - shapeless → `ENTRY_SHAPELESS`, block "crafting_table".
-    /// - furnace → `ENTRY_SHAPELESS` avec block "furnace" (exactement comme
-    ///   PMMP, qui n'utilise PAS `ENTRY_FURNACE` mais réencode en shapeless).
+    /// Les `recipeNetId` démarrent à 1 et suivent l'ordre shaped, shapeless,
+    /// four, haut fourneau, fumoir. Notre handler `CraftRecipe` matche la
+    /// grille directement, donc ces ids ne servent qu'à l'affichage / au
+    /// recipe book côté client.
     ///
-    /// Les `recipeNetId` démarrent à 1 (le client rejette l'id 0 depuis
-    /// 1.21.100 — `CraftingDataCache::RECIPE_ID_OFFSET`). Notre handler
-    /// `CraftRecipe` matche la grille directement, donc ces ids ne servent
-    /// qu'à l'affichage / au recipe book côté client.
+    /// Les ingrédients 2169 désignent l'item par son identifiant texte : une
+    /// recette dont un ingrédient n'a pas de nom dans le registre d'items est
+    /// omise (son net id reste consommé, les autres ne bougent pas).
     pub fn encode_crafting_data(&self) -> Vec<u8> {
+        let encoder = RecipeEncoder {
+            item_name: &item_registry::item_name_by_id,
+            shield_id: item_registry::network_id("minecraft:shield"),
+        };
+        let (payload, skipped) = self.encode_crafting_data_with(&encoder);
+        if skipped > 0 {
+            tracing::warn!(
+                "CraftingData : {} recettes omises (ingrédient absent du registre d'items)",
+                skipped
+            );
+        }
+        payload
+    }
+
+    /// Corps de [`Self::encode_crafting_data`] ; retourne le payload et le
+    /// nombre de recettes omises.
+    fn encode_crafting_data_with(&self, encoder: &RecipeEncoder) -> (Vec<u8>, usize) {
         let mut w = ProtoWriter::with_capacity(256 * 1024);
+        let mut net_id = RECIPE_NET_ID_OFFSET;
+        let mut skipped = 0;
 
-        let total = self.shaped.len()
-            + self.shapeless.len()
-            + self.furnace.len()
-            + self.blast_furnace.len()
-            + self.smoker.len();
-        w.write_var_u32(total as u32);
-
-        let mut net_id: u32 = 1; // RECIPE_ID_OFFSET
-
+        // Vecteur 0 : shaped.
+        let mut shaped = RecipeVector::new();
         for r in &self.shaped {
-            w.write_var_i32(ENTRY_SHAPED);
-            encode_shaped_recipe(&mut w, r, net_id);
+            match encoder.resolve_all(&r.input) {
+                Some(input) => {
+                    encoder.encode_shaped_recipe(&mut shaped.body, r, &input, net_id);
+                    shaped.count += 1;
+                }
+                None => skipped += 1,
+            }
             net_id += 1;
         }
+        shaped.write_to(&mut w);
+
+        // Vecteur 1 : shapeless, puis les recettes de four.
+        let mut shapeless = RecipeVector::new();
         for r in &self.shapeless {
-            w.write_var_i32(ENTRY_SHAPELESS);
-            encode_shapeless_recipe(&mut w, &r.ingredients, &r.output, "crafting_table", net_id);
+            match encoder.resolve_all(&r.ingredients) {
+                Some(input) => {
+                    encoder.encode_shapeless_recipe(
+                        &mut shapeless.body,
+                        &input,
+                        &r.output,
+                        "crafting_table",
+                        net_id,
+                    );
+                    shapeless.count += 1;
+                }
+                None => skipped += 1,
+            }
             net_id += 1;
         }
-        // PMMP encode les recettes de four comme shapeless mono-ingrédient avec
-        // le block name du four (`CraftingDataCache` itère chaque `FurnaceType`).
         for (recipes, block_name) in [
             (&self.furnace, "furnace"),
             (&self.blast_furnace, "blast_furnace"),
             (&self.smoker, "smoker"),
         ] {
             for r in recipes {
-                w.write_var_i32(ENTRY_SHAPELESS);
-                let inputs = std::slice::from_ref(&r.input);
-                let outputs = std::slice::from_ref(&r.output);
-                encode_shapeless_recipe(&mut w, inputs, outputs, block_name, net_id);
+                match encoder.resolve_all(std::slice::from_ref(&r.input)) {
+                    Some(input) => {
+                        encoder.encode_shapeless_recipe(
+                            &mut shapeless.body,
+                            &input,
+                            std::slice::from_ref(&r.output),
+                            block_name,
+                            net_id,
+                        );
+                        shapeless.count += 1;
+                    }
+                    None => skipped += 1,
+                }
                 net_id += 1;
             }
         }
+        shapeless.write_to(&mut w);
 
-        w.write_var_u32(0); // potion type recipes
-        w.write_var_u32(0); // potion container recipes
-        w.write_var_u32(0); // material reducer recipes
-        w.write_bool(true); // clean recipes (PMMP passe toujours true)
+        w.write_var_u32(0); // vecteur 2 : multi
+        w.write_var_u32(0); // vecteur 3 : user-data shapeless
+        w.write_var_u32(0); // vecteur 4 : shapeless chemistry
+        w.write_var_u32(0); // vecteur 5 : shaped chemistry
+        w.write_var_u32(0); // vecteur 6 : smithing transform
+        w.write_var_u32(0); // vecteur 7 : smithing trim
+        w.write_var_u32(0); // potion mixes
+        w.write_var_u32(0); // container mixes
+        w.write_var_u32(0); // material reducers
+        w.write_bool(true); // clearRecipes (PMMP passe toujours true)
 
-        w.into_bytes()
+        (w.into_bytes(), skipped)
     }
 
     /// Précharge des recettes vanilla basiques (planks, sticks, torches, etc.).
@@ -461,114 +530,201 @@ impl CraftingManager {
     }
 }
 
-// ── Helpers d'encodage wire (CraftingDataPacket) ──
+// ── Helpers d'encodage wire (CraftingDataPacket 2169) ──
 
-/// Encode une `ProtocolShapedRecipe` (PMMP `ShapedRecipe::encode`).
-fn encode_shaped_recipe(w: &mut ProtoWriter, r: &ShapedRecipe, net_id: u32) {
-    write_recipe_id(w, net_id);
-    w.write_var_i32(r.width as i32);
-    w.write_var_i32(r.height as i32);
-    // input en ordre row-major (height × width), exactement comme stocké.
-    for ing in &r.input {
-        write_recipe_ingredient(w, ing);
-    }
-    w.write_var_u32(r.output.len() as u32);
-    for out in &r.output {
-        write_item_stack_without_id(w, out);
-    }
-    write_nil_uuid(w);
-    w.write_string("crafting_table");
-    w.write_var_i32(RECIPE_PRIORITY);
-    w.write_bool(true); // symmetric
-    write_no_unlocking_requirement(w);
-    w.write_var_u32(net_id); // recipeNetId
+/// Un vecteur de recettes typé : compteur `VarUInt32` suivi des entrées.
+/// Le corps est accumulé à part car des recettes peuvent être omises.
+struct RecipeVector {
+    count: u32,
+    body: ProtoWriter,
 }
 
-/// Encode une `ProtocolShapelessRecipe` (PMMP `ShapelessRecipe::encode`).
-/// Sert aussi pour les recettes de four (block name = "furnace").
-fn encode_shapeless_recipe(
-    w: &mut ProtoWriter,
-    ingredients: &[RecipeIngredient],
-    output: &[ItemStack],
-    block_name: &str,
-    net_id: u32,
-) {
-    write_recipe_id(w, net_id);
-    w.write_var_u32(ingredients.len() as u32);
-    for ing in ingredients {
-        write_recipe_ingredient(w, ing);
+impl RecipeVector {
+    fn new() -> Self {
+        Self {
+            count: 0,
+            body: ProtoWriter::with_capacity(64 * 1024),
+        }
     }
-    w.write_var_u32(output.len() as u32);
-    for out in output {
-        write_item_stack_without_id(w, out);
+
+    fn write_to(self, w: &mut ProtoWriter) {
+        w.write_var_u32(self.count);
+        w.write_raw(&self.body.into_bytes());
     }
-    write_nil_uuid(w);
-    w.write_string(block_name);
-    w.write_var_i32(RECIPE_PRIORITY);
-    write_no_unlocking_requirement(w);
-    w.write_var_u32(net_id); // recipeNetId
+}
+
+/// Ingrédient prêt pour le wire : le descripteur 2169 porte l'identifiant
+/// texte de l'item, plus son id réseau numérique.
+enum WireIngredient<'a> {
+    Empty,
+    Item { name: &'a str, aux: i32, count: i32 },
+    Tag { tag: &'a str, count: i32 },
+}
+
+/// Contexte d'encodage : résolution id réseau → identifiant texte (registre
+/// d'items en production, table fixe en test) et id réseau du bouclier.
+struct RecipeEncoder<'r> {
+    item_name: &'r dyn Fn(i32) -> Option<&'static str>,
+    shield_id: Option<i32>,
+}
+
+impl RecipeEncoder<'_> {
+    /// `None` si l'item d'un ingrédient n'a pas d'identifiant connu.
+    fn resolve<'a>(&self, ing: &'a RecipeIngredient) -> Option<WireIngredient<'a>> {
+        Some(match ing {
+            RecipeIngredient::Empty => WireIngredient::Empty,
+            RecipeIngredient::Exact {
+                item_id,
+                meta,
+                count,
+            } => WireIngredient::Item {
+                name: (self.item_name)(*item_id)?,
+                aux: *meta as i32,
+                count: i32::from(*count),
+            },
+            RecipeIngredient::AnyMeta { item_id, count } => WireIngredient::Item {
+                name: (self.item_name)(*item_id)?,
+                aux: RECIPE_INPUT_WILDCARD_META,
+                count: i32::from(*count),
+            },
+            RecipeIngredient::Tag { tag, count, .. } => WireIngredient::Tag {
+                tag,
+                count: i32::from(*count),
+            },
+        })
+    }
+
+    fn resolve_all<'a>(&self, ings: &'a [RecipeIngredient]) -> Option<Vec<WireIngredient<'a>>> {
+        ings.iter().map(|ing| self.resolve(ing)).collect()
+    }
+
+    /// `ShapedRecipe` 2169 (gophertunnel `recipe.go` `marshalShaped`,
+    /// Cloudburst `CraftingDataSerializer_v2168::writeShapedRecipe`).
+    fn encode_shaped_recipe(
+        &self,
+        w: &mut ProtoWriter,
+        r: &ShapedRecipe,
+        input: &[WireIngredient],
+        net_id: u32,
+    ) {
+        write_recipe_id(w, net_id);
+        w.write_var_i32(r.width as i32);
+        w.write_var_i32(r.height as i32);
+        // Nouveau en 2168 : compteur explicite, égal à width × height ; ordre
+        // row-major, exactement comme stocké.
+        w.write_var_u32(input.len() as u32);
+        for ing in input {
+            write_recipe_ingredient(w, ing);
+        }
+        w.write_var_u32(r.output.len() as u32);
+        for out in &r.output {
+            self.write_result(w, out);
+        }
+        write_nil_uuid(w);
+        w.write_string("crafting_table");
+        w.write_var_i32(RECIPE_PRIORITY);
+        w.write_bool(true); // assumeSymmetry
+        write_always_unlocked(w);
+        w.write_var_u32(net_id); // recipeNetId
+    }
+
+    /// `ShapelessRecipe` 2169 (gophertunnel `recipe.go` `marshalShapeless`,
+    /// Cloudburst `CraftingDataSerializer_v2168::writeShapelessRecipe`).
+    /// Sert aussi pour les recettes de four (tag = "furnace", etc.).
+    fn encode_shapeless_recipe(
+        &self,
+        w: &mut ProtoWriter,
+        input: &[WireIngredient],
+        output: &[ItemStack],
+        block_name: &str,
+        net_id: u32,
+    ) {
+        write_recipe_id(w, net_id);
+        w.write_var_u32(input.len() as u32);
+        for ing in input {
+            write_recipe_ingredient(w, ing);
+        }
+        w.write_var_u32(output.len() as u32);
+        for out in output {
+            self.write_result(w, out);
+        }
+        write_nil_uuid(w);
+        w.write_string(block_name);
+        w.write_var_i32(RECIPE_PRIORITY);
+        write_always_unlocked(w);
+        w.write_var_u32(net_id); // recipeNetId
+    }
+
+    /// Résultat au format `NetworkItemInstanceDescriptor` 2169. Un item sans
+    /// `extra_data` reçoit le blob userData minimal (allongé du
+    /// `blockingTick` pour le bouclier).
+    fn write_result(&self, w: &mut ProtoWriter, item: &ItemStack) {
+        if item.extra_data.is_empty() {
+            let user_data = item_user_data(None, self.shield_id == Some(item.id));
+            write_item_instance(
+                w,
+                item.id,
+                item.count,
+                item.meta,
+                item.block_runtime_id,
+                &user_data,
+            );
+        } else {
+            write_item_instance(
+                w,
+                item.id,
+                item.count,
+                item.meta,
+                item.block_runtime_id,
+                &item.extra_data,
+            );
+        }
+    }
 }
 
 /// `recipeId` (string). PMMP utilise un int big-endian packé ; on émet juste le
-/// net id en décimal — unique, lisible, et le client ne s'en sert pas pour le
+/// net id en décimal : unique, lisible, et le client ne s'en sert pas pour le
 /// dispatch (il utilise le `recipeNetId` numérique en fin de structure).
 fn write_recipe_id(w: &mut ProtoWriter, net_id: u32) {
     w.write_string(&net_id.to_string());
 }
 
-/// `RecipeIngredient` wire (PMMP `CommonTypes::putRecipeIngredient`) :
-/// descriptor_type (u8) + <descriptor> + count (VarI32).
-fn write_recipe_ingredient(w: &mut ProtoWriter, ing: &RecipeIngredient) {
+/// Ingrédient de recette CraftingData 2169 (gophertunnel `writer.go`
+/// `ItemDescriptorCount`, Cloudburst `BedrockCodecHelper_v2168::writeIngredient`
+/// + `writeItemDescriptor`) :
+/// ```text
+/// VarU32 variante (0 invalide, 1 typé)
+/// [0] VarI32 aux = 32767
+/// [1] string type ("name" | "item_tag"), puis
+///     "name"     : string identifiant + VarI32 aux (32767 = joker)
+///     "item_tag" : string tag + VarI32 aux = 32767
+/// VarI32 count
+/// ```
+/// Le JSON Mojang (`RecipeIngredient.json`) décrit un autre format
+/// (`u8` type + count `u16`) ; gophertunnel et Cloudburst ne l'emploient que
+/// pour les ingrédients d'ItemStackRequest. On suit les deux implémentations.
+fn write_recipe_ingredient(w: &mut ProtoWriter, ing: &WireIngredient) {
     match ing {
-        RecipeIngredient::Empty => {
-            w.write_u8(0); // null descriptor
+        WireIngredient::Empty => {
+            w.write_var_u32(DESCRIPTOR_VARIANT_INVALID);
+            w.write_var_i32(RECIPE_INPUT_WILDCARD_META);
             w.write_var_i32(0);
         }
-        RecipeIngredient::Exact {
-            item_id,
-            meta,
-            count,
-        } => {
-            w.write_u8(DESC_INT_ID_META);
-            write_int_id_meta_descriptor(w, *item_id, *meta as i16);
-            w.write_var_i32(*count as i32);
+        WireIngredient::Item { name, aux, count } => {
+            w.write_var_u32(DESCRIPTOR_VARIANT_TYPED);
+            w.write_string(DESCRIPTOR_NAME_ITEM);
+            w.write_string(name);
+            w.write_var_i32(*aux);
+            w.write_var_i32(*count);
         }
-        RecipeIngredient::AnyMeta { item_id, count } => {
-            w.write_u8(DESC_INT_ID_META);
-            write_int_id_meta_descriptor(w, *item_id, RECIPE_INPUT_WILDCARD_META);
-            w.write_var_i32(*count as i32);
-        }
-        RecipeIngredient::Tag { tag, count, .. } => {
-            w.write_u8(DESC_TAG);
-            w.write_string(tag); // TagItemDescriptor
-            w.write_var_i32(*count as i32);
+        WireIngredient::Tag { tag, count } => {
+            w.write_var_u32(DESCRIPTOR_VARIANT_TYPED);
+            w.write_string(DESCRIPTOR_NAME_TAG);
+            w.write_string(tag);
+            w.write_var_i32(RECIPE_INPUT_WILDCARD_META);
+            w.write_var_i32(*count);
         }
     }
-}
-
-/// `IntIdMetaItemDescriptor::write` : i16 LE id, puis i16 LE meta SI id != 0.
-fn write_int_id_meta_descriptor(w: &mut ProtoWriter, id: i32, meta: i16) {
-    w.write_i16_le(id as i16);
-    if id != 0 {
-        w.write_i16_le(meta);
-    }
-}
-
-/// `getItemStackWithoutStackId` côté écriture (PMMP `putItemStackWithoutStackId`)
-/// : id (VarI32), puis si id != 0 : count (u16 LE), meta (VarU32),
-/// block_runtime_id (VarI32), raw_extra_data (byte array).
-fn write_item_stack_without_id(w: &mut ProtoWriter, item: &ItemStack) {
-    w.write_var_i32(item.id);
-    if item.id == 0 {
-        return;
-    }
-    w.write_u16_le(item.count);
-    w.write_var_u32(item.meta);
-    w.write_var_i32(item.block_runtime_id);
-    // extra data minimal : NBT len=0 (i16) + canPlaceOn=0 (i32) + canDestroy=0 (i32).
-    // Identique à `minimal_item_extra_data` côté mc-rs-proto.
-    let extra = [0u8; 10];
-    w.write_byte_array(&extra);
 }
 
 /// UUID NIL (16 octets nuls). PMMP `CraftingDataCache` passe `Uuid::NIL`.
@@ -576,10 +732,16 @@ fn write_nil_uuid(w: &mut ProtoWriter) {
     w.write_raw(&[0u8; 16]);
 }
 
-/// `RecipeUnlockingRequirement::write` avec `unlockingIngredients === null` :
-/// un seul bool `true` (pas de liste). PMMP `$noUnlockingRequirement`.
-fn write_no_unlocking_requirement(w: &mut ProtoWriter) {
+/// Pas de condition de déblocage : `bool hasUnlock = true`, contexte
+/// AlwaysUnlocked en VarInt32 zigzag (`02`), puis `bool false` (la liste
+/// d'ingrédients n'est présente que pour le contexte None). Octets `01 02 00`
+/// (gophertunnel `RecipeUnlockRequirement::Marshal`, Cloudburst
+/// `CraftingDataSerializer_v2168::writeRequirement`) ; même sémantique que le
+/// `bool true` de PMMP 1001.
+fn write_always_unlocked(w: &mut ProtoWriter) {
     w.write_bool(true);
+    w.write_var_i32(UNLOCK_CONTEXT_ALWAYS_UNLOCKED);
+    w.write_bool(false);
 }
 
 #[cfg(test)]
@@ -613,13 +775,62 @@ mod tests {
         assert!(ing2.matches(&stack(10, 2)));
     }
 
+    use mc_rs_proto::io::ProtoReader;
+    use mc_rs_proto::packets::world::CraftingData;
+
+    const SHIELD_ID: i32 = 900;
+
+    /// Registre d'items factice : les ingrédients 2169 sont nommés.
+    fn test_item_name(id: i32) -> Option<&'static str> {
+        match id {
+            5 => Some("minecraft:oak_log"),
+            10 => Some("minecraft:oak_planks"),
+            15 => Some("minecraft:iron_ore"),
+            _ => None,
+        }
+    }
+
+    fn encode_for_test(mgr: &CraftingManager) -> (Vec<u8>, usize) {
+        let encoder = RecipeEncoder {
+            item_name: &test_item_name,
+            shield_id: Some(SHIELD_ID),
+        };
+        mgr.encode_crafting_data_with(&encoder)
+    }
+
+    fn assert_item_ingredient(r: &mut ProtoReader, name: &str, aux: i32, count: i32) {
+        assert_eq!(r.read_var_u32().unwrap(), DESCRIPTOR_VARIANT_TYPED);
+        assert_eq!(r.read_string().unwrap(), "name");
+        assert_eq!(r.read_string().unwrap(), name);
+        assert_eq!(r.read_var_i32().unwrap(), aux);
+        assert_eq!(r.read_var_i32().unwrap(), count);
+    }
+
+    /// Lit un `NetworkItemInstanceDescriptor` 2169 ; retourne (id, count, blob).
+    fn read_result(r: &mut ProtoReader) -> (i32, u16, Vec<u8>) {
+        let id = r.read_var_i32().unwrap();
+        let count = r.read_u16_le().unwrap();
+        assert_eq!(r.read_var_u32().unwrap(), 0); // meta
+        assert_eq!(r.read_var_i32().unwrap(), 0); // block runtime id
+        (id, count, r.read_byte_array().unwrap())
+    }
+
+    /// UUID nil, tag, priorité.
+    fn assert_recipe_trailer_start(r: &mut ProtoReader, block_name: &str) {
+        assert_eq!(r.read_raw(16).unwrap(), vec![0u8; 16]);
+        assert_eq!(r.read_string().unwrap(), block_name);
+        assert_eq!(r.read_var_i32().unwrap(), RECIPE_PRIORITY);
+    }
+
+    /// hasUnlock + contexte AlwaysUnlocked (zigzag 1 = 0x02) + pas de liste.
+    fn assert_always_unlocked(r: &mut ProtoReader) {
+        assert_eq!(r.read_raw(3).unwrap(), vec![0x01, 0x02, 0x00]);
+    }
+
     #[test]
     fn crafting_data_payload_roundtrips() {
-        use mc_rs_proto::io::ProtoReader;
-
         let mut mgr = CraftingManager::new();
-        // 1 shaped (2x2 oak planks → crafting table), avec un slot Empty pour
-        // forcer le chemin "null descriptor".
+        // 1 shaped avec les quatre sortes d'ingrédients (dont un slot vide).
         mgr.register_shaped(ShapedRecipe::new(
             2,
             2,
@@ -631,7 +842,7 @@ mod tests {
                 RecipeIngredient::Empty,
                 RecipeIngredient::Exact {
                     item_id: 10,
-                    meta: 0,
+                    meta: 3,
                     count: 1,
                 },
                 RecipeIngredient::Tag {
@@ -661,101 +872,112 @@ mod tests {
             xp: 0.7,
         });
 
-        let payload = mgr.encode_crafting_data();
+        let (payload, skipped) = encode_for_test(&mgr);
+        assert_eq!(skipped, 0);
         let mut r = ProtoReader::new(&payload);
 
-        let recipe_count = r.read_var_u32().unwrap();
-        assert_eq!(recipe_count, 3);
-
-        // Recette 1 : shaped.
-        assert_eq!(r.read_var_i32().unwrap(), ENTRY_SHAPED);
+        // Vecteur 0 : shaped.
+        assert_eq!(r.read_var_u32().unwrap(), 1);
         assert_eq!(r.read_string().unwrap(), "1"); // recipeId = net_id
         assert_eq!(r.read_var_i32().unwrap(), 2); // width
         assert_eq!(r.read_var_i32().unwrap(), 2); // height
-                                                  // Ingredient[0] : AnyMeta → INT_ID_META, id=10, meta=wildcard.
-        assert_eq!(r.read_u8().unwrap(), DESC_INT_ID_META);
-        assert_eq!(r.read_i16_le().unwrap(), 10);
-        assert_eq!(r.read_i16_le().unwrap(), RECIPE_INPUT_WILDCARD_META);
-        assert_eq!(r.read_var_i32().unwrap(), 1); // count
-                                                  // Ingredient[1] : Empty → null descriptor + count 0.
-        assert_eq!(r.read_u8().unwrap(), 0);
+        assert_eq!(r.read_var_u32().unwrap(), 4); // nombre d'ingrédients
+        assert_item_ingredient(&mut r, "minecraft:oak_planks", 32767, 1);
+        // Slot vide : variante 0, aux 32767, count 0.
+        assert_eq!(r.read_var_u32().unwrap(), DESCRIPTOR_VARIANT_INVALID);
+        assert_eq!(r.read_var_i32().unwrap(), 32767);
         assert_eq!(r.read_var_i32().unwrap(), 0);
-        // Ingredient[2] : Exact → INT_ID_META, id=10, meta=0.
-        assert_eq!(r.read_u8().unwrap(), DESC_INT_ID_META);
-        assert_eq!(r.read_i16_le().unwrap(), 10);
-        assert_eq!(r.read_i16_le().unwrap(), 0);
-        assert_eq!(r.read_var_i32().unwrap(), 1);
-        // Ingredient[3] : Tag → DESC_TAG + nom.
-        assert_eq!(r.read_u8().unwrap(), DESC_TAG);
+        assert_item_ingredient(&mut r, "minecraft:oak_planks", 3, 1);
+        assert_eq!(r.read_var_u32().unwrap(), DESCRIPTOR_VARIANT_TYPED);
+        assert_eq!(r.read_string().unwrap(), "item_tag");
         assert_eq!(r.read_string().unwrap(), "minecraft:planks");
+        assert_eq!(r.read_var_i32().unwrap(), 32767);
         assert_eq!(r.read_var_i32().unwrap(), 1);
-        // Output : 1 item stack (id=58, count=1).
-        assert_eq!(r.read_var_u32().unwrap(), 1);
-        assert_eq!(r.read_var_i32().unwrap(), 58); // id
-        assert_eq!(r.read_u16_le().unwrap(), 1); // count
-        assert_eq!(r.read_var_u32().unwrap(), 0); // meta
-        assert_eq!(r.read_var_i32().unwrap(), 0); // block_runtime_id
-        assert_eq!(r.read_byte_array().unwrap().len(), 10); // extra data
-                                                            // UUID nil (16 octets).
-        for _ in 0..16 {
-            assert_eq!(r.read_u8().unwrap(), 0);
-        }
-        assert_eq!(r.read_string().unwrap(), "crafting_table");
-        assert_eq!(r.read_var_i32().unwrap(), RECIPE_PRIORITY);
-        assert!(r.read_bool().unwrap()); // symmetric
-        assert!(r.read_bool().unwrap()); // unlocking requirement = null
+        assert_eq!(r.read_var_u32().unwrap(), 1); // 1 résultat
+        assert_eq!(read_result(&mut r), (58, 1, vec![0u8; 10]));
+        assert_recipe_trailer_start(&mut r, "crafting_table");
+        assert!(r.read_bool().unwrap()); // assumeSymmetry
+        assert_always_unlocked(&mut r);
         assert_eq!(r.read_var_u32().unwrap(), 1); // recipeNetId
 
-        // Recette 2 : shapeless (on saute les détails, on vérifie juste le type
-        // et le net id).
-        assert_eq!(r.read_var_i32().unwrap(), ENTRY_SHAPELESS);
+        // Vecteur 1 : shapeless puis four.
+        assert_eq!(r.read_var_u32().unwrap(), 2);
         assert_eq!(r.read_string().unwrap(), "2");
-        assert_eq!(r.read_var_u32().unwrap(), 1); // 1 ingredient
-        assert_eq!(r.read_u8().unwrap(), DESC_INT_ID_META);
-        assert_eq!(r.read_i16_le().unwrap(), 5);
-        assert_eq!(r.read_i16_le().unwrap(), RECIPE_INPUT_WILDCARD_META);
-        assert_eq!(r.read_var_i32().unwrap(), 1);
-        assert_eq!(r.read_var_u32().unwrap(), 1); // 1 output
-        assert_eq!(r.read_var_i32().unwrap(), 280);
-        assert_eq!(r.read_u16_le().unwrap(), 4);
-        assert_eq!(r.read_var_u32().unwrap(), 0);
-        assert_eq!(r.read_var_i32().unwrap(), 0);
-        assert_eq!(r.read_byte_array().unwrap().len(), 10);
-        for _ in 0..16 {
-            assert_eq!(r.read_u8().unwrap(), 0);
-        }
-        assert_eq!(r.read_string().unwrap(), "crafting_table");
-        assert_eq!(r.read_var_i32().unwrap(), RECIPE_PRIORITY);
-        assert!(r.read_bool().unwrap());
+        assert_eq!(r.read_var_u32().unwrap(), 1);
+        assert_item_ingredient(&mut r, "minecraft:oak_log", 32767, 1);
+        assert_eq!(r.read_var_u32().unwrap(), 1);
+        assert_eq!(read_result(&mut r), (280, 4, vec![0u8; 10]));
+        assert_recipe_trailer_start(&mut r, "crafting_table");
+        assert_always_unlocked(&mut r);
         assert_eq!(r.read_var_u32().unwrap(), 2);
 
-        // Recette 3 : furnace encodée en shapeless avec block "furnace".
-        assert_eq!(r.read_var_i32().unwrap(), ENTRY_SHAPELESS);
         assert_eq!(r.read_string().unwrap(), "3");
         assert_eq!(r.read_var_u32().unwrap(), 1);
-        assert_eq!(r.read_u8().unwrap(), DESC_INT_ID_META);
-        assert_eq!(r.read_i16_le().unwrap(), 15);
-        assert_eq!(r.read_i16_le().unwrap(), RECIPE_INPUT_WILDCARD_META);
-        assert_eq!(r.read_var_i32().unwrap(), 1);
+        assert_item_ingredient(&mut r, "minecraft:iron_ore", 32767, 1);
         assert_eq!(r.read_var_u32().unwrap(), 1);
-        assert_eq!(r.read_var_i32().unwrap(), 265);
-        assert_eq!(r.read_u16_le().unwrap(), 1);
-        assert_eq!(r.read_var_u32().unwrap(), 0);
-        assert_eq!(r.read_var_i32().unwrap(), 0);
-        assert_eq!(r.read_byte_array().unwrap().len(), 10);
-        for _ in 0..16 {
-            assert_eq!(r.read_u8().unwrap(), 0);
-        }
-        assert_eq!(r.read_string().unwrap(), "furnace");
-        assert_eq!(r.read_var_i32().unwrap(), RECIPE_PRIORITY);
-        assert!(r.read_bool().unwrap());
+        assert_eq!(read_result(&mut r), (265, 1, vec![0u8; 10]));
+        assert_recipe_trailer_start(&mut r, "furnace");
+        assert_always_unlocked(&mut r);
         assert_eq!(r.read_var_u32().unwrap(), 3);
 
-        // Trailers : potion type / container / material reducer = 0, clean=true.
-        assert_eq!(r.read_var_u32().unwrap(), 0);
-        assert_eq!(r.read_var_u32().unwrap(), 0);
-        assert_eq!(r.read_var_u32().unwrap(), 0);
+        // Vecteurs 2 à 7, potions, conteneurs, reducers : vides ; clearRecipes.
+        for _ in 2..CraftingData::VECTOR_COUNT {
+            assert_eq!(r.read_var_u32().unwrap(), 0);
+        }
         assert!(r.read_bool().unwrap());
+        assert_eq!(r.remaining(), 0);
+    }
+
+    /// Un ingrédient sans nom connu fait omettre la recette, mais son net id
+    /// reste consommé : les suivantes gardent le leur.
+    #[test]
+    fn recipe_with_unnamed_ingredient_is_skipped() {
+        let mut mgr = CraftingManager::new();
+        mgr.register_shapeless(ShapelessRecipe::new(
+            vec![RecipeIngredient::AnyMeta {
+                item_id: 4242,
+                count: 1,
+            }],
+            vec![stack(280, 1)],
+        ));
+        mgr.register_shapeless(ShapelessRecipe::new(
+            vec![RecipeIngredient::AnyMeta {
+                item_id: 5,
+                count: 1,
+            }],
+            vec![stack(280, 4)],
+        ));
+
+        let (payload, skipped) = encode_for_test(&mgr);
+        assert_eq!(skipped, 1);
+        let mut r = ProtoReader::new(&payload);
+        assert_eq!(r.read_var_u32().unwrap(), 0); // aucun shaped
+        assert_eq!(r.read_var_u32().unwrap(), 1); // un seul shapeless
+        assert_eq!(r.read_string().unwrap(), "2");
+    }
+
+    /// Le blob userData d'un bouclier porte le `blockingTick` (i64) en plus.
+    #[test]
+    fn shield_result_carries_blocking_tick() {
+        let mut mgr = CraftingManager::new();
+        mgr.register_shapeless(ShapelessRecipe::new(
+            vec![RecipeIngredient::AnyMeta {
+                item_id: 5,
+                count: 1,
+            }],
+            vec![stack(SHIELD_ID, 1)],
+        ));
+        let (payload, _) = encode_for_test(&mgr);
+        let mut r = ProtoReader::new(&payload);
+        r.read_var_u32().unwrap(); // shaped
+        r.read_var_u32().unwrap(); // shapeless
+        r.read_string().unwrap();
+        r.read_var_u32().unwrap();
+        assert_item_ingredient(&mut r, "minecraft:oak_log", 32767, 1);
+        r.read_var_u32().unwrap();
+        let (id, _, user_data) = read_result(&mut r);
+        assert_eq!(id, SHIELD_ID);
+        assert_eq!(user_data, vec![0u8; 18]);
     }
 
     #[test]
