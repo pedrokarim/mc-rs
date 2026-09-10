@@ -486,8 +486,9 @@ mod item_entities;
 #[allow(dead_code)]
 pub mod item_frame;
 #[allow(dead_code)]
-pub mod item_properties;
+mod item_migration_data;
 #[allow(dead_code)]
+pub mod item_properties;
 mod item_registry;
 #[allow(dead_code)]
 pub mod item_stack_merge;

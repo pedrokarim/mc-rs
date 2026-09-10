@@ -1,28 +1,23 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use base64::Engine;
+use mc_rs_nbt::tag::{NbtRoot, NbtTag};
 use mc_rs_proto::io::ProtoWriter;
-use serde::Deserialize;
 
-const REQUIRED_ITEM_LIST_JSON: &str = include_str!("../data/required_item_list.json");
-const EMPTY_COMPONENT_NBT: &[u8] = &[0x0A, 0x00, 0x00, 0x00];
+use crate::item_migration_data::LEGACY_ITEM_IDS;
 
-#[derive(Debug, Deserialize)]
-struct RawItemTypeEntry {
-    runtime_id: i32,
-    component_based: bool,
-    version: i32,
-    component_nbt: Option<String>,
-}
+/// Table d'items Bedrock 1.26.40 (inchangée en 1.26.45) : dragonfly v0.11.4
+/// `server/world/vanilla_items.nbt` (commit `0c2c4045`), NBT réseau
+/// `{nom: {runtime_id: Int, component_based: Byte, version: Int, data?: Compound}}`.
+/// PMMP/BedrockData s'arrête à 1.26.30 (fin de support de PocketMine-MP).
+const VANILLA_ITEMS_NBT: &[u8] = include_bytes!("../data/vanilla_items.nbt");
 
 struct ItemTypeEntry {
     string_id: String,
     runtime_id: i32,
     component_based: bool,
     version: i32,
-    component_nbt: Vec<u8>,
+    component_nbt: NbtRoot,
 }
 
 pub struct ItemRegistryData {
@@ -32,37 +27,48 @@ pub struct ItemRegistryData {
     by_runtime_id: HashMap<i32, String>,
 }
 
+fn int_field(entry: &HashMap<String, NbtTag>, key: &str, name: &str) -> i32 {
+    entry
+        .get(key)
+        .and_then(NbtTag::as_int)
+        .unwrap_or_else(|| panic!("vanilla_items.nbt: {name} sans champ {key}"))
+}
+
 impl ItemRegistryData {
     fn load() -> Self {
-        let raw: HashMap<String, RawItemTypeEntry> =
-            serde_json::from_str(REQUIRED_ITEM_LIST_JSON).expect("valid required_item_list.json");
+        let mut cursor = VANILLA_ITEMS_NBT;
+        let root = mc_rs_nbt::read_nbt_network(&mut cursor).expect("vanilla_items.nbt valide");
 
-        let mut entries: Vec<ItemTypeEntry> = raw
+        let mut entries: Vec<ItemTypeEntry> = root
+            .compound
             .into_iter()
-            .map(|(string_id, entry)| {
-                let component_nbt = entry
-                    .component_nbt
-                    .as_deref()
-                    .map(|encoded| {
-                        BASE64_STANDARD
-                            .decode(encoded)
-                            .expect("valid base64 component_nbt")
-                    })
-                    .unwrap_or_else(|| EMPTY_COMPONENT_NBT.to_vec());
-
+            .map(|(string_id, tag)| {
+                let NbtTag::Compound(entry) = tag else {
+                    panic!("vanilla_items.nbt: entrée {string_id} n'est pas un compound");
+                };
+                let runtime_id = int_field(&entry, "runtime_id", &string_id);
+                let version = int_field(&entry, "version", &string_id);
+                let component_based = entry
+                    .get("component_based")
+                    .and_then(NbtTag::as_byte)
+                    .is_some_and(|b| b != 0);
+                let data = match entry.get("data") {
+                    Some(NbtTag::Compound(data)) => data.clone(),
+                    _ => HashMap::new(),
+                };
                 ItemTypeEntry {
                     string_id,
-                    runtime_id: entry.runtime_id,
-                    component_based: entry.component_based,
-                    version: entry.version,
-                    component_nbt,
+                    runtime_id,
+                    component_based,
+                    version,
+                    component_nbt: NbtRoot::new("", data),
                 }
             })
             .collect();
 
         entries.sort_by(|left, right| left.string_id.cmp(&right.string_id));
 
-        let mut payload = ProtoWriter::with_capacity(REQUIRED_ITEM_LIST_JSON.len() / 2);
+        let mut payload = ProtoWriter::with_capacity(VANILLA_ITEMS_NBT.len());
         payload.write_var_u32(entries.len() as u32);
         for entry in &entries {
             payload.write_string(&entry.string_id);
@@ -71,15 +77,11 @@ impl ItemRegistryData {
             );
             payload.write_bool(entry.component_based);
             payload.write_var_i32(entry.version);
-            // Protocol 944 (gophertunnel ItemEntry.Marshal) : le component NBT
-            // est écrit DIRECTEMENT en Network-LE, pas wrappé en ByteArray.
-            // PMMP 924 (ItemRegistryPacket.php:71) wrappe en ByteArray avec
-            // un NBT disk-LE dedans — format incompatible avec le client 1.26.10.
-            //
-            // `entry.component_nbt` provient de required_item_list.json en disk-LE
-            // (u16 name lengths). On convertit à la volée disk-LE → network-LE.
-            let network_le_bytes = convert_disk_le_to_network_le(&entry.component_nbt);
-            payload.write_raw(&network_le_bytes);
+            // gophertunnel ItemEntry.Marshal : le component NBT est écrit
+            // directement en NBT réseau (pas de ByteArray englobant).
+            let mut nbt = Vec::new();
+            mc_rs_nbt::write_nbt_network(&mut nbt, &entry.component_nbt);
+            payload.write_raw(&nbt);
         }
 
         let by_name = entries
@@ -100,21 +102,6 @@ impl ItemRegistryData {
     }
 }
 
-/// Re-encode NBT bytes from disk (LittleEndian, u16 name lengths) to network
-/// (NetworkLittleEndian, VarU32 name lengths). Fallback : si le decode échoue,
-/// retourne les bytes tels quels (best effort).
-fn convert_disk_le_to_network_le(bytes: &[u8]) -> Vec<u8> {
-    let mut reader: &[u8] = bytes;
-    match mc_rs_nbt::read_nbt_le(&mut reader) {
-        Ok(root) => {
-            let mut out = Vec::with_capacity(bytes.len());
-            mc_rs_nbt::write_nbt_network(&mut out, &root);
-            out
-        }
-        Err(_) => bytes.to_vec(),
-    }
-}
-
 pub static ITEM_REGISTRY: LazyLock<ItemRegistryData> = LazyLock::new(ItemRegistryData::load);
 
 pub fn payload() -> &'static [u8] {
@@ -125,6 +112,7 @@ pub fn item_name_by_id(id: i32) -> Option<&'static str> {
     ITEM_REGISTRY.by_runtime_id.get(&id).map(String::as_str)
 }
 
+#[cfg(test)]
 pub fn entry_count() -> usize {
     ITEM_REGISTRY.entries.len()
 }
@@ -149,6 +137,20 @@ pub fn all_entries() -> Vec<(&'static str, i32)> {
 
 pub fn required_item_id(name: &str) -> i32 {
     network_id(name).unwrap_or_else(|| panic!("missing required item registry entry for {name}"))
+}
+
+/// Convertit un ID réseau de la table d'items héritée (sauvegardes antérieures
+/// à la table courante, cf. `item_migration_data.rs`) en ID courant, via le nom.
+/// Retourne 0 (air) si l'item n'existe plus.
+pub fn migrate_saved_item_id(legacy_id: i32) -> i32 {
+    if legacy_id == 0 {
+        return 0;
+    }
+    LEGACY_ITEM_IDS
+        .binary_search_by_key(&legacy_id, |&(id, _)| id)
+        .ok()
+        .and_then(|i| network_id(LEGACY_ITEM_IDS[i].1))
+        .unwrap_or(0)
 }
 
 pub fn legacy_item_name(id: i32) -> Option<&'static str> {
@@ -204,24 +206,37 @@ mod tests {
     #[test]
     fn required_item_registry_contains_core_entries() {
         assert_eq!(network_id("minecraft:dirt"), Some(3));
-        assert_eq!(network_id("minecraft:compass"), Some(423));
-        assert!(entry_count() > 1000);
+        assert!(network_id("minecraft:compass").is_some());
+        // Contenu 1.26.40 : famille poplar et cushions.
+        assert!(network_id("minecraft:poplar_planks").is_some());
+        assert!(network_id("minecraft:white_cushion").is_some());
+        assert!(entry_count() > 1900);
         assert!(!payload().is_empty());
     }
 
     #[test]
     fn legacy_item_ids_normalize_to_bedrock_network_ids() {
-        assert_eq!(migrate_legacy_item_id(345), 423);
+        assert_eq!(
+            migrate_legacy_item_id(345),
+            network_id("minecraft:compass").unwrap()
+        );
         assert_eq!(migrate_legacy_item_id(3), 3);
     }
 
     #[test]
+    fn saved_item_ids_migrate_by_name() {
+        // 423 = minecraft:compass dans la table 1.26.0.
+        assert_eq!(
+            migrate_saved_item_id(423),
+            network_id("minecraft:compass").unwrap()
+        );
+        assert_eq!(migrate_saved_item_id(0), 0);
+    }
+
+    #[test]
     fn item_registry_payload_header_is_var_u32_count() {
-        // Format 944 (gophertunnel) : count en VarU32 + { String, I16LE,
-        // Bool, VarI32, raw NBT network-LE } × count. Le NBT n'a plus
-        // de ByteArray wrapping (contrairement à PMMP 924). On vérifie
-        // juste que le header commence bien par un VarU32 count qui
-        // match le nombre d'entrées tracké.
+        // Format (gophertunnel ItemEntry) : count en VarU32 + { String, I16LE,
+        // Bool, VarI32, NBT réseau } × count.
         let mut reader = ProtoReader::new(payload());
         let count = reader.read_var_u32().unwrap() as usize;
         assert_eq!(count, ITEM_REGISTRY.entries.len());

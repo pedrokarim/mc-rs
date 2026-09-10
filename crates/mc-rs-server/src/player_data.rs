@@ -8,6 +8,11 @@ use tracing::{info, warn};
 
 const PLAYERS_DIR: &str = "players";
 
+/// Version du format des IDs sauvegardés (items et blocs) :
+/// - 0 (champ absent) : table d'items 1.26.0 + palette de blocs 1.26.20 ;
+/// - 1 : table d'items et palette 1.26.40 (dragonfly v0.11.4).
+pub const CURRENT_PLAYER_DATA_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlayerSaveData {
     pub position: [f64; 3],
@@ -21,6 +26,9 @@ pub struct PlayerSaveData {
     pub dimension: i32,
     #[serde(default)]
     pub inventory: SavedPlayerInventory,
+    /// Voir [`CURRENT_PLAYER_DATA_VERSION`]. Absent des sauvegardes antérieures.
+    #[serde(default)]
+    pub data_version: u32,
 }
 
 impl Default for PlayerSaveData {
@@ -34,6 +42,7 @@ impl Default for PlayerSaveData {
             spawn_position: None,
             dimension: 0,
             inventory: SavedPlayerInventory::default(),
+            data_version: CURRENT_PLAYER_DATA_VERSION,
         }
     }
 }
@@ -191,7 +200,34 @@ impl PlayerSaveData {
             ]),
             dimension,
             inventory: SavedPlayerInventory::from_runtime(inventory),
+            data_version: CURRENT_PLAYER_DATA_VERSION,
         }
+    }
+
+    /// Convertit les IDs d'une sauvegarde antérieure vers les tables courantes.
+    fn migrate(&mut self) {
+        if self.data_version >= CURRENT_PLAYER_DATA_VERSION {
+            return;
+        }
+        let palette = crate::world::palette_migration::unmarked_world_migration();
+        let inv = &mut self.inventory;
+        for slot in inv
+            .slots
+            .iter_mut()
+            .chain(inv.armor.iter_mut())
+            .chain(std::iter::once(&mut inv.offhand))
+        {
+            let item = &mut slot.item;
+            item.id = item_registry::migrate_saved_item_id(item.id);
+            item.block_runtime_id = match (item.block_runtime_id, palette) {
+                (0, _) | (_, None) => 0,
+                (rid, Some(m)) => m.remap(rid as u32) as i32,
+            };
+            if item.id == 0 {
+                *slot = SavedItemStackWrapperData::default();
+            }
+        }
+        self.data_version = CURRENT_PLAYER_DATA_VERSION;
     }
 }
 
@@ -199,8 +235,15 @@ impl PlayerSaveData {
 pub fn load_player(xuid: &str) -> Option<PlayerSaveData> {
     let path = format!("{}/{}.json", PLAYERS_DIR, xuid);
     match fs::read_to_string(&path) {
-        Ok(content) => match serde_json::from_str(&content) {
-            Ok(data) => {
+        Ok(content) => match serde_json::from_str::<PlayerSaveData>(&content) {
+            Ok(mut data) => {
+                if data.data_version < CURRENT_PLAYER_DATA_VERSION {
+                    info!(
+                        "Migrating player data for XUID {} (v{} -> v{})",
+                        xuid, data.data_version, CURRENT_PLAYER_DATA_VERSION
+                    );
+                    data.migrate();
+                }
                 info!("Loaded player data for XUID {}", xuid);
                 Some(data)
             }
@@ -243,5 +286,22 @@ mod tests {
         assert_eq!(restored.armor[1].item.id, 307);
         assert_eq!(restored.offhand.item.id, 50);
         assert_eq!(restored.held_slot, 2);
+    }
+
+    #[test]
+    fn legacy_save_migrates_item_ids() {
+        // Sauvegarde sans `data_version` : IDs de la table 1.26.0 (423 = compass).
+        let json = r#"{"position":[0,0,0],"rotation":[0,0],"gamemode":0,"health":20,
+            "hunger":20,"spawn_position":null,
+            "inventory":{"slots":[{"stack_id":1,"item":{"id":423,"count":1,"meta":0,
+            "block_runtime_id":0}}],"armor":[],"held_slot":0}}"#;
+        let mut data: PlayerSaveData = serde_json::from_str(json).unwrap();
+        assert_eq!(data.data_version, 0);
+        data.migrate();
+        assert_eq!(data.data_version, CURRENT_PLAYER_DATA_VERSION);
+        assert_eq!(
+            data.inventory.slots[0].item.id,
+            item_registry::network_id("minecraft:compass").unwrap()
+        );
     }
 }

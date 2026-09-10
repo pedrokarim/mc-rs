@@ -1,5 +1,9 @@
 use std::path::{Path, PathBuf};
+
+use rusty_leveldb::LdbIterator;
 use tracing::{debug, info, warn};
+
+use super::palette_migration::{self, PaletteMigration, PALETTE_MARKER_KEY};
 
 /// LevelDB key tags for Bedrock chunk data.
 mod chunk_tag {
@@ -29,10 +33,99 @@ impl WorldStorage {
             .map_err(|e| format!("Failed to open LevelDB: {:?}", e))?;
 
         info!("World storage opened at {:?}", db_path);
-        Ok(Self {
+        let mut storage = Self {
             db,
             path: world_dir.to_path_buf(),
-        })
+        };
+        storage.ensure_current_palette();
+        Ok(storage)
+    }
+
+    /// Garantit que les sous-chunks sauvegardés utilisent la palette courante :
+    /// les runtime IDs étant stockés bruts, un monde écrit avec une autre
+    /// palette est converti une fois (cf. `palette_migration.rs`), puis marqué.
+    fn ensure_current_palette(&mut self) {
+        let current = palette_migration::current_fingerprint();
+        let stored = self
+            .db
+            .get(PALETTE_MARKER_KEY)
+            .and_then(|v| <[u8; 8]>::try_from(v.as_slice()).ok())
+            .map(u64::from_le_bytes);
+
+        let migration = match stored {
+            Some(fp) if fp == current => return,
+            Some(fp) => match palette_migration::migration_from(fp) {
+                Some(m) => m,
+                None => {
+                    warn!(
+                        "World saved with unknown block palette {:#018x} (current {:#018x}):                          no migration available, blocks may render incorrectly",
+                        fp, current
+                    );
+                    return;
+                }
+            },
+            None if self.sub_chunk_keys().is_empty() => {
+                self.write_palette_marker(current);
+                return;
+            }
+            None => match palette_migration::unmarked_world_migration() {
+                Some(m) => m,
+                None => {
+                    warn!("Unmarked world and no legacy palette migration available");
+                    return;
+                }
+            },
+        };
+
+        let (migrated, skipped) = self.migrate_sub_chunks(migration);
+        self.write_palette_marker(current);
+        self.flush();
+        info!(
+            "World block palette migrated from {}: {} sub-chunks rewritten, {} unreadable left as is",
+            migration.label, migrated, skipped
+        );
+    }
+
+    fn write_palette_marker(&mut self, fingerprint: u64) {
+        self.db
+            .put(PALETTE_MARKER_KEY, &fingerprint.to_le_bytes())
+            .ok();
+    }
+
+    /// Une clé de sous-chunk : `[index 8|12 octets][0x2F][y]`.
+    fn is_sub_chunk_key(key: &[u8]) -> bool {
+        matches!(key.len(), 10 | 14) && key[key.len() - 2] == chunk_tag::SUBCHUNK
+    }
+
+    fn sub_chunk_keys(&mut self) -> Vec<Vec<u8>> {
+        let mut keys = Vec::new();
+        let Ok(mut it) = self.db.new_iter() else {
+            return keys;
+        };
+        while let Some((key, _)) = it.next() {
+            if Self::is_sub_chunk_key(&key) {
+                keys.push(key);
+            }
+        }
+        keys
+    }
+
+    fn migrate_sub_chunks(&mut self, migration: &PaletteMigration) -> (usize, usize) {
+        let (mut migrated, mut skipped) = (0, 0);
+        for key in self.sub_chunk_keys() {
+            let Some(data) = self.db.get(&key) else {
+                continue;
+            };
+            match super::chunk_serializer::remap_sub_chunk_palette(&data, |id| migration.remap(id))
+            {
+                Some(rewritten) => {
+                    self.db.put(&key, &rewritten).ok();
+                    migrated += 1;
+                }
+                None => skipped += 1,
+            }
+        }
+        (migrated, skipped)
     }
 
     /// Build the chunk index key (réf dragonfly `mcdb/db.go`, format vanilla Bedrock).
@@ -173,6 +266,34 @@ mod tests {
         let end = WorldStorage::chunk_index(2, 3, 4);
         assert_eq!(end.len(), 12);
         assert_eq!(&end[8..12], &2u32.to_le_bytes());
+    }
+
+    #[test]
+    fn unmarked_world_is_migrated_once() {
+        use crate::world::chunk_serializer::{deserialize_sub_chunk_data, serialize_sub_chunk};
+
+        let dir = std::env::temp_dir().join(format!("mc-rs-palette-mig-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let migration = palette_migration::unmarked_world_migration().unwrap();
+        // Sous-chunk écrit avec la palette 1.26.20 : air (13080) + un autre état.
+        let legacy = [13_080u32, 42];
+        let mut blocks = [0u32; 4096];
+        blocks[1] = 1;
+        {
+            let mut s = WorldStorage::open(&dir).unwrap();
+            // Monde neuf : marqué directement, puis on simule un monde hérité.
+            s.db.delete(PALETTE_MARKER_KEY).ok();
+            s.save_sub_chunk(0, 0, 0, 3, &serialize_sub_chunk(&blocks, &legacy));
+            s.flush();
+        }
+        let mut s = WorldStorage::open(&dir).unwrap();
+        let stored = s.load_sub_chunks(0, 0, 0);
+        let (sub, _) = deserialize_sub_chunk_data(&stored[0].1).unwrap();
+        assert_eq!(sub.blocks[0], migration.remap(13_080));
+        assert_eq!(sub.blocks[1], migration.remap(42));
+        assert!(s.db.get(PALETTE_MARKER_KEY).is_some());
+        drop(s);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

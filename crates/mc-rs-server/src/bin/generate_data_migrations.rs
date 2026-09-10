@@ -1,0 +1,219 @@
+//! Génère les tables de migration des données sauvegardées lors d'un changement
+//! de palette de blocs / de table d'items (montée de version Bedrock).
+//!
+//! - `src/world/palette_migration_data.rs` : runtime ID de l'ancienne palette →
+//!   runtime ID de la palette courante, apparié sur `(name, states)`.
+//! - `src/item_migration_data.rs` : table `(runtime_id, nom)` de l'ancienne
+//!   table d'items, pour retrouver le nom d'un item sauvegardé par ID réseau.
+//!
+//! Usage :
+//! ```text
+//! cargo run -p mc-rs-server --bin generate_data_migrations -- \
+//!     <ancienne_palette.nbt> <ancien_required_item_list.json> <libellé_version>
+//! ```
+//! La palette courante est lue dans `data/canonical_block_states.nbt`.
+
+use std::collections::{BTreeMap, HashMap};
+use std::env;
+use std::fmt::Write as _;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use mc_rs_nbt::tag::{NbtCompound, NbtTag};
+
+fn manifest_path(rel: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel)
+}
+
+/// Même empreinte que `generate_block_registry` (FNV-1a 64 du fichier).
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in bytes {
+        hash ^= u64::from(b);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+/// Représentation canonique (clés triées, type explicite) d'une valeur d'état.
+fn canonical_value(tag: &NbtTag) -> String {
+    match tag {
+        NbtTag::Byte(v) => format!("b{v}"),
+        NbtTag::Short(v) => format!("s{v}"),
+        NbtTag::Int(v) => format!("i{v}"),
+        NbtTag::Long(v) => format!("l{v}"),
+        NbtTag::String(v) => format!("t{v:?}"),
+        other => format!("?{other:?}"),
+    }
+}
+
+fn canonical_states(states: Option<&NbtCompound>) -> String {
+    let Some(states) = states else {
+        return String::new();
+    };
+    let sorted: BTreeMap<&String, &NbtTag> = states.iter().collect();
+    sorted
+        .into_iter()
+        .map(|(k, v)| format!("{k}={}", canonical_value(v)))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// `(nom, états canoniques)` dans l'ordre des runtime IDs.
+type PaletteStates = Vec<(String, String)>;
+
+/// Lit une palette (suite de compounds NBT réseau `{name, states, version}`)
+/// et retourne ses états avec l'empreinte du fichier.
+fn read_palette(path: &Path) -> Result<(PaletteStates, u64), Box<dyn std::error::Error>> {
+    let data = fs::read(path)?;
+    let fingerprint = fnv1a64(&data);
+    let mut cursor = &data[..];
+    let mut states = Vec::new();
+    while !cursor.is_empty() {
+        let root = mc_rs_nbt::read_nbt_network(&mut cursor)?;
+        let name = match root.compound.get("name") {
+            Some(NbtTag::String(name)) => name.clone(),
+            _ => return Err(format!("palette entry without name in {}", path.display()).into()),
+        };
+        let canon = canonical_states(root.compound.get("states").and_then(NbtTag::as_compound));
+        states.push((name, canon));
+    }
+    Ok((states, fingerprint))
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args: Vec<String> = env::args().skip(1).collect();
+    if args.len() != 3 {
+        eprintln!(
+            "usage: cargo run -p mc-rs-server --bin generate_data_migrations -- \
+             <legacy_palette.nbt> <legacy_required_item_list.json> <legacy_version_label>"
+        );
+        std::process::exit(2);
+    }
+    let legacy_palette_path = PathBuf::from(&args[0]);
+    let legacy_items_path = PathBuf::from(&args[1]);
+    let legacy_label = &args[2];
+
+    // ── Palette ────────────────────────────────────────────────────────────
+    let current_path = manifest_path("data/canonical_block_states.nbt");
+    let (current, current_fp) = read_palette(&current_path)?;
+    let (legacy, legacy_fp) = read_palette(&legacy_palette_path)?;
+
+    let mut exact: HashMap<(&str, &str), u32> = HashMap::new();
+    let mut first_by_name: HashMap<&str, u32> = HashMap::new();
+    for (id, (name, states)) in current.iter().enumerate() {
+        exact.insert((name.as_str(), states.as_str()), id as u32);
+        first_by_name.entry(name.as_str()).or_insert(id as u32);
+    }
+    let air = *first_by_name
+        .get("minecraft:air")
+        .ok_or("current palette has no minecraft:air")?;
+
+    let mut table = Vec::with_capacity(legacy.len());
+    let mut fallback_same_name = Vec::new();
+    let mut fallback_air = Vec::new();
+    for (name, states) in &legacy {
+        if let Some(&id) = exact.get(&(name.as_str(), states.as_str())) {
+            table.push(id);
+        } else if let Some(&id) = first_by_name.get(name.as_str()) {
+            fallback_same_name.push(format!("{name}[{states}]"));
+            table.push(id);
+        } else {
+            fallback_air.push(name.clone());
+            table.push(air);
+        }
+    }
+
+    let mut out = String::new();
+    writeln!(
+        out,
+        "// @generated by `cargo run -p mc-rs-server --bin generate_data_migrations`"
+    )?;
+    writeln!(out, "// Palette source : {}", legacy_palette_path.display())?;
+    writeln!(
+        out,
+        "// {} états hérités : {} appariés exactement, {} repliés sur le premier état du même nom, {} sans équivalent (→ air).",
+        legacy.len(),
+        legacy.len() - fallback_same_name.len() - fallback_air.len(),
+        fallback_same_name.len(),
+        fallback_air.len()
+    )?;
+    for s in &fallback_same_name {
+        writeln!(out, "//   même nom : {s}")?;
+    }
+    for s in &fallback_air {
+        writeln!(out, "//   → air : {s}")?;
+    }
+    writeln!(out)?;
+    writeln!(out, "use super::palette_migration::PaletteMigration;")?;
+    writeln!(out)?;
+    writeln!(
+        out,
+        "/// Migrations connues vers la palette courante (empreinte {current_fp:#018x})."
+    )?;
+    writeln!(
+        out,
+        "pub const PALETTE_MIGRATIONS: &[PaletteMigration] = &["
+    )?;
+    writeln!(out, "    PaletteMigration {{")?;
+    writeln!(out, "        label: {legacy_label:?},")?;
+    writeln!(out, "        from_fingerprint: {legacy_fp:#018x},")?;
+    writeln!(out, "        to_fingerprint: {current_fp:#018x},")?;
+    writeln!(out, "        table: &[")?;
+    for chunk in table.chunks(16) {
+        let line: Vec<String> = chunk.iter().map(u32::to_string).collect();
+        writeln!(out, "            {},", line.join(", "))?;
+    }
+    writeln!(out, "        ],")?;
+    writeln!(out, "    }},")?;
+    writeln!(out, "];")?;
+    let palette_out = manifest_path("src/world/palette_migration_data.rs");
+    fs::write(&palette_out, out)?;
+    println!(
+        "palette : {} → {} états, {} repli(s) même nom, {} → air ({})",
+        legacy.len(),
+        current.len(),
+        fallback_same_name.len(),
+        fallback_air.len(),
+        palette_out.display()
+    );
+
+    // ── Items ──────────────────────────────────────────────────────────────
+    let raw: HashMap<String, serde_json::Value> =
+        serde_json::from_str(&fs::read_to_string(&legacy_items_path)?)?;
+    let mut items: Vec<(i64, String)> = raw
+        .into_iter()
+        .map(|(name, entry)| {
+            let id = entry
+                .get("runtime_id")
+                .and_then(serde_json::Value::as_i64)
+                .ok_or_else(|| format!("item {name} sans runtime_id"))?;
+            Ok((id, name))
+        })
+        .collect::<Result<_, String>>()?;
+    items.sort();
+
+    let mut out = String::new();
+    writeln!(
+        out,
+        "// @generated by `cargo run -p mc-rs-server --bin generate_data_migrations`"
+    )?;
+    writeln!(out, "// Table source : {}", legacy_items_path.display())?;
+    writeln!(out)?;
+    writeln!(
+        out,
+        "/// Table d'items héritée ({legacy_label}), triée par runtime ID."
+    )?;
+    writeln!(out, "pub const LEGACY_ITEM_LABEL: &str = {legacy_label:?};")?;
+    writeln!(out)?;
+    writeln!(out, "pub const LEGACY_ITEM_IDS: &[(i32, &str)] = &[")?;
+    for (id, name) in &items {
+        writeln!(out, "    ({id}, {name:?}),")?;
+    }
+    writeln!(out, "];")?;
+    let items_out = manifest_path("src/item_migration_data.rs");
+    fs::write(&items_out, out)?;
+    println!("items : {} entrées ({})", items.len(), items_out.display());
+
+    Ok(())
+}

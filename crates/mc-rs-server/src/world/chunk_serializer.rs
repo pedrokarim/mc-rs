@@ -270,6 +270,47 @@ pub fn deserialize_sub_chunk_data(data: &[u8]) -> Option<(SubChunk, usize)> {
     Some((SubChunk { blocks }, reader.position()))
 }
 
+/// Réécrit les entrées de palette d'un sous-chunk sérialisé (format réseau
+/// version 8, toutes couches) via `remap`, sans toucher aux mots de bits.
+/// Retourne `None` si les données ne sont pas un sous-chunk v8 bien formé.
+pub fn remap_sub_chunk_palette(data: &[u8], remap: impl Fn(u32) -> u32) -> Option<Vec<u8>> {
+    let mut reader = ProtoReader::new(data);
+    let mut w = ProtoWriter::with_capacity(data.len() + 16);
+
+    let version = reader.read_u8().ok()?;
+    if version != 8 {
+        return None;
+    }
+    w.write_u8(version);
+    let storage_count = reader.read_u8().ok()?;
+    w.write_u8(storage_count);
+
+    for _ in 0..storage_count {
+        let header = reader.read_u8().ok()?;
+        w.write_u8(header);
+        let bits_per_block = header >> 1;
+        if bits_per_block == 0 {
+            let value = reader.read_var_i32().ok()? as u32;
+            w.write_var_i32(remap(value) as i32);
+            continue;
+        }
+        let blocks_per_word = 32 / bits_per_block as usize;
+        let word_count = 4096usize.div_ceil(blocks_per_word);
+        w.write_raw(&reader.read_raw(word_count * 4).ok()?);
+
+        let palette_count = reader.read_var_i32().ok()?;
+        w.write_var_i32(palette_count);
+        for _ in 0..palette_count {
+            let value = reader.read_var_i32().ok()? as u32;
+            w.write_var_i32(remap(value) as i32);
+        }
+    }
+
+    // Octets éventuels au-delà des couches : conservés tels quels.
+    w.write_raw(reader.remaining_bytes());
+    Some(w.into_bytes())
+}
+
 /// Rebuild the full network payload from sub-chunks, biome data and block entities.
 /// Format (réf PMMP `ChunkSerializer`) : sub-chunks, biomes, byte border-blocks (0),
 /// puis les NBT réseau des block entities **concaténés sans compteur**.

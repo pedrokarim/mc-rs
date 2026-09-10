@@ -12,6 +12,17 @@ fn default_output_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/world/block_registry_data.rs")
 }
 
+/// FNV-1a 64 bits des octets du fichier de palette : identifie la palette
+/// avec laquelle un monde a été sauvegardé (marqueur LevelDB, cf. `storage.rs`).
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in bytes {
+        hash ^= u64::from(b);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = env::args().skip(1);
     let input = args
@@ -31,6 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let data = fs::read(&input)?;
+    let fingerprint = fnv1a64(&data);
     let mut cursor = &data[..];
     let mut first_runtime_ids = BTreeMap::new();
     let mut total_states = 0u32;
@@ -56,6 +68,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     writeln!(out)?;
     writeln!(
         out,
+        "/// Nombre d'états de la palette (runtime IDs valides : `0..PALETTE_STATE_COUNT`)."
+    )?;
+    writeln!(out, "pub const PALETTE_STATE_COUNT: u32 = {total_states};")?;
+    writeln!(out)?;
+    writeln!(
+        out,
+        "/// FNV-1a 64 du fichier de palette source : marqueur de version des mondes sauvegardés."
+    )?;
+    writeln!(
+        out,
+        "pub const PALETTE_FINGERPRINT: u64 = {fingerprint:#018x};"
+    )?;
+    writeln!(out)?;
+    writeln!(
+        out,
         "pub const BLOCK_NAME_TO_FIRST_RUNTIME_ID: &[(&str, u32)] = &["
     )?;
     for (name, runtime_id) in &first_runtime_ids {
@@ -66,9 +93,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::write(&output, out)?;
 
     println!(
-        "Wrote {} names / {} total states to {}",
+        "Wrote {} names / {} total states (fingerprint {:#018x}) to {}",
         first_runtime_ids.len(),
         total_states,
+        fingerprint,
         output.display()
     );
 

@@ -14,6 +14,8 @@ pub mod nether_generator;
 pub mod nether_portal_build;
 pub mod noise;
 pub mod ore;
+pub mod palette_migration;
+pub mod palette_migration_data;
 pub mod random;
 pub mod storage;
 pub mod structure;
