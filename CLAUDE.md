@@ -133,6 +133,14 @@ powershell -Command "Get-Process mc-rs-server -ErrorAction SilentlyContinue | St
   marqueur LevelDB `mcrs:palette_fingerprint`)
 - Protocole 2168+ (« Cereal ») : optionnels précédés d'un booléen, parfois « doubles » (booléen externe
   toujours vrai + présence), variantes taguées par un index VarUInt32
+- **Le vrai client 1.26.45 vérifie les contraintes du schéma Mojang, gophertunnel non.** Un bot qui se
+  connecte ne prouve rien. Valeur d'énumération hors liste (ex. `BuildPlatform = 0`), `Json::Value` qui
+  n'est pas du JSON (ex. géométrie de skin `""`), taille d'image incohérente : écran « Block » (code 90,
+  `BadPacket`), sans aucun journal côté client. Pour chaque champ envoyé, lire le JSON Mojang
+  (`enum`, `x-runtime-constraint-description`, `minimum`/`maximum`) et le comparer à dragonfly.
+  Méthode en cas de « Block » : bisection avec `MCRS_EMPTY_PRESPAWN`, puis comparaison champ par champ.
+  Causes déjà trouvées (biomes 4096 cases, BiomeDefinitionList vide, skin, pack) :
+  [`new-docs/31-PROTOCOL-2169.md`](new-docs/31-PROTOCOL-2169.md) § 5
 
 ## Communication
 

@@ -1061,7 +1061,7 @@ impl ExecutionContext<'_> {
                     username: String::new(),
                     xuid: String::new(),
                     platform_chat_id: String::new(),
-                    build_platform: 0,
+                    build_platform: PlayerListAdd::BUILD_PLATFORM_UNKNOWN,
                     skin: Default::default(),
                     is_teacher: false,
                     is_host: false,

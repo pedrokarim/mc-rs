@@ -19,3 +19,6 @@ webui.db-wal
 webui.db-shm
 WEBUI_ACCESS.md
 .obsidian/
+
+# Dump binaire des paquets émis (MCRS_DUMP_PACKETS=full)
+pkt_sent.bin

@@ -22,6 +22,14 @@ pub struct Skin {
     /// Claim `ProfileHash` du login (protocole 2168), renvoyé tel quel dans
     /// le SerializedSkin.
     pub profile_hash: String,
+    /// Claim `PlayFabId` du login, renvoyé tel quel dans le SerializedSkin.
+    pub play_fab_id: String,
+}
+
+/// Une image RGBA de `width` × `height` pixels occupe exactement
+/// `width * height * 4` octets (image vide comprise : 0 × 0).
+fn image_size_matches(width: u32, height: u32, data: &[u8]) -> bool {
+    (width as u64) * (height as u64) * 4 == data.len() as u64
 }
 
 #[derive(Debug, Clone)]
@@ -64,11 +72,16 @@ impl Skin {
             skin_color: "#0".into(),
             animations: Vec::new(),
             profile_hash: String::new(),
+            play_fab_id: String::new(),
         }
     }
 
+    /// Image du skin présente et de taille cohérente (largeur × hauteur × 4
+    /// octets RGBA), comme l'exige gophertunnel `Skin.validate`.
     pub fn is_valid(&self) -> bool {
-        !self.skin_data.is_empty() && self.skin_width > 0 && self.skin_height > 0
+        self.skin_width > 0
+            && self.skin_height > 0
+            && image_size_matches(self.skin_width, self.skin_height, &self.skin_data)
     }
 
     /// Parse une `Skin` depuis les claims JSON du `client_data_jwt` envoyé par
@@ -110,25 +123,34 @@ impl Skin {
             skin_color: s("SkinColor").to_string(),
             animations: Vec::new(),
             profile_hash: s("ProfileHash").to_string(),
+            play_fab_id: s("PlayFabId").to_string(),
         })
     }
 
     /// Convertit en `SerializedSkin` wire-format (mc-rs-proto). Tombe sur le
     /// défaut Steve si la skin n'a pas de données valides.
-    pub fn to_serialized(&self, xuid: &str) -> mc_rs_proto::packets::player::SerializedSkin {
+    pub fn to_serialized(&self) -> mc_rs_proto::packets::player::SerializedSkin {
         if !self.is_valid() {
             return mc_rs_proto::packets::player::SerializedSkin::default();
         }
+        // Une cape de taille incohérente ferait rejeter tout le skin : on la
+        // retire plutôt que d'envoyer des dimensions fausses.
+        let cape_ok = image_size_matches(self.cape_width, self.cape_height, &self.cape_data);
         mc_rs_proto::packets::player::SerializedSkin {
             skin_id: self.skin_id.clone(),
-            play_fab_id: xuid.to_string(),
+            // PlayFabId du claim de login, comme dragonfly `parseSkin`.
+            play_fab_id: self.play_fab_id.clone(),
             skin_resource_patch: self.skin_resource_patch.clone(),
             skin_width: self.skin_width,
             skin_height: self.skin_height,
             skin_data: self.skin_data.clone(),
-            cape_width: self.cape_width,
-            cape_height: self.cape_height,
-            cape_data: self.cape_data.clone(),
+            cape_width: if cape_ok { self.cape_width } else { 0 },
+            cape_height: if cape_ok { self.cape_height } else { 0 },
+            cape_data: if cape_ok {
+                self.cape_data.clone()
+            } else {
+                Vec::new()
+            },
             geometry_data: self.geometry_data.clone(),
             geometry_data_engine_version: String::new(),
             animation_data: self.animation_data.clone(),

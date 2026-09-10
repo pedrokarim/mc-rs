@@ -573,6 +573,7 @@ impl Connection {
     /// Encode a raw packet (no compression, no algo byte, no encryption).
     /// Used for the first response (NetworkSettings) before compression is negotiated.
     pub(super) fn encode_raw_packet(&self, pkt_id: u32, payload: &[u8]) -> Vec<u8> {
+        dump_outgoing_packet(pkt_id, payload);
         let pkt_bytes = codec::encode_packet(pkt_id, payload);
 
         let mut batch_inner = mc_rs_proto::io::ProtoWriter::with_capacity(pkt_bytes.len() + 5);
@@ -596,34 +597,7 @@ impl Connection {
 
     /// Encode a compressed (and optionally encrypted) packet.
     pub fn encode_compressed_packet(&self, pkt_id: u32, payload: &[u8]) -> Vec<u8> {
-        // DEBUG DUMP — gated par env MCRS_DUMP_PACKETS=1. Le dump est utile pour
-        // diff contre PMMP NetworkSession.php mais c'est de l'I/O synchrone à
-        // chaque paquet envoyé : sans gate, sur 100 TPS avec broadcasts, ça
-        // sature le disque et bloque le tick loop. Coût mesuré : ~150 µs par
-        // packet pour open+append+close, soit ~15ms/tick avec 100 packets/s.
-        if std::env::var("MCRS_DUMP_PACKETS").as_deref() == Ok("1") {
-            let hex: String = payload
-                .iter()
-                .take(256)
-                .map(|b| format!("{:02X}", b))
-                .collect();
-            let line = format!(
-                "[{}] 0x{:03X} len={} hex={}\n",
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis(),
-                pkt_id,
-                payload.len(),
-                hex
-            );
-            let _ = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open("pkt_sent.log")
-                .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
-        }
-
+        dump_outgoing_packet(pkt_id, payload);
         let pkt_bytes = codec::encode_packet(pkt_id, payload);
         // Level 1 (fastest) : bench `batch_compression` montre ratio quasi
         // identique à L6 (0.71 vs 0.73 small / 0.64 vs 0.67 medium) pour 4-5×
@@ -664,6 +638,92 @@ impl Connection {
     }
 }
 
+/// Mode du dump de débogage des paquets sortants, lu une fois dans
+/// `MCRS_DUMP_PACKETS` : `1` = hex tronqué (256 octets) dans `pkt_sent.log` ;
+/// `full` = en plus, paquets complets dans `pkt_sent.bin`, enregistrements
+/// `[u64 ms][u32 id][u32 len][payload]` little-endian, rejouables dans un
+/// décodeur (gophertunnel) pour trouver un paquet refusé par le client.
+/// C'est de l'I/O synchrone à chaque paquet (~150 µs) : désactivé par défaut.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PacketDumpMode {
+    Off,
+    Hex,
+    Full,
+}
+
+fn packet_dump_mode() -> PacketDumpMode {
+    static MODE: std::sync::OnceLock<PacketDumpMode> = std::sync::OnceLock::new();
+    *MODE.get_or_init(|| match std::env::var("MCRS_DUMP_PACKETS").as_deref() {
+        Ok("1") => PacketDumpMode::Hex,
+        Ok("full") => PacketDumpMode::Full,
+        _ => PacketDumpMode::Off,
+    })
+}
+
+/// Point d'entrée unique du dump : appelé par tous les chemins d'encodage
+/// sortants (paquet unitaire, lots partagés, lots de diffusion).
+pub fn dump_outgoing_packet(pkt_id: u32, payload: &[u8]) {
+    let mode = packet_dump_mode();
+    if mode == PacketDumpMode::Off {
+        return;
+    }
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let append = |path: &str, bytes: &[u8]| {
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .and_then(|mut f| std::io::Write::write_all(&mut f, bytes));
+    };
+    let hex: String = payload
+        .iter()
+        .take(256)
+        .map(|b| format!("{:02X}", b))
+        .collect();
+    append(
+        "pkt_sent.log",
+        format!(
+            "[{now_ms}] 0x{pkt_id:03X} len={} hex={hex}\n",
+            payload.len()
+        )
+        .as_bytes(),
+    );
+    if mode == PacketDumpMode::Full {
+        let mut record = Vec::with_capacity(16 + payload.len());
+        record.extend_from_slice(&now_ms.to_le_bytes());
+        record.extend_from_slice(&pkt_id.to_le_bytes());
+        record.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        record.extend_from_slice(payload);
+        append("pkt_sent.bin", &record);
+    }
+}
+
+/// Diagnostic : paquets de pré-spawn à remplacer par une version vide, lus une
+/// fois dans `MCRS_EMPTY_PRESPAWN` (liste séparée par des virgules parmi
+/// `crafting`, `creative`, `playerlist`). Sert à isoler, avec un vrai client, le
+/// paquet qu'il refuse (`BadPacket`). Désactivé par défaut.
+pub(super) fn prespawn_debug_empty(name: &str) -> bool {
+    static EMPTIED: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    EMPTIED
+        .get_or_init(|| {
+            let list: Vec<String> = std::env::var("MCRS_EMPTY_PRESPAWN")
+                .unwrap_or_default()
+                .split(',')
+                .map(|s| s.trim().to_ascii_lowercase())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if !list.is_empty() {
+                warn!("DIAGNOSTIC: pre-spawn packets sent empty: {:?}", list);
+            }
+            list
+        })
+        .iter()
+        .any(|entry| entry == name)
+}
+
 /// Encode un batch compressé indépendamment de toute connexion. Le résultat
 /// peut être cloné et passé à `prepare_for_send` de plusieurs connexions
 /// partageant le même `CompressionAlgorithm`, économisant le coût zlib N fois
@@ -672,6 +732,7 @@ impl Connection {
 /// PMMP fait la même chose via `NetworkSession::sendDataPacket` avec sharedBatch
 /// (cf `PacketBatch::fromPackets` réutilisé par tous les viewers d'un mob).
 pub fn encode_shared_batch(pkt_id: u32, payload: &[u8], algo: CompressionAlgorithm) -> Vec<u8> {
+    dump_outgoing_packet(pkt_id, payload);
     let pkt_bytes = codec::encode_packet(pkt_id, payload);
     let batch_payload = batch::encode_batch(&[pkt_bytes], algo, 1);
     let mut result = Vec::with_capacity(1 + batch_payload.len());

@@ -3506,7 +3506,7 @@ fn process_peer_events(
 
                         let player_skin = connections
                             .get(&addr)
-                            .and_then(|c| c.skin.as_ref().map(|s| s.to_serialized(&xuid)))
+                            .and_then(|c| c.skin.as_ref().map(|s| s.to_serialized()))
                             .unwrap_or_default();
                         let player_list_add = PlayerList {
                             action: 0,
@@ -3516,7 +3516,7 @@ fn process_peer_events(
                                 username: name.clone(),
                                 xuid: xuid.clone(),
                                 platform_chat_id: String::new(),
-                                build_platform: 0,
+                                build_platform: PlayerListAdd::BUILD_PLATFORM_UNKNOWN,
                                 skin: player_skin,
                                 is_teacher: false,
                                 is_host: false,
@@ -3659,6 +3659,7 @@ fn process_peer_events(
                             let pkts: Vec<Vec<u8>> = broadcasts
                                 .iter()
                                 .map(|(id, payload)| {
+                                    crate::connection::dump_outgoing_packet(*id, payload);
                                     mc_rs_proto::codec::encode_packet(*id, payload)
                                 })
                                 .collect();
@@ -4114,7 +4115,7 @@ fn process_peer_events(
                                 username: String::new(),
                                 xuid: String::new(),
                                 platform_chat_id: String::new(),
-                                build_platform: 0,
+                                build_platform: PlayerListAdd::BUILD_PLATFORM_UNKNOWN,
                                 skin: Default::default(),
                                 is_teacher: false,
                                 is_host: false,

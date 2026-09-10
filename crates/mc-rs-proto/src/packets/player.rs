@@ -1108,7 +1108,8 @@ impl Default for SerializedSkin {
         Self {
             skin_id: "Custom".to_string(),
             play_fab_id: String::new(),
-            skin_resource_patch: "geometry.humanoid.custom".to_string(),
+            skin_resource_patch: "{\"geometry\":{\"default\":\"geometry.humanoid.custom\"}}"
+                .to_string(),
             skin_width: 64,
             skin_height: 64,
             skin_data: vec![0u8; 64 * 64 * 4],
@@ -1147,6 +1148,14 @@ pub struct PlayerListAdd {
 pub struct PlayerList {
     pub action: u8, // 0 = add, 1 = remove
     pub entries: Vec<PlayerListAdd>,
+}
+
+impl PlayerListAdd {
+    /// `BuildPlatform::Unknown`. Le champ est une énumération « Enum-as-Value »
+    /// dont 0 ne fait pas partie (valeurs 1 à 15 et -1). Réf : schéma
+    /// `BuildPlatform.json`, PMMP `PlayerListEntry::createAdditionEntry`,
+    /// dragonfly `session_list.go` (`protocol.DeviceUnknown`).
+    pub const BUILD_PLATFORM_UNKNOWN: i32 = -1;
 }
 
 impl PlayerList {
@@ -1225,8 +1234,20 @@ fn write_serialized_skin(w: &mut ProtoWriter, skin: &SerializedSkin) {
     w.write_u32_le(skin.cape_height);
     w.write_byte_array(&skin.cape_data);
 
-    w.write_string(&skin.geometry_data);
-    w.write_string(&skin.geometry_data_engine_version);
+    // GeometryData est un `Json::Value` : le client rejette le paquet si la
+    // chaîne n'est pas du JSON valide, et la chaîne vide n'en est pas.
+    // dragonfly `skinToProtocol` envoie `{}` dans ce cas, et la version
+    // courante du jeu comme version moteur de la géométrie.
+    w.write_string(if skin.geometry_data.is_empty() {
+        "{}"
+    } else {
+        &skin.geometry_data
+    });
+    w.write_string(if skin.geometry_data_engine_version.is_empty() {
+        crate::MINECRAFT_VERSION
+    } else {
+        &skin.geometry_data_engine_version
+    });
     w.write_string(&skin.animation_data);
 
     w.write_string(&skin.cape_id);
@@ -1328,7 +1349,8 @@ impl AddPlayer {
         w.write_var_u32(0);
         // Device ID + OS
         w.write_string(""); // device_id
-        w.write_i32_le(0); // device_os
+                            // Build Platform : même énumération que dans PlayerList.
+        w.write_i32_le(PlayerListAdd::BUILD_PLATFORM_UNKNOWN);
         w.into_bytes()
     }
 }
@@ -2115,6 +2137,34 @@ mod tests {
     }
 
     #[test]
+    fn player_list_add_sends_valid_json_geometry_and_known_platform() {
+        let entry = PlayerListAdd {
+            uuid: [9; 16],
+            entity_id: 1,
+            username: "a".into(),
+            xuid: String::new(),
+            platform_chat_id: String::new(),
+            build_platform: PlayerListAdd::BUILD_PLATFORM_UNKNOWN,
+            skin: SerializedSkin::default(),
+            is_teacher: false,
+            is_host: false,
+            is_subclient: false,
+        };
+        let bytes = PlayerList {
+            action: PlayerList::ACTION_ADD,
+            entries: vec![entry],
+        }
+        .encode();
+        let contains = |needle: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
+        // BuildPlatform -1 en i32 little-endian, juste après les trois chaînes.
+        assert!(contains(&[0x01, b'a', 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF]));
+        // GeometryData `{}` puis version moteur, chaînes préfixées par leur longueur.
+        let mut geometry = vec![2, b'{', b'}', crate::MINECRAFT_VERSION.len() as u8];
+        geometry.extend_from_slice(crate::MINECRAFT_VERSION.as_bytes());
+        assert!(contains(&geometry));
+    }
+
+    #[test]
     fn player_list_remove_uses_tagged_entries() {
         let entry = PlayerListAdd {
             uuid: [9; 16],
@@ -2122,7 +2172,7 @@ mod tests {
             username: String::new(),
             xuid: String::new(),
             platform_chat_id: String::new(),
-            build_platform: 0,
+            build_platform: PlayerListAdd::BUILD_PLATFORM_UNKNOWN,
             skin: SerializedSkin::default(),
             is_teacher: false,
             is_host: false,

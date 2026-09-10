@@ -130,7 +130,46 @@ officiel. Points où les références divergent, choix retenu entre parenthèses
 En cas de problème, `connection/movement.rs` journalise la première erreur de décodage PlayerAuthInput du
 processus en `WARN`.
 
-## 5. Procédure pour la prochaine version
+## 5. Causes de déconnexion trouvées avec le vrai client (2026-09-10)
+
+Le client Windows n’écrit aucun journal réseau (seul `NonAssertErrorLog.txt` existe, vide) : un paquet
+illisible se traduit par un écran « Block » (code 90, `BadPacket`) sans autre détail. gophertunnel ne
+vérifie pas les contraintes Mojang, un bot qui passe ne prouve donc rien. Méthode retenue : bisection
+des paquets de pré-spawn sur le vrai client, puis comparaison champ par champ du paquet désigné avec le
+schéma JSON Mojang et dragonfly (qui fonctionne avec le client officiel).
+
+1. **« Rabbit »** : `ResourcePackDataInfo` / `ResourcePackChunkData` doivent renvoyer l’identifiant de pack
+   exactement tel que le client l’a demandé (`uuid_version`).
+2. **Sections de biomes de LevelChunk** : stockage palettisé de **4096** cases (`x << 8 | z << 4 | y`), pas
+   64. Les biomes sauvegardés à l’ancien format (64 cellules 4×4×4) sont convertis au chargement du chunk
+   (`chunk_serializer::upgrade_legacy_biome_data`) puis réécrits.
+3. **BiomeDefinitionList vide** : plus envoyée. Une liste vide remplace les définitions intégrées du
+   client ; gophertunnel a retiré cet envoi (commit 6615fd4).
+4. **PlayerList (skin)** :
+   - `GeometryData` est un `Json::Value` : la chaîne vide est refusée, on envoie `{}` comme dragonfly ;
+   - `Build Platform` est une énumération « Enum-as-Value » (1 à 15 et -1) : 0 est refusé, on envoie -1
+     (`BuildPlatform::Unknown`, comme PMMP et dragonfly), y compris dans AddPlayer ;
+   - version moteur de la géométrie = `MINECRAFT_VERSION`, PlayFabId = claim `PlayFabId` du login ;
+   - une cape de taille incohérente (largeur × hauteur × 4 ≠ octets) est retirée plutôt qu’envoyée.
+
+Le login journalise désormais un résumé du skin reçu (`Skin: id=… image=… cape=… persona=…`), à
+confronter au schéma `SerializedSkin.json` si un skin particulier fait de nouveau échouer PlayerList.
+
+## 6. Outils de diagnostic
+
+- `MCRS_DUMP_PACKETS=1` : hexdump de chaque paquet émis dans le log ; `MCRS_DUMP_PACKETS=full` écrit en
+  plus `pkt_sent.bin` (enregistrements `[u64 ms][u32 id][u32 longueur][payload]`, little-endian), que l’on
+  peut rejouer dans les décodeurs de gophertunnel.
+- `MCRS_EMPTY_PRESPAWN=creative,crafting,playerlist` : envoie vides (ou n’envoie pas) les paquets de
+  pré-spawn nommés, pour bisecter un rejet côté client. Le serveur le signale par un `WARN`
+  « DIAGNOSTIC » dans son log.
+
+**Leçon** : la première piste (bots gophertunnel, relecture du code) a fait perdre des heures, car le
+décodeur de gophertunnel accepte des valeurs que le client officiel refuse. Face à un « Block », ne rien
+supposer : bisecter d’abord avec le vrai client, puis confronter le paquet désigné au schéma Mojang
+(énumérations, contraintes d’exécution, bornes) et à dragonfly.
+
+## 7. Procédure pour la prochaine version
 
 1. `update-refs`, puis identifier la dernière release dans `bedrock-protocol-docs` (tags sans `preview`) et
    sa version de protocole (`x-protocol-version` des JSON au tag).

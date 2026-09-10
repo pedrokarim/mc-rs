@@ -152,16 +152,12 @@ impl Connection {
             ENTITY_IDENTIFIERS_NBT,
         ));
 
-        // BiomeDefinitionList
-        let mut biome_writer = mc_rs_proto::io::ProtoWriter::with_capacity(4);
-        biome_writer.write_var_u32(0);
-        biome_writer.write_var_u32(0);
-        responses.push(
-            self.encode_compressed_packet(
-                packet_id::BIOME_DEFINITION_LIST,
-                biome_writer.as_bytes(),
-            ),
-        );
+        // BiomeDefinitionList : volontairement NON envoyé. Une liste vide remplace
+        // les définitions intégrées du client, qui ne reconnaît alors plus les
+        // biomes des chunks (déconnexion « Block » en 1.26.45). gophertunnel a
+        // retiré cet envoi (commit 6615fd4, 2026-07-20) : sans paquet, le client
+        // garde ses définitions vanilla. dragonfly envoie la liste complète ;
+        // à faire si des biomes personnalisés sont un jour nécessaires.
 
         // 5. UpdateAttributes — format protocol 944 corrigé (6 floats/attr)
         let desync = self.attributes.drain_desync();
@@ -223,8 +219,14 @@ impl Connection {
         // 12. CreativeContent — inventaire créatif vanilla 1.26.40 chargé
         //     depuis `data/creative_items.nbt` (dragonfly v0.11.4) : groupes
         //     avec icônes et noms i18n, entrées numérotées dans l'ordre.
-        let creative_groups = crate::creative_content::groups();
-        let creative_items = crate::creative_content::items();
+        let (creative_groups, creative_items) = if super::prespawn_debug_empty("creative") {
+            (Vec::new(), Vec::new())
+        } else {
+            (
+                crate::creative_content::groups(),
+                crate::creative_content::items(),
+            )
+        };
         let (n_groups, n_items) = crate::creative_content::stats();
         info!(
             "[{}] CreativeContent: {} groups + {} items (vanilla PMMP)",
@@ -237,7 +239,10 @@ impl Connection {
 
         // 13. CraftingData — vraies recettes vanilla (1601+) encodées au boot.
         //     Fallback sur un paquet vide si le payload n'a pas été initialisé.
-        let crafting_data = match crate::crafting::CRAFTING_DATA_PAYLOAD.get() {
+        let crafting_payload = crate::crafting::CRAFTING_DATA_PAYLOAD
+            .get()
+            .filter(|_| !super::prespawn_debug_empty("crafting"));
+        let crafting_data = match crafting_payload {
             Some(payload) => self.encode_compressed_packet(packet_id::CRAFTING_DATA, payload),
             None => self
                 .encode_compressed_packet(packet_id::CRAFTING_DATA, &CraftingData::encode_empty()),
@@ -257,7 +262,7 @@ impl Connection {
         let self_skin = self
             .skin
             .as_ref()
-            .map(|s| s.to_serialized(&self_xuid))
+            .map(|s| s.to_serialized())
             .unwrap_or_default();
         let self_entry = PlayerListAdd {
             uuid: uuid_bytes,
@@ -265,7 +270,7 @@ impl Connection {
             username: self.display_name.clone().unwrap_or_default(),
             xuid: self_xuid,
             platform_chat_id: String::new(),
-            build_platform: 0,
+            build_platform: PlayerListAdd::BUILD_PLATFORM_UNKNOWN,
             skin: self_skin,
             is_teacher: false,
             is_host: false,
@@ -275,8 +280,10 @@ impl Connection {
             action: 0,
             entries: vec![self_entry],
         };
-        responses
-            .push(self.encode_compressed_packet(packet_id::PLAYER_LIST, &player_list.encode()));
+        if !super::prespawn_debug_empty("playerlist") {
+            responses
+                .push(self.encode_compressed_packet(packet_id::PLAYER_LIST, &player_list.encode()));
+        }
 
         info!("[{}] Sent {} PreSpawn packets", self.addr, responses.len());
 

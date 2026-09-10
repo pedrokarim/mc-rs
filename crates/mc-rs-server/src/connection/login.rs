@@ -135,13 +135,33 @@ impl Connection {
         if !pkt.client_data_jwt.is_empty() {
             if let Ok(decoded) = jwt::decode_jwt(&pkt.client_data_jwt) {
                 if let Some(skin) = crate::skins::Skin::from_client_data(&decoded.claims) {
-                    debug!(
-                        "[{}] Skin parsed: id={} {}x{} ({} bytes)",
+                    let claims = &decoded.claims;
+                    let count = |key: &str| {
+                        claims
+                            .get(key)
+                            .and_then(|v| v.as_array())
+                            .map_or(0, |a| a.len())
+                    };
+                    info!(
+                        "[{}] Skin: id={} image={}x{} ({} octets) cape={}x{} ({} octets) \
+                         persona={} pieces={} tints={} animations={} geometry={} octets \
+                         arm={} color={} playfab={}",
                         self.addr,
                         skin.skin_id,
                         skin.skin_width,
                         skin.skin_height,
-                        skin.skin_data.len()
+                        skin.skin_data.len(),
+                        skin.cape_width,
+                        skin.cape_height,
+                        skin.cape_data.len(),
+                        skin.persona,
+                        count("PersonaPieces"),
+                        count("PieceTintColors"),
+                        count("AnimatedImageData"),
+                        skin.geometry_data.len(),
+                        skin.arm_size,
+                        skin.skin_color,
+                        skin.play_fab_id,
                     );
                     self.skin = Some(skin);
                 }
