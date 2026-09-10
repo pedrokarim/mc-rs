@@ -25,10 +25,12 @@ impl Connection {
             self.addr, pkt.protocol_version
         );
 
-        if pkt.protocol_version != 1001 {
+        if pkt.protocol_version != mc_rs_proto::CURRENT_PROTOCOL {
             warn!(
-                "[{}] Incompatible protocol: {} (expected 1001)",
-                self.addr, pkt.protocol_version
+                "[{}] Incompatible protocol: {} (expected {})",
+                self.addr,
+                pkt.protocol_version,
+                mc_rs_proto::CURRENT_PROTOCOL
             );
             let disconnect = Disconnect {
                 reason: DisconnectReason::Unknown,
@@ -396,7 +398,7 @@ impl Connection {
             writer.write_string(&pack.version_string());
             writer.write_string(""); // subPackName
         }
-        writer.write_string("1.26.30"); // baseGameVersion
+        writer.write_string(mc_rs_proto::MINECRAFT_VERSION); // baseGameVersion
         writer.write_u32_le(0); // experiments count
         writer.write_bool(false); // hasPreviouslyUsedExperiments
         writer.write_bool(false); // useVanillaEditorPacks

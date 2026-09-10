@@ -62,7 +62,7 @@ impl SimIdentity {
         let pub_b64 = self.public_key_b64();
         let header = json!({ "alg": "ES384", "x5u": pub_b64 });
         let claims = json!({
-            "GameVersion": "1.26.20",
+            "GameVersion": mc_rs_proto::MINECRAFT_VERSION,
             "DeviceOS": 7,
             "DeviceModel": "mc-rs-sim",
             "DeviceId": self.uuid,

@@ -332,7 +332,7 @@ impl StartGame {
             disable_persona: false,
             disable_custom_skins: false,
             mute_emote_announcements: false,
-            vanilla_version: "1.26.30".to_string(),
+            vanilla_version: crate::MINECRAFT_VERSION.to_string(),
             limited_world_width: 0,
             limited_world_length: 0,
             is_new_nether: true,
@@ -355,7 +355,7 @@ impl StartGame {
             // We currently run Bedrock in the legacy/disabled ItemStackNetManager mode.
             // The client expects ContainerOpen + legacy InventoryContent/Slot semantics in this mode.
             enable_new_inventory_system: false,
-            server_software_version: "1.26.30".to_string(),
+            server_software_version: crate::MINECRAFT_VERSION.to_string(),
             // Empty NBT compound tag (network LE format):
             // tag_type=10 (compound), name_length=0 (VarUInt=0x00), end_tag=0x00
             player_actor_properties_nbt: vec![0x0A, 0x00, 0x00],

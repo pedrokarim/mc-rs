@@ -29,8 +29,8 @@ use mc_rs_proto::packets::packet_id;
 use crate::identity::SimIdentity;
 use crate::net::{RakClient, RakError};
 
-/// Version protocole Bedrock cible (1.26.20).
-pub const PROTOCOL_VERSION: i32 = 975;
+/// Version protocole Bedrock cible : celle du serveur, jamais recopiée en dur.
+pub const PROTOCOL_VERSION: i32 = mc_rs_proto::CURRENT_PROTOCOL;
 
 /// Étape de la séquence de connexion Bedrock.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

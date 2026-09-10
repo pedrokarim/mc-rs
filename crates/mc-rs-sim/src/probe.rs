@@ -272,7 +272,7 @@ async fn malformed_login(target: SocketAddr) -> String {
 
     // RequestNetworkSettings (batch SessionStart, sans octet d'algo).
     let mut proto = ProtoWriter::with_capacity(4);
-    proto.write_i32_be(975);
+    proto.write_i32_be(mc_rs_proto::CURRENT_PROTOCOL);
     let rns = codec::encode_packet(packet_id::REQUEST_NETWORK_SETTINGS, &proto.into_bytes());
     let mut batch = vec![0xFE];
     let mut inner = ProtoWriter::with_capacity(rns.len() + 5);
@@ -289,7 +289,7 @@ async fn malformed_login(target: SocketAddr) -> String {
     // Login malformé : chain_data = JSON cassé, byte_array réclame 100 Mo mais
     // n'en fournit qu'une poignée.
     let mut w = ProtoWriter::with_capacity(64);
-    w.write_i32_be(975);
+    w.write_i32_be(mc_rs_proto::CURRENT_PROTOCOL);
     w.write_var_u32(100_000_000); // taille byte_array annoncée = 100 Mo
     w.write_raw(b"{ not json at all >>>"); // beaucoup moins de données
     let login = codec::encode_packet(packet_id::LOGIN, &w.into_bytes());
