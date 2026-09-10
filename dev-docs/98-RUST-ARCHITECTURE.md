@@ -17,7 +17,7 @@ mc-rs/
 ├── old_crates/                   → Ancien code (référence uniquement, NE PAS UTILISER)
 ├── .reference/                   → Code source PocketMine-MP (gitignored)
 │   └── PocketMine-MP/            → Source PHP de référence
-└── new-docs/                     → Documentation
+└── dev-docs/                     → Documentation
 ```
 
 ## Dépendances entre crates (état actuel)

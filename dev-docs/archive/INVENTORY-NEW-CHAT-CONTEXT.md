@@ -12,7 +12,7 @@ Tu travailles sur **mc-rs** (`c:\Users\karim\Desktop\programming-laboratory\mc-r
 
 ## Règle absolue : ne PAS s'arrêter
 
-Tu **NE T'ARRÊTES PAS** tant que les 10 tests E2E listés dans `new-docs/INVENTORY-ITEMS-SYSTEM.md` §4 Phase F ne passent **PAS TOUS** sur un vrai client Bedrock.
+Tu **NE T'ARRÊTES PAS** tant que les 10 tests E2E listés dans `dev-docs/20-INVENTORY-ITEMS.md` §4 Phase F ne passent **PAS TOUS** sur un vrai client Bedrock.
 
 - Pas de "je propose un plan" puis stop.
 - Pas de "j'ai fait la phase A, à toi de tester".
@@ -29,11 +29,11 @@ Si tu identifies un bug qui demande une décision produit (genre : faut-il suppo
 Lis ces fichiers **intégralement** dans cet ordre :
 
 1. **`CLAUDE.md`** (à la racine) — rappel des règles du projet
-2. **`new-docs/INVENTORY-ITEMS-SYSTEM.md`** — état exact du code actuel + plan détaillé en 6 phases (A→F) avec chemins de fichiers et lignes
-3. **`new-docs/09-INVENTORY-SYSTEM.md`** — architecture cible
-4. **`new-docs/99-ROADMAP.md`** section "🚨 PRIORITÉ ABSOLUE — Phase INV" — vue d'ensemble checklist
+2. **`dev-docs/20-INVENTORY-ITEMS.md`** — état exact du code actuel + plan détaillé en 6 phases (A→F) avec chemins de fichiers et lignes
+3. **`dev-docs/09-INVENTORY-SYSTEM.md`** — architecture cible
+4. **`dev-docs/99-ROADMAP.md`** section "🚨 PRIORITÉ ABSOLUE — Phase INV" — vue d'ensemble checklist
 
-Puis lis intégralement les fichiers PMMP listés dans `INVENTORY-ITEMS-SYSTEM.md` §6, en particulier :
+Puis lis intégralement les fichiers PMMP listés dans `20-INVENTORY-ITEMS.md` §6, en particulier :
 - `.reference/PocketMine-MP/src/network/mcpe/InventoryManager.php` (le cœur du système)
 - `.reference/PocketMine-MP/src/network/mcpe/handler/ItemStackRequestExecutor.php`
 - `.reference/PocketMine-MP/src/network/mcpe/handler/ItemStackResponseBuilder.php`
@@ -55,7 +55,7 @@ Les autres références dans `.reference/` (dragonfly, gophertunnel, etc.) serve
 - Block break : ✅ envoie UpdateBlock + spawn item entity (mais l'item s'affiche en ombre côté client)
 - Inventaire : ❌ bricolé, ne fonctionne pas
 
-Voir `INVENTORY-ITEMS-SYSTEM.md` §7 pour le détail exact.
+Voir `20-INVENTORY-ITEMS.md` §7 pour le détail exact.
 
 ## Workflow attendu
 
@@ -91,7 +91,7 @@ L'utilisateur parle français. Il en a marre de tourner en rond. Il a deux exige
 
 ## Critère de fin de mission
 
-Les 10 tests E2E listés dans `INVENTORY-ITEMS-SYSTEM.md` §4 Phase F sont **TOUS validés** par l'utilisateur sur un vrai client Bedrock 1.26.10. Tu commits le travail (`/commit "feat: inventaire complet PMMP"`). Mission accomplie.
+Les 10 tests E2E listés dans `20-INVENTORY-ITEMS.md` §4 Phase F sont **TOUS validés** par l'utilisateur sur un vrai client Bedrock 1.26.10. Tu commits le travail (`/commit "feat: inventaire complet PMMP"`). Mission accomplie.
 
 ## Démarre maintenant
 

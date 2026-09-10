@@ -20,7 +20,7 @@ serveur (handlers, inventaires, gameplay).
 Mojang (`.reference/bedrock-protocol-docs`, tag de la release), gophertunnel (`git diff` entre tags ;
 le dépôt local a des modifications personnelles, ne pas y faire de pull) et CloudburstProtocol
 (`bedrock-codec/.../codec/vNNNN/`). Données de jeu : dragonfly. Détails et procédure :
-[`new-docs/31-PROTOCOL-2169.md`](new-docs/31-PROTOCOL-2169.md).
+[`dev-docs/31-PROTOCOL-2169.md`](dev-docs/31-PROTOCOL-2169.md).
 
 **RÈGLE ABSOLUE** : Toujours vérifier le format des paquets dans les références avant d'implémenter (PMMP
 jusqu'à 1001, puis Mojang + gophertunnel + CloudburstProtocol). Ne jamais deviner un format binaire.
@@ -54,6 +54,18 @@ crates/
         └── random.rs           — RNG déterministe
 ```
 
+## Organisation du dépôt
+
+- `crates/` : le code (voir ci-dessus) ; `plugins/` et `resource_packs/` : exemples et packs livrés.
+- `dev-docs/` : documentation interne (spécifications, audits, suivis), index dans
+  [`dev-docs/README.md`](dev-docs/README.md) ; `dev-docs/archive/` pour les documents périmés.
+- `docs/` : **site public** GitHub Pages (publié depuis `main:/docs`). N'y mettre que des pages du site.
+- `scripts/` : scripts Python d'import de données et outils de dev (`scripts/dev/`), voir leur README.
+- `benchmarks/rust/` (crate `benchmark` du workspace) et `benchmarks/compare/` (comparaison mc-rs,
+  PMMP et BDS en Python).
+- Rien de nouveau à la racine : un script va dans `scripts/`, une note dans `dev-docs/`. Les fichiers
+  runtime (`server-state.json`, `webui.db`, `worlds/`, `players/`, `logs/`) sont ignorés par git.
+
 ## Code legacy (supprimé)
 
 `old_crates/` et `docs_initial/` (première tentative du serveur + sa doc de conception) ont été
@@ -61,7 +73,7 @@ crates/
 
 **NE JAMAIS les réutiliser ni s'en servir de référence d'implémentation.** Seule référence
 canonique : PocketMine-MP dans `.reference/PocketMine-MP/`. Ce qu'ils contenaient est documenté
-dans [`docs/ARCHIVE-legacy-code.md`](docs/ARCHIVE-legacy-code.md) ; le code reste récupérable
+dans [`dev-docs/archive/ARCHIVE-legacy-code.md`](dev-docs/archive/ARCHIVE-legacy-code.md) ; le code reste récupérable
 dans l'historique git (commit `788b429`) si jamais besoin de consulter.
 
 ## Builds et tests
@@ -106,14 +118,14 @@ powershell -Command "Get-Process mc-rs-server -ErrorAction SilentlyContinue | St
   l'arc (entité flèche `arrow_entity.rs`, kite + visée balistique), **creeper** explosion
   (`explosion.rs` : destruction de blocs + dégâts radiaux). Passifs errent et fuient quand
   blessés. Collision horizontale + step-up dans la physique des mobs. Réf = Allay
-  (`.reference/Allay/.../entity/ai/`), car PMMP n'a pas d'IA de mobs. **Doc : `new-docs/18-MOB-AI.md`**.
+  (`.reference/Allay/.../entity/ai/`), car PMMP n'a pas d'IA de mobs. **Doc : `dev-docs/18-MOB-AI.md`**.
   Follow-ups restants : son/particule (explosion/flèche), dégâts par difficulté, lissage de chemin.
 
 ### Bugs connus
 - **Gel per-connexion** : RÉSOLU (2026-05-19). Cause = fenêtre reliable RakNet
   wedgée par le paquet Login splitté (`recv.rs::handle_encapsulated` faisait
   `handle_split` avant l'enregistrement reliable). Détails et instrumentation
-  conservée : `HANDOFF-FREEZE-BUG.md`.
+  conservée : `dev-docs/archive/HANDOFF-FREEZE-BUG.md`.
 - **Fly en survival** : probablement résolu par le fix `UPDATE_ABILITIES =
   0xBB` (l'ancien 0x12B était un ID fantôme). À reconfirmer si réapparition.
 
@@ -140,7 +152,7 @@ powershell -Command "Get-Process mc-rs-server -ErrorAction SilentlyContinue | St
   (`enum`, `x-runtime-constraint-description`, `minimum`/`maximum`) et le comparer à dragonfly.
   Méthode en cas de « Block » : bisection avec `MCRS_EMPTY_PRESPAWN`, puis comparaison champ par champ.
   Causes déjà trouvées (biomes 4096 cases, BiomeDefinitionList vide, skin, pack) :
-  [`new-docs/31-PROTOCOL-2169.md`](new-docs/31-PROTOCOL-2169.md) § 5
+  [`dev-docs/31-PROTOCOL-2169.md`](dev-docs/31-PROTOCOL-2169.md) § 5
 
 ## Communication
 

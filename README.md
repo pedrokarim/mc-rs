@@ -2,14 +2,14 @@
   <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/License-MIT-4ecca3?style=for-the-badge" alt="MIT License">
   <img src="https://img.shields.io/badge/Tests-1165-blue?style=for-the-badge" alt="1165 Tests">
-  <img src="https://img.shields.io/badge/Protocol-975_(1.26.20)-orange?style=for-the-badge" alt="Protocol 975">
+  <img src="https://img.shields.io/badge/Protocol-2169_(1.26.45)-orange?style=for-the-badge" alt="Protocol 2169">
 </p>
 
 # MC-RS
 
 A high-performance **Minecraft Bedrock Edition** server written entirely in Rust.
 
-MC-RS targets **protocol version 975** (Minecraft Bedrock 1.26.20). It implements the full server-authoritative gameplay loop — movement, combat, inventory, world generation, crafting, and more — with a Lua plugin runtime. The codebase is a 7-crate workspace of ~90K lines of Rust, faithfully porting PocketMine-MP packet by packet.
+MC-RS targets **protocol version 2169** (Minecraft Bedrock 1.26.45). It implements the full server-authoritative gameplay loop — movement, combat, inventory, world generation, crafting, and more — with a Lua plugin runtime. The codebase is a 7-crate workspace of ~90K lines of Rust, faithfully porting PocketMine-MP packet by packet.
 
 ## Features
 

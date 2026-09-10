@@ -86,7 +86,7 @@ Sommaire (tel qu'il était) :
 | 11 | rust-crates | Dépendances justifiées (mapping vers les crates legacy) |
 | 12 | roadmap | Plan en 5 phases, milestones, checklists |
 
-La doc « courante » du projet vit ailleurs : `CLAUDE.md` (racine), `docs/`, `new-docs/`.
+La doc « courante » du projet vit ailleurs : `CLAUDE.md` (racine), `docs/`, `dev-docs/`.
 
 ---
 

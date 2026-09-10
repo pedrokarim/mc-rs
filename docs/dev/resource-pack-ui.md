@@ -16,8 +16,8 @@ est servi automatiquement à chaque client à la connexion. Ce pack apporte :
 
 Cette page est une **vue d'ensemble**. La documentation détaillée est dans :
 
-- [`new-docs/16-RESOURCE-PACK-PIPELINE.md`](https://github.com/pedrokarim/mc-rs/blob/main/new-docs/16-RESOURCE-PACK-PIPELINE.md) — pipeline serveur, format binaire, flow complet d'une session
-- [`new-docs/17-UI-LAYOUTS.md`](https://github.com/pedrokarim/mc-rs/blob/main/new-docs/17-UI-LAYOUTS.md) — catalogue détaillé + tutoriel "créer son propre layout"
+- [`dev-docs/16-RESOURCE-PACK-PIPELINE.md`](https://github.com/pedrokarim/mc-rs/blob/main/dev-docs/16-RESOURCE-PACK-PIPELINE.md) — pipeline serveur, format binaire, flow complet d'une session
+- [`dev-docs/17-UI-LAYOUTS.md`](https://github.com/pedrokarim/mc-rs/blob/main/dev-docs/17-UI-LAYOUTS.md) — catalogue détaillé + tutoriel "créer son propre layout"
 - [`resource_packs/mcrs_ui/README.md`](https://github.com/pedrokarim/mc-rs/blob/main/resource_packs/mcrs_ui/README.md) — quickstart au niveau du pack
 
 ---
@@ -145,7 +145,7 @@ Image attachée :
 ## Créer un layout custom
 
 Le tutoriel pas-à-pas est dans
-[`17-UI-LAYOUTS.md §10`](https://github.com/pedrokarim/mc-rs/blob/main/new-docs/17-UI-LAYOUTS.md#10--tutoriel--créer-son-propre-layout).
+[`17-UI-LAYOUTS.md §10`](https://github.com/pedrokarim/mc-rs/blob/main/dev-docs/17-UI-LAYOUTS.md#10--tutoriel--créer-son-propre-layout).
 
 Aperçu des étapes :
 

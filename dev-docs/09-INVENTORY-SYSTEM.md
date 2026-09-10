@@ -1,6 +1,6 @@
 # 09 — Système d'inventaire
 
-> **STATUT : NON FONCTIONNEL.** Voir `INVENTORY-ITEMS-SYSTEM.md` pour le plan complet de portage.
+> **STATUT : NON FONCTIONNEL.** Voir `20-INVENTORY-ITEMS.md` pour le plan complet de portage.
 >
 > Ce document décrit le système cible (PMMP). L'implémentation actuelle dans `crates/mc-rs-server/src/inventory.rs` et `crates/mc-rs-server/src/connection/inventory.rs` est un squelette incomplet — elle DOIT être remplacée par un port intégral de l'`InventoryManager` PMMP.
 
@@ -86,7 +86,7 @@ C'est par ce trait que l'`InventoryManager` (réseau) écoute les changements po
 
 ### 1.4 InventoryManager (per-Connection)
 
-Voir `INVENTORY-ITEMS-SYSTEM.md` §3.1 et suivants pour le détail complet. Résumé :
+Voir `20-INVENTORY-ITEMS.md` §3.1 et suivants pour le détail complet. Résumé :
 
 ```rust
 pub struct InventoryManager {
@@ -208,7 +208,7 @@ pub mod ui_slot {
 
 ---
 
-## 3. Format wire (rappel — voir INVENTORY-ITEMS-SYSTEM.md §3.7 pour le détail)
+## 3. Format wire (rappel — voir 20-INVENTORY-ITEMS.md §3.7 pour le détail)
 
 | Packet | ID | Contenu (résumé) |
 |---|---|---|
@@ -252,16 +252,16 @@ Sans la phase 1 → **crash client à l'ouverture inventaire**.
 
 ## 5. Files PMMP de référence
 
-Voir `INVENTORY-ITEMS-SYSTEM.md` §6 pour la liste exhaustive avec chemins absolus.
+Voir `20-INVENTORY-ITEMS.md` §6 pour la liste exhaustive avec chemins absolus.
 
 ---
 
 ## 6. Plan d'implémentation
 
-Voir `INVENTORY-ITEMS-SYSTEM.md` §4 pour le plan détaillé en 6 phases (A → F).
+Voir `20-INVENTORY-ITEMS.md` §4 pour le plan détaillé en 6 phases (A → F).
 
 ---
 
 ## 7. Tests E2E à passer
 
-Voir `INVENTORY-ITEMS-SYSTEM.md` §4 Phase F pour la liste des 10 tests E2E à valider avant de considérer le système terminé.
+Voir `20-INVENTORY-ITEMS.md` §4 Phase F pour la liste des 10 tests E2E à valider avant de considérer le système terminé.

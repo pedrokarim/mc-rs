@@ -3,9 +3,9 @@
 Test MOTD (Unconnected Pong) from a Bedrock server.
 
 Usage:
-    python test_motd.py                    # test localhost:19132
-    python test_motd.py 127.0.0.1 19132    # test specific host/port
-    python test_motd.py --compare           # compare mc-rs (19132) vs BDS (19133)
+    python scripts/dev/test_motd.py                    # test localhost:19132
+    python scripts/dev/test_motd.py 127.0.0.1 19132    # test specific host/port
+    python scripts/dev/test_motd.py --compare           # compare mc-rs (19132) vs BDS (19133)
 """
 
 import socket

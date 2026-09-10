@@ -3,7 +3,7 @@
 MC-RS Benchmark Suite
 Compare mc-rs (Rust) vs PocketMine-MP (PHP) vs BDS (Mojang C++)
 
-Usage: python benchmarks/bench.py
+Usage: python benchmarks/compare/bench.py
 """
 
 import json
@@ -24,7 +24,7 @@ from pathlib import Path
 #  Constants
 # ══════════════════════════════════════════════════
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RAKNET_MAGIC = bytes([
     0x00, 0xFF, 0xFF, 0x00, 0xFE, 0xFE, 0xFE, 0xFE,
     0xFD, 0xFD, 0xFD, 0xFD, 0x12, 0x34, 0x56, 0x78,
@@ -450,7 +450,7 @@ def print_results_table(results: list[BenchmarkResult]):
 
 def save_results(results: list[BenchmarkResult]):
     """Save results to JSON."""
-    output_path = PROJECT_ROOT / "benchmarks" / "results.json"
+    output_path = PROJECT_ROOT / "benchmarks" / "compare" / "results.json"
     data = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "config": {
@@ -773,7 +773,7 @@ def save_html(results: list[BenchmarkResult]):
 </body>
 </html>"""
 
-    output_path = PROJECT_ROOT / "benchmarks" / "results.html"
+    output_path = PROJECT_ROOT / "benchmarks" / "compare" / "results.html"
     output_path.write_text(html, encoding="utf-8")
     log("bench", f"HTML report saved to {output_path}", "green")
 

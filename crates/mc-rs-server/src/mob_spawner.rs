@@ -12,7 +12,7 @@
 //!   - Vérifie le mob cap par catégorie
 //!   - Apparition en groupe (`herd`), ~5 % d'animaux en bébé
 //!
-//! ⚠️ NON implémenté (voir `new-docs/19-MOB-SYSTEM-ETAT-DES-LIEUX.md`) :
+//! ⚠️ NON implémenté (voir `dev-docs/19-MOB-SYSTEM-ETAT-DES-LIEUX.md`) :
 //!   - **light level réel** au point de spawn (`brightness_range`) : nécessite un
 //!     moteur de lumière (light stocké/requêtable) qui n'existe pas encore. On se
 //!     rabat sur le gate nuit global pour les monstres. NE PAS prétendre l'inverse.

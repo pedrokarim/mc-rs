@@ -5,8 +5,8 @@ dispatcher d'interfaces qui transforme un `ModalFormRequest` standard en
 un layout custom selon un **drapeau invisible dans le titre**.
 
 > Pour la documentation complète, voir :
-> - [Pipeline & architecture serveur](../../new-docs/16-RESOURCE-PACK-PIPELINE.md)
-> - [Catalogue des 8 layouts + tutoriel](../../new-docs/17-UI-LAYOUTS.md)
+> - [Pipeline & architecture serveur](../../dev-docs/16-RESOURCE-PACK-PIPELINE.md)
+> - [Catalogue des 8 layouts + tutoriel](../../dev-docs/17-UI-LAYOUTS.md)
 
 ---
 
@@ -77,7 +77,7 @@ Une fois le serveur lancé :
 6. Mapper le nom dans `Connection::DEMO_PANEL_NAMES` + `build_demo_panel_batch`
 7. Bumper la version dans `manifest.json` (sinon caching client)
 
-→ Détail pas-à-pas : [17 — UI Layouts §10](../../new-docs/17-UI-LAYOUTS.md#10--tutoriel--créer-son-propre-layout)
+→ Détail pas-à-pas : [17 — UI Layouts §10](../../dev-docs/17-UI-LAYOUTS.md#10--tutoriel--créer-son-propre-layout)
 
 ---
 
@@ -99,7 +99,7 @@ Image attachée à un bouton :
   "image": { "type": "path", "data": "textures/ui/mcrs/panels/loading_grid" } }
 ```
 
-→ Référence complète des bindings exposés : [17 — UI Layouts §5](../../new-docs/17-UI-LAYOUTS.md#5-référence-des-bindings-exposés-au-moteur)
+→ Référence complète des bindings exposés : [17 — UI Layouts §5](../../dev-docs/17-UI-LAYOUTS.md#5-référence-des-bindings-exposés-au-moteur)
 
 ---
 

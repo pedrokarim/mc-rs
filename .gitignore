@@ -22,3 +22,6 @@ WEBUI_ACCESS.md
 
 # Dump binaire des paquets émis (MCRS_DUMP_PACKETS=full)
 pkt_sent.bin
+
+# État runtime du serveur (ops, bans), créé au premier lancement
+server-state.json

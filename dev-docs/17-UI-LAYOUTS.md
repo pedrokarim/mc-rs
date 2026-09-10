@@ -758,4 +758,4 @@ Le menu de pause apparaît avec les 3 boutons.
 | `resource_packs/mcrs_ui/textures/ui/mcrs/panels/` | Textures partagées (rounded corners, special_button, etc.) |
 | `crates/mc-rs-server/src/connection/forms.rs` | Builders Rust + routing des `ModalFormResponse` |
 | `crates/mc-rs-server/src/commands/menu.rs` | Commande `/menu <panel>` avec autocomplete |
-| `new-docs/16-RESOURCE-PACK-PIPELINE.md` | Pipeline serveur (zip, chunks, SHA) — prérequis |
+| `dev-docs/16-RESOURCE-PACK-PIPELINE.md` | Pipeline serveur (zip, chunks, SHA) — prérequis |

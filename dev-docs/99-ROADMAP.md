@@ -57,7 +57,7 @@ Avancer **phase par phase**, chaque phase est **testable et fonctionnelle** avan
 ## Phase INV : Port intégral InventoryManager PMMP — ✅ TERMINÉE
 
 **Documents de référence :**
-- [`INVENTORY-ITEMS-SYSTEM.md`](INVENTORY-ITEMS-SYSTEM.md) — état exact + plan détaillé en 6 phases (A→F)
+- [`20-INVENTORY-ITEMS.md`](20-INVENTORY-ITEMS.md) — état exact + plan détaillé en 6 phases (A→F)
 - [`09-INVENTORY-SYSTEM.md`](09-INVENTORY-SYSTEM.md) — architecture cible
 
 **Bugs résolus :**
@@ -67,7 +67,7 @@ Avancer **phase par phase**, chaque phase est **testable et fonctionnelle** avan
 - [x] **Drop d'item** : ItemStackRequest::Drop branché, spawn item entity avec scatter
 - [x] **ItemStackRequest** : Take/Place/Swap/Drop/Destroy/MineBlock/CraftCreative/CraftRecipe/CraftRecipeAuto tous gérés
 
-**Réalisé** (résumé — détail dans INVENTORY-ITEMS-SYSTEM.md §4) :
+**Réalisé** (résumé — détail dans 20-INVENTORY-ITEMS.md §4) :
 
 ### Phase A — Infrastructure ✅
 - [x] `crates/mc-rs-server/src/inventory_manager.rs` (port `InventoryManager.php`)

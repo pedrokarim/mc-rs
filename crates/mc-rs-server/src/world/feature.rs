@@ -3,7 +3,7 @@
 //! Reproduit `OreFeature`/`ScatteredOreFeature` (veines) + les modificateurs de
 //! placement (`count`/chunk, `count_on_every_layer`, `rarity_filter`) et les plages
 //! de hauteur (`uniform`/`trapezoid`/`biased_to_bottom`, ancrages `above_bottom`/
-//! `below_top`/`absolute`). Voir `new-docs/27-DIMENSIONS-GENERATION-SPEC.md`.
+//! `below_top`/`absolute`). Voir `dev-docs/27-DIMENSIONS-GENERATION-SPEC.md`.
 //!
 //! On opère sur une [`DimGrid`] (coords monde, clip hors chunk). Le RNG est
 //! déterministe par chunk (les positions diffèrent de Java mais les statistiques —
