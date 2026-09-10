@@ -265,7 +265,7 @@ impl Connection {
                         .iter()
                         .find(|p| p.uuid().eq_ignore_ascii_case(uuid_part))
                     {
-                        out.push(self.encode_resource_pack_data_info(pack));
+                        out.push(self.encode_resource_pack_data_info(pack, &id));
                     } else {
                         warn!(
                             "[{}] Client requested unknown resource pack id={}",
@@ -329,8 +329,9 @@ impl Connection {
         let chunk_size = crate::pack_encoder::CHUNK_SIZE as usize;
         let offset = (req.chunk_index as u64) * (chunk_size as u64);
         let slice = pack.chunk(req.chunk_index, chunk_size);
+        // Même identifiant que la requête (gophertunnel `handleResourcePackChunkRequest`).
         let response = mc_rs_proto::packets::world::ResourcePackChunkData {
-            pack_id: pack.uuid().to_string(),
+            pack_id: req.pack_id.clone(),
             chunk_index: req.chunk_index,
             offset,
             data: slice.to_vec(),
@@ -393,12 +394,22 @@ impl Connection {
         vec![self.encode_compressed_packet(packet_id::RESOURCE_PACK_STACK, writer.as_bytes())]
     }
 
-    fn encode_resource_pack_data_info(&self, pack: &crate::resource_pack::ResourcePack) -> Vec<u8> {
+    /// `requested_id` est l'identifiant exact envoyé par le client (en général
+    /// `<uuid>_<version>`) : depuis la 1.26.30, le client ne rattache la
+    /// réponse à sa demande que si l'identifiant est identique, sinon il
+    /// télécharge le pack puis échoue à le charger (« Rabbit »).
+    /// Réf : gophertunnel b6c1273 « Align resource pack data IDs with client
+    /// requests ».
+    fn encode_resource_pack_data_info(
+        &self,
+        pack: &crate::resource_pack::ResourcePack,
+        requested_id: &str,
+    ) -> Vec<u8> {
         let chunk_size = crate::pack_encoder::CHUNK_SIZE as u32;
         let total = pack.size();
         let chunk_count = crate::pack_encoder::num_chunks(total) as u32;
         let info = mc_rs_proto::packets::world::ResourcePackDataInfo {
-            pack_id: pack.uuid().to_string(),
+            pack_id: requested_id.to_string(),
             max_chunk_size: chunk_size,
             chunk_count,
             compressed_pack_size: total,
