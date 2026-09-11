@@ -437,11 +437,18 @@ impl Connection {
             compressed_pack_size: total,
             sha256: pack.sha256, // RAW 32 bytes (cf. PMMP hash_file ..., true).
             is_premium: false,
-            pack_type: 0, // Resources
+            // Enum `ResourcePackType` du protocole : 1 addon, 2 cache, 3 protégé,
+            // 4 comportements, 5 persona, 6 ressources, 7 skins, 8 modèle de monde
+            // (gophertunnel `ResourcePackTypeResources`). 0 n'existe pas : le client
+            // télécharge alors le pack mais échoue à le charger (« Rabbit »).
+            pack_type: RESOURCE_PACK_TYPE_RESOURCES,
         };
         self.encode_compressed_packet(packet_id::RESOURCE_PACK_DATA_INFO, &info.encode())
     }
 }
+
+/// Type « ressources » de l'enum `ResourcePackType` du protocole Bedrock.
+const RESOURCE_PACK_TYPE_RESOURCES: u8 = 6;
 
 /// PMMP `CommonTypes::putUUID` : 2 longs little-endian, bytes 7..0 puis 15..8.
 /// Pour un UUID canonique "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", on extrait

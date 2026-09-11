@@ -1030,7 +1030,7 @@ pub struct ResourcePackDataInfo {
     pub compressed_pack_size: u64,
     pub sha256: [u8; 32], // RAW SHA-256 bytes
     pub is_premium: bool,
-    pub pack_type: u8, // 0=Resources, 4=Behavior
+    pub pack_type: u8, // enum ResourcePackType : 4 = comportements, 6 = ressources (0 n'existe pas)
 }
 
 impl ResourcePackDataInfo {
