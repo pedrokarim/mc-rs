@@ -63,6 +63,11 @@ crates/
 - `scripts/` : scripts Python d'import de données et outils de dev (`scripts/dev/`), voir leur README.
 - `benchmarks/rust/` (crate `benchmark` du workspace) et `benchmarks/compare/` (comparaison mc-rs,
   PMMP et BDS en Python).
+- `menu_forge/` : menus Menu Forge servis par le moteur `crates/mc-rs-server/src/menu_forge/`,
+  espace de travail du studio (`workspace/`) et son export Bedrock (`export/`), voir
+  [`dev-docs/32-MENU-FORGE.md`](dev-docs/32-MENU-FORGE.md). Dossier de contenu au même titre que
+  `plugins/` et `resource_packs/` (il ne peut pas aller dans ce dernier : chaque dossier y est chargé
+  comme un pack).
 - Rien de nouveau à la racine : un script va dans `scripts/`, une note dans `dev-docs/`. Les fichiers
   runtime (`server-state.json`, `webui.db`, `worlds/`, `players/`, `logs/`) sont ignorés par git.
 
