@@ -1,5 +1,7 @@
-//! Moteur d’exécution des menus **Menu Forge** sur Bedrock (rendu « formulaire
-//! dessiné »).
+//! Moteur d’exécution des menus **Menu Forge** sur Bedrock : menus coffre
+//! (rendu « formulaire dessiné » par une disposition générée) et formulaires
+//! Bedrock (formulaire à boutons envoyé tel quel, dans une disposition du pack
+//! `mcrs_ui`).
 //!
 //! Le studio Menu Forge exporte, dans un dossier réglé par `[menu_forge]` de
 //! `server.toml`, un pack de ressources (`pack/`, dispositions JSON UI) et un
@@ -93,7 +95,7 @@ impl MenuForgeRuntime {
 
     /// Vrai si `/menu` doit ouvrir le menu Menu Forge `id` plutôt que l’ancien formulaire.
     pub fn serves_menu_command(&self, id: &str) -> bool {
-        self.settings.enabled && self.settings.menu_command && self.catalog().menu(id).is_some()
+        self.settings.enabled && self.settings.menu_command && self.catalog().screen(id).is_some()
     }
 
     /// Identifiants des menus, triés (complétion de `/mf open`).

@@ -11,7 +11,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use super::catalog::{
-    Action, Catalog, CommandRunner, MenuDescriptor, SlotKind, StateDefinition, StateValue,
+    Action, ButtonImage, Catalog, CommandRunner, FormDescriptor, MenuDescriptor, Screen, SlotKind,
+    StateDefinition, StateValue,
 };
 use super::condition::{evaluate, ConditionContext};
 use super::{INERT_MARKER, MENU_FORGE_FLAG, TEXT_MARKER};
@@ -79,15 +80,18 @@ impl Lists for NoLists {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FormEntry {
     pub text: String,
-    /// Chemin de texture Bedrock de l’image (type `path`).
-    pub image: Option<String>,
+    /// Image du bouton (`path` ou `url`).
+    pub image: Option<ButtonImage>,
 }
 
 /// Formulaire composé, prêt à envoyer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComposedForm {
+    /// Écran composé (menu coffre ou formulaire Bedrock).
     pub menu: String,
     pub title: String,
+    /// Texte de contenu (`#form_text`), vide pour un menu coffre.
+    pub content: String,
     pub buttons: Vec<FormEntry>,
 }
 
@@ -95,15 +99,15 @@ impl ComposedForm {
     pub fn to_form(&self) -> Form {
         Form::Simple {
             title: self.title.clone(),
-            content: String::new(),
+            content: self.content.clone(),
             buttons: self
                 .buttons
                 .iter()
                 .map(|entry| SimpleButton {
                     text: entry.text.clone(),
-                    image: entry.image.as_ref().map(|path| SimpleButtonImage {
-                        image_type: "path".to_string(),
-                        data: path.clone(),
+                    image: entry.image.as_ref().map(|image| SimpleButtonImage {
+                        image_type: image.type_name().to_string(),
+                        data: image.data.clone(),
                     }),
                 })
                 .collect(),
@@ -145,27 +149,29 @@ pub enum Effect {
 enum Target {
     Nothing,
     Slot(usize),
-    ListItem { slot: usize, item: usize },
+    ListItem {
+        slot: usize,
+        item: usize,
+    },
+    /// Bouton d’un formulaire Bedrock (rang dans `buttons` du descripteur).
+    FormButton(usize),
 }
 
 #[derive(Debug, Clone)]
 struct Frame {
-    menu: Arc<MenuDescriptor>,
+    screen: Screen,
     state: BTreeMap<String, StateValue>,
 }
 
 impl Frame {
     /// État initial : valeurs par défaut, puis `initial` (ramené dans les bornes).
-    fn new(
-        menu: Arc<MenuDescriptor>,
-        initial: &BTreeMap<String, StateValue>,
-    ) -> (Self, Vec<String>) {
-        let state = menu
-            .state
+    fn new(screen: Screen, initial: &BTreeMap<String, StateValue>) -> (Self, Vec<String>) {
+        let state = screen
+            .state()
             .iter()
             .map(|(name, definition)| (name.clone(), initial_value(definition)))
             .collect();
-        let mut frame = Self { menu, state };
+        let mut frame = Self { screen, state };
         let refused = initial
             .iter()
             .filter(|(name, value)| !frame.set(name, (*value).clone()))
@@ -176,7 +182,7 @@ impl Frame {
 
     /// Change une variable d’état selon sa définition ; `false` si elle est refusée.
     fn set(&mut self, name: &str, value: StateValue) -> bool {
-        let Some(definition) = self.menu.state.get(name) else {
+        let Some(definition) = self.screen.state().get(name) else {
             return false;
         };
         let accepted = match (definition, value) {
@@ -200,8 +206,8 @@ impl Frame {
 
     /// Nom de la variable `page` qui pagine `list`.
     fn page_state(&self, list: &str) -> Option<String> {
-        self.menu
-            .state
+        self.screen
+            .state()
             .iter()
             .find_map(|(name, definition)| match definition {
                 StateDefinition::Page { list: paged } if paged == list => Some(name.clone()),
@@ -312,10 +318,10 @@ impl Session {
         menu_id: &str,
         initial: &BTreeMap<String, StateValue>,
     ) -> Result<Self, String> {
-        let menu = catalog
-            .menu(menu_id)
+        let screen = catalog
+            .screen(menu_id)
             .ok_or_else(|| format!("Menu Menu Forge inconnu : {menu_id}"))?;
-        let (current, refused) = Frame::new(menu, initial);
+        let (current, refused) = Frame::new(screen, initial);
         Ok(Self {
             catalog,
             stack: Vec::new(),
@@ -328,7 +334,7 @@ impl Session {
 
     /// Menu affiché.
     pub fn menu_id(&self) -> &str {
-        &self.current.menu.id
+        self.current.screen.id()
     }
 
     /// Menus sous le menu affiché (retour possible).
@@ -342,12 +348,20 @@ impl Session {
     }
 
     fn evaluate(&mut self, viewer: &Viewer, lists: &dyn Lists) -> Evaluation {
-        let menu = Arc::clone(&self.current.menu);
+        let screen = self.current.screen.clone();
         let mut flags = viewer.flags.clone();
         let mut variables = viewer.variables.clone();
 
         let mut collected: BTreeMap<String, (usize, Vec<ListItem>, usize)> = BTreeMap::new();
-        for slot in menu.slots.iter().filter(|slot| slot.kind == SlotKind::List) {
+        let list_slots: Vec<_> = match &screen {
+            Screen::Chest(menu) => menu
+                .slots
+                .iter()
+                .filter(|slot| slot.kind == SlotKind::List)
+                .collect(),
+            Screen::Form(_) => Vec::new(),
+        };
+        for slot in list_slots {
             let Some(list) = slot.list.as_deref() else {
                 continue;
             };
@@ -378,7 +392,7 @@ impl Session {
             }
         }
         // Page d’une liste sans aucun slot : une seule page.
-        for (name, definition) in &menu.state {
+        for (name, definition) in screen.state() {
             if let StateDefinition::Page { list } = definition {
                 if !collected.contains_key(list) {
                     self.current
@@ -402,7 +416,14 @@ impl Session {
     /// Compose le formulaire du menu affiché et mémorise ce que désigne chaque entrée.
     pub fn compose(&mut self, viewer: &Viewer, lists: &dyn Lists) -> ComposedForm {
         let evaluation = self.evaluate(viewer, lists);
-        let menu = Arc::clone(&self.current.menu);
+        match self.current.screen.clone() {
+            Screen::Chest(menu) => self.compose_chest(&menu, evaluation),
+            Screen::Form(form) => self.compose_form(&form, &evaluation),
+        }
+    }
+
+    /// Menu coffre : une entrée par case du coffre, puis une par texte dynamique.
+    fn compose_chest(&mut self, menu: &MenuDescriptor, evaluation: Evaluation) -> ComposedForm {
         let context = ConditionContext {
             state: &self.current.state,
             flags: &evaluation.flags,
@@ -437,7 +458,7 @@ impl Session {
                     for &cell in slot.cells.iter().filter(|&&cell| cell < cells) {
                         buttons[cell] = FormEntry {
                             text: text.clone(),
-                            image: slot.icon.clone(),
+                            image: slot.icon.clone().map(ButtonImage::path),
                         };
                         targets[cell] = if active {
                             Target::Slot(index)
@@ -475,7 +496,7 @@ impl Session {
                             } else {
                                 format!("{INERT_MARKER}{label}")
                             },
-                            image: item.icon.clone(),
+                            image: item.icon.clone().map(ButtonImage::path),
                         };
                         targets[cell] = if active {
                             Target::ListItem {
@@ -510,6 +531,40 @@ impl Session {
         ComposedForm {
             menu: menu.id.clone(),
             title,
+            content: String::new(),
+            buttons,
+        }
+    }
+
+    /// Formulaire Bedrock : titre (drapeau de la disposition, une espace, titre),
+    /// contenu, puis un bouton par entrée dont `visibleWhen` est vraie ; l’index
+    /// d’un clic est le rang parmi ces boutons envoyés.
+    fn compose_form(&mut self, form: &FormDescriptor, evaluation: &Evaluation) -> ComposedForm {
+        let context = ConditionContext {
+            state: &self.current.state,
+            flags: &evaluation.flags,
+        };
+        let variables = &evaluation.variables;
+        let mut buttons = Vec::new();
+        let mut targets = Vec::new();
+        for (index, button) in form.buttons.iter().enumerate() {
+            if !evaluate(button.visible_when.as_ref(), &context) {
+                continue;
+            }
+            buttons.push(FormEntry {
+                text: interpolate(&button.text, variables),
+                image: button.image.clone(),
+            });
+            targets.push(Target::FormButton(index));
+        }
+        let title = format!("{} {}", form.flag, interpolate(&form.title, variables));
+        let content = interpolate(&form.content, variables);
+        self.targets = targets;
+        self.list_items.clear();
+        ComposedForm {
+            menu: form.id.clone(),
+            title,
+            content,
             buttons,
         }
     }
@@ -517,15 +572,18 @@ impl Session {
     /// Exécute le clic sur l’entrée `index` du dernier formulaire composé.
     /// Le dernier effet est `Show` (menu recomposé) ou `Closed`.
     pub fn click(&mut self, index: usize, viewer: &Viewer, lists: &dyn Lists) -> Vec<Effect> {
-        let actions = match self.targets.get(index).copied() {
-            Some(Target::Slot(slot)) => self.current.menu.slots[slot].on_click.clone(),
-            Some(Target::ListItem { slot, item }) => self.current.menu.slots[slot]
+        let actions = match (&self.current.screen, self.targets.get(index).copied()) {
+            (Screen::Chest(menu), Some(Target::Slot(slot))) => menu.slots[slot].on_click.clone(),
+            (Screen::Chest(menu), Some(Target::ListItem { slot, item })) => menu.slots[slot]
                 .list
                 .as_ref()
                 .and_then(|list| self.list_items.get(list))
                 .and_then(|items| items.get(item))
                 .map(|item| item.on_click.clone())
                 .unwrap_or_default(),
+            (Screen::Form(form), Some(Target::FormButton(button))) => {
+                form.buttons[button].on_click.clone()
+            }
             _ => Vec::new(),
         };
 
@@ -537,7 +595,7 @@ impl Session {
         let mut closed = false;
         for action in actions {
             match action {
-                Action::Open { menu, state } => match self.catalog.menu(&menu) {
+                Action::Open { menu, state } => match self.catalog.screen(&menu) {
                     Some(target) => {
                         let (frame, refused) = Frame::new(target, &state);
                         effects.extend(refused.into_iter().map(Effect::Warning));
@@ -561,7 +619,7 @@ impl Session {
                     if !self.current.set(&state, value.clone()) {
                         effects.push(Effect::Warning(format!(
                             "{} : état « {state} », valeur {value:?} refusée",
-                            self.current.menu.id
+                            self.current.screen.id()
                         )));
                     }
                 }

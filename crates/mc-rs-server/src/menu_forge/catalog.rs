@@ -212,6 +212,147 @@ pub struct MenuDescriptor {
     pub slots: Vec<SlotDescriptor>,
 }
 
+/// Dispositions des formulaires Bedrock et leur drapeau de titre : pack
+/// `mcrs_ui` (`ui/_global_variables.json`, `ui/server_form.json`) ; contrat :
+/// `docs/bedrock.md` § 9 du dépôt Menu Forge (`model/bedrockForm.ts`).
+pub const FORM_LAYOUTS: [(&str, &str); 8] = [
+    ("grid", "§m§a"),
+    ("left_button", "§m§b"),
+    ("bottom_button", "§m§c"),
+    ("image_grid", "§m§d"),
+    ("square_image", "§m§e"),
+    ("motd", "§m§f"),
+    ("store", "§m§0"),
+    ("wrapped", "§m§1"),
+];
+
+/// Drapeau de titre de la disposition `layout`, ou `None` si elle est inconnue.
+pub fn layout_flag(layout: &str) -> Option<&'static str> {
+    FORM_LAYOUTS
+        .iter()
+        .find(|(name, _)| *name == layout)
+        .map(|(_, flag)| *flag)
+}
+
+/// Origine de l’image d’un bouton de formulaire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ImageType {
+    /// Texture d’un pack (vanilla, `mcrs_ui` ou Menu Forge), sans extension.
+    Path,
+    /// Image téléchargée par le client.
+    Url,
+}
+
+/// Image d’un bouton, telle qu’envoyée au client (`image` d’un bouton de `ModalFormRequest`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ButtonImage {
+    #[serde(rename = "type")]
+    pub image_type: ImageType,
+    pub data: String,
+}
+
+impl ButtonImage {
+    /// Image `path` (icône d’un slot de menu coffre).
+    pub fn path(data: impl Into<String>) -> Self {
+        Self {
+            image_type: ImageType::Path,
+            data: data.into(),
+        }
+    }
+
+    /// Valeur du champ `type` envoyé au client.
+    pub fn type_name(&self) -> &'static str {
+        match self.image_type {
+            ImageType::Path => "path",
+            ImageType::Url => "url",
+        }
+    }
+}
+
+/// Bouton d’un formulaire Bedrock : `text` est le texte envoyé (préfixe du
+/// rôle et sous-titre compris), variables interpolées au moment d’envoyer.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormButtonDescriptor {
+    pub id: String,
+    pub text: String,
+    #[serde(default)]
+    pub image: Option<ButtonImage>,
+    #[serde(default)]
+    pub on_click: Vec<Action>,
+    #[serde(default)]
+    pub visible_when: Option<Condition>,
+}
+
+/// Formulaire Bedrock : envoyé tel quel, dans la disposition `layout` du pack
+/// `mcrs_ui` choisie par `flag` (titre envoyé : `flag`, une espace, `title`).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormDescriptor {
+    pub id: String,
+    pub name: String,
+    pub layout: String,
+    pub flag: String,
+    pub title: String,
+    #[serde(default)]
+    pub content: String,
+    #[serde(default)]
+    pub state: BTreeMap<String, StateDefinition>,
+    #[serde(default)]
+    pub buttons: Vec<FormButtonDescriptor>,
+}
+
+/// Écran du catalogue : menu coffre (disposition générée par le studio) ou
+/// formulaire Bedrock (disposition de `mcrs_ui`). Les deux partagent les
+/// identifiants, la pile `open` / `back` et l’état.
+#[derive(Debug, Clone)]
+pub enum Screen {
+    Chest(Arc<MenuDescriptor>),
+    Form(Arc<FormDescriptor>),
+}
+
+impl Screen {
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Chest(menu) => &menu.id,
+            Self::Form(form) => &form.id,
+        }
+    }
+
+    pub fn state(&self) -> &BTreeMap<String, StateDefinition> {
+        match self {
+            Self::Chest(menu) => &menu.state,
+            Self::Form(form) => &form.state,
+        }
+    }
+
+    /// Menus visés par les actions `open` de l’écran, avec l’élément (slot ou bouton) qui les porte.
+    fn opened_menus(&self) -> Vec<(&str, &str)> {
+        let elements: Vec<(&str, &[Action])> = match self {
+            Self::Chest(menu) => menu
+                .slots
+                .iter()
+                .map(|slot| (slot.id.as_str(), slot.on_click.as_slice()))
+                .collect(),
+            Self::Form(form) => form
+                .buttons
+                .iter()
+                .map(|button| (button.id.as_str(), button.on_click.as_slice()))
+                .collect(),
+        };
+        elements
+            .into_iter()
+            .flat_map(|(element, actions)| {
+                actions.iter().filter_map(move |action| match action {
+                    Action::Open { menu, .. } => Some((element, menu.as_str())),
+                    _ => None,
+                })
+            })
+            .collect()
+    }
+}
+
 /// Pack écrit avec ce descripteur.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct PackInfo {
@@ -230,6 +371,9 @@ struct RuntimeDescriptor {
     #[serde(default)]
     warnings: Vec<String>,
     menus: Vec<MenuDescriptor>,
+    /// Formulaires Bedrock ; absents d’un descripteur plus ancien.
+    #[serde(default)]
+    forms: Vec<FormDescriptor>,
 }
 
 /// Menus chargés d’un descripteur, validés.
@@ -237,7 +381,7 @@ struct RuntimeDescriptor {
 pub struct Catalog {
     pack: Option<PackInfo>,
     warnings: Vec<String>,
-    menus: Vec<Arc<MenuDescriptor>>,
+    screens: Vec<Screen>,
     index: HashMap<String, usize>,
 }
 
@@ -288,28 +432,34 @@ impl Catalog {
                 .collect(),
             ..Self::default()
         };
-        for menu in descriptor.menus {
-            validate_menu(&menu)?;
-            if catalog.index.contains_key(&menu.id) {
-                return Err(format!("menu « {} » présent deux fois", menu.id));
+        let chests = descriptor
+            .menus
+            .into_iter()
+            .map(|menu| validate_menu(&menu).map(|()| Screen::Chest(Arc::new(menu))));
+        let forms = descriptor
+            .forms
+            .into_iter()
+            .map(|form| validate_form(&form).map(|()| Screen::Form(Arc::new(form))));
+        for screen in chests.chain(forms) {
+            let screen = screen?;
+            if catalog.index.contains_key(screen.id()) {
+                return Err(format!("menu « {} » présent deux fois", screen.id()));
             }
-            catalog.index.insert(menu.id.clone(), catalog.menus.len());
-            catalog.menus.push(Arc::new(menu));
+            catalog
+                .index
+                .insert(screen.id().to_string(), catalog.screens.len());
+            catalog.screens.push(screen);
         }
 
         let known: BTreeSet<&str> = catalog.index.keys().map(String::as_str).collect();
         let mut missing = Vec::new();
-        for menu in &catalog.menus {
-            for slot in &menu.slots {
-                for action in &slot.on_click {
-                    if let Action::Open { menu: target, .. } = action {
-                        if !known.contains(target.as_str()) {
-                            missing.push(format!(
-                                "{} : le slot « {} » ouvre le menu « {target} », absent",
-                                menu.id, slot.id
-                            ));
-                        }
-                    }
+        for screen in &catalog.screens {
+            for (element, target) in screen.opened_menus() {
+                if !known.contains(target) {
+                    missing.push(format!(
+                        "{} : « {element} » ouvre le menu « {target} », absent",
+                        screen.id()
+                    ));
                 }
             }
         }
@@ -317,10 +467,33 @@ impl Catalog {
         Ok(catalog)
     }
 
+    /// Menu coffre `id` (pas un formulaire).
     pub fn menu(&self, id: &str) -> Option<Arc<MenuDescriptor>> {
-        self.index
-            .get(id)
-            .map(|&index| Arc::clone(&self.menus[index]))
+        match self.screen(id) {
+            Some(Screen::Chest(menu)) => Some(menu),
+            _ => None,
+        }
+    }
+
+    /// Formulaire Bedrock `id`.
+    pub fn form(&self, id: &str) -> Option<Arc<FormDescriptor>> {
+        match self.screen(id) {
+            Some(Screen::Form(form)) => Some(form),
+            _ => None,
+        }
+    }
+
+    /// Écran `id`, menu coffre ou formulaire.
+    pub fn screen(&self, id: &str) -> Option<Screen> {
+        self.index.get(id).map(|&index| self.screens[index].clone())
+    }
+
+    /// Nombre de formulaires Bedrock.
+    pub fn form_count(&self) -> usize {
+        self.screens
+            .iter()
+            .filter(|screen| matches!(screen, Screen::Form(_)))
+            .count()
     }
 
     /// Identifiants des menus, triés.
@@ -331,11 +504,11 @@ impl Catalog {
     }
 
     pub fn len(&self) -> usize {
-        self.menus.len()
+        self.screens.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.menus.is_empty()
+        self.screens.is_empty()
     }
 
     pub fn pack(&self) -> Option<&PackInfo> {
@@ -360,8 +533,12 @@ impl Catalog {
                 )
             })
             .unwrap_or_default();
+        let forms = match self.form_count() {
+            0 => String::new(),
+            count => format!(" dont {count} formulaire(s) Bedrock"),
+        };
         format!(
-            "{} menu(s) chargé(s){pack} : {}",
+            "{} menu(s) chargé(s){forms}{pack} : {}",
             self.len(),
             self.menu_ids().join(", ")
         )
@@ -413,6 +590,56 @@ fn validate_menu(menu: &MenuDescriptor) -> Result<(), String> {
             return Err(format!(
                 "{id} : préfixe {:?} du texte « {} » invalide",
                 text.prefix, text.id
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn valid_id(id: &str) -> bool {
+    !id.is_empty()
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
+/// Formulaire Bedrock : identifiant, disposition connue et drapeau du pack
+/// `mcrs_ui`, boutons d’identifiants distincts, images non vides.
+fn validate_form(form: &FormDescriptor) -> Result<(), String> {
+    let id = &form.id;
+    if !valid_id(id) {
+        return Err(format!("identifiant de menu invalide : {id:?}"));
+    }
+    match layout_flag(&form.layout) {
+        None => {
+            let layouts: Vec<&str> = FORM_LAYOUTS.iter().map(|(name, _)| *name).collect();
+            return Err(format!(
+                "{id} : disposition « {} » inconnue (attendu : {})",
+                form.layout,
+                layouts.join(", ")
+            ));
+        }
+        Some(flag) if flag != form.flag => {
+            return Err(format!(
+                "{id} : drapeau {:?} de la disposition {} différent de celui du pack mcrs_ui ({flag:?})",
+                form.flag, form.layout
+            ));
+        }
+        Some(_) => {}
+    }
+    let mut buttons = BTreeSet::new();
+    for button in &form.buttons {
+        if !buttons.insert(button.id.as_str()) {
+            return Err(format!("{id} : deux boutons « {} »", button.id));
+        }
+        if button
+            .image
+            .as_ref()
+            .is_some_and(|image| image.data.trim().is_empty())
+        {
+            return Err(format!(
+                "{id} : image vide pour le bouton « {} »",
+                button.id
             ));
         }
     }

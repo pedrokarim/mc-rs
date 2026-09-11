@@ -83,6 +83,31 @@ fn fixture() -> serde_json::Value {
                     { "id": "custom", "kind": "button", "cells": [3], "label": "{", "onClick": [{ "type": "custom", "id": "shop.buy", "args": { "item": 3 } }] }
                 ]
             }
+        ],
+        "forms": [
+            {
+                "id": "panel",
+                "name": "Panneau",
+                "layout": "left_button",
+                "flag": "§m§b",
+                "title": "§6Panneau {viewer.name}",
+                "content": "Onglet {state.tab}",
+                "state": { "tab": { "type": "enum", "values": ["a", "b"], "default": "a" } },
+                "buttons": [
+                    {
+                        "id": "secret", "text": "Secret", "visibleWhen": { "flag": "viewer.op" },
+                        "onClick": [{ "type": "command", "command": "say secret {viewer.name}", "as": "console" }]
+                    },
+                    { "id": "banner", "text": "§m§a Bannière", "image": { "type": "url", "data": "https://example.org/a.png" } },
+                    {
+                        "id": "to_b", "text": "Vers B", "image": { "type": "path", "data": "textures/items/diamond" },
+                        "visibleWhen": { "state": "tab", "is": "a" },
+                        "onClick": [{ "type": "setState", "state": "tab", "value": "b" }]
+                    },
+                    { "id": "other", "text": "Autre {state.tab}", "onClick": [{ "type": "open", "menu": "other" }] },
+                    { "id": "quit", "text": "Quitter", "onClick": [{ "type": "close" }] }
+                ]
+            }
         ]
     })
 }
@@ -139,17 +164,31 @@ impl Lists for Goods {
 #[test]
 fn catalog_loads_the_exported_descriptor() {
     let catalog = catalog();
-    assert_eq!(catalog.menu_ids(), ["other", "shop"]);
+    assert_eq!(catalog.menu_ids(), ["other", "panel", "shop"]);
+    assert_eq!(catalog.form_count(), 1);
+    assert!(catalog.form("panel").is_some() && catalog.menu("panel").is_none());
     assert_eq!(catalog.pack().unwrap().version, [1, 0, 3]);
     let warnings = catalog.warnings().join("\n");
     assert!(warnings.contains("export : shop"), "{warnings}");
     assert!(warnings.contains("« absent »"), "{warnings}");
     assert!(
-        catalog.summary().starts_with("2 menu(s)"),
+        catalog
+            .summary()
+            .starts_with("3 menu(s) chargé(s) dont 1 formulaire(s) Bedrock"),
         "{}",
         catalog.summary()
     );
     assert!(Catalog::empty().is_empty());
+
+    // Un descripteur d’avant les formulaires (sans `forms`) reste lisible.
+    let mut without_forms = fixture();
+    without_forms.as_object_mut().unwrap().remove("forms");
+    assert_eq!(
+        Catalog::from_json(&without_forms.to_string())
+            .unwrap()
+            .len(),
+        2
+    );
 }
 
 #[test]
@@ -170,6 +209,17 @@ fn catalog_rejects_structural_errors() {
     assert!(broken(&|value| value["menus"][0]["texts"][0]["prefix"] = json!("[t0]")).is_err());
     assert!(broken(&|value| value["menus"][1]["id"] = json!("shop")).is_err());
     assert!(broken(&|value| value["menus"][1]["id"] = json!("Bad-Id")).is_err());
+    // Formulaires : disposition connue, drapeau du pack mcrs_ui, identifiants distincts, images non vides.
+    assert!(broken(&|value| value["forms"][0]["layout"] = json!("carousel")).is_err());
+    assert!(broken(&|value| value["forms"][0]["flag"] = json!("§m§a")).is_err());
+    assert!(broken(&|value| value["forms"][0]["id"] = json!("shop")).is_err());
+    assert!(broken(&|value| value["forms"][0]["buttons"][1]["id"] = json!("secret")).is_err());
+    assert!(
+        broken(&|value| value["forms"][0]["buttons"][1]["image"]["data"] = json!(" ")).is_err()
+    );
+    assert!(
+        broken(&|value| value["forms"][0]["buttons"][1]["image"]["type"] = json!("file")).is_err()
+    );
     assert!(Catalog::from_json("{").is_err());
 }
 
@@ -189,7 +239,10 @@ fn composes_the_title_tokens_and_entries() {
     assert_eq!(entries[2], "\u{00A7}aOnglet B");
     assert_eq!(entries[26], "{x}\u{00A7}8Joyau", "décoration inerte");
     assert_eq!(
-        form.buttons[26].image.as_deref(),
+        form.buttons[26]
+            .image
+            .as_ref()
+            .map(|image| image.data.as_str()),
         Some("textures/items/diamond")
     );
     assert_eq!(entries[13], "", "slot input sans équivalent");
@@ -343,7 +396,10 @@ fn list_pages_follow_the_source() {
     let entries = texts(&form);
     assert_eq!(&entries[9..12], ["Item 0", "{x}Item 1", "Item 2"]);
     assert_eq!(
-        form.buttons[9].image.as_deref(),
+        form.buttons[9]
+            .image
+            .as_ref()
+            .map(|image| image.data.as_str()),
         Some("textures/items/item_0")
     );
     assert_eq!(entries[17], "Suivant");
@@ -392,13 +448,17 @@ fn runtime_serves_menus_only_when_enabled() {
         Catalog::from_json(&fixture().to_string()).unwrap(),
     );
     assert!(runtime.serves_menu_command("shop"));
+    assert!(
+        runtime.serves_menu_command("panel"),
+        "un formulaire Bedrock sert aussi /menu"
+    );
     assert!(!runtime.serves_menu_command("hub"));
-    assert_eq!(runtime.menu_ids(), ["other", "shop"]);
+    assert_eq!(runtime.menu_ids(), ["other", "panel", "shop"]);
     assert!(
         runtime.reload().is_err(),
         "dossier absent : le catalogue courant est gardé"
     );
-    assert_eq!(runtime.catalog().len(), 2);
+    assert_eq!(runtime.catalog().len(), 3);
 
     let without_menu_command = MenuForgeRuntime::new(
         MenuForgeSettings {
@@ -412,4 +472,95 @@ fn runtime_serves_menus_only_when_enabled() {
         !MenuForgeRuntime::new(MenuForgeSettings::disabled(), Catalog::empty())
             .serves_menu_command("shop")
     );
+}
+
+#[test]
+fn a_form_is_sent_with_its_flag_content_and_visible_buttons() {
+    let mut session = open("panel");
+    let form = session.compose(&player(), &NoLists);
+    assert_eq!(form.menu, "panel");
+    assert_eq!(
+        form.title, "§m§b §6Panneau Karim",
+        "drapeau, une espace, titre"
+    );
+    assert_eq!(form.content, "Onglet a");
+    assert_eq!(
+        texts(&form),
+        ["§m§a Bannière", "Vers B", "Autre a", "Quitter"],
+        "le bouton des opérateurs n’est pas envoyé"
+    );
+
+    let json: serde_json::Value = serde_json::from_str(&form.to_json()).unwrap();
+    assert_eq!(json["type"], "form");
+    assert_eq!(json["content"], "Onglet a");
+    assert_eq!(
+        json["buttons"][0]["image"],
+        json!({ "type": "url", "data": "https://example.org/a.png" })
+    );
+    assert_eq!(
+        json["buttons"][1]["image"],
+        json!({ "type": "path", "data": "textures/items/diamond" })
+    );
+    assert!(json["buttons"][2].get("image").is_none());
+
+    let op = player().with_flag("viewer.op");
+    let form = open("panel").compose(&op, &NoLists);
+    assert_eq!(texts(&form)[0], "Secret");
+    assert_eq!(form.buttons.len(), 5);
+}
+
+#[test]
+fn a_form_click_is_the_rank_among_the_sent_buttons() {
+    let mut session = open("panel");
+    session.compose(&player(), &NoLists);
+    // Index 1 : « Vers B » ; le bouton masqué des opérateurs ne compte pas.
+    let form = shown(&session.click(1, &player(), &NoLists)).clone();
+    assert_eq!(form.content, "Onglet b");
+    assert_eq!(texts(&form), ["§m§a Bannière", "Autre b", "Quitter"]);
+
+    // La bannière n’a pas d’action : le formulaire est simplement renvoyé.
+    assert_eq!(
+        session.click(0, &player(), &NoLists).len(),
+        1,
+        "rien que le formulaire"
+    );
+    // « Autre » ouvre un menu coffre ; son retour ramène le formulaire, état compris.
+    assert_eq!(shown(&session.click(1, &player(), &NoLists)).menu, "other");
+    assert_eq!(session.depth(), 1);
+    let back = shown(&session.click(0, &player(), &NoLists)).clone();
+    assert_eq!(
+        (back.menu.as_str(), back.content.as_str()),
+        ("panel", "Onglet b")
+    );
+    // Index hors des boutons envoyés : le formulaire est renvoyé, rien d’autre.
+    assert!(matches!(
+        session.click(9, &player(), &NoLists).as_slice(),
+        [Effect::Show(_)]
+    ));
+    assert_eq!(session.click(2, &player(), &NoLists), [Effect::Closed]);
+
+    let op = player().with_flag("viewer.op");
+    let mut session = open("panel");
+    session.compose(&op, &NoLists);
+    assert_eq!(
+        session.click(0, &op, &NoLists)[0],
+        Effect::Command {
+            line: "say secret Karim".into(),
+            runner: CommandRunner::Console
+        }
+    );
+}
+
+#[test]
+fn a_chest_menu_can_open_a_form() {
+    let mut catalog_json = fixture();
+    catalog_json["menus"][1]["slots"][1]["onClick"] =
+        json!([{ "type": "open", "menu": "panel", "state": { "tab": "b" } }]);
+    let catalog = Arc::new(Catalog::from_json(&catalog_json.to_string()).unwrap());
+    let mut session = Session::open(catalog, "other", &BTreeMap::new()).unwrap();
+    session.compose(&player(), &NoLists);
+    let form = shown(&session.click(1, &player(), &NoLists)).clone();
+    assert_eq!(form.menu, "panel");
+    assert_eq!(form.content, "Onglet b", "état initial de l’action open");
+    assert_eq!(texts(&form), ["§m§a Bannière", "Autre b", "Quitter"]);
 }

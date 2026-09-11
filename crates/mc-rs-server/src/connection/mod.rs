@@ -2,6 +2,9 @@ mod chat;
 mod chunks;
 mod dimension;
 mod forms;
+// Anciens formulaires de /menu : référence des tests de parité du moteur Menu Forge.
+#[cfg(test)]
+pub(crate) use forms::{legacy_click, legacy_form, LegacyClick};
 mod inventory;
 mod login;
 mod menu_forge;
