@@ -25,6 +25,7 @@ d'un form Bedrock standard :
 | `§m§f` | `motd` | Message du jour |
 | `§m§0` | `store` | Boutique avec onglets |
 | `§m§1` | `wrapped` | Récap avec visuels défilants |
+| `§m§v` | Menu Forge | Menus dessinés avec le studio Menu Forge : la variante vise `menu_forge_router.main_panel`, fourni par le pack exporté (`menu_forge/export/pack`, voir `dev-docs/32-MENU-FORGE.md`) |
 
 **4 overrides vanilla** : `chest_screen`, `hud_screen`, `scoreboards`,
 `ui_common` (notifications custom, scoreboard sidebar, etc.).
