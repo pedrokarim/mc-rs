@@ -64,6 +64,7 @@ son suivi.
 - [`16-RESOURCE-PACK-PIPELINE.md`](16-RESOURCE-PACK-PIPELINE.md) : chaîne des packs et UI pilotée par le
   serveur
 - [`17-UI-LAYOUTS.md`](17-UI-LAYOUTS.md) : catalogue des mises en page
+- [`32-MENU-FORGE.md`](32-MENU-FORGE.md) : menus du studio Menu Forge (moteur, `/mf`, `/menu`, export)
 
 ## Archives
 
