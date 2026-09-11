@@ -1,5 +1,5 @@
 {
-  "namespace": "menu_forge_hub",
+  "namespace": "menu_forge_grid_hub",
   "main_panel": {
     "type": "panel",
     "size": [
@@ -12,7 +12,7 @@
       {
         "layer_0": {
           "type": "image",
-          "texture": "textures/menu_forge/hub/background",
+          "texture": "textures/menu_forge/grid_hub/background",
           "size": [
             176,
             114
@@ -29,7 +29,7 @@
       {
         "layer_1": {
           "type": "image",
-          "texture": "textures/menu_forge/hub/spawn_button",
+          "texture": "textures/menu_forge/grid_hub/spawn_button",
           "size": [
             72,
             18
@@ -46,7 +46,7 @@
       {
         "layer_2": {
           "type": "image",
-          "texture": "textures/menu_forge/hub/creative_button",
+          "texture": "textures/menu_forge/grid_hub/creative_button",
           "size": [
             72,
             18
@@ -63,7 +63,7 @@
       {
         "layer_3": {
           "type": "image",
-          "texture": "textures/menu_forge/hub/survival_button",
+          "texture": "textures/menu_forge/grid_hub/survival_button",
           "size": [
             72,
             18
@@ -80,7 +80,7 @@
       {
         "layer_4": {
           "type": "image",
-          "texture": "textures/menu_forge/hub/day_button",
+          "texture": "textures/menu_forge/grid_hub/day_button",
           "size": [
             72,
             18
@@ -97,7 +97,7 @@
       {
         "layer_5": {
           "type": "image",
-          "texture": "textures/menu_forge/hub/night_button",
+          "texture": "textures/menu_forge/grid_hub/night_button",
           "size": [
             72,
             18
@@ -114,7 +114,7 @@
       {
         "layer_6": {
           "type": "image",
-          "texture": "textures/menu_forge/hub/biome_button",
+          "texture": "textures/menu_forge/grid_hub/biome_button",
           "size": [
             72,
             18
@@ -131,7 +131,7 @@
       {
         "layer_7": {
           "type": "image",
-          "texture": "textures/menu_forge/hub/showcase_button",
+          "texture": "textures/menu_forge/grid_hub/showcase_button",
           "size": [
             162,
             18
@@ -379,7 +379,7 @@
           "anchor_from": "top_left",
           "anchor_to": "top_left",
           "layer": 18,
-          "grid_item_template": "menu_forge_hub.cell",
+          "grid_item_template": "menu_forge_grid_hub.cell",
           "collection_name": "form_buttons",
           "bindings": [
             {
@@ -434,7 +434,7 @@
         }
       },
       {
-        "button@menu_forge_hub.cell_button": {
+        "button@menu_forge_grid_hub.cell_button": {
           "layer": 2
         }
       }
@@ -451,17 +451,17 @@
     "$pressed_button_name": "button.form_button_click",
     "controls": [
       {
-        "default@menu_forge_hub.cell_face": {
+        "default@menu_forge_grid_hub.cell_face": {
           "$state": "default"
         }
       },
       {
-        "hover@menu_forge_hub.cell_face": {
+        "hover@menu_forge_grid_hub.cell_face": {
           "$state": "hover"
         }
       },
       {
-        "pressed@menu_forge_hub.cell_face": {
+        "pressed@menu_forge_grid_hub.cell_face": {
           "$state": "pressed"
         }
       }

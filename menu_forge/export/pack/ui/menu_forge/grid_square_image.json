@@ -1,5 +1,5 @@
 {
-  "namespace": "menu_forge_wrapped",
+  "namespace": "menu_forge_grid_square_image",
   "main_panel": {
     "type": "panel",
     "size": [
@@ -12,7 +12,7 @@
       {
         "layer_0": {
           "type": "image",
-          "texture": "textures/menu_forge/wrapped/background",
+          "texture": "textures/menu_forge/grid_square_image/background",
           "size": [
             176,
             132
@@ -29,13 +29,13 @@
       {
         "layer_1": {
           "type": "image",
-          "texture": "textures/menu_forge/wrapped/image_1",
+          "texture": "textures/menu_forge/grid_square_image/image",
           "size": [
-            54,
-            54
+            90,
+            90
           ],
           "offset": [
-            7,
+            43,
             17
           ],
           "anchor_from": "top_left",
@@ -44,77 +44,9 @@
         }
       },
       {
-        "layer_2": {
-          "type": "image",
-          "texture": "textures/menu_forge/wrapped/image_2",
-          "size": [
-            54,
-            54
-          ],
-          "offset": [
-            61,
-            17
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_left",
-          "layer": 3
-        }
-      },
-      {
-        "layer_3": {
-          "type": "image",
-          "texture": "textures/menu_forge/wrapped/image_3",
-          "size": [
-            54,
-            54
-          ],
-          "offset": [
-            115,
-            17
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_left",
-          "layer": 4
-        }
-      },
-      {
-        "layer_4": {
-          "type": "image",
-          "texture": "textures/menu_forge/wrapped/continue_button",
-          "size": [
-            72,
-            18
-          ],
-          "offset": [
-            7,
-            107
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_left",
-          "layer": 5
-        }
-      },
-      {
-        "layer_5": {
-          "type": "image",
-          "texture": "textures/menu_forge/wrapped/close_button",
-          "size": [
-            72,
-            18
-          ],
-          "offset": [
-            97,
-            107
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_left",
-          "layer": 6
-        }
-      },
-      {
         "text_0": {
           "type": "label",
-          "text": "Wrapped",
+          "text": "Square image",
           "localize": false,
           "color": [
             1,
@@ -132,37 +64,13 @@
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
-          "layer": 7
+          "layer": 3
         }
       },
       {
         "text_1": {
           "type": "label",
-          "text": "Ton récap 2026",
-          "localize": false,
-          "color": [
-            1,
-            0.851,
-            0.2
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            88,
-            75
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_middle",
-          "layer": 8
-        }
-      },
-      {
-        "text_2": {
-          "type": "label",
-          "text": "mcrs.io/recap/2026",
+          "text": "Image carrée, texte en bas",
           "localize": false,
           "color": [
             0.667,
@@ -176,59 +84,11 @@
           ],
           "offset": [
             88,
-            91
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_middle",
-          "layer": 9
-        }
-      },
-      {
-        "text_3": {
-          "type": "label",
-          "text": "Continuer",
-          "localize": false,
-          "color": [
-            0.333,
-            1,
-            0.333
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            44,
             112
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_middle",
-          "layer": 10
-        }
-      },
-      {
-        "text_4": {
-          "type": "label",
-          "text": "Fermer",
-          "localize": false,
-          "color": [
-            1,
-            0.333,
-            0.333
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            134,
-            112
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_middle",
-          "layer": 11
+          "layer": 4
         }
       },
       {
@@ -248,8 +108,8 @@
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
-          "layer": 12,
-          "grid_item_template": "menu_forge_wrapped.cell",
+          "layer": 5,
+          "grid_item_template": "menu_forge_grid_square_image.cell",
           "collection_name": "form_buttons",
           "bindings": [
             {
@@ -304,7 +164,7 @@
         }
       },
       {
-        "button@menu_forge_wrapped.cell_button": {
+        "button@menu_forge_grid_square_image.cell_button": {
           "layer": 2
         }
       }
@@ -321,17 +181,17 @@
     "$pressed_button_name": "button.form_button_click",
     "controls": [
       {
-        "default@menu_forge_wrapped.cell_face": {
+        "default@menu_forge_grid_square_image.cell_face": {
           "$state": "default"
         }
       },
       {
-        "hover@menu_forge_wrapped.cell_face": {
+        "hover@menu_forge_grid_square_image.cell_face": {
           "$state": "hover"
         }
       },
       {
-        "pressed@menu_forge_wrapped.cell_face": {
+        "pressed@menu_forge_grid_square_image.cell_face": {
           "$state": "pressed"
         }
       }

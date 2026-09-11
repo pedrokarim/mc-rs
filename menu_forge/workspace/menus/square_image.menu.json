@@ -2,62 +2,25 @@
   "formatVersion": 1,
   "id": "square_image",
   "name": "Square image",
-  "container": {
-    "type": "chest",
-    "rows": 6
-  },
-  "state": {},
-  "layers": [
-    {
-      "id": "background",
-      "texture": "mcrs/panel_r6.png",
-      "x": 0,
-      "y": 0
-    },
-    {
-      "id": "image",
-      "texture": "mcrs/square_image.png",
-      "x": 43,
-      "y": 17
-    }
-  ],
-  "texts": [
-    {
-      "id": "title",
-      "x": 8,
-      "y": 6,
-      "color": "#ffd933",
-      "value": "Square image"
-    },
-    {
-      "id": "caption",
-      "x": 88,
-      "y": 112,
-      "value": "Image carrée, texte en bas",
-      "color": "#aaaaaa",
-      "align": "center"
-    }
-  ],
-  "slots": [
-    {
-      "id": "image",
-      "kind": "button",
-      "area": {
-        "col": 2,
-        "row": 0,
-        "width": 5,
-        "height": 5
-      },
-      "item": {
-        "invisible": true,
-        "name": "Image"
-      },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    }
-  ]
+  "form": {
+    "layout": "square_image",
+    "title": "§6Square image",
+    "content": "§7Affichage central d'une image carrée avec description en bas.",
+    "buttons": [
+      {
+        "id": "image",
+        "text": "image",
+        "role": "banner",
+        "icon": {
+          "path": "textures/ui/mcrs/panels/loading_grid"
+        },
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
+      }
+    ]
+  }
 }

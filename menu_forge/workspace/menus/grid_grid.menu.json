@@ -1,0 +1,267 @@
+{
+  "formatVersion": 1,
+  "id": "grid_grid",
+  "name": "Grid layout (grille)",
+  "container": {
+    "type": "chest",
+    "rows": 5
+  },
+  "state": {},
+  "layers": [
+    {
+      "id": "background",
+      "texture": "mcrs/panel_r5.png",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "action_a_button",
+      "texture": "mcrs/button_w4_yellow.png",
+      "x": 7,
+      "y": 35
+    },
+    {
+      "id": "action_b_button",
+      "texture": "mcrs/button_w4_yellow.png",
+      "x": 97,
+      "y": 35
+    },
+    {
+      "id": "action_c_button",
+      "texture": "mcrs/button_w4_yellow.png",
+      "x": 7,
+      "y": 53
+    },
+    {
+      "id": "action_d_button",
+      "texture": "mcrs/button_w4_yellow.png",
+      "x": 97,
+      "y": 53
+    },
+    {
+      "id": "action_e_button",
+      "texture": "mcrs/button_w4_yellow.png",
+      "x": 7,
+      "y": 71
+    },
+    {
+      "id": "action_f_button",
+      "texture": "mcrs/button_w4_yellow.png",
+      "x": 97,
+      "y": 71
+    },
+    {
+      "id": "back_button",
+      "texture": "mcrs/button_w4_red.png",
+      "x": 7,
+      "y": 89
+    }
+  ],
+  "texts": [
+    {
+      "id": "title",
+      "x": 8,
+      "y": 6,
+      "color": "#ffd933",
+      "value": "Grid layout"
+    },
+    {
+      "id": "subtitle",
+      "x": 8,
+      "y": 22,
+      "value": "Grille de boutons",
+      "color": "#aaaaaa"
+    },
+    {
+      "id": "action_a_label",
+      "x": 44,
+      "y": 40,
+      "value": "Action A",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "action_b_label",
+      "x": 134,
+      "y": 40,
+      "value": "Action B",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "action_c_label",
+      "x": 44,
+      "y": 58,
+      "value": "Action C",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "action_d_label",
+      "x": 134,
+      "y": 58,
+      "value": "Action D",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "action_e_label",
+      "x": 44,
+      "y": 76,
+      "value": "Action E",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "action_f_label",
+      "x": 134,
+      "y": 76,
+      "value": "Action F",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "back_label",
+      "x": 44,
+      "y": 94,
+      "value": "Retour",
+      "color": "#ff5555",
+      "align": "center"
+    }
+  ],
+  "slots": [
+    {
+      "id": "action_a",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 1,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Action A"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "grid_showcase"
+        }
+      ]
+    },
+    {
+      "id": "action_b",
+      "kind": "button",
+      "area": {
+        "col": 5,
+        "row": 1,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Action B"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "grid_showcase"
+        }
+      ]
+    },
+    {
+      "id": "action_c",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 2,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Action C"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "grid_showcase"
+        }
+      ]
+    },
+    {
+      "id": "action_d",
+      "kind": "button",
+      "area": {
+        "col": 5,
+        "row": 2,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Action D"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "grid_showcase"
+        }
+      ]
+    },
+    {
+      "id": "action_e",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 3,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Action E"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "grid_showcase"
+        }
+      ]
+    },
+    {
+      "id": "action_f",
+      "kind": "button",
+      "area": {
+        "col": 5,
+        "row": 3,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Action F"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "grid_showcase"
+        }
+      ]
+    },
+    {
+      "id": "back",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 4,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<red>Retour"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "grid_showcase"
+        }
+      ]
+    }
+  ]
+}

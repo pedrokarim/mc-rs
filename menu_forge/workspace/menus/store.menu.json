@@ -2,287 +2,100 @@
   "formatVersion": 1,
   "id": "store",
   "name": "Store",
-  "container": {
-    "type": "chest",
-    "rows": 6
-  },
-  "state": {},
-  "layers": [
-    {
-      "id": "background",
-      "texture": "mcrs/panel_r6.png",
-      "x": 0,
-      "y": 0
-    },
-    {
-      "id": "tab_0",
-      "texture": "mcrs/tab_on.png",
-      "x": 7,
-      "y": 17
-    },
-    {
-      "id": "tab_1",
-      "texture": "mcrs/tab_off.png",
-      "x": 61,
-      "y": 17
-    },
-    {
-      "id": "tab_2",
-      "texture": "mcrs/tab_off.png",
-      "x": 115,
-      "y": 17
-    },
-    {
-      "id": "article_sword",
-      "texture": "mcrs/store_sword.png",
-      "x": 7,
-      "y": 35
-    },
-    {
-      "id": "article_pickaxe",
-      "texture": "mcrs/store_pickaxe.png",
-      "x": 7,
-      "y": 53
-    },
-    {
-      "id": "article_skin",
-      "texture": "mcrs/store_skin.png",
-      "x": 7,
-      "y": 71
-    },
-    {
-      "id": "article_cape",
-      "texture": "mcrs/store_cape.png",
-      "x": 7,
-      "y": 89
-    }
-  ],
-  "texts": [
-    {
-      "id": "title",
-      "x": 8,
-      "y": 6,
-      "color": "#ffd933",
-      "value": "Store"
-    },
-    {
-      "id": "tab_0_label",
-      "x": 34,
-      "y": 22,
-      "value": "Populaire",
-      "color": "#ffd933",
-      "align": "center"
-    },
-    {
-      "id": "tab_1_label",
-      "x": 88,
-      "y": 22,
-      "value": "Nouveautés",
-      "color": "#aaaaaa",
-      "align": "center"
-    },
-    {
-      "id": "tab_2_label",
-      "x": 142,
-      "y": 22,
-      "value": "Promotions",
-      "color": "#aaaaaa",
-      "align": "center"
-    },
-    {
-      "id": "article_sword_name",
-      "x": 31,
-      "y": 40,
-      "value": "Épée légendaire",
-      "color": "#f0f0f0"
-    },
-    {
-      "id": "article_sword_price",
-      "x": 165,
-      "y": 40,
-      "value": "1500 coins",
-      "color": "#55ff55",
-      "align": "right"
-    },
-    {
-      "id": "article_pickaxe_name",
-      "x": 31,
-      "y": 58,
-      "value": "Pioche en diamant",
-      "color": "#f0f0f0"
-    },
-    {
-      "id": "article_pickaxe_price",
-      "x": 165,
-      "y": 58,
-      "value": "800 coins",
-      "color": "#55ff55",
-      "align": "right"
-    },
-    {
-      "id": "article_skin_name",
-      "x": 31,
-      "y": 76,
-      "value": "Skin pirate",
-      "color": "#f0f0f0"
-    },
-    {
-      "id": "article_skin_price",
-      "x": 165,
-      "y": 76,
-      "value": "2000 coins",
-      "color": "#55ff55",
-      "align": "right"
-    },
-    {
-      "id": "article_cape_name",
-      "x": 31,
-      "y": 94,
-      "value": "Cape dragon",
-      "color": "#f0f0f0"
-    },
-    {
-      "id": "article_cape_price",
-      "x": 165,
-      "y": 94,
-      "value": "3500 coins",
-      "color": "#55ff55",
-      "align": "right"
-    }
-  ],
-  "slots": [
-    {
-      "id": "tab_0",
-      "kind": "button",
-      "area": {
-        "col": 0,
-        "row": 0,
-        "width": 3
+  "form": {
+    "layout": "store",
+    "title": "§6Store",
+    "content": "§m§aPopulaire",
+    "buttons": [
+      {
+        "id": "tab_popular",
+        "text": "Populaire",
+        "role": "banner",
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
       },
-      "item": {
-        "invisible": true,
-        "name": "Populaire"
+      {
+        "id": "tab_new",
+        "text": "Nouveautés",
+        "role": "banner",
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
       },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    },
-    {
-      "id": "tab_1",
-      "kind": "button",
-      "area": {
-        "col": 3,
-        "row": 0,
-        "width": 3
+      {
+        "id": "tab_sales",
+        "text": "Promotions",
+        "role": "banner",
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
       },
-      "item": {
-        "invisible": true,
-        "name": "Nouveautés"
+      {
+        "id": "sword",
+        "text": "Épée légendaire",
+        "subtitle": "§a1500 coins",
+        "icon": {
+          "path": "textures/ui/mcrs/panels/loading_grid"
+        },
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
       },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    },
-    {
-      "id": "tab_2",
-      "kind": "button",
-      "area": {
-        "col": 6,
-        "row": 0,
-        "width": 3
+      {
+        "id": "pickaxe",
+        "text": "Pioche en diamant",
+        "subtitle": "§a800 coins",
+        "icon": {
+          "path": "textures/ui/mcrs/panels/loading_grid"
+        },
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
       },
-      "item": {
-        "invisible": true,
-        "name": "Promotions"
+      {
+        "id": "skin",
+        "text": "Skin pirate",
+        "subtitle": "§a2000 coins",
+        "icon": {
+          "path": "textures/ui/mcrs/panels/loading_grid"
+        },
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
       },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    },
-    {
-      "id": "article_sword",
-      "kind": "button",
-      "area": {
-        "col": 0,
-        "row": 1,
-        "width": 9
-      },
-      "item": {
-        "invisible": true,
-        "name": "Épée légendaire : 1500 coins"
-      },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    },
-    {
-      "id": "article_pickaxe",
-      "kind": "button",
-      "area": {
-        "col": 0,
-        "row": 2,
-        "width": 9
-      },
-      "item": {
-        "invisible": true,
-        "name": "Pioche en diamant : 800 coins"
-      },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    },
-    {
-      "id": "article_skin",
-      "kind": "button",
-      "area": {
-        "col": 0,
-        "row": 3,
-        "width": 9
-      },
-      "item": {
-        "invisible": true,
-        "name": "Skin pirate : 2000 coins"
-      },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    },
-    {
-      "id": "article_cape",
-      "kind": "button",
-      "area": {
-        "col": 0,
-        "row": 4,
-        "width": 9
-      },
-      "item": {
-        "invisible": true,
-        "name": "Cape dragon : 3500 coins"
-      },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    }
-  ]
+      {
+        "id": "cape",
+        "text": "Cape dragon",
+        "subtitle": "§a3500 coins",
+        "icon": {
+          "path": "textures/ui/mcrs/panels/loading_grid"
+        },
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
+      }
+    ]
+  }
 }

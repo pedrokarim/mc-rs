@@ -1,8 +1,10 @@
 # Menus Menu Forge de mc-rs
 
-Les écrans de `/menu` (hub et panneaux de démonstration du pack `mcrs_ui`)
-dessinés comme menus [Menu Forge](https://pedrokarim.github.io/menu-forge/),
-et leur export pour Bedrock, lu par le moteur `crates/mc-rs-server/src/menu_forge/`.
+Les écrans de `/menu` (hub et panneaux de démonstration du pack `mcrs_ui`) en
+formulaires Bedrock [Menu Forge](https://pedrokarim.github.io/menu-forge/), portés
+tels quels de `connection/forms.rs`, leurs versions dessinées en grille de coffre
+(`grid_hub`, `grid_showcase`…, ouvrables par `/mf open`), le menu `demo`, et leur
+export pour Bedrock, lu par le moteur `crates/mc-rs-server/src/menu_forge/`.
 Documentation : [`dev-docs/32-MENU-FORGE.md`](../dev-docs/32-MENU-FORGE.md).
 
 | Dossier | Contenu |

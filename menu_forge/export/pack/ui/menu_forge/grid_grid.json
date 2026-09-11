@@ -1,10 +1,10 @@
 {
-  "namespace": "menu_forge_showcase",
+  "namespace": "menu_forge_grid_grid",
   "main_panel": {
     "type": "panel",
     "size": [
       176,
-      222
+      204
     ],
     "anchor_from": "center",
     "anchor_to": "center",
@@ -12,10 +12,10 @@
       {
         "layer_0": {
           "type": "image",
-          "texture": "textures/menu_forge/showcase/background",
+          "texture": "textures/menu_forge/grid_grid/background",
           "size": [
             176,
-            132
+            114
           ],
           "offset": [
             0,
@@ -29,7 +29,7 @@
       {
         "layer_1": {
           "type": "image",
-          "texture": "textures/menu_forge/showcase/open_grid_button",
+          "texture": "textures/menu_forge/grid_grid/action_a_button",
           "size": [
             72,
             18
@@ -46,7 +46,7 @@
       {
         "layer_2": {
           "type": "image",
-          "texture": "textures/menu_forge/showcase/open_left_button_button",
+          "texture": "textures/menu_forge/grid_grid/action_b_button",
           "size": [
             72,
             18
@@ -63,7 +63,7 @@
       {
         "layer_3": {
           "type": "image",
-          "texture": "textures/menu_forge/showcase/open_bottom_button_button",
+          "texture": "textures/menu_forge/grid_grid/action_c_button",
           "size": [
             72,
             18
@@ -80,7 +80,7 @@
       {
         "layer_4": {
           "type": "image",
-          "texture": "textures/menu_forge/showcase/open_image_grid_button",
+          "texture": "textures/menu_forge/grid_grid/action_d_button",
           "size": [
             72,
             18
@@ -97,7 +97,7 @@
       {
         "layer_5": {
           "type": "image",
-          "texture": "textures/menu_forge/showcase/open_square_image_button",
+          "texture": "textures/menu_forge/grid_grid/action_e_button",
           "size": [
             72,
             18
@@ -114,7 +114,7 @@
       {
         "layer_6": {
           "type": "image",
-          "texture": "textures/menu_forge/showcase/open_motd_button",
+          "texture": "textures/menu_forge/grid_grid/action_f_button",
           "size": [
             72,
             18
@@ -131,7 +131,7 @@
       {
         "layer_7": {
           "type": "image",
-          "texture": "textures/menu_forge/showcase/open_store_button",
+          "texture": "textures/menu_forge/grid_grid/back_button",
           "size": [
             72,
             18
@@ -146,43 +146,9 @@
         }
       },
       {
-        "layer_8": {
-          "type": "image",
-          "texture": "textures/menu_forge/showcase/open_wrapped_button",
-          "size": [
-            72,
-            18
-          ],
-          "offset": [
-            97,
-            89
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_left",
-          "layer": 9
-        }
-      },
-      {
-        "layer_9": {
-          "type": "image",
-          "texture": "textures/menu_forge/showcase/back_button",
-          "size": [
-            72,
-            18
-          ],
-          "offset": [
-            7,
-            107
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_left",
-          "layer": 10
-        }
-      },
-      {
         "text_0": {
           "type": "label",
-          "text": "UI Showcase",
+          "text": "Grid layout",
           "localize": false,
           "color": [
             1,
@@ -200,13 +166,13 @@
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
-          "layer": 11
+          "layer": 9
         }
       },
       {
         "text_1": {
           "type": "label",
-          "text": "Sélectionne le layout :",
+          "text": "Grille de boutons",
           "localize": false,
           "color": [
             0.667,
@@ -224,13 +190,13 @@
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
-          "layer": 12
+          "layer": 10
         }
       },
       {
         "text_2": {
           "type": "label",
-          "text": "Grid",
+          "text": "Action A",
           "localize": false,
           "color": [
             1,
@@ -245,6 +211,54 @@
           "offset": [
             44,
             40
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 11
+        }
+      },
+      {
+        "text_3": {
+          "type": "label",
+          "text": "Action B",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            134,
+            40
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 12
+        }
+      },
+      {
+        "text_4": {
+          "type": "label",
+          "text": "Action C",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            44,
+            58
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_middle",
@@ -252,9 +266,9 @@
         }
       },
       {
-        "text_3": {
+        "text_5": {
           "type": "label",
-          "text": "Left buttons",
+          "text": "Action D",
           "localize": false,
           "color": [
             1,
@@ -268,7 +282,7 @@
           ],
           "offset": [
             134,
-            40
+            58
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_middle",
@@ -276,9 +290,9 @@
         }
       },
       {
-        "text_4": {
+        "text_6": {
           "type": "label",
-          "text": "Bottom",
+          "text": "Action E",
           "localize": false,
           "color": [
             1,
@@ -292,7 +306,7 @@
           ],
           "offset": [
             44,
-            58
+            76
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_middle",
@@ -300,9 +314,9 @@
         }
       },
       {
-        "text_5": {
+        "text_7": {
           "type": "label",
-          "text": "Image grid",
+          "text": "Action F",
           "localize": false,
           "color": [
             1,
@@ -316,7 +330,7 @@
           ],
           "offset": [
             134,
-            58
+            76
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_middle",
@@ -324,103 +338,7 @@
         }
       },
       {
-        "text_6": {
-          "type": "label",
-          "text": "Square image",
-          "localize": false,
-          "color": [
-            1,
-            1,
-            0.333
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            44,
-            76
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_middle",
-          "layer": 17
-        }
-      },
-      {
-        "text_7": {
-          "type": "label",
-          "text": "MOTD",
-          "localize": false,
-          "color": [
-            1,
-            1,
-            0.333
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            134,
-            76
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_middle",
-          "layer": 18
-        }
-      },
-      {
         "text_8": {
-          "type": "label",
-          "text": "Store",
-          "localize": false,
-          "color": [
-            1,
-            1,
-            0.333
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            44,
-            94
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_middle",
-          "layer": 19
-        }
-      },
-      {
-        "text_9": {
-          "type": "label",
-          "text": "Wrapped",
-          "localize": false,
-          "color": [
-            1,
-            1,
-            0.333
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            134,
-            94
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_middle",
-          "layer": 20
-        }
-      },
-      {
-        "text_10": {
           "type": "label",
           "text": "Retour",
           "localize": false,
@@ -436,11 +354,11 @@
           ],
           "offset": [
             44,
-            112
+            94
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_middle",
-          "layer": 21
+          "layer": 17
         }
       },
       {
@@ -448,11 +366,11 @@
           "type": "grid",
           "grid_dimensions": [
             9,
-            6
+            5
           ],
           "size": [
             162,
-            108
+            90
           ],
           "offset": [
             7,
@@ -460,8 +378,8 @@
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
-          "layer": 22,
-          "grid_item_template": "menu_forge_showcase.cell",
+          "layer": 18,
+          "grid_item_template": "menu_forge_grid_grid.cell",
           "collection_name": "form_buttons",
           "bindings": [
             {
@@ -516,7 +434,7 @@
         }
       },
       {
-        "button@menu_forge_showcase.cell_button": {
+        "button@menu_forge_grid_grid.cell_button": {
           "layer": 2
         }
       }
@@ -533,17 +451,17 @@
     "$pressed_button_name": "button.form_button_click",
     "controls": [
       {
-        "default@menu_forge_showcase.cell_face": {
+        "default@menu_forge_grid_grid.cell_face": {
           "$state": "default"
         }
       },
       {
-        "hover@menu_forge_showcase.cell_face": {
+        "hover@menu_forge_grid_grid.cell_face": {
           "$state": "hover"
         }
       },
       {
-        "pressed@menu_forge_showcase.cell_face": {
+        "pressed@menu_forge_grid_grid.cell_face": {
           "$state": "pressed"
         }
       }

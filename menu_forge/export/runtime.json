@@ -8,89 +8,11 @@
     "version": [
       1,
       0,
-      0
+      2
     ]
   },
   "warnings": [],
   "menus": [
-    {
-      "id": "bottom_button",
-      "name": "Bottom buttons",
-      "rows": 6,
-      "entries": 54,
-      "token": "[mf:bottom_button]",
-      "state": {},
-      "tokens": [],
-      "texts": [],
-      "slots": [
-        {
-          "id": "join_solo",
-          "kind": "button",
-          "cells": [
-            27,
-            28,
-            29
-          ],
-          "label": "§eSolo",
-          "icon": null,
-          "onClick": [
-            {
-              "type": "close"
-            }
-          ]
-        },
-        {
-          "id": "join_duo",
-          "kind": "button",
-          "cells": [
-            30,
-            31,
-            32
-          ],
-          "label": "§eDuo",
-          "icon": null,
-          "onClick": [
-            {
-              "type": "close"
-            }
-          ]
-        },
-        {
-          "id": "join_squad",
-          "kind": "button",
-          "cells": [
-            33,
-            34,
-            35
-          ],
-          "label": "§eSquad",
-          "icon": null,
-          "onClick": [
-            {
-              "type": "close"
-            }
-          ]
-        },
-        {
-          "id": "back",
-          "kind": "button",
-          "cells": [
-            45,
-            46,
-            47,
-            48
-          ],
-          "label": "§cRetour",
-          "icon": null,
-          "onClick": [
-            {
-              "type": "open",
-              "menu": "showcase"
-            }
-          ]
-        }
-      ]
-    },
     {
       "id": "demo",
       "name": "Démo Menu Forge",
@@ -420,11 +342,89 @@
       ]
     },
     {
-      "id": "grid",
-      "name": "Grid layout",
+      "id": "grid_bottom_button",
+      "name": "Bottom buttons (grille)",
+      "rows": 6,
+      "entries": 54,
+      "token": "[mf:grid_bottom_button]",
+      "state": {},
+      "tokens": [],
+      "texts": [],
+      "slots": [
+        {
+          "id": "join_solo",
+          "kind": "button",
+          "cells": [
+            27,
+            28,
+            29
+          ],
+          "label": "§eSolo",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "join_duo",
+          "kind": "button",
+          "cells": [
+            30,
+            31,
+            32
+          ],
+          "label": "§eDuo",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "join_squad",
+          "kind": "button",
+          "cells": [
+            33,
+            34,
+            35
+          ],
+          "label": "§eSquad",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "back",
+          "kind": "button",
+          "cells": [
+            45,
+            46,
+            47,
+            48
+          ],
+          "label": "§cRetour",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "grid_showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "grid_grid",
+      "name": "Grid layout (grille)",
       "rows": 5,
       "entries": 45,
-      "token": "[mf:grid]",
+      "token": "[mf:grid_grid]",
       "state": {},
       "tokens": [],
       "texts": [],
@@ -443,7 +443,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -461,7 +461,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -479,7 +479,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -497,7 +497,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -515,7 +515,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -533,7 +533,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -551,18 +551,18 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         }
       ]
     },
     {
-      "id": "hub",
-      "name": "Hub mc-rs",
+      "id": "grid_hub",
+      "name": "Hub mc-rs (grille)",
       "rows": 5,
       "entries": 45,
-      "token": "[mf:hub]",
+      "token": "[mf:grid_hub]",
       "state": {},
       "tokens": [],
       "texts": [],
@@ -718,18 +718,18 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         }
       ]
     },
     {
-      "id": "image_grid",
-      "name": "Image grid",
+      "id": "grid_image_grid",
+      "name": "Image grid (grille)",
       "rows": 6,
       "entries": 54,
-      "token": "[mf:image_grid]",
+      "token": "[mf:grid_image_grid]",
       "state": {},
       "tokens": [],
       "texts": [],
@@ -752,7 +752,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -774,7 +774,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -796,7 +796,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -818,7 +818,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -836,18 +836,18 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         }
       ]
     },
     {
-      "id": "left_button",
-      "name": "Left buttons",
+      "id": "grid_left_button",
+      "name": "Left buttons (grille)",
       "rows": 5,
       "entries": 45,
-      "token": "[mf:left_button]",
+      "token": "[mf:grid_left_button]",
       "state": {},
       "tokens": [],
       "texts": [],
@@ -867,7 +867,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -886,7 +886,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -905,7 +905,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -924,7 +924,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -943,18 +943,18 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         }
       ]
     },
     {
-      "id": "motd",
-      "name": "MOTD",
+      "id": "grid_motd",
+      "name": "MOTD (grille)",
       "rows": 6,
       "entries": 54,
-      "token": "[mf:motd]",
+      "token": "[mf:grid_motd]",
       "state": {},
       "tokens": [],
       "texts": [],
@@ -973,7 +973,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -991,18 +991,18 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         }
       ]
     },
     {
-      "id": "showcase",
-      "name": "UI Showcase",
+      "id": "grid_showcase",
+      "name": "UI Showcase (grille)",
       "rows": 6,
       "entries": 54,
-      "token": "[mf:showcase]",
+      "token": "[mf:grid_showcase]",
       "state": {},
       "tokens": [],
       "texts": [],
@@ -1021,7 +1021,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "grid"
+              "menu": "grid_grid"
             }
           ]
         },
@@ -1039,7 +1039,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "left_button"
+              "menu": "grid_left_button"
             }
           ]
         },
@@ -1057,7 +1057,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "bottom_button"
+              "menu": "grid_bottom_button"
             }
           ]
         },
@@ -1075,7 +1075,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "image_grid"
+              "menu": "grid_image_grid"
             }
           ]
         },
@@ -1093,7 +1093,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "square_image"
+              "menu": "grid_square_image"
             }
           ]
         },
@@ -1111,7 +1111,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "motd"
+              "menu": "grid_motd"
             }
           ]
         },
@@ -1129,7 +1129,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "store"
+              "menu": "grid_store"
             }
           ]
         },
@@ -1147,7 +1147,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "wrapped"
+              "menu": "grid_wrapped"
             }
           ]
         },
@@ -1165,18 +1165,18 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "hub"
+              "menu": "grid_hub"
             }
           ]
         }
       ]
     },
     {
-      "id": "square_image",
-      "name": "Square image",
+      "id": "grid_square_image",
+      "name": "Square image (grille)",
       "rows": 6,
       "entries": 54,
-      "token": "[mf:square_image]",
+      "token": "[mf:grid_square_image]",
       "state": {},
       "tokens": [],
       "texts": [],
@@ -1216,18 +1216,18 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         }
       ]
     },
     {
-      "id": "store",
-      "name": "Store",
+      "id": "grid_store",
+      "name": "Store (grille)",
       "rows": 6,
       "entries": 54,
-      "token": "[mf:store]",
+      "token": "[mf:grid_store]",
       "state": {},
       "tokens": [],
       "texts": [],
@@ -1245,7 +1245,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -1262,7 +1262,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -1279,7 +1279,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -1302,7 +1302,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -1325,7 +1325,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -1348,7 +1348,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -1371,18 +1371,18 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         }
       ]
     },
     {
-      "id": "wrapped",
-      "name": "Wrapped",
+      "id": "grid_wrapped",
+      "name": "Wrapped (grille)",
       "rows": 6,
       "entries": 54,
-      "token": "[mf:wrapped]",
+      "token": "[mf:grid_wrapped]",
       "state": {},
       "tokens": [],
       "texts": [],
@@ -1401,7 +1401,7 @@
           "onClick": [
             {
               "type": "open",
-              "menu": "showcase"
+              "menu": "grid_showcase"
             }
           ]
         },
@@ -1416,6 +1416,746 @@
           ],
           "label": "§cFermer",
           "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "grid_showcase"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "forms": [
+    {
+      "id": "bottom_button",
+      "name": "Bottom buttons",
+      "layout": "bottom_button",
+      "flag": "§m§c",
+      "title": "§6Bottom buttons",
+      "content": "§7Bannière en haut, liste de boutons en bas. Mise en scène d'un mode de jeu.",
+      "state": {},
+      "buttons": [
+        {
+          "id": "banner",
+          "text": "§m§a Mode Bedwars",
+          "onClick": [
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "join_solo",
+          "text": "§eRejoindre solo",
+          "onClick": [
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "join_duo",
+          "text": "§eRejoindre duo",
+          "onClick": [
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "join_squad",
+          "text": "§eRejoindre squad",
+          "onClick": [
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "back",
+          "text": "§c↩ Retour",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "grid",
+      "name": "Grid layout",
+      "layout": "grid",
+      "flag": "§m§a",
+      "title": "§6Grid layout",
+      "content": "§7Layout: button_grid_panel — grille verticale de boutons rectangulaires.",
+      "state": {},
+      "buttons": [
+        {
+          "id": "action_a",
+          "text": "§eAction A",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "action_b",
+          "text": "§eAction B",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "action_c",
+          "text": "§eAction C",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "action_d",
+          "text": "§eAction D",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "action_e",
+          "text": "§eAction E",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "action_f",
+          "text": "§eAction F",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "back",
+          "text": "§c↩ Retour",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hub",
+      "name": "Hub mc-rs",
+      "layout": "grid",
+      "flag": "§m§a",
+      "title": "§l§6mc-rs§r §eHUB",
+      "content": "§7Choisis une action :",
+      "state": {},
+      "buttons": [
+        {
+          "id": "spawn",
+          "text": "§a▶ Téléporter au spawn",
+          "image": {
+            "type": "path",
+            "data": "textures/items/compass_item"
+          },
+          "onClick": [
+            {
+              "type": "command",
+              "command": "tp {mcrs.spawn}",
+              "as": "player"
+            },
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "creative",
+          "text": "§b▶ Mode Créatif",
+          "image": {
+            "type": "path",
+            "data": "textures/blocks/grass_side_carried"
+          },
+          "onClick": [
+            {
+              "type": "command",
+              "command": "gamemode creative",
+              "as": "player"
+            },
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "survival",
+          "text": "§e▶ Mode Survie",
+          "onClick": [
+            {
+              "type": "command",
+              "command": "gamemode survival",
+              "as": "player"
+            },
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "day",
+          "text": "§d▶ Régler sur Jour",
+          "image": {
+            "type": "path",
+            "data": "textures/items/clock_item"
+          },
+          "onClick": [
+            {
+              "type": "command",
+              "command": "time set day",
+              "as": "player"
+            },
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "night",
+          "text": "§9▶ Régler sur Nuit",
+          "onClick": [
+            {
+              "type": "command",
+              "command": "time set night",
+              "as": "player"
+            },
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "biome",
+          "text": "§7▶ Infos biome",
+          "onClick": [
+            {
+              "type": "command",
+              "command": "biome",
+              "as": "player"
+            },
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "showcase",
+          "text": "§6▶ §lUI Showcase",
+          "image": {
+            "type": "path",
+            "data": "textures/items/map_filled"
+          },
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "image_grid",
+      "name": "Image grid",
+      "layout": "image_grid",
+      "flag": "§m§d",
+      "title": "§6Image grid",
+      "content": "§7Grille d'images avec titre superposé. Idéal pour un sélecteur de map.",
+      "state": {},
+      "buttons": [
+        {
+          "id": "forest",
+          "text": "Forêt\t§aDifficulté facile",
+          "image": {
+            "type": "path",
+            "data": "textures/ui/mcrs/panels/loading_grid"
+          },
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "desert",
+          "text": "Désert\t§eDifficulté moyenne",
+          "image": {
+            "type": "path",
+            "data": "textures/ui/mcrs/panels/loading_grid"
+          },
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "mountain",
+          "text": "Montagne\t§cDifficulté difficile",
+          "image": {
+            "type": "path",
+            "data": "textures/ui/mcrs/panels/loading_grid"
+          },
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "swamp",
+          "text": "Marais\t§eDifficulté moyenne",
+          "image": {
+            "type": "path",
+            "data": "textures/ui/mcrs/panels/loading_grid"
+          },
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "back",
+          "text": "§c↩ Retour",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "left_button",
+      "name": "Left buttons",
+      "layout": "left_button",
+      "flag": "§m§b",
+      "title": "§6Left buttons",
+      "content": "§7Liste de boutons à gauche, description à droite. Survole un bouton pour afficher son texte.",
+      "state": {},
+      "buttons": [
+        {
+          "id": "ranked",
+          "text": "§ePartie classée",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "quick",
+          "text": "§ePartie rapide",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "tutorial",
+          "text": "§eTutoriel",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "settings",
+          "text": "§eParamètres",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "back",
+          "text": "§c↩ Retour",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "motd",
+      "name": "MOTD",
+      "layout": "motd",
+      "flag": "§m§f",
+      "title": "§6MOTD",
+      "content": "§7Bienvenue sur mc-rs.\n§7Le serveur Minecraft Bedrock le plus rapide écrit en Rust.\n\n§eAppuie sur un bouton pour continuer.",
+      "state": {},
+      "buttons": [
+        {
+          "id": "banner",
+          "text": "§m§a Banner",
+          "image": {
+            "type": "path",
+            "data": "textures/ui/mcrs/panels/loading_grid"
+          },
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "continue",
+          "text": "§eContinuer",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "quit",
+          "text": "§cQuitter",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "showcase",
+      "name": "UI Showcase",
+      "layout": "grid",
+      "flag": "§m§a",
+      "title": "§l§6UI§r §eShowcase",
+      "content": "§7Sélectionne le layout à afficher :",
+      "state": {},
+      "buttons": [
+        {
+          "id": "open_grid",
+          "text": "§e▶ Grid §7(button_grid)",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "grid"
+            }
+          ]
+        },
+        {
+          "id": "open_left_button",
+          "text": "§e▶ Left buttons §7(left_button)",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "left_button"
+            }
+          ]
+        },
+        {
+          "id": "open_bottom_button",
+          "text": "§e▶ Bottom buttons §7(bottom_button)",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "bottom_button"
+            }
+          ]
+        },
+        {
+          "id": "open_image_grid",
+          "text": "§e▶ Image grid §7(image_grid)",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "image_grid"
+            }
+          ]
+        },
+        {
+          "id": "open_square_image",
+          "text": "§e▶ Square image §7(square_image)",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "square_image"
+            }
+          ]
+        },
+        {
+          "id": "open_motd",
+          "text": "§e▶ MOTD §7(motd)",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "motd"
+            }
+          ]
+        },
+        {
+          "id": "open_store",
+          "text": "§e▶ Store §7(store)",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "store"
+            }
+          ]
+        },
+        {
+          "id": "open_wrapped",
+          "text": "§e▶ Wrapped §7(wrapped)",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "wrapped"
+            }
+          ]
+        },
+        {
+          "id": "back",
+          "text": "§c↩ Retour",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "hub"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "square_image",
+      "name": "Square image",
+      "layout": "square_image",
+      "flag": "§m§e",
+      "title": "§6Square image",
+      "content": "§7Affichage central d'une image carrée avec description en bas.",
+      "state": {},
+      "buttons": [
+        {
+          "id": "image",
+          "text": "§m§a image",
+          "image": {
+            "type": "path",
+            "data": "textures/ui/mcrs/panels/loading_grid"
+          },
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "name": "Store",
+      "layout": "store",
+      "flag": "§m§0",
+      "title": "§6Store",
+      "content": "§m§aPopulaire",
+      "state": {},
+      "buttons": [
+        {
+          "id": "tab_popular",
+          "text": "§m§a Populaire",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "tab_new",
+          "text": "§m§a Nouveautés",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "tab_sales",
+          "text": "§m§a Promotions",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "sword",
+          "text": "Épée légendaire\t§a1500 coins",
+          "image": {
+            "type": "path",
+            "data": "textures/ui/mcrs/panels/loading_grid"
+          },
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "pickaxe",
+          "text": "Pioche en diamant\t§a800 coins",
+          "image": {
+            "type": "path",
+            "data": "textures/ui/mcrs/panels/loading_grid"
+          },
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "skin",
+          "text": "Skin pirate\t§a2000 coins",
+          "image": {
+            "type": "path",
+            "data": "textures/ui/mcrs/panels/loading_grid"
+          },
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "cape",
+          "text": "Cape dragon\t§a3500 coins",
+          "image": {
+            "type": "path",
+            "data": "textures/ui/mcrs/panels/loading_grid"
+          },
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wrapped",
+      "name": "Wrapped",
+      "layout": "wrapped",
+      "flag": "§m§1",
+      "title": "§6Wrapped",
+      "content": "https://mcrs.io/recap/2026",
+      "state": {},
+      "buttons": [
+        {
+          "id": "image_1",
+          "text": "§m§a Image 1",
+          "image": {
+            "type": "path",
+            "data": "textures/ui/mcrs/panels/loading_grid"
+          },
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "image_2",
+          "text": "§m§a Image 2",
+          "image": {
+            "type": "path",
+            "data": "textures/ui/mcrs/panels/loading_grid"
+          },
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "image_3",
+          "text": "§m§a Image 3",
+          "image": {
+            "type": "path",
+            "data": "textures/ui/mcrs/panels/loading_grid"
+          },
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "continue",
+          "text": "§eContinuer",
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "close",
+          "text": "§cFermer",
           "onClick": [
             {
               "type": "open",

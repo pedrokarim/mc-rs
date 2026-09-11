@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """Espace de travail Menu Forge des écrans de /menu (mc-rs).
 
-Génère les textures (Pillow, dans l'esprit du pack mcrs_ui : bleu nuit,
-liserés dorés ; aucun asset tiers) et, sur demande, les menus qui recréent les
-écrans de /menu (hub et panneaux de démonstration), plus le menu « demo »
-réservé à /mf open demo.
+Génère les textures (Pillow, dans l'esprit du pack mcrs_ui : bleu nuit,
+liserés dorés ; aucun asset tiers) et, sur demande, les menus :
+
+- les écrans de /menu (hub, showcase et les 8 panneaux) portés tels quels de
+  connection/forms.rs comme formulaires Bedrock (mêmes dispositions, textes,
+  boutons et actions), plus quelques icônes vanilla d'exemple sur le hub ;
+- leurs versions dessinées en grille de coffre (grid_hub, grid_showcase…),
+  ouvrables par /mf open ;
+- le menu « demo » réservé à /mf open demo.
 
 Usage, depuis ce dossier :
 
@@ -339,11 +344,12 @@ def command(line):
     return [{"type": "command", "command": line, "as": "player"}, {"type": "close"}]
 
 
-SHOWCASE = open_menu("showcase")
+# Versions en grille de coffre : elles s'ouvrent entre elles (préfixe grid_).
+SHOWCASE = open_menu("grid_showcase")
 
 
-def hub():
-    menu = Menu("hub", "Hub mc-rs", 5, "mc-rs HUB")
+def grid_hub():
+    menu = Menu("grid_hub", "Hub mc-rs (grille)", 5, "mc-rs HUB")
     menu.text("subtitle", 8, cell_y(0) + 5, f"Choisis une action{NBSP}:", "muted")
     buttons = [
         ("spawn", "Spawn", "green", command("tp {mcrs.spawn}")),
@@ -355,12 +361,12 @@ def hub():
     ]
     for index, (slot_id, label, accent, actions) in enumerate(buttons):
         menu.button(slot_id, 0 if index % 2 == 0 else 5, 1 + index // 2, 4, label, accent, actions)
-    menu.button("showcase", 0, 4, 9, "UI Showcase", "gold", open_menu("showcase"))
+    menu.button("showcase", 0, 4, 9, "UI Showcase", "gold", open_menu("grid_showcase"))
     return menu
 
 
-def showcase():
-    menu = Menu("showcase", "UI Showcase", 6, "UI Showcase")
+def grid_showcase():
+    menu = Menu("grid_showcase", "UI Showcase (grille)", 6, "UI Showcase")
     menu.text("subtitle", 8, cell_y(0) + 5, f"Sélectionne le layout{NBSP}:", "muted")
     demos = [
         ("grid", "Grid"),
@@ -373,13 +379,13 @@ def showcase():
         ("wrapped", "Wrapped"),
     ]
     for index, (menu_id, label) in enumerate(demos):
-        menu.button(f"open_{menu_id}", 0 if index % 2 == 0 else 5, 1 + index // 2, 4, label, "yellow", open_menu(menu_id))
-    menu.button("back", 0, 5, 4, "Retour", "red", open_menu("hub"))
+        menu.button(f"open_{menu_id}", 0 if index % 2 == 0 else 5, 1 + index // 2, 4, label, "yellow", open_menu(f"grid_{menu_id}"))
+    menu.button("back", 0, 5, 4, "Retour", "red", open_menu("grid_hub"))
     return menu
 
 
-def grid():
-    menu = Menu("grid", "Grid layout", 5, "Grid layout")
+def grid_grid():
+    menu = Menu("grid_grid", "Grid layout (grille)", 5, "Grid layout")
     menu.text("subtitle", 8, cell_y(0) + 5, "Grille de boutons", "muted")
     for index, letter in enumerate("ABCDEF"):
         menu.button(f"action_{letter.lower()}", 0 if index % 2 == 0 else 5, 1 + index // 2, 4, f"Action {letter}", "yellow", SHOWCASE)
@@ -387,8 +393,8 @@ def grid():
     return menu
 
 
-def left_button():
-    menu = Menu("left_button", "Left buttons", 5, "Left buttons")
+def grid_left_button():
+    menu = Menu("grid_left_button", "Left buttons (grille)", 5, "Left buttons")
     for row, label in enumerate(["Partie classée", "Partie rapide", "Tutoriel", "Paramètres"]):
         menu.button(f"choice_{row}", 0, row, 5, label, "yellow", SHOWCASE)
     menu.button("back", 0, 4, 5, "Retour", "red", SHOWCASE)
@@ -398,8 +404,8 @@ def left_button():
     return menu
 
 
-def bottom_button():
-    menu = Menu("bottom_button", "Bottom buttons", 6, "Bottom buttons")
+def grid_bottom_button():
+    menu = Menu("grid_bottom_button", "Bottom buttons (grille)", 6, "Bottom buttons")
     menu.layer("banner", "banner_bedwars", cell_x(0), cell_y(0))
     menu.text("banner_label", 88, cell_y(0) + 6, "Mode Bedwars", "light", "center")
     for index, label in enumerate(["Solo", "Duo", "Squad"]):
@@ -408,8 +414,8 @@ def bottom_button():
     return menu
 
 
-def image_grid():
-    menu = Menu("image_grid", "Image grid", 6, "Image grid")
+def grid_image_grid():
+    menu = Menu("grid_image_grid", "Image grid (grille)", 6, "Image grid")
     maps = [
         ("forest", "Forêt", "green", 0, 0),
         ("desert", "Désert", "yellow", 5, 0),
@@ -425,16 +431,16 @@ def image_grid():
     return menu
 
 
-def square_image():
-    menu = Menu("square_image", "Square image", 6, "Square image")
+def grid_square_image():
+    menu = Menu("grid_square_image", "Square image (grille)", 6, "Square image")
     menu.layer("image", "square_image", cell_x(2), cell_y(0))
     menu.slot("image", 2, 0, 5, 5, "Image", SHOWCASE)
     menu.text("caption", 88, cell_y(5) + 5, "Image carrée, texte en bas", "muted", "center")
     return menu
 
 
-def motd():
-    menu = Menu("motd", "MOTD", 6, "MOTD")
+def grid_motd():
+    menu = Menu("grid_motd", "MOTD (grille)", 6, "MOTD")
     menu.layer("banner", "banner_motd", cell_x(0), cell_y(0))
     menu.text("welcome", 88, cell_y(0) + 14, "Bienvenue sur mc-rs", "gold", "center")
     for index, line in enumerate(["Le serveur Bedrock le plus", "rapide, écrit en Rust.", "Appuie sur un bouton."]):
@@ -444,8 +450,8 @@ def motd():
     return menu
 
 
-def store():
-    menu = Menu("store", "Store", 6, "Store")
+def grid_store():
+    menu = Menu("grid_store", "Store (grille)", 6, "Store")
     for index, label in enumerate(["Populaire", "Nouveautés", "Promotions"]):
         menu.layer(f"tab_{index}", "tab_on" if index == 0 else "tab_off", cell_x(3 * index), cell_y(0))
         menu.text(f"tab_{index}_label", cell_x(3 * index) + 27, cell_y(0) + 5, label, "gold" if index == 0 else "muted", "center")
@@ -465,8 +471,8 @@ def store():
     return menu
 
 
-def wrapped():
-    menu = Menu("wrapped", "Wrapped", 6, "Wrapped")
+def grid_wrapped():
+    menu = Menu("grid_wrapped", "Wrapped (grille)", 6, "Wrapped")
     for index in range(3):
         menu.layer(f"image_{index + 1}", f"wrapped_{index + 1}", cell_x(3 * index), cell_y(0))
     menu.text("recap", 88, cell_y(3) + 4, "Ton récap 2026", "gold", "center")
@@ -511,8 +517,178 @@ def demo():
     return menu
 
 
+# ── Formulaires Bedrock : les écrans de /menu de connection/forms.rs ─────────
+#
+# Portés à l'identique : disposition (drapeau §m§… du titre), titre, contenu,
+# texte et image de chaque bouton, et comportement du clic (commande puis
+# fermeture, ouverture d'un écran, ou fermeture seule). Les textes sont ceux de
+# forms.rs, octet pour octet ; la seule nouveauté est une icône vanilla sur
+# quatre boutons du hub, pour montrer la possibilité.
+
+LOADING_GRID = {"path": "textures/ui/mcrs/panels/loading_grid"}
+
+
+def close_after(line):
+    """Commande du joueur, puis fermeture (l'ancien formulaire se fermait au clic)."""
+    return [{"type": "command", "command": line, "as": "player"}, {"type": "close"}]
+
+
+CLOSE = [{"type": "close"}]
+TO_SHOWCASE = [{"type": "open", "menu": "showcase"}]
+
+
+def form_button(button_id, text, on_click, role=None, subtitle=None, icon=None):
+    button = {"id": button_id, "text": text}
+    if subtitle is not None:
+        button["subtitle"] = subtitle
+    if role is not None:
+        button["role"] = role
+    if icon is not None:
+        button["icon"] = icon
+    if on_click:
+        button["onClick"] = on_click
+    return button
+
+
+class Form:
+    def __init__(self, menu_id, name, layout, title, content, buttons):
+        self.data = {
+            "formatVersion": 1,
+            "id": menu_id,
+            "name": name,
+            "form": {"layout": layout, "title": title, "content": content, "buttons": buttons},
+        }
+
+    def save(self):
+        os.makedirs(MENUS, exist_ok=True)
+        path = os.path.join(MENUS, f"{self.data['id']}.menu.json")
+        with open(path, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(self.data, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+
+
+def hub_form():
+    return Form("hub", "Hub mc-rs", "grid", "§l§6mc-rs§r §eHUB", "§7Choisis une action :", [
+        form_button("spawn", "§a▶ Téléporter au spawn", close_after("tp {mcrs.spawn}"), icon={"path": "textures/items/compass_item"}),
+        form_button("creative", "§b▶ Mode Créatif", close_after("gamemode creative"), icon={"path": "textures/blocks/grass_side_carried"}),
+        form_button("survival", "§e▶ Mode Survie", close_after("gamemode survival")),
+        form_button("day", "§d▶ Régler sur Jour", close_after("time set day"), icon={"path": "textures/items/clock_item"}),
+        form_button("night", "§9▶ Régler sur Nuit", close_after("time set night")),
+        form_button("biome", "§7▶ Infos biome", close_after("biome")),
+        form_button("showcase", "§6▶ §lUI Showcase", [{"type": "open", "menu": "showcase"}], icon={"path": "textures/items/map_filled"}),
+    ])
+
+
+def showcase_form():
+    panels = [
+        ("grid", "§e▶ Grid §7(button_grid)"),
+        ("left_button", "§e▶ Left buttons §7(left_button)"),
+        ("bottom_button", "§e▶ Bottom buttons §7(bottom_button)"),
+        ("image_grid", "§e▶ Image grid §7(image_grid)"),
+        ("square_image", "§e▶ Square image §7(square_image)"),
+        ("motd", "§e▶ MOTD §7(motd)"),
+        ("store", "§e▶ Store §7(store)"),
+        ("wrapped", "§e▶ Wrapped §7(wrapped)"),
+    ]
+    buttons = [form_button(f"open_{panel}", text, [{"type": "open", "menu": panel}]) for panel, text in panels]
+    buttons.append(form_button("back", "§c↩ Retour", [{"type": "open", "menu": "hub"}]))
+    return Form("showcase", "UI Showcase", "grid", "§l§6UI§r §eShowcase", "§7Sélectionne le layout à afficher :", buttons)
+
+
+def grid_form():
+    buttons = [form_button(f"action_{letter.lower()}", f"§eAction {letter}", TO_SHOWCASE) for letter in "ABCDEF"]
+    buttons.append(form_button("back", "§c↩ Retour", TO_SHOWCASE))
+    return Form("grid", "Grid layout", "grid", "§6Grid layout", "§7Layout: button_grid_panel — grille verticale de boutons rectangulaires.", buttons)
+
+
+def left_button_form():
+    choices = [("ranked", "§ePartie classée"), ("quick", "§ePartie rapide"), ("tutorial", "§eTutoriel"), ("settings", "§eParamètres")]
+    buttons = [form_button(button_id, text, TO_SHOWCASE) for button_id, text in choices]
+    buttons.append(form_button("back", "§c↩ Retour", TO_SHOWCASE))
+    return Form(
+        "left_button", "Left buttons", "left_button", "§6Left buttons",
+        "§7Liste de boutons à gauche, description à droite. Survole un bouton pour afficher son texte.", buttons,
+    )
+
+
+def bottom_button_form():
+    return Form(
+        "bottom_button", "Bottom buttons", "bottom_button", "§6Bottom buttons",
+        "§7Bannière en haut, liste de boutons en bas. Mise en scène d'un mode de jeu.",
+        [
+            # Bannière : l'ancien formulaire ne faisait rien au clic (formulaire fermé).
+            form_button("banner", "Mode Bedwars", CLOSE, role="banner"),
+            form_button("join_solo", "§eRejoindre solo", CLOSE),
+            form_button("join_duo", "§eRejoindre duo", CLOSE),
+            form_button("join_squad", "§eRejoindre squad", CLOSE),
+            form_button("back", "§c↩ Retour", TO_SHOWCASE),
+        ],
+    )
+
+
+def image_grid_form():
+    maps = [
+        ("forest", "Forêt", "§aDifficulté facile"),
+        ("desert", "Désert", "§eDifficulté moyenne"),
+        ("mountain", "Montagne", "§cDifficulté difficile"),
+        ("swamp", "Marais", "§eDifficulté moyenne"),
+    ]
+    buttons = [form_button(button_id, text, TO_SHOWCASE, subtitle=subtitle, icon=LOADING_GRID) for button_id, text, subtitle in maps]
+    buttons.append(form_button("back", "§c↩ Retour", TO_SHOWCASE))
+    return Form("image_grid", "Image grid", "image_grid", "§6Image grid", "§7Grille d'images avec titre superposé. Idéal pour un sélecteur de map.", buttons)
+
+
+def square_image_form():
+    return Form(
+        "square_image", "Square image", "square_image", "§6Square image", "§7Affichage central d'une image carrée avec description en bas.",
+        [form_button("image", "image", TO_SHOWCASE, role="banner", icon=LOADING_GRID)],
+    )
+
+
+def motd_form():
+    return Form(
+        "motd", "MOTD", "motd", "§6MOTD",
+        "§7Bienvenue sur mc-rs.\n§7Le serveur Minecraft Bedrock le plus rapide écrit en Rust.\n\n§eAppuie sur un bouton pour continuer.",
+        [
+            form_button("banner", "Banner", TO_SHOWCASE, role="banner", icon=LOADING_GRID),
+            form_button("continue", "§eContinuer", TO_SHOWCASE),
+            form_button("quit", "§cQuitter", TO_SHOWCASE),
+        ],
+    )
+
+
+def store_form():
+    tabs = [("tab_popular", "Populaire"), ("tab_new", "Nouveautés"), ("tab_sales", "Promotions")]
+    articles = [
+        ("sword", "Épée légendaire", "§a1500 coins"),
+        ("pickaxe", "Pioche en diamant", "§a800 coins"),
+        ("skin", "Skin pirate", "§a2000 coins"),
+        ("cape", "Cape dragon", "§a3500 coins"),
+    ]
+    buttons = [form_button(button_id, text, TO_SHOWCASE, role="banner") for button_id, text in tabs]
+    buttons += [form_button(button_id, text, TO_SHOWCASE, subtitle=price, icon=LOADING_GRID) for button_id, text, price in articles]
+    return Form("store", "Store", "store", "§6Store", "§m§aPopulaire", buttons)
+
+
+def wrapped_form():
+    buttons = [form_button(f"image_{index}", f"Image {index}", TO_SHOWCASE, role="banner", icon=LOADING_GRID) for index in (1, 2, 3)]
+    buttons += [form_button("continue", "§eContinuer", TO_SHOWCASE), form_button("close", "§cFermer", TO_SHOWCASE)]
+    return Form("wrapped", "Wrapped", "wrapped", "§6Wrapped", "https://mcrs.io/recap/2026", buttons)
+
+
+def forms():
+    return [
+        hub_form(), showcase_form(), grid_form(), left_button_form(), bottom_button_form(),
+        image_grid_form(), square_image_form(), motd_form(), store_form(), wrapped_form(),
+    ]
+
+
 def generate_menus():
-    menus = [hub(), showcase(), grid(), left_button(), bottom_button(), image_grid(), square_image(), motd(), store(), wrapped(), demo()]
+    menus = [
+        *forms(),
+        grid_hub(), grid_showcase(), grid_grid(), grid_left_button(), grid_bottom_button(),
+        grid_image_grid(), grid_square_image(), grid_motd(), grid_store(), grid_wrapped(), demo(),
+    ]
     for menu in menus:
         menu.save()
     print(f"{len(menus)} menus écrits dans {MENUS}")

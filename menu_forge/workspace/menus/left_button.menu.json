@@ -2,220 +2,61 @@
   "formatVersion": 1,
   "id": "left_button",
   "name": "Left buttons",
-  "container": {
-    "type": "chest",
-    "rows": 5
-  },
-  "state": {},
-  "layers": [
-    {
-      "id": "background",
-      "texture": "mcrs/panel_r5.png",
-      "x": 0,
-      "y": 0
-    },
-    {
-      "id": "choice_0_button",
-      "texture": "mcrs/button_w5_yellow.png",
-      "x": 7,
-      "y": 17
-    },
-    {
-      "id": "choice_1_button",
-      "texture": "mcrs/button_w5_yellow.png",
-      "x": 7,
-      "y": 35
-    },
-    {
-      "id": "choice_2_button",
-      "texture": "mcrs/button_w5_yellow.png",
-      "x": 7,
-      "y": 53
-    },
-    {
-      "id": "choice_3_button",
-      "texture": "mcrs/button_w5_yellow.png",
-      "x": 7,
-      "y": 71
-    },
-    {
-      "id": "back_button",
-      "texture": "mcrs/button_w5_red.png",
-      "x": 7,
-      "y": 89
-    },
-    {
-      "id": "description",
-      "texture": "mcrs/description.png",
-      "x": 98,
-      "y": 17
-    }
-  ],
-  "texts": [
-    {
-      "id": "title",
-      "x": 8,
-      "y": 6,
-      "color": "#ffd933",
-      "value": "Left buttons"
-    },
-    {
-      "id": "choice_0_label",
-      "x": 53,
-      "y": 22,
-      "value": "Partie classée",
-      "color": "#ffff55",
-      "align": "center"
-    },
-    {
-      "id": "choice_1_label",
-      "x": 53,
-      "y": 40,
-      "value": "Partie rapide",
-      "color": "#ffff55",
-      "align": "center"
-    },
-    {
-      "id": "choice_2_label",
-      "x": 53,
-      "y": 58,
-      "value": "Tutoriel",
-      "color": "#ffff55",
-      "align": "center"
-    },
-    {
-      "id": "choice_3_label",
-      "x": 53,
-      "y": 76,
-      "value": "Paramètres",
-      "color": "#ffff55",
-      "align": "center"
-    },
-    {
-      "id": "back_label",
-      "x": 53,
-      "y": 94,
-      "value": "Retour",
-      "color": "#ff5555",
-      "align": "center"
-    },
-    {
-      "id": "description_0",
-      "x": 102,
-      "y": 23,
-      "value": "Liste à gauche,",
-      "color": "#aaaaaa"
-    },
-    {
-      "id": "description_1",
-      "x": 102,
-      "y": 34,
-      "value": "description",
-      "color": "#aaaaaa"
-    },
-    {
-      "id": "description_2",
-      "x": 102,
-      "y": 45,
-      "value": "à droite.",
-      "color": "#aaaaaa"
-    }
-  ],
-  "slots": [
-    {
-      "id": "choice_0",
-      "kind": "button",
-      "area": {
-        "col": 0,
-        "row": 0,
-        "width": 5
+  "form": {
+    "layout": "left_button",
+    "title": "§6Left buttons",
+    "content": "§7Liste de boutons à gauche, description à droite. Survole un bouton pour afficher son texte.",
+    "buttons": [
+      {
+        "id": "ranked",
+        "text": "§ePartie classée",
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
       },
-      "item": {
-        "invisible": true,
-        "name": "<yellow>Partie classée"
+      {
+        "id": "quick",
+        "text": "§ePartie rapide",
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
       },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    },
-    {
-      "id": "choice_1",
-      "kind": "button",
-      "area": {
-        "col": 0,
-        "row": 1,
-        "width": 5
+      {
+        "id": "tutorial",
+        "text": "§eTutoriel",
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
       },
-      "item": {
-        "invisible": true,
-        "name": "<yellow>Partie rapide"
+      {
+        "id": "settings",
+        "text": "§eParamètres",
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
       },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    },
-    {
-      "id": "choice_2",
-      "kind": "button",
-      "area": {
-        "col": 0,
-        "row": 2,
-        "width": 5
-      },
-      "item": {
-        "invisible": true,
-        "name": "<yellow>Tutoriel"
-      },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    },
-    {
-      "id": "choice_3",
-      "kind": "button",
-      "area": {
-        "col": 0,
-        "row": 3,
-        "width": 5
-      },
-      "item": {
-        "invisible": true,
-        "name": "<yellow>Paramètres"
-      },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    },
-    {
-      "id": "back",
-      "kind": "button",
-      "area": {
-        "col": 0,
-        "row": 4,
-        "width": 5
-      },
-      "item": {
-        "invisible": true,
-        "name": "<red>Retour"
-      },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    }
-  ]
+      {
+        "id": "back",
+        "text": "§c↩ Retour",
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
+      }
+    ]
+  }
 }

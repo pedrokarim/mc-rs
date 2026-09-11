@@ -2,205 +2,77 @@
   "formatVersion": 1,
   "id": "image_grid",
   "name": "Image grid",
-  "container": {
-    "type": "chest",
-    "rows": 6
-  },
-  "state": {},
-  "layers": [
-    {
-      "id": "background",
-      "texture": "mcrs/panel_r6.png",
-      "x": 0,
-      "y": 0
-    },
-    {
-      "id": "map_forest",
-      "texture": "mcrs/map_forest.png",
-      "x": 7,
-      "y": 17
-    },
-    {
-      "id": "map_desert",
-      "texture": "mcrs/map_desert.png",
-      "x": 97,
-      "y": 17
-    },
-    {
-      "id": "map_mountain",
-      "texture": "mcrs/map_mountain.png",
-      "x": 7,
-      "y": 53
-    },
-    {
-      "id": "map_swamp",
-      "texture": "mcrs/map_swamp.png",
-      "x": 97,
-      "y": 53
-    },
-    {
-      "id": "back_button",
-      "texture": "mcrs/button_w4_red.png",
-      "x": 7,
-      "y": 107
-    }
-  ],
-  "texts": [
-    {
-      "id": "title",
-      "x": 8,
-      "y": 6,
-      "color": "#ffd933",
-      "value": "Image grid"
-    },
-    {
-      "id": "map_forest_label",
-      "x": 43,
-      "y": 43,
-      "value": "Forêt",
-      "color": "#55ff55",
-      "align": "center"
-    },
-    {
-      "id": "map_desert_label",
-      "x": 133,
-      "y": 43,
-      "value": "Désert",
-      "color": "#ffff55",
-      "align": "center"
-    },
-    {
-      "id": "map_mountain_label",
-      "x": 43,
-      "y": 79,
-      "value": "Montagne",
-      "color": "#ff5555",
-      "align": "center"
-    },
-    {
-      "id": "map_swamp_label",
-      "x": 133,
-      "y": 79,
-      "value": "Marais",
-      "color": "#ffff55",
-      "align": "center"
-    },
-    {
-      "id": "legend",
-      "x": 88,
-      "y": 94,
-      "value": "Facile, moyenne, difficile",
-      "color": "#aaaaaa",
-      "align": "center"
-    },
-    {
-      "id": "back_label",
-      "x": 44,
-      "y": 112,
-      "value": "Retour",
-      "color": "#ff5555",
-      "align": "center"
-    }
-  ],
-  "slots": [
-    {
-      "id": "map_forest",
-      "kind": "button",
-      "area": {
-        "col": 0,
-        "row": 0,
-        "width": 4,
-        "height": 2
+  "form": {
+    "layout": "image_grid",
+    "title": "§6Image grid",
+    "content": "§7Grille d'images avec titre superposé. Idéal pour un sélecteur de map.",
+    "buttons": [
+      {
+        "id": "forest",
+        "text": "Forêt",
+        "subtitle": "§aDifficulté facile",
+        "icon": {
+          "path": "textures/ui/mcrs/panels/loading_grid"
+        },
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
       },
-      "item": {
-        "invisible": true,
-        "name": "<green>Forêt"
+      {
+        "id": "desert",
+        "text": "Désert",
+        "subtitle": "§eDifficulté moyenne",
+        "icon": {
+          "path": "textures/ui/mcrs/panels/loading_grid"
+        },
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
       },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    },
-    {
-      "id": "map_desert",
-      "kind": "button",
-      "area": {
-        "col": 5,
-        "row": 0,
-        "width": 4,
-        "height": 2
+      {
+        "id": "mountain",
+        "text": "Montagne",
+        "subtitle": "§cDifficulté difficile",
+        "icon": {
+          "path": "textures/ui/mcrs/panels/loading_grid"
+        },
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
       },
-      "item": {
-        "invisible": true,
-        "name": "<yellow>Désert"
+      {
+        "id": "swamp",
+        "text": "Marais",
+        "subtitle": "§eDifficulté moyenne",
+        "icon": {
+          "path": "textures/ui/mcrs/panels/loading_grid"
+        },
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
       },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    },
-    {
-      "id": "map_mountain",
-      "kind": "button",
-      "area": {
-        "col": 0,
-        "row": 2,
-        "width": 4,
-        "height": 2
-      },
-      "item": {
-        "invisible": true,
-        "name": "<red>Montagne"
-      },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    },
-    {
-      "id": "map_swamp",
-      "kind": "button",
-      "area": {
-        "col": 5,
-        "row": 2,
-        "width": 4,
-        "height": 2
-      },
-      "item": {
-        "invisible": true,
-        "name": "<yellow>Marais"
-      },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    },
-    {
-      "id": "back",
-      "kind": "button",
-      "area": {
-        "col": 0,
-        "row": 5,
-        "width": 4
-      },
-      "item": {
-        "invisible": true,
-        "name": "<red>Retour"
-      },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    }
-  ]
+      {
+        "id": "back",
+        "text": "§c↩ Retour",
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
+      }
+    ]
+  }
 }

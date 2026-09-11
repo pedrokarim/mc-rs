@@ -1,10 +1,10 @@
 {
-  "namespace": "menu_forge_grid",
+  "namespace": "menu_forge_grid_wrapped",
   "main_panel": {
     "type": "panel",
     "size": [
       176,
-      204
+      222
     ],
     "anchor_from": "center",
     "anchor_to": "center",
@@ -12,10 +12,10 @@
       {
         "layer_0": {
           "type": "image",
-          "texture": "textures/menu_forge/grid/background",
+          "texture": "textures/menu_forge/grid_wrapped/background",
           "size": [
             176,
-            114
+            132
           ],
           "offset": [
             0,
@@ -29,14 +29,14 @@
       {
         "layer_1": {
           "type": "image",
-          "texture": "textures/menu_forge/grid/action_a_button",
+          "texture": "textures/menu_forge/grid_wrapped/image_1",
           "size": [
-            72,
-            18
+            54,
+            54
           ],
           "offset": [
             7,
-            35
+            17
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
@@ -46,14 +46,14 @@
       {
         "layer_2": {
           "type": "image",
-          "texture": "textures/menu_forge/grid/action_b_button",
+          "texture": "textures/menu_forge/grid_wrapped/image_2",
           "size": [
-            72,
-            18
+            54,
+            54
           ],
           "offset": [
-            97,
-            35
+            61,
+            17
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
@@ -63,14 +63,14 @@
       {
         "layer_3": {
           "type": "image",
-          "texture": "textures/menu_forge/grid/action_c_button",
+          "texture": "textures/menu_forge/grid_wrapped/image_3",
           "size": [
-            72,
-            18
+            54,
+            54
           ],
           "offset": [
-            7,
-            53
+            115,
+            17
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
@@ -80,14 +80,14 @@
       {
         "layer_4": {
           "type": "image",
-          "texture": "textures/menu_forge/grid/action_d_button",
+          "texture": "textures/menu_forge/grid_wrapped/continue_button",
           "size": [
             72,
             18
           ],
           "offset": [
-            97,
-            53
+            7,
+            107
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
@@ -97,14 +97,14 @@
       {
         "layer_5": {
           "type": "image",
-          "texture": "textures/menu_forge/grid/action_e_button",
+          "texture": "textures/menu_forge/grid_wrapped/close_button",
           "size": [
             72,
             18
           ],
           "offset": [
-            7,
-            71
+            97,
+            107
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
@@ -112,43 +112,9 @@
         }
       },
       {
-        "layer_6": {
-          "type": "image",
-          "texture": "textures/menu_forge/grid/action_f_button",
-          "size": [
-            72,
-            18
-          ],
-          "offset": [
-            97,
-            71
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_left",
-          "layer": 7
-        }
-      },
-      {
-        "layer_7": {
-          "type": "image",
-          "texture": "textures/menu_forge/grid/back_button",
-          "size": [
-            72,
-            18
-          ],
-          "offset": [
-            7,
-            89
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_left",
-          "layer": 8
-        }
-      },
-      {
         "text_0": {
           "type": "label",
-          "text": "Grid layout",
+          "text": "Wrapped",
           "localize": false,
           "color": [
             1,
@@ -166,13 +132,37 @@
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
-          "layer": 9
+          "layer": 7
         }
       },
       {
         "text_1": {
           "type": "label",
-          "text": "Grille de boutons",
+          "text": "Ton récap 2026",
+          "localize": false,
+          "color": [
+            1,
+            0.851,
+            0.2
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            88,
+            75
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 8
+        }
+      },
+      {
+        "text_2": {
+          "type": "label",
+          "text": "mcrs.io/recap/2026",
           "localize": false,
           "color": [
             0.667,
@@ -185,45 +175,21 @@
             "default"
           ],
           "offset": [
-            8,
-            22
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_left",
-          "layer": 10
-        }
-      },
-      {
-        "text_2": {
-          "type": "label",
-          "text": "Action A",
-          "localize": false,
-          "color": [
-            1,
-            1,
-            0.333
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            44,
-            40
+            88,
+            91
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_middle",
-          "layer": 11
+          "layer": 9
         }
       },
       {
         "text_3": {
           "type": "label",
-          "text": "Action B",
+          "text": "Continuer",
           "localize": false,
           "color": [
-            1,
+            0.333,
             1,
             0.333
           ],
@@ -233,114 +199,18 @@
             "default"
           ],
           "offset": [
-            134,
-            40
+            44,
+            112
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_middle",
-          "layer": 12
+          "layer": 10
         }
       },
       {
         "text_4": {
           "type": "label",
-          "text": "Action C",
-          "localize": false,
-          "color": [
-            1,
-            1,
-            0.333
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            44,
-            58
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_middle",
-          "layer": 13
-        }
-      },
-      {
-        "text_5": {
-          "type": "label",
-          "text": "Action D",
-          "localize": false,
-          "color": [
-            1,
-            1,
-            0.333
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            134,
-            58
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_middle",
-          "layer": 14
-        }
-      },
-      {
-        "text_6": {
-          "type": "label",
-          "text": "Action E",
-          "localize": false,
-          "color": [
-            1,
-            1,
-            0.333
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            44,
-            76
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_middle",
-          "layer": 15
-        }
-      },
-      {
-        "text_7": {
-          "type": "label",
-          "text": "Action F",
-          "localize": false,
-          "color": [
-            1,
-            1,
-            0.333
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            134,
-            76
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_middle",
-          "layer": 16
-        }
-      },
-      {
-        "text_8": {
-          "type": "label",
-          "text": "Retour",
+          "text": "Fermer",
           "localize": false,
           "color": [
             1,
@@ -353,12 +223,12 @@
             "default"
           ],
           "offset": [
-            44,
-            94
+            134,
+            112
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_middle",
-          "layer": 17
+          "layer": 11
         }
       },
       {
@@ -366,11 +236,11 @@
           "type": "grid",
           "grid_dimensions": [
             9,
-            5
+            6
           ],
           "size": [
             162,
-            90
+            108
           ],
           "offset": [
             7,
@@ -378,8 +248,8 @@
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
-          "layer": 18,
-          "grid_item_template": "menu_forge_grid.cell",
+          "layer": 12,
+          "grid_item_template": "menu_forge_grid_wrapped.cell",
           "collection_name": "form_buttons",
           "bindings": [
             {
@@ -434,7 +304,7 @@
         }
       },
       {
-        "button@menu_forge_grid.cell_button": {
+        "button@menu_forge_grid_wrapped.cell_button": {
           "layer": 2
         }
       }
@@ -451,17 +321,17 @@
     "$pressed_button_name": "button.form_button_click",
     "controls": [
       {
-        "default@menu_forge_grid.cell_face": {
+        "default@menu_forge_grid_wrapped.cell_face": {
           "$state": "default"
         }
       },
       {
-        "hover@menu_forge_grid.cell_face": {
+        "hover@menu_forge_grid_wrapped.cell_face": {
           "$state": "hover"
         }
       },
       {
-        "pressed@menu_forge_grid.cell_face": {
+        "pressed@menu_forge_grid_wrapped.cell_face": {
           "$state": "pressed"
         }
       }

@@ -1,4 +1,4 @@
-# 32 – Menus Menu Forge (rendu Bedrock « formulaire dessiné »)
+# 32 – Menus Menu Forge sur Bedrock (menus coffre et formulaires)
 
 Les menus dessinés avec le studio [Menu Forge](https://pedrokarim.github.io/menu-forge/)
 s’affichent sur Bedrock grâce à un pack JSON UI exporté par le studio et à un
@@ -11,13 +11,15 @@ Menu Forge ; ce document décrit l’intégration dans mc-rs.
 | Élément | Où |
 |---|---|
 | Moteur : descripteur, conditions, session (pile, état, pages), composition du formulaire | `crates/mc-rs-server/src/menu_forge/` |
+| Formulaires Bedrock (`forms` du descripteur) : disposition de `mcrs_ui` choisie par le drapeau (`FORM_LAYOUTS`), boutons filtrés par `visibleWhen`, index d’un clic = rang parmi les boutons envoyés | `menu_forge/catalog.rs`, `menu_forge/session.rs` |
+| Anciens formulaires de `/menu`, en fonctions pures (repli `/menu legacy`, référence des tests de parité) | `connection/forms.rs` (`legacy_form`, `legacy_click`) |
 | Lien avec la connexion : ouverture, clic, effets (formulaire suivant, commandes, sons) | `connection/menu_forge.rs`, `PendingFormKind::MenuForge` dans `connection/forms.rs` |
 | Chargement au démarrage (descripteur + pack exporté ajouté aux packs servis) | `menu_forge::load_at_startup`, `main.rs` |
 | Section `[menu_forge]` | `config.rs` |
 | `/mf open <menu>`, `/mf list`, `/mf reload` (opérateurs) | `commands/mf.rs` |
 | `/menu` et `/menu <panneau>` passent par Menu Forge, ancien formulaire en repli | `commands/mod.rs`, `commands/menu.rs` |
 | Accroche dans le pack : drapeau `§m§v`, variante `mcrs_menu_forge@menu_forge_router.main_panel`, terme du repli vanilla | `resource_packs/mcrs_ui/ui/server_form.json`, `_global_variables.json` (pack 1.4.0) |
-| Espace de travail des écrans de `/menu` et leur export | `menu_forge/workspace/`, `menu_forge/export/` (voir `menu_forge/README.md`) |
+| Espace de travail : les écrans de `/menu` en formulaires Bedrock, leurs versions en grille de coffre (`grid_*`), le menu `demo` ; et leur export | `menu_forge/workspace/`, `menu_forge/export/` (voir `menu_forge/README.md`) |
 
 ## 2. Configuration
 
@@ -59,21 +61,35 @@ Variables fournies par mc-rs : `{viewer.name}`, `{viewer.uuid}`,
 `{mcrs.spawn}` (point de réapparition, `x y z`, comme l’ancien bouton « Téléporter
 au spawn ») ; drapeaux : `viewer.bedrock` (toujours), `viewer.op`.
 
-## 4. `/menu` : Menu Forge d’abord, ancien chemin en repli
+## 4. `/menu` : les écrans d’origine, portés comme formulaires Bedrock
 
-| Commande | Menu Forge actif et menu exporté | Sinon |
+Les écrans de `/menu` (hub, showcase et les huit panneaux de `mcrs_ui`) sont
+des **formulaires Bedrock** du format Menu Forge (clé `form`, voir
+`docs/format.md` et `docs/bedrock.md` § 9 du dépôt Menu Forge) : le formulaire
+à boutons d’origine, envoyé tel quel dans la disposition `mcrs_ui` choisie par
+le drapeau du titre (`§m§a` grille, `§m§b` boutons à gauche…).
+
+| Commande | Menu Forge actif et écran exporté | Sinon |
 |---|---|---|
-| `/menu` | menu `hub` | ancien hub (`build_hub_form_batch`) |
-| `/menu <panneau>` | menu du même nom | ancien panneau (`build_demo_panel_batch`) |
+| `/menu` | formulaire `hub` | ancien hub (`build_hub_form_batch`) |
+| `/menu <panneau>` | formulaire du même nom | ancien panneau (`build_demo_panel_batch`) |
 | `/menu legacy` | ancien hub, toujours | idem |
+| `/mf open grid_hub` (…`grid_store`, `grid_wrapped`) | versions en grille de coffre de l’étape E2 | – |
 
-Les menus reprennent chaque bouton de l’ancien chemin (inventaire complet dans
-`docs/bedrock.md` § 8 du dépôt Menu Forge) : les commandes du hub (`tp`
-au point de réapparition, `gamemode creative`, `gamemode survival`,
-`time set day`, `time set night`, `biome`) suivies de la fermeture, le
-showcase vers chaque panneau et le retour au hub, chaque bouton de panneau vers
-le showcase, « Rejoindre » du panneau `bottom_button` qui ferme. Les tests
-`menu_forge::export_tests` vérifient cette parité sur l’export versionné.
+Chaque formulaire reprend **exactement** la disposition, le titre, le contenu,
+les textes, les images et l’ordre des boutons de `connection/forms.rs`, et le
+comportement de chaque bouton : les commandes du hub (`tp` au point de
+réapparition, `gamemode creative`, `gamemode survival`, `time set day`,
+`time set night`, `biome`) suivies de la fermeture, le showcase vers chaque
+panneau et le retour au hub, chaque bouton de panneau vers le showcase, la
+bannière et « Rejoindre » du panneau `bottom_button` qui ferment. Seule
+nouveauté : une icône vanilla sur quatre boutons du hub (Téléporter au spawn,
+Mode Créatif, Régler sur Jour, UI Showcase), pour montrer la possibilité.
+
+Les tests `menu_forge::export_tests` le vérifient sur l’export versionné :
+même JSON que l’ancien formulaire (aux icônes du hub près) et même effet pour
+chaque index de chaque écran, par comparaison avec `legacy_form` et
+`legacy_click`.
 
 **L’ancien chemin reste en place tant que le rendu n’a pas été validé en jeu**
 (`[menu_forge] menu_command = false` pour y revenir sans recompiler).
@@ -96,3 +112,6 @@ seule (actions, conditions) : `/mf reload`.
 - Chaque changement d’état referme puis rouvre le formulaire.
 - Rendu à vérifier en jeu : étiquettes des textes dynamiques qui débordent de
   leur case, bouton de fermeture vanilla du routeur, icônes d’items.
+- Formulaires Bedrock : ils s’appuient sur les dispositions du pack `mcrs_ui`
+  (servi avec le pack Menu Forge) ; les icônes `path` vanilla du hub ne sont
+  pas visibles dans le studio, seulement en jeu.

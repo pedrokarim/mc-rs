@@ -2,132 +2,45 @@
   "formatVersion": 1,
   "id": "motd",
   "name": "MOTD",
-  "container": {
-    "type": "chest",
-    "rows": 6
-  },
-  "state": {},
-  "layers": [
-    {
-      "id": "background",
-      "texture": "mcrs/panel_r6.png",
-      "x": 0,
-      "y": 0
-    },
-    {
-      "id": "banner",
-      "texture": "mcrs/banner_motd.png",
-      "x": 7,
-      "y": 17
-    },
-    {
-      "id": "continue_button",
-      "texture": "mcrs/button_w4_green.png",
-      "x": 7,
-      "y": 107
-    },
-    {
-      "id": "quit_button",
-      "texture": "mcrs/button_w4_red.png",
-      "x": 97,
-      "y": 107
-    }
-  ],
-  "texts": [
-    {
-      "id": "title",
-      "x": 8,
-      "y": 6,
-      "color": "#ffd933",
-      "value": "MOTD"
-    },
-    {
-      "id": "welcome",
-      "x": 88,
-      "y": 31,
-      "value": "Bienvenue sur mc-rs",
-      "color": "#ffd933",
-      "align": "center"
-    },
-    {
-      "id": "line_0",
-      "x": 88,
-      "y": 57,
-      "value": "Le serveur Bedrock le plus",
-      "color": "#f0f0f0",
-      "align": "center"
-    },
-    {
-      "id": "line_1",
-      "x": 88,
-      "y": 68,
-      "value": "rapide, écrit en Rust.",
-      "color": "#f0f0f0",
-      "align": "center"
-    },
-    {
-      "id": "line_2",
-      "x": 88,
-      "y": 79,
-      "value": "Appuie sur un bouton.",
-      "color": "#ffff55",
-      "align": "center"
-    },
-    {
-      "id": "continue_label",
-      "x": 44,
-      "y": 112,
-      "value": "Continuer",
-      "color": "#55ff55",
-      "align": "center"
-    },
-    {
-      "id": "quit_label",
-      "x": 134,
-      "y": 112,
-      "value": "Quitter",
-      "color": "#ff5555",
-      "align": "center"
-    }
-  ],
-  "slots": [
-    {
-      "id": "continue",
-      "kind": "button",
-      "area": {
-        "col": 0,
-        "row": 5,
-        "width": 4
+  "form": {
+    "layout": "motd",
+    "title": "§6MOTD",
+    "content": "§7Bienvenue sur mc-rs.\n§7Le serveur Minecraft Bedrock le plus rapide écrit en Rust.\n\n§eAppuie sur un bouton pour continuer.",
+    "buttons": [
+      {
+        "id": "banner",
+        "text": "Banner",
+        "role": "banner",
+        "icon": {
+          "path": "textures/ui/mcrs/panels/loading_grid"
+        },
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
       },
-      "item": {
-        "invisible": true,
-        "name": "<green>Continuer"
+      {
+        "id": "continue",
+        "text": "§eContinuer",
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
       },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    },
-    {
-      "id": "quit",
-      "kind": "button",
-      "area": {
-        "col": 5,
-        "row": 5,
-        "width": 4
-      },
-      "item": {
-        "invisible": true,
-        "name": "<red>Quitter"
-      },
-      "onClick": [
-        {
-          "type": "open",
-          "menu": "showcase"
-        }
-      ]
-    }
-  ]
+      {
+        "id": "quit",
+        "text": "§cQuitter",
+        "onClick": [
+          {
+            "type": "open",
+            "menu": "showcase"
+          }
+        ]
+      }
+    ]
+  }
 }

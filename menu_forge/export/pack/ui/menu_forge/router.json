@@ -25,34 +25,8 @@
         }
       },
       {
-        "menu_bottom_button@menu_forge_bottom_button.main_panel": {
-          "visible": false,
-          "enabled": false,
-          "layer": 1,
-          "bindings": [
-            {
-              "binding_type": "global",
-              "binding_condition": "none",
-              "binding_name": "#title_text",
-              "binding_name_override": "#title_text"
-            },
-            {
-              "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:bottom_button]') = #title_text))",
-              "target_property_name": "#visible"
-            },
-            {
-              "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:bottom_button]') = #title_text))",
-              "target_property_name": "#enabled"
-            }
-          ]
-        }
-      },
-      {
         "menu_demo@menu_forge_demo.main_panel": {
           "visible": false,
-          "enabled": false,
           "layer": 1,
           "bindings": [
             {
@@ -65,19 +39,13 @@
               "binding_type": "view",
               "source_property_name": "(not ((#title_text - '[mf:demo]') = #title_text))",
               "target_property_name": "#visible"
-            },
-            {
-              "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:demo]') = #title_text))",
-              "target_property_name": "#enabled"
             }
           ]
         }
       },
       {
-        "menu_grid@menu_forge_grid.main_panel": {
+        "menu_grid_bottom_button@menu_forge_grid_bottom_button.main_panel": {
           "visible": false,
-          "enabled": false,
           "layer": 1,
           "bindings": [
             {
@@ -88,21 +56,15 @@
             },
             {
               "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:grid]') = #title_text))",
+              "source_property_name": "(not ((#title_text - '[mf:grid_bottom_button]') = #title_text))",
               "target_property_name": "#visible"
-            },
-            {
-              "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:grid]') = #title_text))",
-              "target_property_name": "#enabled"
             }
           ]
         }
       },
       {
-        "menu_hub@menu_forge_hub.main_panel": {
+        "menu_grid_grid@menu_forge_grid_grid.main_panel": {
           "visible": false,
-          "enabled": false,
           "layer": 1,
           "bindings": [
             {
@@ -113,21 +75,15 @@
             },
             {
               "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:hub]') = #title_text))",
+              "source_property_name": "(not ((#title_text - '[mf:grid_grid]') = #title_text))",
               "target_property_name": "#visible"
-            },
-            {
-              "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:hub]') = #title_text))",
-              "target_property_name": "#enabled"
             }
           ]
         }
       },
       {
-        "menu_image_grid@menu_forge_image_grid.main_panel": {
+        "menu_grid_hub@menu_forge_grid_hub.main_panel": {
           "visible": false,
-          "enabled": false,
           "layer": 1,
           "bindings": [
             {
@@ -138,21 +94,15 @@
             },
             {
               "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:image_grid]') = #title_text))",
+              "source_property_name": "(not ((#title_text - '[mf:grid_hub]') = #title_text))",
               "target_property_name": "#visible"
-            },
-            {
-              "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:image_grid]') = #title_text))",
-              "target_property_name": "#enabled"
             }
           ]
         }
       },
       {
-        "menu_left_button@menu_forge_left_button.main_panel": {
+        "menu_grid_image_grid@menu_forge_grid_image_grid.main_panel": {
           "visible": false,
-          "enabled": false,
           "layer": 1,
           "bindings": [
             {
@@ -163,21 +113,15 @@
             },
             {
               "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:left_button]') = #title_text))",
+              "source_property_name": "(not ((#title_text - '[mf:grid_image_grid]') = #title_text))",
               "target_property_name": "#visible"
-            },
-            {
-              "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:left_button]') = #title_text))",
-              "target_property_name": "#enabled"
             }
           ]
         }
       },
       {
-        "menu_motd@menu_forge_motd.main_panel": {
+        "menu_grid_left_button@menu_forge_grid_left_button.main_panel": {
           "visible": false,
-          "enabled": false,
           "layer": 1,
           "bindings": [
             {
@@ -188,21 +132,15 @@
             },
             {
               "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:motd]') = #title_text))",
+              "source_property_name": "(not ((#title_text - '[mf:grid_left_button]') = #title_text))",
               "target_property_name": "#visible"
-            },
-            {
-              "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:motd]') = #title_text))",
-              "target_property_name": "#enabled"
             }
           ]
         }
       },
       {
-        "menu_showcase@menu_forge_showcase.main_panel": {
+        "menu_grid_motd@menu_forge_grid_motd.main_panel": {
           "visible": false,
-          "enabled": false,
           "layer": 1,
           "bindings": [
             {
@@ -213,21 +151,15 @@
             },
             {
               "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:showcase]') = #title_text))",
+              "source_property_name": "(not ((#title_text - '[mf:grid_motd]') = #title_text))",
               "target_property_name": "#visible"
-            },
-            {
-              "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:showcase]') = #title_text))",
-              "target_property_name": "#enabled"
             }
           ]
         }
       },
       {
-        "menu_square_image@menu_forge_square_image.main_panel": {
+        "menu_grid_showcase@menu_forge_grid_showcase.main_panel": {
           "visible": false,
-          "enabled": false,
           "layer": 1,
           "bindings": [
             {
@@ -238,21 +170,15 @@
             },
             {
               "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:square_image]') = #title_text))",
+              "source_property_name": "(not ((#title_text - '[mf:grid_showcase]') = #title_text))",
               "target_property_name": "#visible"
-            },
-            {
-              "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:square_image]') = #title_text))",
-              "target_property_name": "#enabled"
             }
           ]
         }
       },
       {
-        "menu_store@menu_forge_store.main_panel": {
+        "menu_grid_square_image@menu_forge_grid_square_image.main_panel": {
           "visible": false,
-          "enabled": false,
           "layer": 1,
           "bindings": [
             {
@@ -263,21 +189,15 @@
             },
             {
               "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:store]') = #title_text))",
+              "source_property_name": "(not ((#title_text - '[mf:grid_square_image]') = #title_text))",
               "target_property_name": "#visible"
-            },
-            {
-              "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:store]') = #title_text))",
-              "target_property_name": "#enabled"
             }
           ]
         }
       },
       {
-        "menu_wrapped@menu_forge_wrapped.main_panel": {
+        "menu_grid_store@menu_forge_grid_store.main_panel": {
           "visible": false,
-          "enabled": false,
           "layer": 1,
           "bindings": [
             {
@@ -288,13 +208,27 @@
             },
             {
               "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:wrapped]') = #title_text))",
+              "source_property_name": "(not ((#title_text - '[mf:grid_store]') = #title_text))",
               "target_property_name": "#visible"
+            }
+          ]
+        }
+      },
+      {
+        "menu_grid_wrapped@menu_forge_grid_wrapped.main_panel": {
+          "visible": false,
+          "layer": 1,
+          "bindings": [
+            {
+              "binding_type": "global",
+              "binding_condition": "none",
+              "binding_name": "#title_text",
+              "binding_name_override": "#title_text"
             },
             {
               "binding_type": "view",
-              "source_property_name": "(not ((#title_text - '[mf:wrapped]') = #title_text))",
-              "target_property_name": "#enabled"
+              "source_property_name": "(not ((#title_text - '[mf:grid_wrapped]') = #title_text))",
+              "target_property_name": "#visible"
             }
           ]
         }

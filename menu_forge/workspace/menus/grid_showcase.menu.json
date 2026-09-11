@@ -1,0 +1,333 @@
+{
+  "formatVersion": 1,
+  "id": "grid_showcase",
+  "name": "UI Showcase (grille)",
+  "container": {
+    "type": "chest",
+    "rows": 6
+  },
+  "state": {},
+  "layers": [
+    {
+      "id": "background",
+      "texture": "mcrs/panel_r6.png",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "open_grid_button",
+      "texture": "mcrs/button_w4_yellow.png",
+      "x": 7,
+      "y": 35
+    },
+    {
+      "id": "open_left_button_button",
+      "texture": "mcrs/button_w4_yellow.png",
+      "x": 97,
+      "y": 35
+    },
+    {
+      "id": "open_bottom_button_button",
+      "texture": "mcrs/button_w4_yellow.png",
+      "x": 7,
+      "y": 53
+    },
+    {
+      "id": "open_image_grid_button",
+      "texture": "mcrs/button_w4_yellow.png",
+      "x": 97,
+      "y": 53
+    },
+    {
+      "id": "open_square_image_button",
+      "texture": "mcrs/button_w4_yellow.png",
+      "x": 7,
+      "y": 71
+    },
+    {
+      "id": "open_motd_button",
+      "texture": "mcrs/button_w4_yellow.png",
+      "x": 97,
+      "y": 71
+    },
+    {
+      "id": "open_store_button",
+      "texture": "mcrs/button_w4_yellow.png",
+      "x": 7,
+      "y": 89
+    },
+    {
+      "id": "open_wrapped_button",
+      "texture": "mcrs/button_w4_yellow.png",
+      "x": 97,
+      "y": 89
+    },
+    {
+      "id": "back_button",
+      "texture": "mcrs/button_w4_red.png",
+      "x": 7,
+      "y": 107
+    }
+  ],
+  "texts": [
+    {
+      "id": "title",
+      "x": 8,
+      "y": 6,
+      "color": "#ffd933",
+      "value": "UI Showcase"
+    },
+    {
+      "id": "subtitle",
+      "x": 8,
+      "y": 22,
+      "value": "Sélectionne le layout :",
+      "color": "#aaaaaa"
+    },
+    {
+      "id": "open_grid_label",
+      "x": 44,
+      "y": 40,
+      "value": "Grid",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "open_left_button_label",
+      "x": 134,
+      "y": 40,
+      "value": "Left buttons",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "open_bottom_button_label",
+      "x": 44,
+      "y": 58,
+      "value": "Bottom",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "open_image_grid_label",
+      "x": 134,
+      "y": 58,
+      "value": "Image grid",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "open_square_image_label",
+      "x": 44,
+      "y": 76,
+      "value": "Square image",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "open_motd_label",
+      "x": 134,
+      "y": 76,
+      "value": "MOTD",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "open_store_label",
+      "x": 44,
+      "y": 94,
+      "value": "Store",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "open_wrapped_label",
+      "x": 134,
+      "y": 94,
+      "value": "Wrapped",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "back_label",
+      "x": 44,
+      "y": 112,
+      "value": "Retour",
+      "color": "#ff5555",
+      "align": "center"
+    }
+  ],
+  "slots": [
+    {
+      "id": "open_grid",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 1,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Grid"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "grid_grid"
+        }
+      ]
+    },
+    {
+      "id": "open_left_button",
+      "kind": "button",
+      "area": {
+        "col": 5,
+        "row": 1,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Left buttons"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "grid_left_button"
+        }
+      ]
+    },
+    {
+      "id": "open_bottom_button",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 2,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Bottom"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "grid_bottom_button"
+        }
+      ]
+    },
+    {
+      "id": "open_image_grid",
+      "kind": "button",
+      "area": {
+        "col": 5,
+        "row": 2,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Image grid"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "grid_image_grid"
+        }
+      ]
+    },
+    {
+      "id": "open_square_image",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 3,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Square image"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "grid_square_image"
+        }
+      ]
+    },
+    {
+      "id": "open_motd",
+      "kind": "button",
+      "area": {
+        "col": 5,
+        "row": 3,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>MOTD"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "grid_motd"
+        }
+      ]
+    },
+    {
+      "id": "open_store",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 4,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Store"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "grid_store"
+        }
+      ]
+    },
+    {
+      "id": "open_wrapped",
+      "kind": "button",
+      "area": {
+        "col": 5,
+        "row": 4,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Wrapped"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "grid_wrapped"
+        }
+      ]
+    },
+    {
+      "id": "back",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 5,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<red>Retour"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "grid_hub"
+        }
+      ]
+    }
+  ]
+}

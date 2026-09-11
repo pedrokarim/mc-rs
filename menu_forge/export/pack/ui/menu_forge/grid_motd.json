@@ -1,5 +1,5 @@
 {
-  "namespace": "menu_forge_square_image",
+  "namespace": "menu_forge_grid_motd",
   "main_panel": {
     "type": "panel",
     "size": [
@@ -12,7 +12,7 @@
       {
         "layer_0": {
           "type": "image",
-          "texture": "textures/menu_forge/square_image/background",
+          "texture": "textures/menu_forge/grid_motd/background",
           "size": [
             176,
             132
@@ -29,13 +29,13 @@
       {
         "layer_1": {
           "type": "image",
-          "texture": "textures/menu_forge/square_image/image",
+          "texture": "textures/menu_forge/grid_motd/banner",
           "size": [
-            90,
-            90
+            162,
+            36
           ],
           "offset": [
-            43,
+            7,
             17
           ],
           "anchor_from": "top_left",
@@ -44,9 +44,43 @@
         }
       },
       {
+        "layer_2": {
+          "type": "image",
+          "texture": "textures/menu_forge/grid_motd/continue_button",
+          "size": [
+            72,
+            18
+          ],
+          "offset": [
+            7,
+            107
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 3
+        }
+      },
+      {
+        "layer_3": {
+          "type": "image",
+          "texture": "textures/menu_forge/grid_motd/quit_button",
+          "size": [
+            72,
+            18
+          ],
+          "offset": [
+            97,
+            107
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 4
+        }
+      },
+      {
         "text_0": {
           "type": "label",
-          "text": "Square image",
+          "text": "MOTD",
           "localize": false,
           "color": [
             1,
@@ -64,18 +98,18 @@
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
-          "layer": 3
+          "layer": 5
         }
       },
       {
         "text_1": {
           "type": "label",
-          "text": "Image carrée, texte en bas",
+          "text": "Bienvenue sur mc-rs",
           "localize": false,
           "color": [
-            0.667,
-            0.667,
-            0.667
+            1,
+            0.851,
+            0.2
           ],
           "shadow": false,
           "size": [
@@ -84,11 +118,131 @@
           ],
           "offset": [
             88,
+            31
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 6
+        }
+      },
+      {
+        "text_2": {
+          "type": "label",
+          "text": "Le serveur Bedrock le plus",
+          "localize": false,
+          "color": [
+            0.941,
+            0.941,
+            0.941
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            88,
+            57
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 7
+        }
+      },
+      {
+        "text_3": {
+          "type": "label",
+          "text": "rapide, écrit en Rust.",
+          "localize": false,
+          "color": [
+            0.941,
+            0.941,
+            0.941
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            88,
+            68
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 8
+        }
+      },
+      {
+        "text_4": {
+          "type": "label",
+          "text": "Appuie sur un bouton.",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            88,
+            79
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 9
+        }
+      },
+      {
+        "text_5": {
+          "type": "label",
+          "text": "Continuer",
+          "localize": false,
+          "color": [
+            0.333,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            44,
             112
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_middle",
-          "layer": 4
+          "layer": 10
+        }
+      },
+      {
+        "text_6": {
+          "type": "label",
+          "text": "Quitter",
+          "localize": false,
+          "color": [
+            1,
+            0.333,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            134,
+            112
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 11
         }
       },
       {
@@ -108,8 +262,8 @@
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
-          "layer": 5,
-          "grid_item_template": "menu_forge_square_image.cell",
+          "layer": 12,
+          "grid_item_template": "menu_forge_grid_motd.cell",
           "collection_name": "form_buttons",
           "bindings": [
             {
@@ -164,7 +318,7 @@
         }
       },
       {
-        "button@menu_forge_square_image.cell_button": {
+        "button@menu_forge_grid_motd.cell_button": {
           "layer": 2
         }
       }
@@ -181,17 +335,17 @@
     "$pressed_button_name": "button.form_button_click",
     "controls": [
       {
-        "default@menu_forge_square_image.cell_face": {
+        "default@menu_forge_grid_motd.cell_face": {
           "$state": "default"
         }
       },
       {
-        "hover@menu_forge_square_image.cell_face": {
+        "hover@menu_forge_grid_motd.cell_face": {
           "$state": "hover"
         }
       },
       {
-        "pressed@menu_forge_square_image.cell_face": {
+        "pressed@menu_forge_grid_motd.cell_face": {
           "$state": "pressed"
         }
       }

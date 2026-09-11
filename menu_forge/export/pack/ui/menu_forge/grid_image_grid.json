@@ -1,5 +1,5 @@
 {
-  "namespace": "menu_forge_store",
+  "namespace": "menu_forge_grid_image_grid",
   "main_panel": {
     "type": "panel",
     "size": [
@@ -12,7 +12,7 @@
       {
         "layer_0": {
           "type": "image",
-          "texture": "textures/menu_forge/store/background",
+          "texture": "textures/menu_forge/grid_image_grid/background",
           "size": [
             176,
             132
@@ -29,10 +29,10 @@
       {
         "layer_1": {
           "type": "image",
-          "texture": "textures/menu_forge/store/tab_0",
+          "texture": "textures/menu_forge/grid_image_grid/map_forest",
           "size": [
-            54,
-            18
+            72,
+            36
           ],
           "offset": [
             7,
@@ -46,13 +46,13 @@
       {
         "layer_2": {
           "type": "image",
-          "texture": "textures/menu_forge/store/tab_1",
+          "texture": "textures/menu_forge/grid_image_grid/map_desert",
           "size": [
-            54,
-            18
+            72,
+            36
           ],
           "offset": [
-            61,
+            97,
             17
           ],
           "anchor_from": "top_left",
@@ -63,14 +63,14 @@
       {
         "layer_3": {
           "type": "image",
-          "texture": "textures/menu_forge/store/tab_2",
+          "texture": "textures/menu_forge/grid_image_grid/map_mountain",
           "size": [
-            54,
-            18
+            72,
+            36
           ],
           "offset": [
-            115,
-            17
+            7,
+            53
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
@@ -80,14 +80,14 @@
       {
         "layer_4": {
           "type": "image",
-          "texture": "textures/menu_forge/store/article_sword",
+          "texture": "textures/menu_forge/grid_image_grid/map_swamp",
           "size": [
-            162,
-            18
+            72,
+            36
           ],
           "offset": [
-            7,
-            35
+            97,
+            53
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
@@ -97,14 +97,14 @@
       {
         "layer_5": {
           "type": "image",
-          "texture": "textures/menu_forge/store/article_pickaxe",
+          "texture": "textures/menu_forge/grid_image_grid/back_button",
           "size": [
-            162,
+            72,
             18
           ],
           "offset": [
             7,
-            53
+            107
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
@@ -112,43 +112,9 @@
         }
       },
       {
-        "layer_6": {
-          "type": "image",
-          "texture": "textures/menu_forge/store/article_skin",
-          "size": [
-            162,
-            18
-          ],
-          "offset": [
-            7,
-            71
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_left",
-          "layer": 7
-        }
-      },
-      {
-        "layer_7": {
-          "type": "image",
-          "texture": "textures/menu_forge/store/article_cape",
-          "size": [
-            162,
-            18
-          ],
-          "offset": [
-            7,
-            89
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_left",
-          "layer": 8
-        }
-      },
-      {
         "text_0": {
           "type": "label",
-          "text": "Store",
+          "text": "Image grid",
           "localize": false,
           "color": [
             1,
@@ -166,18 +132,18 @@
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
-          "layer": 9
+          "layer": 7
         }
       },
       {
         "text_1": {
           "type": "label",
-          "text": "Populaire",
+          "text": "Forêt",
           "localize": false,
           "color": [
+            0.333,
             1,
-            0.851,
-            0.2
+            0.333
           ],
           "shadow": false,
           "size": [
@@ -185,8 +151,56 @@
             "default"
           ],
           "offset": [
-            34,
-            22
+            43,
+            43
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 8
+        }
+      },
+      {
+        "text_2": {
+          "type": "label",
+          "text": "Désert",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            133,
+            43
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 9
+        }
+      },
+      {
+        "text_3": {
+          "type": "label",
+          "text": "Montagne",
+          "localize": false,
+          "color": [
+            1,
+            0.333,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            43,
+            79
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_middle",
@@ -194,9 +208,33 @@
         }
       },
       {
-        "text_2": {
+        "text_4": {
           "type": "label",
-          "text": "Nouveautés",
+          "text": "Marais",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            133,
+            79
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 11
+        }
+      },
+      {
+        "text_5": {
+          "type": "label",
+          "text": "Facile, moyenne, difficile",
           "localize": false,
           "color": [
             0.667,
@@ -210,31 +248,7 @@
           ],
           "offset": [
             88,
-            22
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_middle",
-          "layer": 11
-        }
-      },
-      {
-        "text_3": {
-          "type": "label",
-          "text": "Promotions",
-          "localize": false,
-          "color": [
-            0.667,
-            0.667,
-            0.667
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            142,
-            22
+            94
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_middle",
@@ -242,85 +256,13 @@
         }
       },
       {
-        "text_4": {
-          "type": "label",
-          "text": "Épée légendaire",
-          "localize": false,
-          "color": [
-            0.941,
-            0.941,
-            0.941
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            31,
-            40
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_left",
-          "layer": 13
-        }
-      },
-      {
-        "text_5": {
-          "type": "label",
-          "text": "1500 coins",
-          "localize": false,
-          "color": [
-            0.333,
-            1,
-            0.333
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            165,
-            40
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_right",
-          "layer": 14
-        }
-      },
-      {
         "text_6": {
           "type": "label",
-          "text": "Pioche en diamant",
+          "text": "Retour",
           "localize": false,
           "color": [
-            0.941,
-            0.941,
-            0.941
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            31,
-            58
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_left",
-          "layer": 15
-        }
-      },
-      {
-        "text_7": {
-          "type": "label",
-          "text": "800 coins",
-          "localize": false,
-          "color": [
-            0.333,
             1,
+            0.333,
             0.333
           ],
           "shadow": false,
@@ -329,108 +271,12 @@
             "default"
           ],
           "offset": [
-            165,
-            58
+            44,
+            112
           ],
           "anchor_from": "top_left",
-          "anchor_to": "top_right",
-          "layer": 16
-        }
-      },
-      {
-        "text_8": {
-          "type": "label",
-          "text": "Skin pirate",
-          "localize": false,
-          "color": [
-            0.941,
-            0.941,
-            0.941
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            31,
-            76
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_left",
-          "layer": 17
-        }
-      },
-      {
-        "text_9": {
-          "type": "label",
-          "text": "2000 coins",
-          "localize": false,
-          "color": [
-            0.333,
-            1,
-            0.333
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            165,
-            76
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_right",
-          "layer": 18
-        }
-      },
-      {
-        "text_10": {
-          "type": "label",
-          "text": "Cape dragon",
-          "localize": false,
-          "color": [
-            0.941,
-            0.941,
-            0.941
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            31,
-            94
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_left",
-          "layer": 19
-        }
-      },
-      {
-        "text_11": {
-          "type": "label",
-          "text": "3500 coins",
-          "localize": false,
-          "color": [
-            0.333,
-            1,
-            0.333
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            165,
-            94
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_right",
-          "layer": 20
+          "anchor_to": "top_middle",
+          "layer": 13
         }
       },
       {
@@ -450,8 +296,8 @@
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
-          "layer": 21,
-          "grid_item_template": "menu_forge_store.cell",
+          "layer": 14,
+          "grid_item_template": "menu_forge_grid_image_grid.cell",
           "collection_name": "form_buttons",
           "bindings": [
             {
@@ -506,7 +352,7 @@
         }
       },
       {
-        "button@menu_forge_store.cell_button": {
+        "button@menu_forge_grid_image_grid.cell_button": {
           "layer": 2
         }
       }
@@ -523,17 +369,17 @@
     "$pressed_button_name": "button.form_button_click",
     "controls": [
       {
-        "default@menu_forge_store.cell_face": {
+        "default@menu_forge_grid_image_grid.cell_face": {
           "$state": "default"
         }
       },
       {
-        "hover@menu_forge_store.cell_face": {
+        "hover@menu_forge_grid_image_grid.cell_face": {
           "$state": "hover"
         }
       },
       {
-        "pressed@menu_forge_store.cell_face": {
+        "pressed@menu_forge_grid_image_grid.cell_face": {
           "$state": "pressed"
         }
       }

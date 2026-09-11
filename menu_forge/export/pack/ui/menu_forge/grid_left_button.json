@@ -1,10 +1,10 @@
 {
-  "namespace": "menu_forge_bottom_button",
+  "namespace": "menu_forge_grid_left_button",
   "main_panel": {
     "type": "panel",
     "size": [
       176,
-      222
+      204
     ],
     "anchor_from": "center",
     "anchor_to": "center",
@@ -12,10 +12,10 @@
       {
         "layer_0": {
           "type": "image",
-          "texture": "textures/menu_forge/bottom_button/background",
+          "texture": "textures/menu_forge/grid_left_button/background",
           "size": [
             176,
-            132
+            114
           ],
           "offset": [
             0,
@@ -29,10 +29,10 @@
       {
         "layer_1": {
           "type": "image",
-          "texture": "textures/menu_forge/bottom_button/banner",
+          "texture": "textures/menu_forge/grid_left_button/choice_0_button",
           "size": [
-            162,
-            54
+            90,
+            18
           ],
           "offset": [
             7,
@@ -46,14 +46,14 @@
       {
         "layer_2": {
           "type": "image",
-          "texture": "textures/menu_forge/bottom_button/join_solo_button",
+          "texture": "textures/menu_forge/grid_left_button/choice_1_button",
           "size": [
-            54,
+            90,
             18
           ],
           "offset": [
             7,
-            71
+            35
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
@@ -63,14 +63,14 @@
       {
         "layer_3": {
           "type": "image",
-          "texture": "textures/menu_forge/bottom_button/join_duo_button",
+          "texture": "textures/menu_forge/grid_left_button/choice_2_button",
           "size": [
-            54,
+            90,
             18
           ],
           "offset": [
-            61,
-            71
+            7,
+            53
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
@@ -80,13 +80,13 @@
       {
         "layer_4": {
           "type": "image",
-          "texture": "textures/menu_forge/bottom_button/join_squad_button",
+          "texture": "textures/menu_forge/grid_left_button/choice_3_button",
           "size": [
-            54,
+            90,
             18
           ],
           "offset": [
-            115,
+            7,
             71
           ],
           "anchor_from": "top_left",
@@ -97,14 +97,14 @@
       {
         "layer_5": {
           "type": "image",
-          "texture": "textures/menu_forge/bottom_button/back_button",
+          "texture": "textures/menu_forge/grid_left_button/back_button",
           "size": [
-            72,
+            90,
             18
           ],
           "offset": [
             7,
-            107
+            89
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
@@ -112,9 +112,26 @@
         }
       },
       {
+        "layer_6": {
+          "type": "image",
+          "texture": "textures/menu_forge/grid_left_button/description",
+          "size": [
+            72,
+            90
+          ],
+          "offset": [
+            98,
+            17
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 7
+        }
+      },
+      {
         "text_0": {
           "type": "label",
-          "text": "Bottom buttons",
+          "text": "Left buttons",
           "localize": false,
           "color": [
             1,
@@ -132,37 +149,13 @@
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
-          "layer": 7
+          "layer": 8
         }
       },
       {
         "text_1": {
           "type": "label",
-          "text": "Mode Bedwars",
-          "localize": false,
-          "color": [
-            0.941,
-            0.941,
-            0.941
-          ],
-          "shadow": false,
-          "size": [
-            "default",
-            "default"
-          ],
-          "offset": [
-            88,
-            23
-          ],
-          "anchor_from": "top_left",
-          "anchor_to": "top_middle",
-          "layer": 8
-        }
-      },
-      {
-        "text_2": {
-          "type": "label",
-          "text": "Solo",
+          "text": "Partie classée",
           "localize": false,
           "color": [
             1,
@@ -175,8 +168,8 @@
             "default"
           ],
           "offset": [
-            35,
-            76
+            53,
+            22
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_middle",
@@ -184,9 +177,9 @@
         }
       },
       {
-        "text_3": {
+        "text_2": {
           "type": "label",
-          "text": "Duo",
+          "text": "Partie rapide",
           "localize": false,
           "color": [
             1,
@@ -199,8 +192,8 @@
             "default"
           ],
           "offset": [
-            89,
-            76
+            53,
+            40
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_middle",
@@ -208,9 +201,9 @@
         }
       },
       {
-        "text_4": {
+        "text_3": {
           "type": "label",
-          "text": "Squad",
+          "text": "Tutoriel",
           "localize": false,
           "color": [
             1,
@@ -223,12 +216,36 @@
             "default"
           ],
           "offset": [
-            143,
-            76
+            53,
+            58
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_middle",
           "layer": 11
+        }
+      },
+      {
+        "text_4": {
+          "type": "label",
+          "text": "Paramètres",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            53,
+            76
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 12
         }
       },
       {
@@ -247,12 +264,84 @@
             "default"
           ],
           "offset": [
-            44,
-            112
+            53,
+            94
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_middle",
-          "layer": 12
+          "layer": 13
+        }
+      },
+      {
+        "text_6": {
+          "type": "label",
+          "text": "Liste à gauche,",
+          "localize": false,
+          "color": [
+            0.667,
+            0.667,
+            0.667
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            102,
+            23
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 14
+        }
+      },
+      {
+        "text_7": {
+          "type": "label",
+          "text": "description",
+          "localize": false,
+          "color": [
+            0.667,
+            0.667,
+            0.667
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            102,
+            34
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 15
+        }
+      },
+      {
+        "text_8": {
+          "type": "label",
+          "text": "à droite.",
+          "localize": false,
+          "color": [
+            0.667,
+            0.667,
+            0.667
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            102,
+            45
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 16
         }
       },
       {
@@ -260,11 +349,11 @@
           "type": "grid",
           "grid_dimensions": [
             9,
-            6
+            5
           ],
           "size": [
             162,
-            108
+            90
           ],
           "offset": [
             7,
@@ -272,8 +361,8 @@
           ],
           "anchor_from": "top_left",
           "anchor_to": "top_left",
-          "layer": 13,
-          "grid_item_template": "menu_forge_bottom_button.cell",
+          "layer": 17,
+          "grid_item_template": "menu_forge_grid_left_button.cell",
           "collection_name": "form_buttons",
           "bindings": [
             {
@@ -328,7 +417,7 @@
         }
       },
       {
-        "button@menu_forge_bottom_button.cell_button": {
+        "button@menu_forge_grid_left_button.cell_button": {
           "layer": 2
         }
       }
@@ -345,17 +434,17 @@
     "$pressed_button_name": "button.form_button_click",
     "controls": [
       {
-        "default@menu_forge_bottom_button.cell_face": {
+        "default@menu_forge_grid_left_button.cell_face": {
           "$state": "default"
         }
       },
       {
-        "hover@menu_forge_bottom_button.cell_face": {
+        "hover@menu_forge_grid_left_button.cell_face": {
           "$state": "hover"
         }
       },
       {
-        "pressed@menu_forge_bottom_button.cell_face": {
+        "pressed@menu_forge_grid_left_button.cell_face": {
           "$state": "pressed"
         }
       }
