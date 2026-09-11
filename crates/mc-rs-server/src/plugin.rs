@@ -1523,6 +1523,18 @@ mod tests {
             Ok(())
         }
 
+        fn open_sender_menu_forge(&mut self, _menu: &str) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn reload_menu_forge(&mut self) -> Result<String, String> {
+            Ok(String::new())
+        }
+
+        fn menu_forge_menus(&self) -> Vec<String> {
+            Vec::new()
+        }
+
         fn show_sender_biome(&mut self) {}
 
         fn selector_entities(&self) -> Vec<mc_rs_command::SelectorEntity> {

@@ -135,6 +135,18 @@ port = 19132
 # Si `false`, le client peut télécharger le pack mais Bedrock peut
 # silencieusement ignorer les overrides UI qu'il juge incertains.
 must_accept = true
+
+[menu_forge]
+# Menus dessinés avec le studio Menu Forge : le studio (« Exporter pour
+# Bedrock ») écrit dans ce dossier un pack Bedrock (pack/, servi avec les
+# autres packs) et la logique des menus (runtime.json). Voir
+# dev-docs/32-MENU-FORGE.md.
+enabled = true
+directory = "menu_forge/export"
+
+# /menu ouvre les menus Menu Forge quand ils existent ; sinon, et avec
+# `false`, les anciens formulaires (`/menu legacy` les rouvre toujours).
+menu_command = true
 "#;
 
 #[derive(Debug, Deserialize)]
@@ -156,6 +168,8 @@ pub struct ServerConfig {
     pub query: QuerySection,
     #[serde(default)]
     pub resource_pack: ResourcePackSection,
+    #[serde(default)]
+    pub menu_forge: MenuForgeSection,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -176,6 +190,43 @@ impl Default for ResourcePackSection {
     fn default() -> Self {
         Self {
             must_accept: default_pack_must_accept(),
+        }
+    }
+}
+
+/// Section `[menu_forge]` : menus exportés par le studio Menu Forge
+/// (`runtime.json` et `pack/` dans `directory`), voir `dev-docs/32-MENU-FORGE.md`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct MenuForgeSection {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_menu_forge_directory")]
+    pub directory: String,
+    /// `/menu` ouvre les menus Menu Forge quand ils existent (sinon, anciens formulaires).
+    #[serde(default = "default_true")]
+    pub menu_command: bool,
+}
+
+fn default_menu_forge_directory() -> String {
+    "menu_forge/export".to_string()
+}
+
+impl Default for MenuForgeSection {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            directory: default_menu_forge_directory(),
+            menu_command: true,
+        }
+    }
+}
+
+impl MenuForgeSection {
+    pub fn settings(&self) -> crate::menu_forge::MenuForgeSettings {
+        crate::menu_forge::MenuForgeSettings {
+            enabled: self.enabled,
+            directory: std::path::PathBuf::from(&self.directory),
+            menu_command: self.menu_command,
         }
     }
 }
@@ -382,6 +433,7 @@ impl Default for ServerConfig {
             rcon: RconSection::default(),
             query: QuerySection::default(),
             resource_pack: ResourcePackSection::default(),
+            menu_forge: MenuForgeSection::default(),
         }
     }
 }

@@ -27,6 +27,8 @@ pub enum PendingFormKind {
     DemoMotd,
     DemoStore,
     DemoWrapped,
+    /// Menu Menu Forge (`/menu`, `/mf open`), voir `connection/menu_forge.rs`.
+    MenuForge,
 }
 
 /// Préfixes injectés au début du `title` pour activer le layout custom côté
@@ -47,7 +49,7 @@ impl Connection {
         form_id
     }
 
-    fn encode_form(&mut self, kind: PendingFormKind, json: &str) -> Vec<u8> {
+    pub(super) fn encode_form(&mut self, kind: PendingFormKind, json: &str) -> Vec<u8> {
         let form_id = self.allocate_form_id();
         self.pending_form = Some(PendingForm { form_id, kind });
         let req = ModalFormRequest {
@@ -191,6 +193,11 @@ impl Connection {
             return Vec::new();
         }
 
+        // Menu Forge traite aussi les annulations (fin de la session du joueur).
+        if let PendingFormKind::MenuForge = pending.kind {
+            return self.handle_menu_forge_response(&resp);
+        }
+
         if resp.cancel_reason.is_some() {
             return Vec::new();
         }
@@ -212,6 +219,8 @@ impl Connection {
             | PendingFormKind::DemoMotd
             | PendingFormKind::DemoStore
             | PendingFormKind::DemoWrapped => self.handle_demo_back_to_showcase(),
+            // Déjà traité plus haut, annulations comprises.
+            PendingFormKind::MenuForge => Vec::new(),
         }
     }
 

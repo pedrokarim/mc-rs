@@ -4,6 +4,7 @@ mod dimension;
 mod forms;
 mod inventory;
 mod login;
+mod menu_forge;
 mod movement;
 mod spawn;
 
@@ -202,6 +203,11 @@ pub struct Connection {
     /// `None` quand aucun form n'a été envoyé ou que la réponse a déjà été
     /// consommée. Le form_id est tracké pour ignorer les réponses obsolètes.
     pub(super) pending_form: Option<forms::PendingForm>,
+    /// Menus Menu Forge ouverts par ce joueur (pile, état), voir `connection/menu_forge.rs`.
+    pub(super) menu_forge_session: Option<crate::menu_forge::Session>,
+    /// Commandes à exécuter en console, poussées par une action `command` de
+    /// Menu Forge (`as: console`) ; `main.rs` les exécute comme `pending_commands`.
+    pub pending_console_commands: Vec<String>,
 
     // Server keypair (shared across connections)
     pub(super) server_keypair: std::sync::Arc<ServerKeyPair>,
@@ -351,6 +357,8 @@ impl Connection {
             events,
             next_form_id: 1,
             pending_form: None,
+            menu_forge_session: None,
+            pending_console_commands: Vec::new(),
             server_keypair,
             chunk_cache,
             worlds,
@@ -554,6 +562,10 @@ impl Connection {
 
     pub fn take_pending_commands(&mut self) -> Vec<String> {
         std::mem::take(&mut self.pending_commands)
+    }
+
+    pub fn take_pending_console_commands(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.pending_console_commands)
     }
 
     pub fn take_pending_furnace_events(&mut self) -> Vec<PendingFurnaceEvent> {

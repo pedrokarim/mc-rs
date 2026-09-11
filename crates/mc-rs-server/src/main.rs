@@ -560,6 +560,8 @@ pub mod map_rendering;
 #[allow(dead_code)]
 pub mod maps;
 #[allow(dead_code)]
+mod menu_forge;
+#[allow(dead_code)]
 pub mod minecart;
 #[allow(dead_code)]
 pub mod mineshaft;
@@ -1128,11 +1130,15 @@ async fn main() {
     let server_keypair = Arc::new(ServerKeyPair::generate());
     info!("Server EC keypair generated");
 
-    // Charge les resource packs depuis ./resource_packs/ (dossiers + .mcpack).
+    // Charge les resource packs depuis ./resource_packs/ (dossiers + .mcpack),
+    // puis le pack exporté par Menu Forge (dossier de la section `[menu_forge]`).
     // Arc partagé entre toutes les connexions : on ne clone pas les bytes.
-    let resource_packs = Arc::new(crate::resource_pack::discover_packs(
-        &crate::resource_pack::pack_path(),
-    ));
+    let mut packs = crate::resource_pack::discover_packs(&crate::resource_pack::pack_path());
+    let (menu_forge_runtime, menu_forge_pack) =
+        crate::menu_forge::load_at_startup(config.menu_forge.settings());
+    crate::menu_forge::install(menu_forge_runtime);
+    packs.extend(menu_forge_pack);
+    let resource_packs = Arc::new(packs);
     info!("Loaded {} resource pack(s)", resource_packs.len());
 
     // Generate server GUID
@@ -3398,6 +3404,7 @@ fn process_peer_events(
                         broadcasts,
                         join_info,
                         pending_commands,
+                        pending_console_commands,
                         item_spawns,
                         pending_entity_attacks,
                         pending_furnace_events,
@@ -3436,6 +3443,7 @@ fn process_peer_events(
 
                         let broadcasts = conn.take_broadcasts();
                         let pending_commands = conn.take_pending_commands();
+                        let pending_console_commands = conn.take_pending_console_commands();
                         let item_spawns = std::mem::take(&mut conn.pending_item_spawns);
                         let pending_entity_attacks = conn.take_pending_entity_attacks();
                         let pending_furnace_events = conn.take_pending_furnace_events();
@@ -3445,6 +3453,7 @@ fn process_peer_events(
                             broadcasts,
                             join_info,
                             pending_commands,
+                            pending_console_commands,
                             item_spawns,
                             pending_entity_attacks,
                             pending_furnace_events,
@@ -3718,6 +3727,26 @@ fn process_peer_events(
                         }
                         dispatch_command_line(
                             CommandSource::Player(addr),
+                            &command,
+                            command_system,
+                            connections,
+                            peers,
+                            raknet,
+                            registry,
+                            item_entities,
+                            mob_entities,
+                            world_state,
+                            server_state,
+                            plugin_manager,
+                            chunk_cache,
+                            should_stop,
+                        );
+                    }
+
+                    // Commandes `as: console` des menus Menu Forge.
+                    for command in pending_console_commands {
+                        dispatch_command_line(
+                            CommandSource::Console,
                             &command,
                             command_system,
                             connections,

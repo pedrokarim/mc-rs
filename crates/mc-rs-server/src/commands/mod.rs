@@ -66,6 +66,7 @@ mod locate;
 mod loot;
 mod me;
 mod menu;
+mod mf;
 mod music;
 mod op;
 mod pardon;
@@ -142,6 +143,12 @@ pub trait ServerCommandRuntime: CommandSender + SoftEnumSource {
     fn broadcast_action(&mut self, source: &str, message: &str);
     fn open_sender_menu(&mut self);
     fn open_sender_panel(&mut self, panel: &str) -> Result<(), String>;
+    /// Ouvre au joueur le menu Menu Forge `menu` (`/mf open`).
+    fn open_sender_menu_forge(&mut self, menu: &str) -> Result<(), String>;
+    /// Relit le descripteur Menu Forge (`/mf reload`) : résumé ou erreur.
+    fn reload_menu_forge(&mut self) -> Result<String, String>;
+    /// Identifiants des menus Menu Forge chargés, triés.
+    fn menu_forge_menus(&self) -> Vec<String>;
     fn show_sender_biome(&mut self);
     fn selector_entities(&self) -> Vec<SelectorEntity>;
     fn random_index(&mut self, upper: usize) -> usize;
@@ -939,6 +946,7 @@ impl SoftEnumSource for ViewerContext<'_> {
                 .iter()
                 .map(|name| (*name).to_string())
                 .collect(),
+            mf::MENU_ENUM => crate::menu_forge::shared().menu_ids(),
             _ => Vec::new(),
         }
     }
@@ -1004,6 +1012,8 @@ impl SoftEnumSource for ExecutionContext<'_> {
     fn soft_enum_values(&self, name: &str) -> Vec<String> {
         if name.eq_ignore_ascii_case("online_players") {
             self.online_player_names()
+        } else if name.eq_ignore_ascii_case(mf::MENU_ENUM) {
+            crate::menu_forge::shared().menu_ids()
         } else {
             Vec::new()
         }
@@ -1135,7 +1145,18 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
         let Some(connection) = self.connections.get_mut(&addr) else {
             return;
         };
-        let batch = connection.build_hub_form_batch();
+        // Hub Menu Forge s’il est exporté ; sinon l’ancien formulaire, gardé en repli.
+        let batch = if crate::menu_forge::shared().serves_menu_command("hub") {
+            match connection.open_menu_forge("hub") {
+                Ok(batch) => batch,
+                Err(error) => {
+                    tracing::warn!("[menu-forge] {error} : ancien hub");
+                    connection.build_hub_form_batch()
+                }
+            }
+        } else {
+            connection.build_hub_form_batch()
+        };
         let prepared = connection.prepare_for_send(batch);
         self.raknet
             .send_to_session(&addr, prepared, Reliability::ReliableOrdered, true);
@@ -1148,13 +1169,42 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
         let Some(connection) = self.connections.get_mut(&addr) else {
             return Err("Sender connection not found.".into());
         };
-        let batch = connection
-            .build_demo_panel_batch(panel)
-            .ok_or_else(|| format!("Unknown panel: {panel}"))?;
+        // `/menu legacy` : ancien hub ; sinon le menu Menu Forge du même nom s’il est exporté.
+        let batch = if panel == menu::LEGACY_PANEL {
+            connection.build_hub_form_batch()
+        } else if crate::menu_forge::shared().serves_menu_command(panel) {
+            connection.open_menu_forge(panel)?
+        } else {
+            connection
+                .build_demo_panel_batch(panel)
+                .ok_or_else(|| format!("Unknown panel: {panel}"))?
+        };
         let prepared = connection.prepare_for_send(batch);
         self.raknet
             .send_to_session(&addr, prepared, Reliability::ReliableOrdered, true);
         Ok(())
+    }
+
+    fn open_sender_menu_forge(&mut self, menu: &str) -> Result<(), String> {
+        let Some(addr) = self.source_addr() else {
+            return Err("La console ne peut pas ouvrir de menu.".into());
+        };
+        let Some(connection) = self.connections.get_mut(&addr) else {
+            return Err("Connexion du joueur introuvable.".into());
+        };
+        let batch = connection.open_menu_forge(menu)?;
+        let prepared = connection.prepare_for_send(batch);
+        self.raknet
+            .send_to_session(&addr, prepared, Reliability::ReliableOrdered, true);
+        Ok(())
+    }
+
+    fn reload_menu_forge(&mut self) -> Result<String, String> {
+        crate::menu_forge::shared().reload()
+    }
+
+    fn menu_forge_menus(&self) -> Vec<String> {
+        crate::menu_forge::shared().menu_ids()
     }
 
     fn show_sender_biome(&mut self) {
@@ -2412,6 +2462,7 @@ pub fn build_command_system() -> ServerCommandSystem {
     timings::register(&mut permissions, &mut map);
     list::register(&mut permissions, &mut map);
     menu::register(&mut permissions, &mut map);
+    mf::register(&mut permissions, &mut map);
     say::register(&mut permissions, &mut map);
     me::register(&mut permissions, &mut map);
     tell::register(&mut permissions, &mut map);
@@ -2675,6 +2726,20 @@ mod tests {
             self.feedback
                 .push(format!("Console cannot open panel: {panel}"));
             Ok(())
+        }
+
+        fn open_sender_menu_forge(&mut self, menu: &str) -> Result<(), String> {
+            self.feedback
+                .push(format!("Console cannot open menu: {menu}"));
+            Ok(())
+        }
+
+        fn reload_menu_forge(&mut self) -> Result<String, String> {
+            Ok("0 menu".to_string())
+        }
+
+        fn menu_forge_menus(&self) -> Vec<String> {
+            Vec::new()
         }
 
         fn show_sender_biome(&mut self) {
