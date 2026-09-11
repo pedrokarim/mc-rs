@@ -1,0 +1,16 @@
+{
+  "ui_defs": [
+    "ui/menu_forge/router.json",
+    "ui/menu_forge/bottom_button.json",
+    "ui/menu_forge/demo.json",
+    "ui/menu_forge/grid.json",
+    "ui/menu_forge/hub.json",
+    "ui/menu_forge/image_grid.json",
+    "ui/menu_forge/left_button.json",
+    "ui/menu_forge/motd.json",
+    "ui/menu_forge/showcase.json",
+    "ui/menu_forge/square_image.json",
+    "ui/menu_forge/store.json",
+    "ui/menu_forge/wrapped.json"
+  ]
+}

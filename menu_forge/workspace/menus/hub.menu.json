@@ -1,0 +1,291 @@
+{
+  "formatVersion": 1,
+  "id": "hub",
+  "name": "Hub mc-rs",
+  "container": {
+    "type": "chest",
+    "rows": 5
+  },
+  "state": {},
+  "layers": [
+    {
+      "id": "background",
+      "texture": "mcrs/panel_r5.png",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "spawn_button",
+      "texture": "mcrs/button_w4_green.png",
+      "x": 7,
+      "y": 35
+    },
+    {
+      "id": "creative_button",
+      "texture": "mcrs/button_w4_aqua.png",
+      "x": 97,
+      "y": 35
+    },
+    {
+      "id": "survival_button",
+      "texture": "mcrs/button_w4_yellow.png",
+      "x": 7,
+      "y": 53
+    },
+    {
+      "id": "day_button",
+      "texture": "mcrs/button_w4_pink.png",
+      "x": 97,
+      "y": 53
+    },
+    {
+      "id": "night_button",
+      "texture": "mcrs/button_w4_blue.png",
+      "x": 7,
+      "y": 71
+    },
+    {
+      "id": "biome_button",
+      "texture": "mcrs/button_w4_gray.png",
+      "x": 97,
+      "y": 71
+    },
+    {
+      "id": "showcase_button",
+      "texture": "mcrs/button_w9_gold.png",
+      "x": 7,
+      "y": 89
+    }
+  ],
+  "texts": [
+    {
+      "id": "title",
+      "x": 8,
+      "y": 6,
+      "color": "#ffd933",
+      "value": "mc-rs HUB"
+    },
+    {
+      "id": "subtitle",
+      "x": 8,
+      "y": 22,
+      "value": "Choisis une action :",
+      "color": "#aaaaaa"
+    },
+    {
+      "id": "spawn_label",
+      "x": 44,
+      "y": 40,
+      "value": "Spawn",
+      "color": "#55ff55",
+      "align": "center"
+    },
+    {
+      "id": "creative_label",
+      "x": 134,
+      "y": 40,
+      "value": "Créatif",
+      "color": "#55ffff",
+      "align": "center"
+    },
+    {
+      "id": "survival_label",
+      "x": 44,
+      "y": 58,
+      "value": "Survie",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "day_label",
+      "x": 134,
+      "y": 58,
+      "value": "Jour",
+      "color": "#ff55ff",
+      "align": "center"
+    },
+    {
+      "id": "night_label",
+      "x": 44,
+      "y": 76,
+      "value": "Nuit",
+      "color": "#8080ff",
+      "align": "center"
+    },
+    {
+      "id": "biome_label",
+      "x": 134,
+      "y": 76,
+      "value": "Biome",
+      "color": "#aaaaaa",
+      "align": "center"
+    },
+    {
+      "id": "showcase_label",
+      "x": 89,
+      "y": 94,
+      "value": "UI Showcase",
+      "color": "#ffd933",
+      "align": "center"
+    }
+  ],
+  "slots": [
+    {
+      "id": "spawn",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 1,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<green>Spawn"
+      },
+      "onClick": [
+        {
+          "type": "command",
+          "command": "tp {mcrs.spawn}",
+          "as": "player"
+        },
+        {
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "id": "creative",
+      "kind": "button",
+      "area": {
+        "col": 5,
+        "row": 1,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<aqua>Créatif"
+      },
+      "onClick": [
+        {
+          "type": "command",
+          "command": "gamemode creative",
+          "as": "player"
+        },
+        {
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "id": "survival",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 2,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Survie"
+      },
+      "onClick": [
+        {
+          "type": "command",
+          "command": "gamemode survival",
+          "as": "player"
+        },
+        {
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "id": "day",
+      "kind": "button",
+      "area": {
+        "col": 5,
+        "row": 2,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<light_purple>Jour"
+      },
+      "onClick": [
+        {
+          "type": "command",
+          "command": "time set day",
+          "as": "player"
+        },
+        {
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "id": "night",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 3,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<blue>Nuit"
+      },
+      "onClick": [
+        {
+          "type": "command",
+          "command": "time set night",
+          "as": "player"
+        },
+        {
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "id": "biome",
+      "kind": "button",
+      "area": {
+        "col": 5,
+        "row": 3,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<gray>Biome"
+      },
+      "onClick": [
+        {
+          "type": "command",
+          "command": "biome",
+          "as": "player"
+        },
+        {
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "id": "showcase",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 4,
+        "width": 9
+      },
+      "item": {
+        "invisible": true,
+        "name": "<gold>UI Showcase"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "showcase"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1429 @@
+{
+  "format": "menu-forge-bedrock",
+  "formatVersion": 1,
+  "flag": "§m§v",
+  "pack": {
+    "name": "Menu Forge",
+    "uuid": "37b2b427-84fa-8cbf-a6d9-96325771184a",
+    "version": [
+      1,
+      0,
+      0
+    ]
+  },
+  "warnings": [],
+  "menus": [
+    {
+      "id": "bottom_button",
+      "name": "Bottom buttons",
+      "rows": 6,
+      "entries": 54,
+      "token": "[mf:bottom_button]",
+      "state": {},
+      "tokens": [],
+      "texts": [],
+      "slots": [
+        {
+          "id": "join_solo",
+          "kind": "button",
+          "cells": [
+            27,
+            28,
+            29
+          ],
+          "label": "§eSolo",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "join_duo",
+          "kind": "button",
+          "cells": [
+            30,
+            31,
+            32
+          ],
+          "label": "§eDuo",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "join_squad",
+          "kind": "button",
+          "cells": [
+            33,
+            34,
+            35
+          ],
+          "label": "§eSquad",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "back",
+          "kind": "button",
+          "cells": [
+            45,
+            46,
+            47,
+            48
+          ],
+          "label": "§cRetour",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "demo",
+      "name": "Démo Menu Forge",
+      "rows": 6,
+      "entries": 56,
+      "token": "[mf:demo]",
+      "state": {
+        "tab": {
+          "type": "enum",
+          "values": [
+            "infos",
+            "settings"
+          ],
+          "default": "infos"
+        },
+        "count": {
+          "type": "int",
+          "default": 0,
+          "min": 0,
+          "max": 5
+        }
+      },
+      "tokens": [
+        {
+          "token": "(2)",
+          "layer": "tab_infos_on",
+          "visibleWhen": {
+            "state": "tab",
+            "is": "infos"
+          }
+        },
+        {
+          "token": "(4)",
+          "layer": "tab_settings_on",
+          "visibleWhen": {
+            "state": "tab",
+            "is": "settings"
+          }
+        },
+        {
+          "token": "(11)",
+          "layer": "badge",
+          "visibleWhen": {
+            "state": "count",
+            "in": [
+              3,
+              4,
+              5
+            ]
+          }
+        },
+        {
+          "token": "(t4)",
+          "text": "infos",
+          "visibleWhen": {
+            "state": "tab",
+            "is": "infos"
+          }
+        },
+        {
+          "token": "(t5)",
+          "text": "settings",
+          "visibleWhen": {
+            "state": "tab",
+            "is": "settings"
+          }
+        }
+      ],
+      "texts": [
+        {
+          "id": "greeting",
+          "entry": 54,
+          "prefix": "{t0}",
+          "value": "Bonjour {viewer.name}"
+        },
+        {
+          "id": "count",
+          "entry": 55,
+          "prefix": "{t1}",
+          "value": "Compteur : {state.count}"
+        }
+      ],
+      "slots": [
+        {
+          "id": "tab_infos",
+          "kind": "button",
+          "cells": [
+            9,
+            10,
+            11,
+            12
+          ],
+          "label": "Infos",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "setState",
+              "state": "tab",
+              "value": "infos"
+            },
+            {
+              "type": "sound",
+              "sound": "random.click"
+            }
+          ],
+          "enabledWhen": {
+            "not": {
+              "state": "tab",
+              "is": "infos"
+            }
+          }
+        },
+        {
+          "id": "tab_settings",
+          "kind": "button",
+          "cells": [
+            14,
+            15,
+            16,
+            17
+          ],
+          "label": "Réglages",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "setState",
+              "state": "tab",
+              "value": "settings"
+            },
+            {
+              "type": "sound",
+              "sound": "random.click"
+            }
+          ],
+          "enabledWhen": {
+            "not": {
+              "state": "tab",
+              "is": "settings"
+            }
+          }
+        },
+        {
+          "id": "count_0",
+          "kind": "button",
+          "cells": [
+            27
+          ],
+          "label": "0",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "setState",
+              "state": "count",
+              "value": 0
+            }
+          ],
+          "enabledWhen": {
+            "not": {
+              "state": "count",
+              "is": 0
+            }
+          }
+        },
+        {
+          "id": "count_1",
+          "kind": "button",
+          "cells": [
+            28
+          ],
+          "label": "1",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "setState",
+              "state": "count",
+              "value": 1
+            }
+          ],
+          "enabledWhen": {
+            "not": {
+              "state": "count",
+              "is": 1
+            }
+          }
+        },
+        {
+          "id": "count_2",
+          "kind": "button",
+          "cells": [
+            29
+          ],
+          "label": "2",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "setState",
+              "state": "count",
+              "value": 2
+            }
+          ],
+          "enabledWhen": {
+            "not": {
+              "state": "count",
+              "is": 2
+            }
+          }
+        },
+        {
+          "id": "count_3",
+          "kind": "button",
+          "cells": [
+            30
+          ],
+          "label": "3",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "setState",
+              "state": "count",
+              "value": 3
+            }
+          ],
+          "enabledWhen": {
+            "not": {
+              "state": "count",
+              "is": 3
+            }
+          }
+        },
+        {
+          "id": "count_4",
+          "kind": "button",
+          "cells": [
+            31
+          ],
+          "label": "4",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "setState",
+              "state": "count",
+              "value": 4
+            }
+          ],
+          "enabledWhen": {
+            "not": {
+              "state": "count",
+              "is": 4
+            }
+          }
+        },
+        {
+          "id": "count_5",
+          "kind": "button",
+          "cells": [
+            32
+          ],
+          "label": "5",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "setState",
+              "state": "count",
+              "value": 5
+            }
+          ],
+          "enabledWhen": {
+            "not": {
+              "state": "count",
+              "is": 5
+            }
+          }
+        },
+        {
+          "id": "chat",
+          "kind": "button",
+          "cells": [
+            36,
+            37,
+            38,
+            39
+          ],
+          "label": "§bChat",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "command",
+              "command": "me teste Menu Forge",
+              "as": "player"
+            }
+          ]
+        },
+        {
+          "id": "back",
+          "kind": "button",
+          "cells": [
+            45,
+            46,
+            47,
+            48
+          ],
+          "label": "§cRetour",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "back"
+            }
+          ]
+        },
+        {
+          "id": "close",
+          "kind": "button",
+          "cells": [
+            50,
+            51,
+            52,
+            53
+          ],
+          "label": "§7Fermer",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "close"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "grid",
+      "name": "Grid layout",
+      "rows": 5,
+      "entries": 45,
+      "token": "[mf:grid]",
+      "state": {},
+      "tokens": [],
+      "texts": [],
+      "slots": [
+        {
+          "id": "action_a",
+          "kind": "button",
+          "cells": [
+            9,
+            10,
+            11,
+            12
+          ],
+          "label": "§eAction A",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "action_b",
+          "kind": "button",
+          "cells": [
+            14,
+            15,
+            16,
+            17
+          ],
+          "label": "§eAction B",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "action_c",
+          "kind": "button",
+          "cells": [
+            18,
+            19,
+            20,
+            21
+          ],
+          "label": "§eAction C",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "action_d",
+          "kind": "button",
+          "cells": [
+            23,
+            24,
+            25,
+            26
+          ],
+          "label": "§eAction D",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "action_e",
+          "kind": "button",
+          "cells": [
+            27,
+            28,
+            29,
+            30
+          ],
+          "label": "§eAction E",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "action_f",
+          "kind": "button",
+          "cells": [
+            32,
+            33,
+            34,
+            35
+          ],
+          "label": "§eAction F",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "back",
+          "kind": "button",
+          "cells": [
+            36,
+            37,
+            38,
+            39
+          ],
+          "label": "§cRetour",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hub",
+      "name": "Hub mc-rs",
+      "rows": 5,
+      "entries": 45,
+      "token": "[mf:hub]",
+      "state": {},
+      "tokens": [],
+      "texts": [],
+      "slots": [
+        {
+          "id": "spawn",
+          "kind": "button",
+          "cells": [
+            9,
+            10,
+            11,
+            12
+          ],
+          "label": "§aSpawn",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "command",
+              "command": "tp {mcrs.spawn}",
+              "as": "player"
+            },
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "creative",
+          "kind": "button",
+          "cells": [
+            14,
+            15,
+            16,
+            17
+          ],
+          "label": "§bCréatif",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "command",
+              "command": "gamemode creative",
+              "as": "player"
+            },
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "survival",
+          "kind": "button",
+          "cells": [
+            18,
+            19,
+            20,
+            21
+          ],
+          "label": "§eSurvie",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "command",
+              "command": "gamemode survival",
+              "as": "player"
+            },
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "day",
+          "kind": "button",
+          "cells": [
+            23,
+            24,
+            25,
+            26
+          ],
+          "label": "§dJour",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "command",
+              "command": "time set day",
+              "as": "player"
+            },
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "night",
+          "kind": "button",
+          "cells": [
+            27,
+            28,
+            29,
+            30
+          ],
+          "label": "§9Nuit",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "command",
+              "command": "time set night",
+              "as": "player"
+            },
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "biome",
+          "kind": "button",
+          "cells": [
+            32,
+            33,
+            34,
+            35
+          ],
+          "label": "§7Biome",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "command",
+              "command": "biome",
+              "as": "player"
+            },
+            {
+              "type": "close"
+            }
+          ]
+        },
+        {
+          "id": "showcase",
+          "kind": "button",
+          "cells": [
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44
+          ],
+          "label": "§6UI Showcase",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "image_grid",
+      "name": "Image grid",
+      "rows": 6,
+      "entries": 54,
+      "token": "[mf:image_grid]",
+      "state": {},
+      "tokens": [],
+      "texts": [],
+      "slots": [
+        {
+          "id": "map_forest",
+          "kind": "button",
+          "cells": [
+            0,
+            1,
+            2,
+            3,
+            9,
+            10,
+            11,
+            12
+          ],
+          "label": "§aForêt",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "map_desert",
+          "kind": "button",
+          "cells": [
+            5,
+            6,
+            7,
+            8,
+            14,
+            15,
+            16,
+            17
+          ],
+          "label": "§eDésert",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "map_mountain",
+          "kind": "button",
+          "cells": [
+            18,
+            19,
+            20,
+            21,
+            27,
+            28,
+            29,
+            30
+          ],
+          "label": "§cMontagne",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "map_swamp",
+          "kind": "button",
+          "cells": [
+            23,
+            24,
+            25,
+            26,
+            32,
+            33,
+            34,
+            35
+          ],
+          "label": "§eMarais",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "back",
+          "kind": "button",
+          "cells": [
+            45,
+            46,
+            47,
+            48
+          ],
+          "label": "§cRetour",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "left_button",
+      "name": "Left buttons",
+      "rows": 5,
+      "entries": 45,
+      "token": "[mf:left_button]",
+      "state": {},
+      "tokens": [],
+      "texts": [],
+      "slots": [
+        {
+          "id": "choice_0",
+          "kind": "button",
+          "cells": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "label": "§ePartie classée",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "choice_1",
+          "kind": "button",
+          "cells": [
+            9,
+            10,
+            11,
+            12,
+            13
+          ],
+          "label": "§ePartie rapide",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "choice_2",
+          "kind": "button",
+          "cells": [
+            18,
+            19,
+            20,
+            21,
+            22
+          ],
+          "label": "§eTutoriel",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "choice_3",
+          "kind": "button",
+          "cells": [
+            27,
+            28,
+            29,
+            30,
+            31
+          ],
+          "label": "§eParamètres",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "back",
+          "kind": "button",
+          "cells": [
+            36,
+            37,
+            38,
+            39,
+            40
+          ],
+          "label": "§cRetour",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "motd",
+      "name": "MOTD",
+      "rows": 6,
+      "entries": 54,
+      "token": "[mf:motd]",
+      "state": {},
+      "tokens": [],
+      "texts": [],
+      "slots": [
+        {
+          "id": "continue",
+          "kind": "button",
+          "cells": [
+            45,
+            46,
+            47,
+            48
+          ],
+          "label": "§aContinuer",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "quit",
+          "kind": "button",
+          "cells": [
+            50,
+            51,
+            52,
+            53
+          ],
+          "label": "§cQuitter",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "showcase",
+      "name": "UI Showcase",
+      "rows": 6,
+      "entries": 54,
+      "token": "[mf:showcase]",
+      "state": {},
+      "tokens": [],
+      "texts": [],
+      "slots": [
+        {
+          "id": "open_grid",
+          "kind": "button",
+          "cells": [
+            9,
+            10,
+            11,
+            12
+          ],
+          "label": "§eGrid",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "grid"
+            }
+          ]
+        },
+        {
+          "id": "open_left_button",
+          "kind": "button",
+          "cells": [
+            14,
+            15,
+            16,
+            17
+          ],
+          "label": "§eLeft buttons",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "left_button"
+            }
+          ]
+        },
+        {
+          "id": "open_bottom_button",
+          "kind": "button",
+          "cells": [
+            18,
+            19,
+            20,
+            21
+          ],
+          "label": "§eBottom",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "bottom_button"
+            }
+          ]
+        },
+        {
+          "id": "open_image_grid",
+          "kind": "button",
+          "cells": [
+            23,
+            24,
+            25,
+            26
+          ],
+          "label": "§eImage grid",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "image_grid"
+            }
+          ]
+        },
+        {
+          "id": "open_square_image",
+          "kind": "button",
+          "cells": [
+            27,
+            28,
+            29,
+            30
+          ],
+          "label": "§eSquare image",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "square_image"
+            }
+          ]
+        },
+        {
+          "id": "open_motd",
+          "kind": "button",
+          "cells": [
+            32,
+            33,
+            34,
+            35
+          ],
+          "label": "§eMOTD",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "motd"
+            }
+          ]
+        },
+        {
+          "id": "open_store",
+          "kind": "button",
+          "cells": [
+            36,
+            37,
+            38,
+            39
+          ],
+          "label": "§eStore",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "store"
+            }
+          ]
+        },
+        {
+          "id": "open_wrapped",
+          "kind": "button",
+          "cells": [
+            41,
+            42,
+            43,
+            44
+          ],
+          "label": "§eWrapped",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "wrapped"
+            }
+          ]
+        },
+        {
+          "id": "back",
+          "kind": "button",
+          "cells": [
+            45,
+            46,
+            47,
+            48
+          ],
+          "label": "§cRetour",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "hub"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "square_image",
+      "name": "Square image",
+      "rows": 6,
+      "entries": 54,
+      "token": "[mf:square_image]",
+      "state": {},
+      "tokens": [],
+      "texts": [],
+      "slots": [
+        {
+          "id": "image",
+          "kind": "button",
+          "cells": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            11,
+            12,
+            13,
+            14,
+            15,
+            20,
+            21,
+            22,
+            23,
+            24,
+            29,
+            30,
+            31,
+            32,
+            33,
+            38,
+            39,
+            40,
+            41,
+            42
+          ],
+          "label": "Image",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "store",
+      "name": "Store",
+      "rows": 6,
+      "entries": 54,
+      "token": "[mf:store]",
+      "state": {},
+      "tokens": [],
+      "texts": [],
+      "slots": [
+        {
+          "id": "tab_0",
+          "kind": "button",
+          "cells": [
+            0,
+            1,
+            2
+          ],
+          "label": "Populaire",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "tab_1",
+          "kind": "button",
+          "cells": [
+            3,
+            4,
+            5
+          ],
+          "label": "Nouveautés",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "tab_2",
+          "kind": "button",
+          "cells": [
+            6,
+            7,
+            8
+          ],
+          "label": "Promotions",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "article_sword",
+          "kind": "button",
+          "cells": [
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17
+          ],
+          "label": "Épée légendaire : 1500 coins",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "article_pickaxe",
+          "kind": "button",
+          "cells": [
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26
+          ],
+          "label": "Pioche en diamant : 800 coins",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "article_skin",
+          "kind": "button",
+          "cells": [
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35
+          ],
+          "label": "Skin pirate : 2000 coins",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "article_cape",
+          "kind": "button",
+          "cells": [
+            36,
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44
+          ],
+          "label": "Cape dragon : 3500 coins",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wrapped",
+      "name": "Wrapped",
+      "rows": 6,
+      "entries": 54,
+      "token": "[mf:wrapped]",
+      "state": {},
+      "tokens": [],
+      "texts": [],
+      "slots": [
+        {
+          "id": "continue",
+          "kind": "button",
+          "cells": [
+            45,
+            46,
+            47,
+            48
+          ],
+          "label": "§aContinuer",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        },
+        {
+          "id": "close",
+          "kind": "button",
+          "cells": [
+            50,
+            51,
+            52,
+            53
+          ],
+          "label": "§cFermer",
+          "icon": null,
+          "onClick": [
+            {
+              "type": "open",
+              "menu": "showcase"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

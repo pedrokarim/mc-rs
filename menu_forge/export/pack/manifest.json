@@ -1,0 +1,29 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Menu Forge",
+    "description": "Menus Menu Forge pour Bedrock (générés par le studio)",
+    "uuid": "37b2b427-84fa-8cbf-a6d9-96325771184a",
+    "version": [
+      1,
+      0,
+      0
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      0
+    ]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "d24567bc-8a8d-8598-a3f1-e7259c471b6e",
+      "version": [
+        1,
+        0,
+        0
+      ]
+    }
+  ]
+}

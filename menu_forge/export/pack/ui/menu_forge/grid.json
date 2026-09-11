@@ -1,0 +1,528 @@
+{
+  "namespace": "menu_forge_grid",
+  "main_panel": {
+    "type": "panel",
+    "size": [
+      176,
+      204
+    ],
+    "anchor_from": "center",
+    "anchor_to": "center",
+    "controls": [
+      {
+        "layer_0": {
+          "type": "image",
+          "texture": "textures/menu_forge/grid/background",
+          "size": [
+            176,
+            114
+          ],
+          "offset": [
+            0,
+            0
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 1
+        }
+      },
+      {
+        "layer_1": {
+          "type": "image",
+          "texture": "textures/menu_forge/grid/action_a_button",
+          "size": [
+            72,
+            18
+          ],
+          "offset": [
+            7,
+            35
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 2
+        }
+      },
+      {
+        "layer_2": {
+          "type": "image",
+          "texture": "textures/menu_forge/grid/action_b_button",
+          "size": [
+            72,
+            18
+          ],
+          "offset": [
+            97,
+            35
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 3
+        }
+      },
+      {
+        "layer_3": {
+          "type": "image",
+          "texture": "textures/menu_forge/grid/action_c_button",
+          "size": [
+            72,
+            18
+          ],
+          "offset": [
+            7,
+            53
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 4
+        }
+      },
+      {
+        "layer_4": {
+          "type": "image",
+          "texture": "textures/menu_forge/grid/action_d_button",
+          "size": [
+            72,
+            18
+          ],
+          "offset": [
+            97,
+            53
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 5
+        }
+      },
+      {
+        "layer_5": {
+          "type": "image",
+          "texture": "textures/menu_forge/grid/action_e_button",
+          "size": [
+            72,
+            18
+          ],
+          "offset": [
+            7,
+            71
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 6
+        }
+      },
+      {
+        "layer_6": {
+          "type": "image",
+          "texture": "textures/menu_forge/grid/action_f_button",
+          "size": [
+            72,
+            18
+          ],
+          "offset": [
+            97,
+            71
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 7
+        }
+      },
+      {
+        "layer_7": {
+          "type": "image",
+          "texture": "textures/menu_forge/grid/back_button",
+          "size": [
+            72,
+            18
+          ],
+          "offset": [
+            7,
+            89
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 8
+        }
+      },
+      {
+        "text_0": {
+          "type": "label",
+          "text": "Grid layout",
+          "localize": false,
+          "color": [
+            1,
+            0.851,
+            0.2
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            8,
+            6
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 9
+        }
+      },
+      {
+        "text_1": {
+          "type": "label",
+          "text": "Grille de boutons",
+          "localize": false,
+          "color": [
+            0.667,
+            0.667,
+            0.667
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            8,
+            22
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 10
+        }
+      },
+      {
+        "text_2": {
+          "type": "label",
+          "text": "Action A",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            44,
+            40
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 11
+        }
+      },
+      {
+        "text_3": {
+          "type": "label",
+          "text": "Action B",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            134,
+            40
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 12
+        }
+      },
+      {
+        "text_4": {
+          "type": "label",
+          "text": "Action C",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            44,
+            58
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 13
+        }
+      },
+      {
+        "text_5": {
+          "type": "label",
+          "text": "Action D",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            134,
+            58
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 14
+        }
+      },
+      {
+        "text_6": {
+          "type": "label",
+          "text": "Action E",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            44,
+            76
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 15
+        }
+      },
+      {
+        "text_7": {
+          "type": "label",
+          "text": "Action F",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            134,
+            76
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 16
+        }
+      },
+      {
+        "text_8": {
+          "type": "label",
+          "text": "Retour",
+          "localize": false,
+          "color": [
+            1,
+            0.333,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            44,
+            94
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 17
+        }
+      },
+      {
+        "slots": {
+          "type": "grid",
+          "grid_dimensions": [
+            9,
+            5
+          ],
+          "size": [
+            162,
+            90
+          ],
+          "offset": [
+            7,
+            17
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 18,
+          "grid_item_template": "menu_forge_grid.cell",
+          "collection_name": "form_buttons",
+          "bindings": [
+            {
+              "binding_name": "#form_button_length",
+              "binding_name_override": "#maximum_grid_items"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "cell": {
+    "type": "panel",
+    "size": [
+      18,
+      18
+    ],
+    "bindings": [
+      {
+        "binding_type": "collection_details",
+        "binding_collection_name": "form_buttons"
+      }
+    ],
+    "controls": [
+      {
+        "icon": {
+          "type": "image",
+          "size": [
+            16,
+            16
+          ],
+          "layer": 1,
+          "bindings": [
+            {
+              "binding_type": "collection",
+              "binding_collection_name": "form_buttons",
+              "binding_name": "#form_button_texture",
+              "binding_name_override": "#texture"
+            },
+            {
+              "binding_type": "collection",
+              "binding_collection_name": "form_buttons",
+              "binding_name": "#form_button_texture_file_system",
+              "binding_name_override": "#texture_file_system"
+            },
+            {
+              "binding_type": "view",
+              "source_property_name": "(not ((#texture = '') or (#texture = 'loading')))",
+              "target_property_name": "#visible"
+            }
+          ]
+        }
+      },
+      {
+        "button@menu_forge_grid.cell_button": {
+          "layer": 2
+        }
+      }
+    ]
+  },
+  "cell_button@common.button": {
+    "size": [
+      18,
+      18
+    ],
+    "default_control": "default",
+    "hover_control": "hover",
+    "pressed_control": "pressed",
+    "$pressed_button_name": "button.form_button_click",
+    "controls": [
+      {
+        "default@menu_forge_grid.cell_face": {
+          "$state": "default"
+        }
+      },
+      {
+        "hover@menu_forge_grid.cell_face": {
+          "$state": "hover"
+        }
+      },
+      {
+        "pressed@menu_forge_grid.cell_face": {
+          "$state": "pressed"
+        }
+      }
+    ],
+    "bindings": [
+      {
+        "binding_type": "collection",
+        "binding_condition": "none",
+        "binding_collection_name": "form_buttons"
+      },
+      {
+        "binding_type": "collection_details",
+        "binding_collection_name": "form_buttons"
+      },
+      {
+        "binding_type": "collection",
+        "binding_collection_name": "form_buttons",
+        "binding_name": "#form_button_text"
+      },
+      {
+        "binding_type": "view",
+        "source_property_name": "(not ((#form_button_text = '') or (not ((#form_button_text - '{x}') = #form_button_text)) or (not ((#form_button_text - '{t') = #form_button_text))))",
+        "target_property_name": "#visible"
+      }
+    ]
+  },
+  "cell_face": {
+    "type": "panel",
+    "size": [
+      18,
+      18
+    ],
+    "$highlight_alpha|default": 0,
+    "variables": [
+      {
+        "requires": "($state = 'hover')",
+        "$highlight_alpha": 0.45
+      },
+      {
+        "requires": "($state = 'pressed')",
+        "$highlight_alpha": 0.7
+      }
+    ],
+    "controls": [
+      {
+        "highlight": {
+          "type": "image",
+          "texture": "textures/menu_forge/_white",
+          "color": [
+            1,
+            1,
+            1
+          ],
+          "alpha": "$highlight_alpha",
+          "size": [
+            16,
+            16
+          ],
+          "layer": 1
+        }
+      }
+    ]
+  }
+}

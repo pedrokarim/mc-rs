@@ -1,0 +1,172 @@
+{
+  "formatVersion": 1,
+  "id": "bottom_button",
+  "name": "Bottom buttons",
+  "container": {
+    "type": "chest",
+    "rows": 6
+  },
+  "state": {},
+  "layers": [
+    {
+      "id": "background",
+      "texture": "mcrs/panel_r6.png",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "banner",
+      "texture": "mcrs/banner_bedwars.png",
+      "x": 7,
+      "y": 17
+    },
+    {
+      "id": "join_solo_button",
+      "texture": "mcrs/button_w3_yellow.png",
+      "x": 7,
+      "y": 71
+    },
+    {
+      "id": "join_duo_button",
+      "texture": "mcrs/button_w3_yellow.png",
+      "x": 61,
+      "y": 71
+    },
+    {
+      "id": "join_squad_button",
+      "texture": "mcrs/button_w3_yellow.png",
+      "x": 115,
+      "y": 71
+    },
+    {
+      "id": "back_button",
+      "texture": "mcrs/button_w4_red.png",
+      "x": 7,
+      "y": 107
+    }
+  ],
+  "texts": [
+    {
+      "id": "title",
+      "x": 8,
+      "y": 6,
+      "color": "#ffd933",
+      "value": "Bottom buttons"
+    },
+    {
+      "id": "banner_label",
+      "x": 88,
+      "y": 23,
+      "value": "Mode Bedwars",
+      "color": "#f0f0f0",
+      "align": "center"
+    },
+    {
+      "id": "join_solo_label",
+      "x": 35,
+      "y": 76,
+      "value": "Solo",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "join_duo_label",
+      "x": 89,
+      "y": 76,
+      "value": "Duo",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "join_squad_label",
+      "x": 143,
+      "y": 76,
+      "value": "Squad",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "back_label",
+      "x": 44,
+      "y": 112,
+      "value": "Retour",
+      "color": "#ff5555",
+      "align": "center"
+    }
+  ],
+  "slots": [
+    {
+      "id": "join_solo",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 3,
+        "width": 3
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Solo"
+      },
+      "onClick": [
+        {
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "id": "join_duo",
+      "kind": "button",
+      "area": {
+        "col": 3,
+        "row": 3,
+        "width": 3
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Duo"
+      },
+      "onClick": [
+        {
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "id": "join_squad",
+      "kind": "button",
+      "area": {
+        "col": 6,
+        "row": 3,
+        "width": 3
+      },
+      "item": {
+        "invisible": true,
+        "name": "<yellow>Squad"
+      },
+      "onClick": [
+        {
+          "type": "close"
+        }
+      ]
+    },
+    {
+      "id": "back",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 5,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<red>Retour"
+      },
+      "onClick": [
+        {
+          "type": "open",
+          "menu": "showcase"
+        }
+      ]
+    }
+  ]
+}

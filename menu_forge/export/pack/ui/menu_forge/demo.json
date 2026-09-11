@@ -1,0 +1,914 @@
+{
+  "namespace": "menu_forge_demo",
+  "main_panel": {
+    "type": "panel",
+    "size": [
+      176,
+      222
+    ],
+    "anchor_from": "center",
+    "anchor_to": "center",
+    "controls": [
+      {
+        "layer_0": {
+          "type": "image",
+          "texture": "textures/menu_forge/demo/background",
+          "size": [
+            176,
+            132
+          ],
+          "offset": [
+            0,
+            0
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 1
+        }
+      },
+      {
+        "layer_1": {
+          "type": "image",
+          "texture": "textures/menu_forge/demo/tab_infos_off",
+          "size": [
+            72,
+            18
+          ],
+          "offset": [
+            7,
+            35
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 2
+        }
+      },
+      {
+        "layer_2": {
+          "type": "image",
+          "texture": "textures/menu_forge/demo/tab_infos_on",
+          "size": [
+            72,
+            18
+          ],
+          "offset": [
+            7,
+            35
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 3,
+          "bindings": [
+            {
+              "binding_type": "global",
+              "binding_condition": "none",
+              "binding_name": "#title_text",
+              "binding_name_override": "#title_text"
+            },
+            {
+              "binding_type": "view",
+              "source_property_name": "(not ((#title_text - '(2)') = #title_text))",
+              "target_property_name": "#visible"
+            }
+          ]
+        }
+      },
+      {
+        "layer_3": {
+          "type": "image",
+          "texture": "textures/menu_forge/demo/tab_settings_off",
+          "size": [
+            72,
+            18
+          ],
+          "offset": [
+            97,
+            35
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 4
+        }
+      },
+      {
+        "layer_4": {
+          "type": "image",
+          "texture": "textures/menu_forge/demo/tab_settings_on",
+          "size": [
+            72,
+            18
+          ],
+          "offset": [
+            97,
+            35
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 5,
+          "bindings": [
+            {
+              "binding_type": "global",
+              "binding_condition": "none",
+              "binding_name": "#title_text",
+              "binding_name_override": "#title_text"
+            },
+            {
+              "binding_type": "view",
+              "source_property_name": "(not ((#title_text - '(4)') = #title_text))",
+              "target_property_name": "#visible"
+            }
+          ]
+        }
+      },
+      {
+        "layer_5": {
+          "type": "image",
+          "texture": "textures/menu_forge/demo/count_0_button",
+          "size": [
+            18,
+            18
+          ],
+          "offset": [
+            7,
+            71
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 6
+        }
+      },
+      {
+        "layer_6": {
+          "type": "image",
+          "texture": "textures/menu_forge/demo/count_1_button",
+          "size": [
+            18,
+            18
+          ],
+          "offset": [
+            25,
+            71
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 7
+        }
+      },
+      {
+        "layer_7": {
+          "type": "image",
+          "texture": "textures/menu_forge/demo/count_2_button",
+          "size": [
+            18,
+            18
+          ],
+          "offset": [
+            43,
+            71
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 8
+        }
+      },
+      {
+        "layer_8": {
+          "type": "image",
+          "texture": "textures/menu_forge/demo/count_3_button",
+          "size": [
+            18,
+            18
+          ],
+          "offset": [
+            61,
+            71
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 9
+        }
+      },
+      {
+        "layer_9": {
+          "type": "image",
+          "texture": "textures/menu_forge/demo/count_4_button",
+          "size": [
+            18,
+            18
+          ],
+          "offset": [
+            79,
+            71
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 10
+        }
+      },
+      {
+        "layer_10": {
+          "type": "image",
+          "texture": "textures/menu_forge/demo/count_5_button",
+          "size": [
+            18,
+            18
+          ],
+          "offset": [
+            97,
+            71
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 11
+        }
+      },
+      {
+        "layer_11": {
+          "type": "image",
+          "texture": "textures/menu_forge/demo/badge",
+          "size": [
+            15,
+            14
+          ],
+          "offset": [
+            134,
+            72
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 12,
+          "bindings": [
+            {
+              "binding_type": "global",
+              "binding_condition": "none",
+              "binding_name": "#title_text",
+              "binding_name_override": "#title_text"
+            },
+            {
+              "binding_type": "view",
+              "source_property_name": "(not ((#title_text - '(11)') = #title_text))",
+              "target_property_name": "#visible"
+            }
+          ]
+        }
+      },
+      {
+        "layer_12": {
+          "type": "image",
+          "texture": "textures/menu_forge/demo/chat_button",
+          "size": [
+            72,
+            18
+          ],
+          "offset": [
+            7,
+            89
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 13
+        }
+      },
+      {
+        "layer_13": {
+          "type": "image",
+          "texture": "textures/menu_forge/demo/back_button",
+          "size": [
+            72,
+            18
+          ],
+          "offset": [
+            7,
+            107
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 14
+        }
+      },
+      {
+        "layer_14": {
+          "type": "image",
+          "texture": "textures/menu_forge/demo/close_button",
+          "size": [
+            72,
+            18
+          ],
+          "offset": [
+            97,
+            107
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 15
+        }
+      },
+      {
+        "text_0": {
+          "type": "label",
+          "text": "Démo Menu Forge",
+          "localize": false,
+          "color": [
+            1,
+            0.851,
+            0.2
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            8,
+            6
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 16
+        }
+      },
+      {
+        "text_2": {
+          "type": "label",
+          "text": "Infos",
+          "localize": false,
+          "color": [
+            1,
+            0.851,
+            0.2
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            44,
+            40
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 18
+        }
+      },
+      {
+        "text_3": {
+          "type": "label",
+          "text": "Réglages",
+          "localize": false,
+          "color": [
+            1,
+            0.851,
+            0.2
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            134,
+            40
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 19
+        }
+      },
+      {
+        "text_4": {
+          "type": "label",
+          "text": "Onglet Infos : couches et textes",
+          "localize": false,
+          "color": [
+            0.667,
+            0.667,
+            0.667
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            88,
+            58
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 20,
+          "bindings": [
+            {
+              "binding_type": "global",
+              "binding_condition": "none",
+              "binding_name": "#title_text",
+              "binding_name_override": "#title_text"
+            },
+            {
+              "binding_type": "view",
+              "source_property_name": "(not ((#title_text - '(t4)') = #title_text))",
+              "target_property_name": "#visible"
+            }
+          ]
+        }
+      },
+      {
+        "text_5": {
+          "type": "label",
+          "text": "Onglet Réglages : compteur",
+          "localize": false,
+          "color": [
+            0.667,
+            0.667,
+            0.667
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            88,
+            58
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 21,
+          "bindings": [
+            {
+              "binding_type": "global",
+              "binding_condition": "none",
+              "binding_name": "#title_text",
+              "binding_name_override": "#title_text"
+            },
+            {
+              "binding_type": "view",
+              "source_property_name": "(not ((#title_text - '(t5)') = #title_text))",
+              "target_property_name": "#visible"
+            }
+          ]
+        }
+      },
+      {
+        "text_6": {
+          "type": "label",
+          "text": "0",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            17,
+            76
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 22
+        }
+      },
+      {
+        "text_7": {
+          "type": "label",
+          "text": "1",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            35,
+            76
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 23
+        }
+      },
+      {
+        "text_8": {
+          "type": "label",
+          "text": "2",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            53,
+            76
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 24
+        }
+      },
+      {
+        "text_9": {
+          "type": "label",
+          "text": "3",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            71,
+            76
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 25
+        }
+      },
+      {
+        "text_10": {
+          "type": "label",
+          "text": "4",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            89,
+            76
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 26
+        }
+      },
+      {
+        "text_11": {
+          "type": "label",
+          "text": "5",
+          "localize": false,
+          "color": [
+            1,
+            1,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            107,
+            76
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 27
+        }
+      },
+      {
+        "text_13": {
+          "type": "label",
+          "text": "Chat",
+          "localize": false,
+          "color": [
+            0.333,
+            1,
+            1
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            44,
+            94
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 29
+        }
+      },
+      {
+        "text_14": {
+          "type": "label",
+          "text": "Retour",
+          "localize": false,
+          "color": [
+            1,
+            0.333,
+            0.333
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            44,
+            112
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 30
+        }
+      },
+      {
+        "text_15": {
+          "type": "label",
+          "text": "Fermer",
+          "localize": false,
+          "color": [
+            0.667,
+            0.667,
+            0.667
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            134,
+            112
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_middle",
+          "layer": 31
+        }
+      },
+      {
+        "slots": {
+          "type": "grid",
+          "grid_dimensions": [
+            9,
+            7
+          ],
+          "size": [
+            162,
+            126
+          ],
+          "offset": [
+            7,
+            17
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 32,
+          "grid_item_template": "menu_forge_demo.cell",
+          "collection_name": "form_buttons",
+          "bindings": [
+            {
+              "binding_name": "#form_button_length",
+              "binding_name_override": "#maximum_grid_items"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "cell": {
+    "type": "panel",
+    "size": [
+      18,
+      18
+    ],
+    "bindings": [
+      {
+        "binding_type": "collection_details",
+        "binding_collection_name": "form_buttons"
+      }
+    ],
+    "controls": [
+      {
+        "icon": {
+          "type": "image",
+          "size": [
+            16,
+            16
+          ],
+          "layer": 1,
+          "bindings": [
+            {
+              "binding_type": "collection",
+              "binding_collection_name": "form_buttons",
+              "binding_name": "#form_button_texture",
+              "binding_name_override": "#texture"
+            },
+            {
+              "binding_type": "collection",
+              "binding_collection_name": "form_buttons",
+              "binding_name": "#form_button_texture_file_system",
+              "binding_name_override": "#texture_file_system"
+            },
+            {
+              "binding_type": "view",
+              "source_property_name": "(not ((#texture = '') or (#texture = 'loading')))",
+              "target_property_name": "#visible"
+            }
+          ]
+        }
+      },
+      {
+        "button@menu_forge_demo.cell_button": {
+          "layer": 2
+        }
+      },
+      {
+        "text_1": {
+          "type": "label",
+          "text": "#text",
+          "localize": false,
+          "color": [
+            0.941,
+            0.941,
+            0.941
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            1,
+            -103
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_left",
+          "layer": 3,
+          "bindings": [
+            {
+              "binding_type": "collection",
+              "binding_collection_name": "form_buttons",
+              "binding_name": "#form_button_text"
+            },
+            {
+              "binding_type": "view",
+              "source_property_name": "(#form_button_text - '{t0}')",
+              "target_property_name": "#text"
+            },
+            {
+              "binding_type": "view",
+              "source_property_name": "(not ((#form_button_text - '{t0}') = #form_button_text))",
+              "target_property_name": "#visible"
+            }
+          ]
+        }
+      },
+      {
+        "text_12": {
+          "type": "label",
+          "text": "#text",
+          "localize": false,
+          "color": [
+            1,
+            0.851,
+            0.2
+          ],
+          "shadow": false,
+          "size": [
+            "default",
+            "default"
+          ],
+          "offset": [
+            140,
+            -31
+          ],
+          "anchor_from": "top_left",
+          "anchor_to": "top_right",
+          "layer": 3,
+          "bindings": [
+            {
+              "binding_type": "collection",
+              "binding_collection_name": "form_buttons",
+              "binding_name": "#form_button_text"
+            },
+            {
+              "binding_type": "view",
+              "source_property_name": "(#form_button_text - '{t1}')",
+              "target_property_name": "#text"
+            },
+            {
+              "binding_type": "view",
+              "source_property_name": "(not ((#form_button_text - '{t1}') = #form_button_text))",
+              "target_property_name": "#visible"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "cell_button@common.button": {
+    "size": [
+      18,
+      18
+    ],
+    "default_control": "default",
+    "hover_control": "hover",
+    "pressed_control": "pressed",
+    "$pressed_button_name": "button.form_button_click",
+    "controls": [
+      {
+        "default@menu_forge_demo.cell_face": {
+          "$state": "default"
+        }
+      },
+      {
+        "hover@menu_forge_demo.cell_face": {
+          "$state": "hover"
+        }
+      },
+      {
+        "pressed@menu_forge_demo.cell_face": {
+          "$state": "pressed"
+        }
+      }
+    ],
+    "bindings": [
+      {
+        "binding_type": "collection",
+        "binding_condition": "none",
+        "binding_collection_name": "form_buttons"
+      },
+      {
+        "binding_type": "collection_details",
+        "binding_collection_name": "form_buttons"
+      },
+      {
+        "binding_type": "collection",
+        "binding_collection_name": "form_buttons",
+        "binding_name": "#form_button_text"
+      },
+      {
+        "binding_type": "view",
+        "source_property_name": "(not ((#form_button_text = '') or (not ((#form_button_text - '{x}') = #form_button_text)) or (not ((#form_button_text - '{t') = #form_button_text))))",
+        "target_property_name": "#visible"
+      }
+    ]
+  },
+  "cell_face": {
+    "type": "panel",
+    "size": [
+      18,
+      18
+    ],
+    "$highlight_alpha|default": 0,
+    "variables": [
+      {
+        "requires": "($state = 'hover')",
+        "$highlight_alpha": 0.45
+      },
+      {
+        "requires": "($state = 'pressed')",
+        "$highlight_alpha": 0.7
+      }
+    ],
+    "controls": [
+      {
+        "highlight": {
+          "type": "image",
+          "texture": "textures/menu_forge/_white",
+          "color": [
+            1,
+            1,
+            1
+          ],
+          "alpha": "$highlight_alpha",
+          "size": [
+            16,
+            16
+          ],
+          "layer": 1
+        }
+      }
+    ]
+  }
+}

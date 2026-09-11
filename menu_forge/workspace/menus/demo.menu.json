@@ -1,0 +1,537 @@
+{
+  "formatVersion": 1,
+  "id": "demo",
+  "name": "Démo Menu Forge",
+  "container": {
+    "type": "chest",
+    "rows": 6
+  },
+  "state": {
+    "tab": {
+      "type": "enum",
+      "values": [
+        "infos",
+        "settings"
+      ],
+      "default": "infos"
+    },
+    "count": {
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 5
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "texture": "mcrs/panel_r6.png",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "id": "tab_infos_off",
+      "texture": "mcrs/button_w4_gray.png",
+      "x": 7,
+      "y": 35
+    },
+    {
+      "id": "tab_infos_on",
+      "texture": "mcrs/button_w4_active.png",
+      "x": 7,
+      "y": 35,
+      "visibleWhen": {
+        "state": "tab",
+        "is": "infos"
+      }
+    },
+    {
+      "id": "tab_settings_off",
+      "texture": "mcrs/button_w4_gray.png",
+      "x": 97,
+      "y": 35
+    },
+    {
+      "id": "tab_settings_on",
+      "texture": "mcrs/button_w4_active.png",
+      "x": 97,
+      "y": 35,
+      "visibleWhen": {
+        "state": "tab",
+        "is": "settings"
+      }
+    },
+    {
+      "id": "count_0_button",
+      "texture": "mcrs/button_w1_yellow.png",
+      "x": 7,
+      "y": 71
+    },
+    {
+      "id": "count_1_button",
+      "texture": "mcrs/button_w1_yellow.png",
+      "x": 25,
+      "y": 71
+    },
+    {
+      "id": "count_2_button",
+      "texture": "mcrs/button_w1_yellow.png",
+      "x": 43,
+      "y": 71
+    },
+    {
+      "id": "count_3_button",
+      "texture": "mcrs/button_w1_yellow.png",
+      "x": 61,
+      "y": 71
+    },
+    {
+      "id": "count_4_button",
+      "texture": "mcrs/button_w1_yellow.png",
+      "x": 79,
+      "y": 71
+    },
+    {
+      "id": "count_5_button",
+      "texture": "mcrs/button_w1_yellow.png",
+      "x": 97,
+      "y": 71
+    },
+    {
+      "id": "badge",
+      "texture": "mcrs/badge.png",
+      "x": 134,
+      "y": 72,
+      "visibleWhen": {
+        "state": "count",
+        "in": [
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "id": "chat_button",
+      "texture": "mcrs/button_w4_aqua.png",
+      "x": 7,
+      "y": 89
+    },
+    {
+      "id": "back_button",
+      "texture": "mcrs/button_w4_red.png",
+      "x": 7,
+      "y": 107
+    },
+    {
+      "id": "close_button",
+      "texture": "mcrs/button_w4_gray.png",
+      "x": 97,
+      "y": 107
+    }
+  ],
+  "texts": [
+    {
+      "id": "title",
+      "x": 8,
+      "y": 6,
+      "color": "#ffd933",
+      "value": "Démo Menu Forge"
+    },
+    {
+      "id": "greeting",
+      "x": 8,
+      "y": 22,
+      "value": "Bonjour {viewer.name}",
+      "color": "#f0f0f0"
+    },
+    {
+      "id": "tab_infos_label",
+      "x": 44,
+      "y": 40,
+      "value": "Infos",
+      "color": "#ffd933",
+      "align": "center"
+    },
+    {
+      "id": "tab_settings_label",
+      "x": 134,
+      "y": 40,
+      "value": "Réglages",
+      "color": "#ffd933",
+      "align": "center"
+    },
+    {
+      "id": "infos",
+      "x": 88,
+      "y": 58,
+      "value": "Onglet Infos : couches et textes",
+      "color": "#aaaaaa",
+      "align": "center",
+      "visibleWhen": {
+        "state": "tab",
+        "is": "infos"
+      }
+    },
+    {
+      "id": "settings",
+      "x": 88,
+      "y": 58,
+      "value": "Onglet Réglages : compteur",
+      "color": "#aaaaaa",
+      "align": "center",
+      "visibleWhen": {
+        "state": "tab",
+        "is": "settings"
+      }
+    },
+    {
+      "id": "count_0_label",
+      "x": 17,
+      "y": 76,
+      "value": "0",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "count_1_label",
+      "x": 35,
+      "y": 76,
+      "value": "1",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "count_2_label",
+      "x": 53,
+      "y": 76,
+      "value": "2",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "count_3_label",
+      "x": 71,
+      "y": 76,
+      "value": "3",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "count_4_label",
+      "x": 89,
+      "y": 76,
+      "value": "4",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "count_5_label",
+      "x": 107,
+      "y": 76,
+      "value": "5",
+      "color": "#ffff55",
+      "align": "center"
+    },
+    {
+      "id": "count",
+      "x": 165,
+      "y": 94,
+      "value": "Compteur : {state.count}",
+      "color": "#ffd933",
+      "align": "right"
+    },
+    {
+      "id": "chat_label",
+      "x": 44,
+      "y": 94,
+      "value": "Chat",
+      "color": "#55ffff",
+      "align": "center"
+    },
+    {
+      "id": "back_label",
+      "x": 44,
+      "y": 112,
+      "value": "Retour",
+      "color": "#ff5555",
+      "align": "center"
+    },
+    {
+      "id": "close_label",
+      "x": 134,
+      "y": 112,
+      "value": "Fermer",
+      "color": "#aaaaaa",
+      "align": "center"
+    }
+  ],
+  "slots": [
+    {
+      "id": "tab_infos",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 1,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "Infos"
+      },
+      "onClick": [
+        {
+          "type": "setState",
+          "state": "tab",
+          "value": "infos"
+        },
+        {
+          "type": "sound",
+          "sound": "ui.button.click"
+        }
+      ],
+      "enabledWhen": {
+        "not": {
+          "state": "tab",
+          "is": "infos"
+        }
+      }
+    },
+    {
+      "id": "tab_settings",
+      "kind": "button",
+      "area": {
+        "col": 5,
+        "row": 1,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "Réglages"
+      },
+      "onClick": [
+        {
+          "type": "setState",
+          "state": "tab",
+          "value": "settings"
+        },
+        {
+          "type": "sound",
+          "sound": "ui.button.click"
+        }
+      ],
+      "enabledWhen": {
+        "not": {
+          "state": "tab",
+          "is": "settings"
+        }
+      }
+    },
+    {
+      "id": "count_0",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 3
+      },
+      "item": {
+        "invisible": true,
+        "name": "0"
+      },
+      "onClick": [
+        {
+          "type": "setState",
+          "state": "count",
+          "value": 0
+        }
+      ],
+      "enabledWhen": {
+        "not": {
+          "state": "count",
+          "is": 0
+        }
+      }
+    },
+    {
+      "id": "count_1",
+      "kind": "button",
+      "area": {
+        "col": 1,
+        "row": 3
+      },
+      "item": {
+        "invisible": true,
+        "name": "1"
+      },
+      "onClick": [
+        {
+          "type": "setState",
+          "state": "count",
+          "value": 1
+        }
+      ],
+      "enabledWhen": {
+        "not": {
+          "state": "count",
+          "is": 1
+        }
+      }
+    },
+    {
+      "id": "count_2",
+      "kind": "button",
+      "area": {
+        "col": 2,
+        "row": 3
+      },
+      "item": {
+        "invisible": true,
+        "name": "2"
+      },
+      "onClick": [
+        {
+          "type": "setState",
+          "state": "count",
+          "value": 2
+        }
+      ],
+      "enabledWhen": {
+        "not": {
+          "state": "count",
+          "is": 2
+        }
+      }
+    },
+    {
+      "id": "count_3",
+      "kind": "button",
+      "area": {
+        "col": 3,
+        "row": 3
+      },
+      "item": {
+        "invisible": true,
+        "name": "3"
+      },
+      "onClick": [
+        {
+          "type": "setState",
+          "state": "count",
+          "value": 3
+        }
+      ],
+      "enabledWhen": {
+        "not": {
+          "state": "count",
+          "is": 3
+        }
+      }
+    },
+    {
+      "id": "count_4",
+      "kind": "button",
+      "area": {
+        "col": 4,
+        "row": 3
+      },
+      "item": {
+        "invisible": true,
+        "name": "4"
+      },
+      "onClick": [
+        {
+          "type": "setState",
+          "state": "count",
+          "value": 4
+        }
+      ],
+      "enabledWhen": {
+        "not": {
+          "state": "count",
+          "is": 4
+        }
+      }
+    },
+    {
+      "id": "count_5",
+      "kind": "button",
+      "area": {
+        "col": 5,
+        "row": 3
+      },
+      "item": {
+        "invisible": true,
+        "name": "5"
+      },
+      "onClick": [
+        {
+          "type": "setState",
+          "state": "count",
+          "value": 5
+        }
+      ],
+      "enabledWhen": {
+        "not": {
+          "state": "count",
+          "is": 5
+        }
+      }
+    },
+    {
+      "id": "chat",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 4,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<aqua>Chat"
+      },
+      "onClick": [
+        {
+          "type": "command",
+          "command": "me teste Menu Forge",
+          "as": "player"
+        }
+      ]
+    },
+    {
+      "id": "back",
+      "kind": "button",
+      "area": {
+        "col": 0,
+        "row": 5,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<red>Retour"
+      },
+      "onClick": [
+        {
+          "type": "back"
+        }
+      ]
+    },
+    {
+      "id": "close",
+      "kind": "button",
+      "area": {
+        "col": 5,
+        "row": 5,
+        "width": 4
+      },
+      "item": {
+        "invisible": true,
+        "name": "<gray>Fermer"
+      },
+      "onClick": [
+        {
+          "type": "close"
+        }
+      ]
+    }
+  ]
+}
