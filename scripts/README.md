@@ -8,8 +8,9 @@ Scripts Python annexes. Aucun n’est nécessaire pour compiler ou lancer le ser
 [`../dev-docs/31-PROTOCOL-2169.md`](../dev-docs/31-PROTOCOL-2169.md), procédure, et
 [`../dev-docs/33-PROTOCOL-2193.md`](../dev-docs/33-PROTOCOL-2193.md)).
 
-- `import_recipes.py <tag>` : régénère `crates/mc-rs-server/data/recipes/vanilla.json` depuis
-  `.reference/bedrock-samples` au tag donné (ex. `v1.26.50.4`) ; `--check` compare au fichier actuel.
+- `import_bds_recipes.py <capture> --version <bds>` : régénère `crates/mc-rs-server/data/recipes/bds.json`
+  depuis une capture de BDS décodée en mode typé (`bds-capture decode -typed`) ; `--check` compare au fichier
+  actuel. Remplace l'ancien import de bedrock-samples.
 - `extract_biomes.py` : régénère `crates/mc-rs-server/data/biomes.json` (climat, règles multinoise,
   surface) depuis `.reference/bedrock-samples/behavior_pack/biomes` (version du checkout courant) et les
   IDs de `biome_id_map.json` de BedrockData (PMMP, arrêté à 1.26.30).

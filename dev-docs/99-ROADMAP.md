@@ -256,7 +256,7 @@ Quand une fonctionnalité doit être implémentée :
 
 ### Modules data-driven créés (branchés runtime)
 - [x] `creative_content` — 4 catégories + ~150 sous-groupes (PMMP bedrock-data) → envoyé dans CreativeContent au PreSpawn
-- [x] `recipes_vanilla` — 1601 recettes (939 shaped + 513 shapeless + 149 furnace) → registrées au boot dans `CraftingManager`
+- [x] `recipes_bds` — 4 768 recettes de BDS 1.26.52.3 (remplace `recipes_vanilla` le 2026-10-25) → registrées au boot dans `CraftingManager`
 
 ### Modules data-driven créés (data-only, consommateurs runtime à venir)
 - [x] `loot_table` — 176 tables (122 mobs + 29 chests + 25 equipment/gameplay/dispensers/pots/spawners) avec parser pools/conditions/functions
@@ -339,7 +339,7 @@ Quand une fonctionnalité doit être implémentée :
 ### 5.1 - Crafting — ✅ TERMINÉE
 - [x] CraftingManager (`crafting.rs` + RECIPE_DB static OnceLock)
 - [x] ShapedRecipe + ShapelessRecipe + FurnaceRecipe
-- [x] **1601 recettes vanilla** chargées au boot via `recipes_vanilla::register_all`
+- [x] **Recettes de BDS** chargées au boot via `recipes_bds::register_all` (4 768, CraftingData identique à BDS)
   - 939 shaped + 513 shapeless + 149 furnace
 - [x] Crafting table 3x3 (InvKey::Craft3x3, UI slots 32..40, ContainerOpen WORKBENCH)
 - [x] Inventory crafting 2x2 (InvKey::Craft2x2, UI slots 28..31)

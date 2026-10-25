@@ -730,7 +730,7 @@ pub mod rcon;
 pub mod recipe_book;
 #[allow(dead_code)]
 pub mod recipe_unlock;
-pub mod recipes_vanilla;
+pub mod recipes_bds;
 #[allow(dead_code)]
 pub mod redstone;
 #[allow(dead_code)]
@@ -1181,15 +1181,24 @@ async fn main() {
     let mut dragon_fight = crate::dragon_fight_manager::DragonFightManager::new();
     let mut sign_manager = crate::sign_storage::SignManager::new();
     let mut crafting_manager = crate::crafting::CraftingManager::default();
-    let (sh, sl, fu) = crate::recipes_vanilla::register_all(&mut crafting_manager);
+    let recipes = crate::recipes_bds::register_all(&mut crafting_manager);
     tracing::info!(
-        "Loaded vanilla recipes: {} shaped + {} shapeless + {} furnace ({} blast, {} smoker)",
-        sh,
-        sl,
-        fu,
-        crafting_manager.blast_furnace.len(),
-        crafting_manager.smoker.len()
+        "Loaded BDS {} recipes: {} shaped + {} shapeless ({} cooking) + {} user-data + {} smithing + {} potion mixes",
+        recipes.bds_version,
+        recipes.shaped,
+        recipes.shapeless,
+        recipes.furnace,
+        recipes.user_data_shapeless,
+        recipes.smithing,
+        recipes.potion_mixes
     );
+    if !recipes.skipped.is_empty() {
+        tracing::warn!(
+            "{} recette(s) BDS omises : {:?}",
+            recipes.skipped.len(),
+            recipes.skipped
+        );
+    }
     let crafting_manager = crafting_manager;
     // Static recipe DB — utilisé par InventoryManager::try_match_recipe
     // sans avoir besoin de passer la référence à chaque appel.
@@ -1198,9 +1207,9 @@ async fn main() {
     let crafting_data_payload = crafting_manager.encode_crafting_data();
     let total_recipes = crafting_manager.shaped.len()
         + crafting_manager.shapeless.len()
-        + crafting_manager.furnace.len()
-        + crafting_manager.blast_furnace.len()
-        + crafting_manager.smoker.len();
+        + crafting_manager.user_data_shapeless.len()
+        + crafting_manager.smithing_transform.len()
+        + crafting_manager.smithing_trim.len();
     tracing::info!(
         "Encoded CraftingData packet: {} recipes, {} bytes",
         total_recipes,

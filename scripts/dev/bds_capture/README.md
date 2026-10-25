@@ -23,7 +23,10 @@ bds-capture decode -in <préfixe>_s2c.bin -direction s2c -out <préfixe>_s2c.jso
 - `capture` se connecte comme un client et écrit `<préfixe>_s2c.bin` (serveur → client) et `<préfixe>_c2s.bin`
   (client → serveur), au format `[u64 ms][u32 id][u32 longueur][charge utile]` little-endian.
 - `decode` décode chaque paquet avec gophertunnel et écrit une ligne JSON par paquet ; `unread` signale des
-  octets restants (format divergent), `error` un échec de décodage.
+  octets restants (format divergent), `error` un échec de décodage. Avec `-typed`, le NBT garde ses types
+  (`{"int": 0}`, `{"byte_array": [...]}`…) et les champs optionnels montrent leur contenu
+  (`{"set": true, "val": ...}`), que le JSON standard affiche `{}` : à utiliser pour comparer des optionnels ou
+  importer des données (recettes).
 - La première connexion demande un code sur https://www.microsoft.com/link (compte Microsoft du jeu) : BDS
   exige une identité Xbox Live en NetherNet, même avec `online-mode=false`. Le jeton est enregistré dans
   `%APPDATA%\mc-rs\bds-capture-token.json`, hors du dépôt.

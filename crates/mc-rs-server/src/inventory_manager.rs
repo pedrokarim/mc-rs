@@ -922,6 +922,36 @@ impl InventoryManager {
         None
     }
 
+    /// Recette d'établi désignée par le client (`CraftRecipe`), vérifiée
+    /// contre la grille. Refusée si l'identifiant est inconnu, si la recette
+    /// n'est pas une recette d'établi (four, tailleur de pierre…), ou si c'est
+    /// une recette à données : son résultat doit reprendre le NBT de l'entrée
+    /// (contenu d'une boîte de Shulker…), ce que le serveur ne sait pas faire.
+    fn match_recipe_by_net_id(&self, inv: &PlayerInventory, net_id: u32) -> Option<ItemStack> {
+        use crate::crafting::{CraftingRecipeRef, CRAFTING_TABLE};
+        let db = crate::crafting::RECIPE_DB.get()?;
+        let grids: [(Vec<ItemStack>, usize); 2] = [
+            (
+                inv.craft_grid_3x3.iter().map(|w| w.item.clone()).collect(),
+                3,
+            ),
+            (inv.craft_grid.iter().map(|w| w.item.clone()).collect(), 2),
+        ];
+        let filled = grids.iter().filter(|(g, _)| g.iter().any(|s| !s.is_air()));
+        let output = match db.recipe_by_net_id(net_id)? {
+            CraftingRecipeRef::Shaped(r) if r.info.block == CRAFTING_TABLE => filled
+                .clone()
+                .any(|(g, size)| r.matches(g, *size))
+                .then_some(&r.output)?,
+            CraftingRecipeRef::Shapeless(r) if r.info.block == CRAFTING_TABLE => filled
+                .clone()
+                .any(|(g, _)| r.matches(g))
+                .then_some(&r.output)?,
+            _ => return None,
+        };
+        output.first().cloned()
+    }
+
     pub fn new_item_stack_id_pub(&mut self) -> i32 {
         self.new_item_stack_id()
     }
@@ -1171,9 +1201,11 @@ impl InventoryManager {
                 }
                 StackRequestAction::CraftRecipe { recipe_id, times }
                 | StackRequestAction::CraftRecipeAuto { recipe_id, times } => {
-                    // Match la grille 3x3 (Craft3x3) ou 2x2 (Craft2x2 si
-                    // crafting depuis inventaire) contre les recipes.
-                    let result = self.try_match_recipe(inv);
+                    // Recette désignée par son identifiant réseau (PMMP
+                    // `ItemStackRequestExecutor`), vérifiée contre la grille
+                    // 3x3 (Craft3x3) ou 2x2 (Craft2x2 si crafting depuis
+                    // l'inventaire).
+                    let result = self.match_recipe_by_net_id(inv, *recipe_id);
                     if let Some(output) = result {
                         // Stocke comme pending_creative_item (le client va
                         // ensuite faire un Place depuis CREATED_OUTPUT).

@@ -2,9 +2,9 @@
 //! `ItemIdMetaUpgrader` (`src/data/bedrock/item/upgrade/`) et de ses schémas
 //! `pmmp/BedrockItemUpgradeSchema` (`id_meta_upgrade_schema/*.json`).
 //!
-//! Les données Mojang (recettes de bedrock-samples…) emploient encore des noms
-//! legacy (`minecraft:emptymap`, `minecraft:dye` + meta, `minecraft:chain`…) :
-//! le schéma les convertit vers les identifiants de la table d'items courante.
+//! Sert à convertir les items des sauvegardes joueurs écrites avec une table
+//! d'items antérieure (`item_registry::migrate_saved_item`) : seuls les
+//! schémas postérieurs à cette table sont rejoués.
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -52,18 +52,12 @@ static SCHEMAS: LazyLock<Vec<Schema>> = LazyLock::new(|| {
         .collect()
 });
 
-/// `ItemIdMetaUpgrader::upgrade` : applique les schémas dans l'ordre de leur
-/// numéro ; pour chacun, un remappage par meta (qui remet la meta à 0)
-/// l'emporte sur un renommage. Les clés sont comparées en minuscules ASCII
-/// (`mb_strtolower($id, 'US-ASCII')`).
-pub fn upgrade(id: &str, meta: i32) -> (String, i32) {
-    upgrade_since(id, meta, 0)
-}
-
-/// Comme [`upgrade`], en n'appliquant que les schémas de numéro au moins égal
-/// à `first_schema` : ceux que des données d'une version connue ne reflètent
-/// pas encore (PMMP ne rejoue que les schémas postérieurs à la version des
-/// données).
+/// `ItemIdMetaUpgrader::upgrade` : applique dans l'ordre de leur numéro les
+/// schémas d'au moins `first_schema`, ceux que des données d'une version
+/// connue ne reflètent pas encore (PMMP ne rejoue que les schémas postérieurs
+/// à la version des données). Pour chaque schéma, un remappage par meta (qui
+/// remet la meta à 0) l'emporte sur un renommage ; les clés sont comparées en
+/// minuscules ASCII (`mb_strtolower($id, 'US-ASCII')`).
 pub fn upgrade_since(id: &str, meta: i32, first_schema: u32) -> (String, i32) {
     let mut id = id.to_string();
     let mut meta = meta;
@@ -79,25 +73,6 @@ pub fn upgrade_since(id: &str, meta: i32, first_schema: u32) -> (String, i32) {
     (id, meta)
 }
 
-/// Nom d'item tel qu'écrit dans les données Mojang → (identifiant, meta
-/// éventuelle). Sans espace de noms, `minecraft:` est implicite ; la forme
-/// legacy `nom:meta` (`minecraft:coal:1`) porte la meta en suffixe.
-pub fn parse_item_name(name: &str) -> (String, Option<i32>) {
-    let (base, meta) = match name.rsplit_once(':') {
-        Some((head, tail)) => match tail.parse::<i32>() {
-            Ok(meta) => (head, Some(meta)),
-            Err(_) => (name, None),
-        },
-        None => (name, None),
-    };
-    let id = if base.contains(':') {
-        base.to_string()
-    } else {
-        format!("minecraft:{base}")
-    };
-    (id, meta)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,15 +80,15 @@ mod tests {
     #[test]
     fn renames_legacy_ids() {
         assert_eq!(
-            upgrade("minecraft:emptymap", 0),
+            upgrade_since("minecraft:emptymap", 0, 0),
             ("minecraft:empty_map".to_string(), 0)
         );
         assert_eq!(
-            upgrade("minecraft:chain", 0),
+            upgrade_since("minecraft:chain", 0, 0),
             ("minecraft:iron_chain".to_string(), 0)
         );
         assert_eq!(
-            upgrade("minecraft:melon", 0),
+            upgrade_since("minecraft:melon", 0, 0),
             ("minecraft:melon_slice".to_string(), 0)
         );
     }
@@ -136,33 +111,13 @@ mod tests {
     #[test]
     fn remaps_meta_variants_and_resets_meta() {
         assert_eq!(
-            upgrade("minecraft:coal", 1),
+            upgrade_since("minecraft:coal", 1, 0),
             ("minecraft:charcoal".to_string(), 0)
         );
         // Meta sans remappage : identifiant et meta conservés.
         assert_eq!(
-            upgrade("minecraft:stone", 0),
+            upgrade_since("minecraft:stone", 0, 0),
             ("minecraft:stone".to_string(), 0)
-        );
-    }
-
-    #[test]
-    fn parses_mojang_item_names() {
-        assert_eq!(
-            parse_item_name("stick"),
-            ("minecraft:stick".to_string(), None)
-        );
-        assert_eq!(
-            parse_item_name("minecraft:stick"),
-            ("minecraft:stick".to_string(), None)
-        );
-        assert_eq!(
-            parse_item_name("minecraft:coal:1"),
-            ("minecraft:coal".to_string(), Some(1))
-        );
-        assert_eq!(
-            parse_item_name("coal:1"),
-            ("minecraft:coal".to_string(), Some(1))
         );
     }
 }

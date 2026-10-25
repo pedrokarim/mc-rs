@@ -105,8 +105,8 @@ sous-chunks, `SubChunkCount = 0`), IDs de blocs (BDS en hash, mc-rs en séquenti
 
 ### 4.4 Questions ouvertes
 
-- Recette `minecraft:barrel` de BDS : gophertunnel lit `minecraft:stick` là où la recette vanilla utilise des
-  planches. Lecture du descripteur par nom à vérifier avant d'en tirer une conclusion.
+- ~~Recette `minecraft:barrel` de BDS avec des bâtons~~ : **résolu**. Cette recette est rattachée au bloc
+  `deprecated` (priorité −1) : une ancienne recette que BDS envoie encore, pas une erreur de lecture.
 - `UpdateAdventureSettings.ShowNameTags` à `false` et `InventoryContent.Container.ContainerID` à 0 chez BDS :
   à confirmer avec un vrai client.
 
@@ -151,7 +151,30 @@ Documentation corrigée au passage : bits de drapeaux de `07-ENTITY-SYSTEM.md` (
 (`keepInventory`, `naturalRegeneration`, `fallDamage`… sans effet) ; le `SkinResourcePatch` renvoyé par mc-rs
 n'est pas l'octet près celui du client (fins de ligne), BDS le relaie tel quel.
 
-## 6. Décompilation (en cours)
+## 6. Recettes importées de BDS (2026-10-25)
+
+Toutes les recettes de mc-rs viennent désormais du CraftingData de BDS
+(`scripts/import_bds_recipes.py` → `data/recipes/bds.json`, chargé par `recipes_bds.rs`), au lieu de
+bedrock-samples. Les 1 796 recettes de bedrock-samples existent toutes chez BDS sous le même nom ; BDS en
+ajoute 2 856 que le jeu génère par code. Détail du format et du comportement serveur :
+[`30-VANILLA-DATA-IMPORT.md`](30-VANILLA-DATA-IMPORT.md).
+
+Comparaison après import (`comparisons/2026-10-25_craftingdata_bds_vs_mc-rs-recettes-bds-2.txt`) : identifiants,
+UUID, blocs, priorités, ingrédients, NBT, potions, forge, recettes multiples **identiques**. Restent deux écarts
+assumés : la condition de déblocage (« toujours débloquée ») et le runtime ID de bloc des sorties (hash chez BDS,
+séquentiel chez mc-rs). BDS ne met un bloc qu'aux sorties qui sont des items-blocs (pas aux lits, portes,
+panneaux suspendus, feux de camp…) : la présence est reprise sortie par sortie.
+
+Défauts corrigés au passage : les recettes du tailleur de pierre partaient avec le bloc `crafting_table` (elles
+apparaissaient à l'établi) ; `CraftRecipe` ignorait l'identifiant de recette envoyé par le client.
+
+**Mode typé du décodeur** (`bds-capture decode -typed`) : le JSON standard de gophertunnel perd les types NBT et
+affiche `{}` pour tout champ optionnel. Une première lecture de la condition de déblocage (« absente chez BDS »)
+venait de là et était **fausse** : BDS envoie une condition par recette (contexte « None » et les ingrédients
+dont la possession débloque la recette ; aucune pour les recettes à données). Les comparaisons de champs
+optionnels se font désormais sur des captures décodées en mode typé.
+
+## 7. Décompilation (en cours)
 
 Import et analyse automatique de `bedrock_server.exe` lancés le 2026-10-25 à 16:12 dans le projet Ghidra
 (16 Go de tas, 12 cœurs, priorité basse ; journal `C:\tools\ghidra-projects\bds-1.26.52.3-analyze.log`).

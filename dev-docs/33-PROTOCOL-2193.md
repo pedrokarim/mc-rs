@@ -60,7 +60,8 @@ Toutes viennent de **dragonfly v0.11.5**, identiques au commit `4c7b5074` :
 | `creative_items.nbt` | 124 groupes, 1 980 entrées |
 | `data_driven_blocks.nbt` (nouveau) | 98 définitions de blocs data-driven |
 
-Recettes : bedrock-samples `v1.26.50.4` (`python scripts/import_recipes.py v1.26.50.4`). Schémas d'items :
+Recettes : bedrock-samples `v1.26.50.4` à la montée, remplacées le même jour par celles de BDS 1.26.52.3
+(`scripts/import_bds_recipes.py`, voir [`30-VANILLA-DATA-IMPORT.md`](30-VANILLA-DATA-IMPORT.md)). Schémas d'items :
 `python scripts/import_item_upgrade_schema.py` (29 schémas, jusqu'à 0281).
 
 ### 3.1 Blocs vanilla data-driven

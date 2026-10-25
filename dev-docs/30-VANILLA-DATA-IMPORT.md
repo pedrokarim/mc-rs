@@ -34,19 +34,27 @@ Intégration complète des **données canoniques Mojang** (`bedrock-samples` v1.
   - `loot_table::roll_any(table_name)` — cherche dans toutes les catégories
   - `total_table_count()` ≥ 176
 
-### `recipes_vanilla` (bedrock-samples)
-- **Source** : `behavior_pack/recipes/*.json`, **1.26.50.4 depuis le 2026-10-25** (85 fichiers ignorés : brewing/smithing non supportés)
-- **Génération** : `python scripts/import_recipes.py v1.26.50.4` (lit le tag git de `.reference/bedrock-samples`, sans checkout) ; `--check` compare au fichier en place. Le script reproduit à l’identique l’import 1.26.10.4 d’origine.
-- **Data** : `data/recipes/vanilla.json` (consolidé)
-- **Contenu** :
-  - **1 064 `recipe_shaped`** (pattern 2D + key)
-  - **591 `recipe_shapeless`** (liste d'ingrédients)
-  - **152 `recipe_furnace`** (1 input → 1 output)
-  - Nouveautés 1.26.50 : dalles et escaliers de béton et de laine.
-  - Nouveautés 1.26.40 : familles cinabre et soufre (dont tailleur de pierre). Aucune recette poplar ni cushion dans bedrock-samples 1.26.40.5.
-- **Tags** : résolution statique des tags utilisés comme ingrédients (`planks`, `logs`, `logs_that_burn`, `wool`, `metal_nuggets`, `coals`, `stone_crafting_materials`, `stone_tool_materials`, `soul_fire_base_blocks`, `egg`, `wooden_slabs`). Les tags de dragonfly et Nukkit n’incluent pas encore le bois poplar : il n’est donc pas ajouté.
-- **API** : `recipes_vanilla::register_all(&mut CraftingManager) -> (shaped, shapeless, furnace)`.
-- **Intégration** : appelé au boot dans `main.rs` ; le `CraftingManager` global est passé dans `process_peer_events`.
+### `recipes_bds` (CraftingData de BDS, depuis le 2026-10-25)
+- **Source** : le CraftingData que BDS 1.26.52.3 envoie au client, capturé et décodé en mode typé
+  (`bds-capture decode -typed`, voir [`34-BDS-RETRO-INGENIERIE.md`](34-BDS-RETRO-INGENIERIE.md)). Il remplace
+  l'import de bedrock-samples (`recipes_vanilla`, `scripts/import_recipes.py`, `data/recipes/vanilla.json`,
+  retirés ; historique git) : les 1 796 recettes de bedrock-samples y sont toutes, sous le même nom, et BDS en
+  ajoute 2 856 générées par le code du jeu (teintures de lits, sacs et boîtes de Shulker, anciennes recettes,
+  variantes de tailleur de pierre).
+- **Génération** : `python scripts/import_bds_recipes.py <capture>/s2c.typed.jsonl --version 1.26.52.3` ;
+  `--check` compare au fichier en place. Le script s'arrête sur tout élément qu'il ne sait pas représenter.
+- **Data** : `data/recipes/bds.json` ; tags d'ingrédients : `data/recipes/item_tags.json` (dragonfly v0.11.5).
+- **Contenu** : 1 217 façonnées, 2 068 sans forme (dont la cuisson au four, haut fourneau, fumoir, feux de camp et
+  le tailleur de pierre, chacune avec son bloc), 1 456 à données utilisateur, 14 multiples, 13 de forge,
+  210 mélanges d'alambic, 2 changements de contenant. Chaque recette garde son identifiant BDS, son identifiant
+  réseau, son UUID, son bloc, sa priorité et sa condition de déblocage.
+- **Envoi** : CraftingData identique à celui de BDS, sauf la condition de déblocage (« toujours débloquée » :
+  mc-rs n'envoie pas UnlockedRecipes) et le runtime ID de bloc des sorties (séquentiel au lieu d'un hash).
+- **Serveur** : l'établi ne considère que les recettes du bloc `crafting_table` ; `CraftRecipe` retrouve la
+  recette par son identifiant réseau puis vérifie la grille (PMMP `ItemStackRequestExecutor`) ; les recettes à
+  données sont refusées (leur résultat doit reprendre le NBT de l'entrée) ; la cuisson alimente `furnace.rs`
+  (durée 200 ticks et 0,1 d'expérience : BDS ne les envoie pas).
+- **API** : `recipes_bds::register_all(&mut CraftingManager) -> LoadSummary`.
 
 ### `spawn_rules_vanilla` (bedrock-samples)
 - **Source** : `behavior_pack/spawn_rules/*.json` (56/58 fichiers ; 2 avec commentaires JSON5 skipped)
@@ -117,7 +125,7 @@ Intégration complète des **données canoniques Mojang** (`bedrock-samples` v1.
 | Data | Consommateur runtime |
 |---|---|
 | `creative_content` | ✅ Envoyé dans CreativeContent (0x91) au PreSpawn |
-| `recipes_vanilla` | ✅ 1653 recettes enregistrées + matching Craft3x3/Craft2x2. Les noms Mojang sans espace de noms ou legacy (`coal:1`, `emptymap`, `chain`…) sont migrés par `item_upgrade` (port de PMMP `ItemIdMetaUpgrader`, schémas `pmmp/BedrockItemUpgradeSchema` consolidés par `scripts/import_item_upgrade_schema.py`) ; chaque recette ignorée est journalisée avec sa raison |
+| `recipes_bds` | ✅ 4 768 recettes de BDS 1.26.52.3, toutes chargées, CraftingData identique à BDS (voir ci-dessus) ; remplace `recipes_vanilla` (bedrock-samples) le 2026-10-25 |
 | `loot_table::roll_entity_loot` | ✅ Wired dans `mob_entities::apply_attack` (drops mobs vanilla) |
 | `loot_table::roll_chest_loot` | ✅ API exposée pour générateur de structures (data prête) |
 | `spawn_rules_vanilla` | ✅ `mob_spawner.rs` consulte `spawn_weight` + `brightness_range` chaque game tick |

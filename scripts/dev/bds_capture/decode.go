@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -32,6 +33,7 @@ func decode(args []string) {
 	direction := fs.String("direction", "s2c", "s2c (paquets du serveur) ou c2s (paquets du client)")
 	ids := fs.String("ids", "", "identifiants à décoder, séparés par des virgules (vide : tous)")
 	out := fs.String("out", "", "fichier JSON Lines produit (vide : sortie standard)")
+	typed := fs.Bool("typed", false, "NBT typé et champs non exportés (contenu des optionnels), voir typed.go")
 	fs.Parse(args)
 	if *in == "" {
 		log.Fatal("-in est requis")
@@ -73,6 +75,9 @@ func decode(args []string) {
 			continue
 		}
 		line := decodeOne(i, r, pool, shieldID)
+		if *typed && line.Packet != nil {
+			line.Packet = typedTree(reflect.ValueOf(line.Packet))
+		}
 		if line.Error != "" {
 			failed++
 		} else {
