@@ -174,7 +174,28 @@ venait de là et était **fausse** : BDS envoie une condition par recette (conte
 dont la possession débloque la recette ; aucune pour les recettes à données). Les comparaisons de champs
 optionnels se font désormais sur des captures décodées en mode typé.
 
-## 7. Décompilation (en cours)
+## 7. Premier essai avec le vrai client 1.26.52 : écran « Boat »
+
+Après les corrections ci-dessus, le client 1.26.52 (Windows GDK, RakNet 2193) se déconnectait 0,3 s après le
+début de l'envoi des chunks, avec l'écran **« Boat »** et le détail `InitialConnection-148`. Aucune trace côté
+serveur ; `NonAssertErrorLog.txt` du client reste vide.
+
+**Lire un écran d'erreur** : le nombre de `InitialConnection-NNN` est l'indice dans l'énumération Mojang
+`DisconnectFailReason` (`json/DisconnectFailReason.json`). 148 = `MissingStructureData`, valeur ajoutée en
+1.26.50 ; 90 = `BadPacket`, l'écran « Block » de la montée 2169.
+
+Cause : le client 1.26.50+ exige le paquet **JigsawStructureData** (définitions des structures jigsaw), que BDS
+envoie juste avant StartGame et que mc-rs n'envoyait pas (dragonfly v0.11.5 ne l'envoie pas non plus). Correctif :
+JigsawStructureData et VoxelShapes (table des formes de blocs) repris octet pour octet de BDS
+(`scripts/import_bds_packets.py` → `data/bds_packets/`, provenance et SHA-256 dans `manifest.json`), envoyés
+avant StartGame dans l'ordre de BDS. TrimData (garnitures d'armure, `scripts/import_bds_trim_data.py`) est
+envoyé après CreativeContent, comme BDS.
+
+Résultat le 2026-10-25 : connexion, déplacement, sprint, `/gamemode creative` et inventaire créatif fonctionnent
+avec le vrai client 1.26.52. Pour une prochaine bisection, `MCRS_EMPTY_PRESPAWN` accepte aussi `trim`, `jigsaw`
+et `voxel`.
+
+## 8. Décompilation (en cours)
 
 Import et analyse automatique de `bedrock_server.exe` lancés le 2026-10-25 à 16:12 dans le projet Ghidra
 (16 Go de tas, 12 cœurs, priorité basse ; journal `C:\tools\ghidra-projects\bds-1.26.52.3-analyze.log`).

@@ -87,4 +87,10 @@ pub mod packet_id {
     /// Options d'affichage du four choisies par le joueur (2193, C→S et S→C ;
     /// gophertunnel `IDSetPlayerFurnaceOptions`, Cloudburst ID 351).
     pub const SET_PLAYER_FURNACE_OPTIONS: u32 = 0x15F;
+    /// Garnitures d'armure (gophertunnel `IDTrimData` = 302).
+    pub const TRIM_DATA: u32 = 0x12E;
+    /// Structures jigsaw (gophertunnel `IDJigsawStructureData` = 313).
+    pub const JIGSAW_STRUCTURE_DATA: u32 = 0x139;
+    /// Formes de blocs (gophertunnel `IDVoxelShapes` = 337).
+    pub const VOXEL_SHAPES: u32 = 0x151;
 }

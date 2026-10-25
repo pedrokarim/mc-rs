@@ -1,0 +1,138 @@
+{
+ "source": {
+  "bds_version": "1.26.52.3",
+  "capture": "bds/captures/1.26.52.3/2026-10-25_bot-nethernet-20s/s2c.typed.jsonl",
+  "generated_by": "scripts/import_bds_trim_data.py"
+ },
+ "patterns": [
+  {
+   "item": "minecraft:ward_armor_trim_smithing_template",
+   "pattern": "ward"
+  },
+  {
+   "item": "minecraft:sentry_armor_trim_smithing_template",
+   "pattern": "sentry"
+  },
+  {
+   "item": "minecraft:snout_armor_trim_smithing_template",
+   "pattern": "snout"
+  },
+  {
+   "item": "minecraft:dune_armor_trim_smithing_template",
+   "pattern": "dune"
+  },
+  {
+   "item": "minecraft:spire_armor_trim_smithing_template",
+   "pattern": "spire"
+  },
+  {
+   "item": "minecraft:tide_armor_trim_smithing_template",
+   "pattern": "tide"
+  },
+  {
+   "item": "minecraft:wild_armor_trim_smithing_template",
+   "pattern": "wild"
+  },
+  {
+   "item": "minecraft:rib_armor_trim_smithing_template",
+   "pattern": "rib"
+  },
+  {
+   "item": "minecraft:coast_armor_trim_smithing_template",
+   "pattern": "coast"
+  },
+  {
+   "item": "minecraft:shaper_armor_trim_smithing_template",
+   "pattern": "shaper"
+  },
+  {
+   "item": "minecraft:eye_armor_trim_smithing_template",
+   "pattern": "eye"
+  },
+  {
+   "item": "minecraft:vex_armor_trim_smithing_template",
+   "pattern": "vex"
+  },
+  {
+   "item": "minecraft:silence_armor_trim_smithing_template",
+   "pattern": "silence"
+  },
+  {
+   "item": "minecraft:wayfinder_armor_trim_smithing_template",
+   "pattern": "wayfinder"
+  },
+  {
+   "item": "minecraft:raiser_armor_trim_smithing_template",
+   "pattern": "raiser"
+  },
+  {
+   "item": "minecraft:host_armor_trim_smithing_template",
+   "pattern": "host"
+  },
+  {
+   "item": "minecraft:flow_armor_trim_smithing_template",
+   "pattern": "flow"
+  },
+  {
+   "item": "minecraft:bolt_armor_trim_smithing_template",
+   "pattern": "bolt"
+  }
+ ],
+ "materials": [
+  {
+   "material": "quartz",
+   "colour": "§h",
+   "item": "minecraft:quartz"
+  },
+  {
+   "material": "iron",
+   "colour": "§i",
+   "item": "minecraft:iron_ingot"
+  },
+  {
+   "material": "netherite",
+   "colour": "§j",
+   "item": "minecraft:netherite_ingot"
+  },
+  {
+   "material": "redstone",
+   "colour": "§m",
+   "item": "minecraft:redstone"
+  },
+  {
+   "material": "copper",
+   "colour": "§n",
+   "item": "minecraft:copper_ingot"
+  },
+  {
+   "material": "gold",
+   "colour": "§p",
+   "item": "minecraft:gold_ingot"
+  },
+  {
+   "material": "emerald",
+   "colour": "§q",
+   "item": "minecraft:emerald"
+  },
+  {
+   "material": "diamond",
+   "colour": "§s",
+   "item": "minecraft:diamond"
+  },
+  {
+   "material": "lapis",
+   "colour": "§t",
+   "item": "minecraft:lapis_lazuli"
+  },
+  {
+   "material": "amethyst",
+   "colour": "§u",
+   "item": "minecraft:amethyst_shard"
+  },
+  {
+   "material": "resin",
+   "colour": "§v",
+   "item": "minecraft:resin_brick"
+  }
+ ]
+}

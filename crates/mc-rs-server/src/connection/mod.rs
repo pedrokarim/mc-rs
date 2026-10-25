@@ -726,7 +726,7 @@ pub fn dump_outgoing_packet(pkt_id: u32, payload: &[u8]) {
 
 /// Diagnostic : paquets de pré-spawn à remplacer par une version vide, lus une
 /// fois dans `MCRS_EMPTY_PRESPAWN` (liste séparée par des virgules parmi
-/// `crafting`, `creative`, `playerlist`). Sert à isoler, avec un vrai client, le
+/// `crafting`, `creative`, `playerlist`, `trim`, `jigsaw`, `voxel`). Sert à isoler, avec un vrai client, le
 /// paquet qu'il refuse (`BadPacket`). Désactivé par défaut.
 pub(super) fn prespawn_debug_empty(name: &str) -> bool {
     static EMPTIED: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();

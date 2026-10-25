@@ -1,0 +1,17 @@
+{
+ "bds_version": "1.26.52.3",
+ "capture": "bds/captures/1.26.52.3/2026-10-25_bot-nethernet-20s/s2c.bin",
+ "generated_by": "scripts/import_bds_packets.py",
+ "packets": {
+  "jigsaw_structure_data": {
+   "id": 313,
+   "size": 209307,
+   "sha256": "d15c9786ef12b21b7e67e022d884cc1a1d3e96081296d4f904eae95f34b3c3b1"
+  },
+  "voxel_shapes": {
+   "id": 337,
+   "size": 23178,
+   "sha256": "7cd81b39d20489d703c5ca0319ff8793a3b225e49a701edf504516a12fffc406"
+  }
+ }
+}

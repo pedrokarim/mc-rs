@@ -164,6 +164,10 @@ powershell -Command "Get-Process mc-rs-server -ErrorAction SilentlyContinue | St
   Méthode en cas de « Block » : bisection avec `MCRS_EMPTY_PRESPAWN`, puis comparaison champ par champ.
   Causes déjà trouvées (biomes 4096 cases, BiomeDefinitionList vide, skin, pack) :
   [`dev-docs/31-PROTOCOL-2169.md`](dev-docs/31-PROTOCOL-2169.md) § 5
+- **Écran d'erreur du client** : le nombre de `InitialConnection-NNN` est l'indice dans l'énumération Mojang
+  `DisconnectFailReason` (90 `BadPacket` = « Block », 148 `MissingStructureData` = « Boat »). Depuis 1.26.50, le
+  client exige JigsawStructureData avant StartGame :
+  [`dev-docs/34-BDS-RETRO-INGENIERIE.md`](dev-docs/34-BDS-RETRO-INGENIERIE.md) § 7
 
 ## Communication
 

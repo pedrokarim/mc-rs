@@ -11,6 +11,10 @@ Scripts Python annexes. Aucun n’est nécessaire pour compiler ou lancer le ser
 - `import_bds_recipes.py <capture> --version <bds>` : régénère `crates/mc-rs-server/data/recipes/bds.json`
   depuis une capture de BDS décodée en mode typé (`bds-capture decode -typed`) ; `--check` compare au fichier
   actuel. Remplace l'ancien import de bedrock-samples.
+- `import_bds_trim_data.py <capture> --version <bds>` : garnitures d'armure (TrimData) de BDS →
+  `crates/mc-rs-server/data/trim_data.json`.
+- `import_bds_packets.py <capture>/s2c.bin --version <bds>` : paquets de pure donnée de BDS
+  (JigsawStructureData, VoxelShapes) renvoyés tels quels → `crates/mc-rs-server/data/bds_packets/`.
 - `extract_biomes.py` : régénère `crates/mc-rs-server/data/biomes.json` (climat, règles multinoise,
   surface) depuis `.reference/bedrock-samples/behavior_pack/biomes` (version du checkout courant) et les
   IDs de `biome_id_map.json` de BedrockData (PMMP, arrêté à 1.26.30).

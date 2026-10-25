@@ -128,6 +128,22 @@ impl Connection {
     pub(super) fn send_pre_spawn_packets(&mut self) -> Vec<Vec<u8>> {
         let mut responses = Vec::new();
 
+        // Données de jeu de BDS envoyées avant StartGame, dans son ordre :
+        // structures jigsaw (exigées par le client 1.26.50+, sinon
+        // `MissingStructureData`), puis formes de blocs. Voir `bds_packets.rs`.
+        if !super::prespawn_debug_empty("jigsaw") {
+            responses.push(self.encode_compressed_packet(
+                packet_id::JIGSAW_STRUCTURE_DATA,
+                crate::bds_packets::JIGSAW_STRUCTURE_DATA,
+            ));
+        }
+        if !super::prespawn_debug_empty("voxel") {
+            responses.push(self.encode_compressed_packet(
+                packet_id::VOXEL_SHAPES,
+                crate::bds_packets::VOXEL_SHAPES,
+            ));
+        }
+
         // StartGame
         let mut start_game =
             StartGame::default_with_id(self.entity_runtime_id as i64, self.position);
@@ -220,7 +236,7 @@ impl Connection {
         let mob_eq = MobEquipment::encode_item(self.entity_runtime_id, &held_wrapper, held_slot);
         responses.push(self.encode_compressed_packet(packet_id::MOB_EQUIPMENT, &mob_eq));
 
-        // 12. CreativeContent — inventaire créatif vanilla 1.26.40 chargé
+        // 12. CreativeContent — inventaire créatif vanilla 1.26.50 chargé
         //     depuis `data/creative_items.nbt` (dragonfly v0.11.5) : groupes
         //     avec icônes et noms i18n, entrées numérotées dans l'ordre.
         let (creative_groups, creative_items) = if super::prespawn_debug_empty("creative") {
@@ -241,7 +257,15 @@ impl Connection {
             &CreativeContent::encode(&creative_groups, &creative_items),
         ));
 
-        // 13. CraftingData — vraies recettes vanilla (1601+) encodées au boot.
+        // TrimData — garnitures d'armure de BDS, juste après CreativeContent
+        // comme BDS 1.26.52.3 (voir `trim_data.rs`).
+        if !super::prespawn_debug_empty("trim") {
+            responses.push(
+                self.encode_compressed_packet(packet_id::TRIM_DATA, crate::trim_data::payload()),
+            );
+        }
+
+        // 13. CraftingData — recettes de BDS (`recipes_bds`) encodées au boot.
         //     Fallback sur un paquet vide si le payload n'a pas été initialisé.
         let crafting_payload = crate::crafting::CRAFTING_DATA_PAYLOAD
             .get()

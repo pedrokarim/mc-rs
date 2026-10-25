@@ -463,6 +463,50 @@ impl PlaySound {
     }
 }
 
+// ── TrimData (S→C, 0x12E) ──
+
+/// Motif de garniture d'armure : gabarit de forge et identifiant du motif.
+pub struct TrimPattern {
+    pub item: String,
+    pub pattern: String,
+}
+
+/// Matériau de garniture : identifiant, code couleur de texte (`§h`…), item.
+pub struct TrimMaterial {
+    pub material: String,
+    pub colour: String,
+    pub item: String,
+}
+
+/// Garnitures d'armure connues du serveur, envoyées au pré-spawn.
+///
+/// Format (schéma Mojang `TrimDataPacketPayload.json`, gophertunnel
+/// `packet/trim_data.go`) : VarUInt32 + motifs (item, identifiant), puis
+/// VarUInt32 + matériaux (identifiant, couleur, item), chaînes VarUInt32.
+pub struct TrimData {
+    pub patterns: Vec<TrimPattern>,
+    pub materials: Vec<TrimMaterial>,
+}
+
+impl TrimData {
+    pub fn encode(&self) -> Vec<u8> {
+        use crate::io::ProtoWriter;
+        let mut w = ProtoWriter::with_capacity(1024);
+        w.write_var_u32(self.patterns.len() as u32);
+        for p in &self.patterns {
+            w.write_string(&p.item);
+            w.write_string(&p.pattern);
+        }
+        w.write_var_u32(self.materials.len() as u32);
+        for m in &self.materials {
+            w.write_string(&m.material);
+            w.write_string(&m.colour);
+            w.write_string(&m.item);
+        }
+        w.into_bytes()
+    }
+}
+
 // ── StopSound (S→C, 0x57) ──
 
 pub struct StopSound {

@@ -76,6 +76,7 @@ pub mod barrel;
 pub mod bastion_remnant;
 #[allow(dead_code)]
 pub mod bat;
+pub mod bds_packets;
 #[allow(dead_code)]
 pub mod beacon;
 #[allow(dead_code)]
@@ -951,6 +952,7 @@ pub mod trial_loot;
 pub mod trial_spawner;
 #[allow(dead_code)]
 pub mod trident;
+pub mod trim_data;
 #[allow(dead_code)]
 pub mod trim_patterns;
 #[allow(dead_code)]
