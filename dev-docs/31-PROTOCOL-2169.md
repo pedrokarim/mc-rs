@@ -139,7 +139,10 @@ des paquets de pré-spawn sur le vrai client, puis comparaison champ par champ d
 schéma JSON Mojang et dragonfly (qui fonctionne avec le client officiel).
 
 1. **« Rabbit »** : `ResourcePackDataInfo` / `ResourcePackChunkData` doivent renvoyer l’identifiant de pack
-   exactement tel que le client l’a demandé (`uuid_version`).
+   exactement tel que le client l’a demandé (`uuid_version`), et `ResourcePackDataInfo` doit annoncer le
+   type **6** (ressources) : 0 est `Invalid` (`PackType.json`), le client télécharge le pack puis refuse de
+   le charger. Trouvé le 2026-09-11 avec l’essai E0 de Menu Forge (commit `42b65f7`) ; un pack déjà en
+   cache côté client masque le défaut.
 2. **Sections de biomes de LevelChunk** : stockage palettisé de **4096** cases (`x << 8 | z << 4 | y`), pas
    64. Les biomes sauvegardés à l’ancien format (64 cellules 4×4×4) sont convertis au chargement du chunk
    (`chunk_serializer::upgrade_legacy_biome_data`) puis réécrits.

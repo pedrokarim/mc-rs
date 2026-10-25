@@ -115,3 +115,58 @@ seule (actions, conditions) : `/mf reload`.
 - Formulaires Bedrock : ils s’appuient sur les dispositions du pack `mcrs_ui`
   (servi avec le pack Menu Forge) ; les icônes `path` vanilla du hub ne sont
   pas visibles dans le studio, seulement en jeu.
+
+## 7. Essais en jeu
+
+Rapatriés le 2026-10-25 des notes non commitées des worktrees `menu-forge-e0` (`E0-ESSAI.md`) et
+`menu-forge-runtime` (`E2-ESSAI.md`), croisées avec leurs journaux serveur. La synthèse complète du rendu
+est aussi dans `docs/bedrock.md` § 1 du dépôt Menu Forge.
+
+### 7.1 Essai E0 (2026-09-11, client 1.26.45) : pourquoi des grilles
+
+Disposition d’essai (fond de coffre 176 × 168) servie par une commande `/mfe0`, retirée depuis.
+
+| Mécanisme | Résultat en jeu |
+|---|---|
+| Boutons de `form_buttons` posés au pixel avec un `collection_index` fixe (`§m§z`) | fond, placement au pixel, pastille par jeton de titre `(v)` et titre dynamique **marchent** ; mais les boutons affichent tous « A » et **renvoient tous l’index 0** : un `collection_index` posé à la main n’est pas honoré pour `form_buttons` |
+| Fabrique vanilla, une entrée par bouton, position désignée par un jeton `(k)` du texte (`§m§y`) | **aucun bouton affiché** |
+| Contrôle `grid` vanilla 9 × 3 sur `form_buttons` avec `#maximum_grid_items` (`§m§x`), 27 boutons, un par case | **index justes** au clic (journal : Diamant 0, Pomme 13, Pierre 20, Émeraude 26), soit colonne + 9 × ligne |
+
+Conséquence, appliquée par l’exporteur et le moteur : un bouton cliquable doit être porté par une case
+d’une `grid` qui génère elle-même les entrées de la collection, d’où les « 9 × lignes entrées (une par
+case) » du § 3. **Point resté ouvert** : un bouton libre hors de toute grille (comme Valider ou Fermer dans
+l’essai) n’a aucun mécanisme d’index qui marche.
+
+L’essai a aussi trouvé la cause du « Rabbit » au téléchargement des packs : `ResourcePackDataInfo` doit
+annoncer le type 6 (ressources), corrigé dans `connection/login.rs` (voir
+[`31-PROTOCOL-2169.md`](31-PROTOCOL-2169.md) § 5).
+
+### 7.2 Essai E2/E3 : procédure
+
+1. Dossier d’exécution séparé (ignoré par git, par exemple `.tmp/e2-run/`) avec sa propre `server.toml` :
+   port **19140** (peut tourner à côté du serveur habituel), WebUI coupée, monde plat, créatif,
+   `[menu_forge] directory` pointant directement sur `menu_forge/export` (un nouvel export est pris au
+   redémarrage, sans copie).
+2. Console pilotable : `Get-Content -Path stdin.txt -Wait | & <chemin>\mc-rs-server.exe`, puis, depuis une
+   autre fenêtre, `Add-Content stdin.txt "op <pseudo>"`. **Se reconnecter après `op`** : la liste des
+   commandes n’est envoyée qu’à la connexion (`/mf` est réservée aux opérateurs, `/menu` non).
+3. Au premier doute, supprimer « mc-rs UI » et « Menu Forge » du cache du client (Paramètres, Stockage) ;
+   activer le journal de contenu (Paramètres, Créateur) pour voir les erreurs de JSON UI.
+4. Comparer chaque écran de `/menu` avec `/menu legacy` : disposition, titre, textes, images, ordre et effet
+   des boutons doivent être identiques, aux quatre icônes du hub près.
+
+| Ce que l’on observe | Ce que ça veut dire |
+|---|---|
+| Liste vanilla de boutons vides à la place du dessin | pack Menu Forge ou accroche de `mcrs_ui` non appliqués : versions des deux packs, journal de contenu |
+| Fond dessiné, aucun bouton ne réagit ou le mauvais | grille de la disposition : noter la case cliquée et la ligne `[menu-forge]` de la console |
+| Textes figés absents ou décalés | noter le décalage et l’échelle d’interface (police Bedrock ≠ police Java) |
+| `demo` : « Bonjour … » ou « Compteur » absents | étiquettes des textes dynamiques coupées hors de leur case |
+| Hub sans icônes | chemin vanilla introuvable parmi `textures/items/compass_item`, `textures/blocks/grass_side_carried`, `textures/items/clock_item`, `textures/items/map_filled` |
+| Store : onglets aussi en cartes de produits | attendu, l’ancien écran fait pareil |
+
+### 7.3 Sessions E2/E3 jouées, verdict en attente
+
+Les journaux montrent un vrai client (protocole 2169) le 2026-09-11 vers 22 h 22 et le 2026-09-12 entre
+0 h 15 et 1 h 02 : ouverture de `hub`, `store`, `motd`, `demo`, `grid` et `grid_hub`. **Aucun verdict sur
+le rendu n’a été noté.** Tant qu’il n’est pas donné, l’ancien chemin de `/menu` reste en place (§ 4) ; une
+fois le rendu validé, retirer le repli et mettre à jour le § 6.

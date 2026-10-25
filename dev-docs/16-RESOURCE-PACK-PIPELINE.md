@@ -177,9 +177,11 @@ ResourcePackDataInfo {
     compressed_pack_size: pack.size(),
     sha256: pack.sha256,        // 32 bytes RAW (pas hex !)
     is_premium: false,
-    pack_type: 0,               // 0 = Resources
+    pack_type: 6,               // 6 = Resources (0 = Invalid)
 }
 ```
+
+⚠ `pack_type` vaut **6** (`ResourcePackType::Resources` chez PMMP, `ResourcePackTypeResources` chez gophertunnel ; schéma Mojang `PackType.json`). 0 est `Invalid` : le client télécharge le pack puis refuse de le charger (« Rabbit »), et un pack déjà en cache masque le défaut.
 
 ⚠ Erreur classique évitée : le champ `sha256` est une string Bedrock de **32 bytes raw**, jamais hex 64 chars. PMMP utilise `hash_file("sha256", path, true)` (raw_output=true).
 

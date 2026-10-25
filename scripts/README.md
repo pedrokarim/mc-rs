@@ -5,10 +5,14 @@ Scripts Python annexes. Aucun n’est nécessaire pour compiler ou lancer le ser
 ## Import de données vanilla
 
 À relancer à chaque changement de version du jeu (voir
-[`../dev-docs/31-PROTOCOL-2169.md`](../dev-docs/31-PROTOCOL-2169.md), procédure).
+[`../dev-docs/31-PROTOCOL-2169.md`](../dev-docs/31-PROTOCOL-2169.md), procédure, et
+[`../dev-docs/33-PROTOCOL-2193.md`](../dev-docs/33-PROTOCOL-2193.md)).
 
 - `import_recipes.py <tag>` : régénère `crates/mc-rs-server/data/recipes/vanilla.json` depuis
-  `.reference/bedrock-samples` au tag donné (ex. `v1.26.40.05`) ; `--check` compare au fichier actuel.
+  `.reference/bedrock-samples` au tag donné (ex. `v1.26.50.4`) ; `--check` compare au fichier actuel.
+- `extract_biomes.py` : régénère `crates/mc-rs-server/data/biomes.json` (climat, règles multinoise,
+  surface) depuis `.reference/bedrock-samples/behavior_pack/biomes` (version du checkout courant) et les
+  IDs de `biome_id_map.json` de BedrockData (PMMP, arrêté à 1.26.30).
 - `import_item_upgrade_schema.py [dossier]` : consolide les schémas de `BedrockItemUpgradeSchema` dans
   `crates/mc-rs-server/data/item_id_upgrade_schema.json` (migration des anciens identifiants d’items).
 
