@@ -110,7 +110,7 @@ pub struct Disconnect {
     pub message: Option<String>,
 }
 
-/// Sous-ensemble de `DisconnectFailReason` (schéma Mojang 2169,
+/// Sous-ensemble de `DisconnectFailReason` (schéma Mojang 2193,
 /// `__protocoldoc.json`) : 1 et 2 y désignent « pas d'Internet » et « pas de
 /// permission », pas l'arrêt ni l'expulsion.
 #[derive(Debug, Clone, Copy)]

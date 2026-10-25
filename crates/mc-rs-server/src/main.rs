@@ -1507,7 +1507,7 @@ async fn main() {
                 info!("level.dat saved");
             }
             // Save all connected players
-            for (_, conn) in connections.iter() {
+            for conn in connections.values() {
                 if let Some(ref xuid) = conn.xuid {
                     let save = player_data::PlayerSaveData::from_runtime(
                         conn.position,

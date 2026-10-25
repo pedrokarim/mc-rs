@@ -1,5 +1,5 @@
-//! CreativeContent — inventaire créatif vanilla Bedrock 1.26.40 (inchangé en
-//! 1.26.45), chargé depuis `data/creative_items.nbt` : dragonfly v0.11.4
+//! CreativeContent — inventaire créatif vanilla Bedrock 1.26.50 (inchangé en
+//! 1.26.51), chargé depuis `data/creative_items.nbt` : dragonfly v0.11.5
 //! `server/item/creative/creative_items.nbt`. PMMP/BedrockData s'arrête à
 //! 1.26.30 (fin de support de PocketMine-MP).
 //!
@@ -273,9 +273,9 @@ mod tests {
     #[test]
     fn creative_items_nbt_loads_every_entry() {
         let data = &*CREATIVE_DATA;
-        assert_eq!(data.groups.len(), 123);
+        assert_eq!(data.groups.len(), 124);
         assert_eq!(data.skipped, 0, "items inconnus du registre");
-        assert_eq!(data.items.len(), 1875);
+        assert_eq!(data.items.len(), 1980);
         assert!(data.groups.iter().all(|g| (1..=4).contains(&g.category_id)));
         for (index, item) in data.items.iter().enumerate() {
             assert_eq!(item.entry_id as usize, index);
@@ -345,7 +345,7 @@ mod tests {
         let payload = CreativeContent::encode(&groups(), &items());
         let mut r = ProtoReader::new(&payload);
         let group_count = r.read_var_u32().unwrap();
-        assert_eq!(group_count, 123);
+        assert_eq!(group_count, 124);
         for _ in 0..group_count {
             let category = r.read_u8().unwrap();
             assert!((1..=4).contains(&category));

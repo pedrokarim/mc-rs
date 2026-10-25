@@ -12,9 +12,9 @@ Intégration complète des **données canoniques Mojang** (`bedrock-samples` v1.
 ## Modules ajoutés
 
 ### `creative_content` (dragonfly NBT, depuis le 2026-09-10)
-- **Source** : dragonfly v0.11.4 `server/item/creative/creative_items.nbt` (Bedrock 1.26.40) ; remplace les JSON PMMP 1.26.10, PMMP étant en fin de support.
+- **Source** : dragonfly v0.11.5 `server/item/creative/creative_items.nbt` (Bedrock 1.26.50, depuis le 2026-10-25) ; remplace les JSON PMMP 1.26.10, PMMP étant en fin de support.
 - **Data** : `data/creative_items.nbt` (NBT réseau `{groups, items}`)
-- **Contenu** : 123 groupes et 1 875 entrées, avec meta et NBT (livres enchantés, bannières, fusées…).
+- **Contenu** : 124 groupes et 1 980 entrées, avec meta et NBT (livres enchantés, bannières, fusées…).
 - **API** : `creative_content::groups()` + `items()` + `item_name_by_entry_id(entry_id)` + `item_stack_by_entry_id(entry_id, count)` (utilisé par CraftCreative).
 
 ### `loot_table` (bedrock-samples)
@@ -35,13 +35,14 @@ Intégration complète des **données canoniques Mojang** (`bedrock-samples` v1.
   - `total_table_count()` ≥ 176
 
 ### `recipes_vanilla` (bedrock-samples)
-- **Source** : `behavior_pack/recipes/*.json`, **1.26.40.5 depuis le 2026-09-10** (1756 fichiers ; 85 ignorés : brewing/smithing non supportés)
-- **Génération** : `python scripts/import_recipes.py v1.26.40.05` (lit le tag git de `.reference/bedrock-samples`, sans checkout) ; `--check` compare au fichier en place. Le script reproduit à l’identique l’import 1.26.10.4 d’origine.
+- **Source** : `behavior_pack/recipes/*.json`, **1.26.50.4 depuis le 2026-10-25** (85 fichiers ignorés : brewing/smithing non supportés)
+- **Génération** : `python scripts/import_recipes.py v1.26.50.4` (lit le tag git de `.reference/bedrock-samples`, sans checkout) ; `--check` compare au fichier en place. Le script reproduit à l’identique l’import 1.26.10.4 d’origine.
 - **Data** : `data/recipes/vanilla.json` (consolidé)
 - **Contenu** :
-  - **965 `recipe_shaped`** (pattern 2D + key)
-  - **557 `recipe_shapeless`** (liste d'ingrédients)
-  - **149 `recipe_furnace`** (1 input → 1 output)
+  - **1 064 `recipe_shaped`** (pattern 2D + key)
+  - **591 `recipe_shapeless`** (liste d'ingrédients)
+  - **152 `recipe_furnace`** (1 input → 1 output)
+  - Nouveautés 1.26.50 : dalles et escaliers de béton et de laine.
   - Nouveautés 1.26.40 : familles cinabre et soufre (dont tailleur de pierre). Aucune recette poplar ni cushion dans bedrock-samples 1.26.40.5.
 - **Tags** : résolution statique des tags utilisés comme ingrédients (`planks`, `logs`, `logs_that_burn`, `wool`, `metal_nuggets`, `coals`, `stone_crafting_materials`, `stone_tool_materials`, `soul_fire_base_blocks`, `egg`, `wooden_slabs`). Les tags de dragonfly et Nukkit n’incluent pas encore le bois poplar : il n’est donc pas ajouté.
 - **API** : `recipes_vanilla::register_all(&mut CraftingManager) -> (shaped, shapeless, furnace)`.

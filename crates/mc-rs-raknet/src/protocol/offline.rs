@@ -222,7 +222,7 @@ mod tests {
         let pong = encode_unconnected_pong(
             12345,
             67890,
-            "MCPE;Test;2169;1.26.45;0;20;67890;world;Survival;19132;19133;",
+            "MCPE;Test;2193;1.26.51;0;20;67890;world;Survival;19132;19133;",
         );
         assert_eq!(pong[0], 0x1C);
         // send_time at offset 1
@@ -298,7 +298,7 @@ mod tests {
 
     #[test]
     fn test_client_pong_roundtrip() {
-        let pong = encode_unconnected_pong(999, 0xBEEF, "MCPE;Hello;2169;1.26.45;0;5;");
+        let pong = encode_unconnected_pong(999, 0xBEEF, "MCPE;Hello;2193;1.26.51;0;5;");
         let (send_time, guid, motd) = decode_unconnected_pong(&pong).unwrap();
         assert_eq!(send_time, 999);
         assert_eq!(guid, 0xBEEF);

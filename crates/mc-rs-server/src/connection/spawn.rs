@@ -139,6 +139,9 @@ impl Connection {
         start_game.generator = self.config.generator_id;
         // Spawn dans la dimension restaurée (ex. reconnexion dans le Nether/End).
         start_game.dimension = self.current_dimension;
+        // Blocs vanilla data-driven : sans leurs définitions, la palette du
+        // client est incomplète (voir `world::data_driven_blocks`).
+        start_game.block_properties = crate::world::data_driven_blocks::block_properties().to_vec();
         responses.push(self.encode_compressed_packet(packet_id::START_GAME, &start_game.encode()));
 
         responses.push(
@@ -216,7 +219,7 @@ impl Connection {
         responses.push(self.encode_compressed_packet(packet_id::MOB_EQUIPMENT, &mob_eq));
 
         // 12. CreativeContent — inventaire créatif vanilla 1.26.40 chargé
-        //     depuis `data/creative_items.nbt` (dragonfly v0.11.4) : groupes
+        //     depuis `data/creative_items.nbt` (dragonfly v0.11.5) : groupes
         //     avec icônes et noms i18n, entrées numérotées dans l'ordre.
         let (creative_groups, creative_items) = if super::prespawn_debug_empty("creative") {
             (Vec::new(), Vec::new())

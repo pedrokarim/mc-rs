@@ -4,38 +4,31 @@ use crate::io::{ProtoReader, ProtoWriter};
 // ── Primitives Cereal (protocole 2168+) ──
 //
 // Depuis la conversion « Cereal » des paquets (changelog Mojang 2168), les
-// champs optionnels sont précédés d'un booléen de présence, et certains
-// optionnels sont « doubles » : un booléen externe toujours à vrai, puis le
-// booléen de présence et la valeur (gophertunnel `io.go` `DoubleOptionalFunc`,
-// CloudburstProtocol `readBoolean() && readBoolean()`).
+// champs optionnels sont précédés d'un booléen de présence. Les optionnels
+// « doubles » de 2168 (booléen externe toujours vrai, puis présence et valeur)
+// et les booléens de présence imposés à vrai d'InventoryTransaction ont
+// disparu en 2193 (gophertunnel v1.62.0 retire `DoubleOptionalFunc`,
+// CloudburstProtocol `PlayerAuthInputSerializer_v2193`,
+// `InventoryTransactionSerializer_v2193`).
 
 /// Taille maximale d'une liste générique (gophertunnel `maxSliceLength`).
 const MAX_LIST_LENGTH: u32 = 1024;
 /// Maximum d'actions par transaction, requête ou bloc d'actions (schémas
-/// Mojang 2169 : `maxItems: 100`).
+/// Mojang 2193 : `maxItems: 100`).
 const MAX_ACTIONS: u32 = 100;
 /// Nombre de drapeaux PlayerAuthInput : identifiants 0 à 65 (gophertunnel
 /// `InputFlagCount`, 65 = InternalUpdate ajouté en 2168).
 const INPUT_FLAG_COUNT: u32 = 66;
 
-/// Lit un optionnel double (booléen externe, booléen de présence, valeur).
-fn read_double_optional<T>(
+/// Lit un optionnel (booléen de présence, puis valeur).
+fn read_optional<T>(
     reader: &mut ProtoReader,
     read: impl FnOnce(&mut ProtoReader) -> Result<T, ProtoReadError>,
 ) -> Result<Option<T>, ProtoReadError> {
-    if !reader.read_bool()? || !reader.read_bool()? {
+    if !reader.read_bool()? {
         return Ok(None);
     }
     read(reader).map(Some)
-}
-
-/// Lit un booléen de présence que le protocole impose à vrai.
-fn expect_present(reader: &mut ProtoReader, what: &'static str) -> Result<(), ProtoReadError> {
-    if reader.read_bool()? {
-        Ok(())
-    } else {
-        Err(ProtoReadError::InvalidValue { what, value: 0 })
-    }
 }
 
 /// Lit un nombre d'éléments et le borne au maximum du protocole.
@@ -75,6 +68,9 @@ pub struct ItemInteractionData {
     /// « aucune face » des versions où le champ était un VarInt signé).
     pub face: i32,
     pub hotbar_slot: i32,
+    /// Main utilisée (`HandSlot` : 0 = main principale, 1 = main secondaire ;
+    /// ajouté en 2193).
+    pub hand: u8,
     pub player_position: [f32; 3],
     pub click_position: [f32; 3],
     pub block_runtime_id: u32,
@@ -288,14 +284,11 @@ pub struct InventoryTransaction {
     pub data: InventoryTransactionData,
 }
 
-/// Lit les drapeaux PlayerAuthInput : booléen de présence, puis liste des
-/// identifiants de drapeaux actifs (VarInt32 zigzag, 0 à 65).
+/// Lit les drapeaux PlayerAuthInput : liste des identifiants de drapeaux
+/// actifs (VarInt32 zigzag, 0 à 65), sans booléen de présence depuis 2193.
 /// Réf : gophertunnel `input_flags.go` `InputFlagList`, CloudburstProtocol
-/// `PlayerAuthInputSerializer_v2168`.
+/// `PlayerAuthInputSerializer_v2193` (`readInputData`).
 fn read_input_flags(reader: &mut ProtoReader) -> Result<u128, ProtoReadError> {
-    if !reader.read_bool()? {
-        return Ok(0);
-    }
     let count = read_count(reader, "player auth input flags", INPUT_FLAG_COUNT)?;
     let mut flags: u128 = 0;
     for _ in 0..count {
@@ -345,14 +338,15 @@ pub fn decode_network_item_stack_descriptor(
 }
 
 /// Decode a NetworkInventoryAction : source, identifiant de fenêtre et
-/// drapeaux en optionnels doubles, puis deux descripteurs d'item.
-/// Réf : gophertunnel `inventory.go` `InventoryAction.Marshal`.
+/// drapeaux optionnels, puis deux descripteurs d'item.
+/// Réf : gophertunnel `inventory.go` `InventoryAction.Marshal`,
+/// CloudburstProtocol `BedrockCodecHelper_v2193::readSource`.
 fn decode_network_inventory_action(
     reader: &mut ProtoReader,
 ) -> Result<NetworkInventoryAction, ProtoReadError> {
     let source_type = reader.read_var_u32()?;
-    let window_id = read_double_optional(reader, |r| r.read_i8())?.map(i32::from);
-    let source_flags = read_double_optional(reader, |r| r.read_var_u32())?;
+    let window_id = read_optional(reader, |r| r.read_i8())?.map(i32::from);
+    let source_flags = read_optional(reader, |r| r.read_var_u32())?;
     let inventory_slot = reader.read_var_u32()?;
     let old_item = decode_network_item_stack_descriptor(reader)?;
     let new_item = decode_network_item_stack_descriptor(reader)?;
@@ -397,7 +391,8 @@ fn decode_changed_slots_hack(
 
 /// Données d'une transaction UseItem (partagées entre InventoryTransaction et
 /// PlayerAuthInput). Réf : gophertunnel `inventory.go`
-/// `UseItemTransactionData.Marshal`, schéma `ItemUseInventoryTransaction.json`.
+/// `UseItemTransactionData.Marshal`, schéma `ItemUseInventoryTransaction.json`
+/// (main utilisée après le slot de barre rapide depuis 2193).
 fn decode_use_item_transaction_data(
     reader: &mut ProtoReader,
 ) -> Result<ItemInteractionData, ProtoReadError> {
@@ -412,6 +407,7 @@ fn decode_use_item_transaction_data(
 
     let face = i32::from(reader.read_u8()? as i8);
     let hotbar_slot = reader.read_var_i32()?;
+    let hand = reader.read_u8()?;
 
     let _held_item = decode_network_item_stack_descriptor(reader)?;
 
@@ -427,6 +423,7 @@ fn decode_use_item_transaction_data(
         block_position: [bx, by, bz],
         face,
         hotbar_slot,
+        hand,
         player_position,
         click_position,
         block_runtime_id,
@@ -482,8 +479,9 @@ fn decode_release_item_transaction_data(
 
 impl InventoryTransaction {
     /// Réf : gophertunnel `packet/inventory_transaction.go`, PMMP
-    /// `InventoryTransactionPacket::decodePayload` (inchangé depuis 985 hors
-    /// descripteurs d'item).
+    /// `InventoryTransactionPacket::decodePayload`, CloudburstProtocol
+    /// `InventoryTransactionSerializer_v2193` : depuis 2193, le type et les
+    /// actions ne sont plus précédés d'un booléen de présence.
     pub fn decode(reader: &mut ProtoReader) -> Result<Self, ProtoReadError> {
         let request_id = reader.read_var_i32()?;
         let changed_slots = if reader.read_bool()? {
@@ -492,9 +490,7 @@ impl InventoryTransaction {
             Vec::new()
         };
 
-        expect_present(reader, "inventory transaction type")?;
         let transaction_type = reader.read_var_u32()?;
-        expect_present(reader, "inventory transaction actions")?;
         let actions = decode_inventory_actions(reader)?;
 
         let data = match transaction_type {
@@ -523,7 +519,7 @@ impl InventoryTransaction {
 
 /// Transaction UseItem « empaquetée » de PlayerAuthInput
 /// (`PackedItemUseLegacyInventoryTransaction`, gophertunnel `reader.go`
-/// `PlayerInventoryAction`).
+/// `PlayerInventoryAction`) : les actions sont une liste simple depuis 2193.
 fn decode_item_interaction(
     reader: &mut ProtoReader,
 ) -> Result<ItemInteractionData, ProtoReadError> {
@@ -531,7 +527,7 @@ fn decode_item_interaction(
     if reader.read_bool()? {
         let _ = decode_changed_slots_hack(reader)?;
     }
-    let _ = read_double_optional(reader, decode_inventory_actions)?;
+    let _ = decode_inventory_actions(reader)?;
     decode_use_item_transaction_data(reader)
 }
 
@@ -768,20 +764,20 @@ struct PlayerAuthInputTail {
     block_actions: Vec<BlockAction>,
 }
 
-/// Ordre 2169 (gophertunnel `packet/player_auth_input.go` `Marshal`) : cinq
-/// optionnels doubles (transaction UseItem, ItemStackRequest, actions de
-/// bloc, rotation de véhicule, véhicule prédit), puis vecteurs analogique,
-/// orientation caméra et mouvement brut (ignorés). La présence est portée
-/// par les booléens, plus par les drapeaux.
+/// Ordre 2193 (gophertunnel `packet/player_auth_input.go` `Marshal`,
+/// CloudburstProtocol `PlayerAuthInputSerializer_v2193`) : cinq optionnels
+/// simples (transaction UseItem, ItemStackRequest, actions de bloc, rotation
+/// de véhicule, véhicule prédit), puis vecteurs analogique, orientation
+/// caméra et mouvement brut (ignorés). La présence est portée par les
+/// booléens, plus par les drapeaux.
 fn decode_player_auth_input_tail(
     reader: &mut ProtoReader,
 ) -> Result<PlayerAuthInputTail, ProtoReadError> {
-    let item_interaction = read_double_optional(reader, decode_item_interaction)?;
-    let item_stack_request = read_double_optional(reader, decode_item_stack_request)?;
-    let block_actions = read_double_optional(reader, decode_block_actions)?.unwrap_or_default();
-    let _vehicle_rotation =
-        read_double_optional(reader, |r| Ok((r.read_f32_le()?, r.read_f32_le()?)))?;
-    let _client_predicted_vehicle = read_double_optional(reader, |r| r.read_var_i64())?;
+    let item_interaction = read_optional(reader, decode_item_interaction)?;
+    let item_stack_request = read_optional(reader, decode_item_stack_request)?;
+    let block_actions = read_optional(reader, decode_block_actions)?.unwrap_or_default();
+    let _vehicle_rotation = read_optional(reader, |r| Ok((r.read_f32_le()?, r.read_f32_le()?)))?;
+    let _client_predicted_vehicle = read_optional(reader, |r| r.read_var_i64())?;
     Ok(PlayerAuthInputTail {
         item_interaction,
         item_stack_request,
@@ -2189,19 +2185,15 @@ mod tests {
     }
 
     #[test]
-    fn inventory_transaction_normal_decodes_2169_layout() {
+    fn inventory_transaction_normal_decodes_2193_layout() {
         let mut w = ProtoWriter::new();
         w.write_var_i32(0); // legacy request id
         w.write_bool(false); // pas de legacy slots
-        w.write_bool(true); // présence du type
         w.write_var_u32(0); // Normal
-        w.write_bool(true); // présence des actions
         w.write_var_u32(1);
         w.write_var_u32(0); // source Container
         w.write_bool(true);
-        w.write_bool(true);
         w.write_i8(-2); // window id
-        w.write_bool(true);
         w.write_bool(false); // pas de drapeaux
         w.write_var_u32(4); // slot
         ItemStackWrapper::air().encode_descriptor(&mut w);
@@ -2219,12 +2211,11 @@ mod tests {
     }
 
     #[test]
-    fn player_auth_input_reads_flag_list_and_double_optionals() {
+    fn player_auth_input_reads_flag_list_and_optionals() {
         let mut w = ProtoWriter::new();
         for _ in 0..8 {
             w.write_f32_le(0.0); // rotation, position, move vector, head yaw
         }
-        w.write_bool(true);
         w.write_var_u32(2);
         w.write_var_i32(25); // START_SPRINTING
         w.write_var_i32(65); // InternalUpdate
@@ -2237,11 +2228,8 @@ mod tests {
         for _ in 0..3 {
             w.write_f32_le(0.0); // delta
         }
-        w.write_bool(true);
         w.write_bool(false); // pas de transaction UseItem
-        w.write_bool(true);
         w.write_bool(false); // pas d'ItemStackRequest
-        w.write_bool(true);
         w.write_bool(true); // actions de bloc
         w.write_var_u32(1);
         w.write_var_i32(18); // PREDICT_DESTROY_BLOCK
@@ -2250,7 +2238,6 @@ mod tests {
         w.write_var_i32(-3);
         w.write_var_i32(1);
         for _ in 0..2 {
-            w.write_bool(true);
             w.write_bool(false); // véhicule
         }
         let bytes = w.into_bytes();

@@ -547,6 +547,9 @@ impl Connection {
             | (_, packet_id::INTERACT)
             | (ConnectionState::SpawnResponse, packet_id::PLAYER_AUTH_INPUT)
             | (_, 0x081) => Vec::new(),
+            // Préférence d'interface du four (2193) : dragonfly l'ignore
+            // aussi (handler `nil`), le serveur n'a rien à en faire.
+            (_, packet_id::SET_PLAYER_FURNACE_OPTIONS) => Vec::new(),
 
             _ => {
                 info!(

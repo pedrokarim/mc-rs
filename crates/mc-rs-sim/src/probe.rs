@@ -233,7 +233,7 @@ async fn wrong_state_packet(target: SocketAddr) -> String {
     let Ok(mut rak) = RakClient::open(target, 1400).await else {
         return "connexion RakNet KO".into();
     };
-    // PlayerAuthInput minimal mais bien formé (layout 2169, même encodeur que
+    // PlayerAuthInput minimal mais bien formé (layout 2193, même encodeur que
     // les bots), cadré comme un batch SessionStart (sans octet d'algo, non
     // chiffré) : 0xFE + varint(len) + paquet.
     let payload = encode_player_auth_input(&AuthInput::default());

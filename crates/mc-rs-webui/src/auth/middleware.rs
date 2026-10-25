@@ -30,6 +30,10 @@ pub struct CurrentUser {
 
 /// À appeler en entrée de handler protégé. Si OK, renvoie le `CurrentUser`.
 /// Si KO, renvoie une `Response` à propager directement (redirect HTML ou 401 JSON).
+#[expect(
+    clippy::result_large_err,
+    reason = "la `Response` axum est le rejet propagé tel quel par les handlers"
+)]
 pub async fn require_auth(state: &AppState, headers: &HeaderMap) -> Result<CurrentUser, Response> {
     match authenticate(state, headers).await {
         Ok(u) => Ok(u),

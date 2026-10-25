@@ -4,10 +4,10 @@ use std::sync::LazyLock;
 use mc_rs_nbt::tag::{NbtRoot, NbtTag};
 use mc_rs_proto::io::ProtoWriter;
 
-use crate::item_migration_data::LEGACY_ITEM_IDS;
+use crate::item_migration_data::LEGACY_ITEM_TABLES;
 
-/// Table d'items Bedrock 1.26.40 (inchangée en 1.26.45) : dragonfly v0.11.4
-/// `server/world/vanilla_items.nbt` (commit `0c2c4045`), NBT réseau
+/// Table d'items Bedrock 1.26.50 (inchangée en 1.26.51) : dragonfly v0.11.5
+/// `server/world/vanilla_items.nbt` (commit `4c7b5074`), NBT réseau
 /// `{nom: {runtime_id: Int, component_based: Byte, version: Int, data?: Compound}}`.
 /// PMMP/BedrockData s'arrête à 1.26.30 (fin de support de PocketMine-MP).
 const VANILLA_ITEMS_NBT: &[u8] = include_bytes!("../data/vanilla_items.nbt");
@@ -139,18 +139,46 @@ pub fn required_item_id(name: &str) -> i32 {
     network_id(name).unwrap_or_else(|| panic!("missing required item registry entry for {name}"))
 }
 
-/// Convertit un ID réseau de la table d'items héritée (sauvegardes antérieures
-/// à la table courante, cf. `item_migration_data.rs`) en ID courant, via le nom.
-/// Retourne 0 (air) si l'item n'existe plus.
-pub fn migrate_saved_item_id(legacy_id: i32) -> i32 {
+/// Table d'items d'une version de sauvegarde joueur antérieure (générée dans
+/// `item_migration_data.rs` par `generate_data_migrations`).
+pub struct LegacyItemTable {
+    /// Version de sauvegarde (`player_data::CURRENT_PLAYER_DATA_VERSION`) qui
+    /// utilisait cette table.
+    pub data_version: u32,
+    /// Premier schéma d'upgrade d'items (`item_id_upgrade_schema.json`) que la
+    /// table ne reflète pas encore.
+    pub first_upgrade_schema: u32,
+    /// `(runtime_id, nom)`, triés par runtime ID.
+    pub ids: &'static [(i32, &'static str)],
+}
+
+/// Convertit un item sauvegardé avec la table d'items de `data_version` en
+/// `(ID courant, meta)` : nom dans l'ancienne table, puis schémas d'upgrade
+/// postérieurs à cette table (PMMP `ItemIdMetaUpgrader`), puis ID dans la
+/// table courante. Retourne `(0, 0)` (air) si l'item n'existe plus ou si la
+/// version n'a pas de table.
+pub fn migrate_saved_item(data_version: u32, legacy_id: i32, meta: u32) -> (i32, u32) {
     if legacy_id == 0 {
-        return 0;
+        return (0, 0);
     }
-    LEGACY_ITEM_IDS
-        .binary_search_by_key(&legacy_id, |&(id, _)| id)
-        .ok()
-        .and_then(|i| network_id(LEGACY_ITEM_IDS[i].1))
-        .unwrap_or(0)
+    let Some(table) = LEGACY_ITEM_TABLES
+        .iter()
+        .find(|table| table.data_version == data_version)
+    else {
+        return (0, 0);
+    };
+    let Ok(index) = table.ids.binary_search_by_key(&legacy_id, |&(id, _)| id) else {
+        return (0, 0);
+    };
+    let (name, meta) = crate::item_upgrade::upgrade_since(
+        table.ids[index].1,
+        meta as i32,
+        table.first_upgrade_schema,
+    );
+    match network_id(&name) {
+        Some(id) => (id, meta as u32),
+        None => (0, 0),
+    }
 }
 
 pub fn legacy_item_name(id: i32) -> Option<&'static str> {
@@ -225,12 +253,58 @@ mod tests {
 
     #[test]
     fn saved_item_ids_migrate_by_name() {
-        // 423 = minecraft:compass dans la table 1.26.0.
+        // 423 = minecraft:compass dans la table 1.26.0 (sauvegardes v0).
         assert_eq!(
-            migrate_saved_item_id(423),
-            network_id("minecraft:compass").unwrap()
+            migrate_saved_item(0, 423, 0),
+            (network_id("minecraft:compass").unwrap(), 0)
         );
-        assert_eq!(migrate_saved_item_id(0), 0);
+        assert_eq!(migrate_saved_item(0, 0, 0), (0, 0));
+        // Version sans table : air.
+        assert_eq!(migrate_saved_item(99, 423, 0), (0, 0));
+    }
+
+    #[test]
+    fn saved_item_ids_follow_upgrade_schemas() {
+        // Table 1.26.0 (sauvegardes v0, schémas 0261 et suivants) : le bateau
+        // à coffre meta 10 devient `minecraft:poplar_chest_boat` (schéma 0271),
+        // meta remise à 0.
+        let v0 = LEGACY_ITEM_TABLES
+            .iter()
+            .find(|t| t.data_version == 0)
+            .unwrap();
+        let &(chest_boat, _) = v0
+            .ids
+            .iter()
+            .find(|&&(_, name)| name == "minecraft:chest_boat")
+            .unwrap();
+        assert_eq!(
+            migrate_saved_item(0, chest_boat, 10),
+            (network_id("minecraft:poplar_chest_boat").unwrap(), 0)
+        );
+        // Table 1.26.40 (sauvegardes v1, schémas 0281 et suivants) : 0271 est
+        // déjà reflété, la meta est conservée.
+        let table = LEGACY_ITEM_TABLES
+            .iter()
+            .find(|t| t.data_version == 1)
+            .unwrap();
+        let &(chest_boat, _) = table
+            .ids
+            .iter()
+            .find(|&&(_, name)| name == "minecraft:chest_boat")
+            .unwrap();
+        assert_eq!(
+            migrate_saved_item(1, chest_boat, 10),
+            (network_id("minecraft:chest_boat").unwrap(), 10)
+        );
+        let &(apple, _) = table
+            .ids
+            .iter()
+            .find(|&&(_, name)| name == "minecraft:apple")
+            .unwrap();
+        assert_eq!(
+            migrate_saved_item(1, apple, 0),
+            (network_id("minecraft:apple").unwrap(), 0)
+        );
     }
 
     #[test]

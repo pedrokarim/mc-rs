@@ -115,6 +115,10 @@ pub struct CreateUserForm {
     role: String,
 }
 
+#[expect(
+    clippy::result_large_err,
+    reason = "la `Response` axum est le rejet propagé tel quel par les handlers"
+)]
 async fn ensure_admin(
     state: &AppState,
     headers: &HeaderMap,

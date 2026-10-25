@@ -20,6 +20,8 @@ son suivi.
 - [`24-CHUNK-LOADING.md`](24-CHUNK-LOADING.md) : chargement et envoi des chunks
 - [`31-PROTOCOL-2169.md`](31-PROTOCOL-2169.md) : protocole 2169 (1.26.45), références après la fin de
   support de PMMP, **causes de déconnexion trouvées avec le vrai client** et outils de diagnostic
+- [`33-PROTOCOL-2193.md`](33-PROTOCOL-2193.md) : protocole 2193 (1.26.51), blocs vanilla data-driven,
+  propriétés de connexion et migration des mondes
 
 ## Cœur du serveur
 

@@ -80,18 +80,18 @@ pub mod boss_color {
     pub const WHITE: u8 = 7;
 }
 
-/// Port de `BossEventPacket` (protocoles 1001 et 2169). Depuis le protocole
-/// 984, les 8 champs sont TOUJOURS écrits, quel que soit le type d'événement
-/// (plus de champs conditionnels ni de `darkenScreen`) : les champs inutiles
-/// gardent leur valeur par défaut, comme les constructeurs statiques de PMMP.
+/// Port de `BossEventPacket` (protocole 2193). Depuis le protocole 984, tous
+/// les champs sont TOUJOURS écrits, quel que soit le type d'événement (plus de
+/// champs conditionnels ni de `darkenScreen`) : les champs inutiles gardent
+/// leur valeur par défaut, comme les constructeurs statiques de PMMP. Le
+/// protocole 2193 retire l'identifiant du joueur qui suivait celui du boss.
 ///
-/// Réf : BedrockProtocol `BossEventPacket::encodePayload` ; gophertunnel
-/// `packet/boss_event.go` `Marshal`.
+/// Réf : schéma Mojang `BossEventPacketPayload.json` (v1.26.51) ; gophertunnel
+/// `packet/boss_event.go` `Marshal` ; CloudburstProtocol
+/// `BossEventSerializer_v2193`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BossEvent {
     pub boss_actor_unique_id: i64,
-    /// Utile pour REGISTER_PLAYER / UNREGISTER_PLAYER / QUERY ; 0 sinon.
-    pub player_actor_unique_id: i64,
     pub event_type: u8,
     pub title: String,
     pub filtered_title: String,
@@ -105,7 +105,6 @@ impl BossEvent {
     fn base(boss_actor_unique_id: i64, event_type: u8) -> Self {
         Self {
             boss_actor_unique_id,
-            player_actor_unique_id: 0,
             event_type,
             title: String::new(),
             filtered_title: String::new(),
@@ -148,12 +147,11 @@ impl BossEvent {
         }
     }
 
-    /// `ActorUniqueId` (VarInt64 zigzag) ×2, u8 type, 2 strings, f32 LE,
+    /// `ActorUniqueId` (VarInt64 zigzag), u8 type, 2 strings, f32 LE,
     /// u8 couleur, u8 overlay.
     pub fn encode(&self) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(32 + self.title.len() + self.filtered_title.len());
         w.write_var_i64(self.boss_actor_unique_id);
-        w.write_var_i64(self.player_actor_unique_id);
         w.write_u8(self.event_type);
         w.write_string(&self.title);
         w.write_string(&self.filtered_title);
@@ -216,9 +214,9 @@ mod tests {
 
     #[test]
     fn boss_show_writes_all_fields() {
-        // boss -1 (zigzag 0x01), joueur 0, type SHOW, titre et titre filtré
-        // identiques (PMMP `show()`), santé 1.0, couleur PURPLE, overlay 0.
-        let mut expected = vec![0x01, 0x00, 0x00, 0x06];
+        // boss -1 (zigzag 0x01), type SHOW, titre et titre filtré identiques
+        // (PMMP `show()`), santé 1.0, couleur PURPLE, overlay 0.
+        let mut expected = vec![0x01, 0x00, 0x06];
         expected.extend_from_slice(b"Wither");
         expected.push(0x06);
         expected.extend_from_slice(b"Wither");
@@ -229,22 +227,22 @@ mod tests {
 
     #[test]
     fn boss_hide_keeps_default_fields() {
-        // Même HIDE écrit les 8 champs : id(1)=0x02, joueur 0, type 2, deux
-        // strings vides, f32 0.0, couleur PINK, overlay 0.
+        // Même HIDE écrit les 7 champs : id(1)=0x02, type 2, deux strings
+        // vides, f32 0.0, couleur PINK, overlay 0.
         assert_eq!(
             boss_hide(1),
-            vec![0x02, 0x00, 0x02, 0x00, 0x00, 0, 0, 0, 0, 0x00, 0x00]
+            vec![0x02, 0x02, 0x00, 0x00, 0, 0, 0, 0, 0x00, 0x00]
         );
     }
 
     #[test]
     fn boss_update_health_and_title() {
-        let mut expected = vec![0x02, 0x00, boss_event_type::HEALTH_PERCENT, 0x00, 0x00];
+        let mut expected = vec![0x02, boss_event_type::HEALTH_PERCENT, 0x00, 0x00];
         expected.extend_from_slice(&0.5f32.to_le_bytes());
         expected.extend_from_slice(&[0x00, 0x00]);
         assert_eq!(boss_update_health(1, 0.5), expected);
 
-        let mut expected = vec![0x02, 0x00, boss_event_type::TITLE, 0x02];
+        let mut expected = vec![0x02, boss_event_type::TITLE, 0x02];
         expected.extend_from_slice(b"Ab");
         expected.push(0x02);
         expected.extend_from_slice(b"Ab");

@@ -469,7 +469,7 @@ impl BedrockClient {
     }
 }
 
-/// Réponse du client à la séquence de packs de ressources (protocole 2169).
+/// Réponse du client à la séquence de packs de ressources (protocole 2193).
 ///
 /// Variante étiquetée : l'index VarUInt32 vaut la valeur de l'énumération,
 /// suivi du nom en minuscules. Réf. gophertunnel
@@ -502,7 +502,7 @@ impl PackResponse {
     }
 }
 
-/// Encode ResourcePackClientResponse (payload seul, protocole 2169) :
+/// Encode ResourcePackClientResponse (payload seul, protocole 2193) :
 /// `VarUInt32 index + string nom`, puis **uniquement** pour `Downloading` :
 /// `VarUInt32 n + n × string` (`"<uuid>_<version>"`). `packs` est ignoré pour
 /// les autres réponses, comme chez gophertunnel et Cloudburst.
@@ -520,7 +520,7 @@ pub fn encode_resource_pack_client_response(response: PackResponse, packs: &[Str
     w.into_bytes()
 }
 
-/// Nombre de flags PlayerAuthInput connus en 2169 (0..=65, `InternalUpdate`
+/// Nombre de flags PlayerAuthInput connus en 2193 (0..=65, `InternalUpdate`
 /// = 65 étant le dernier). Réf. gophertunnel `InputFlagCount`.
 pub const INPUT_FLAG_COUNT: u32 = 66;
 
@@ -542,17 +542,17 @@ pub struct AuthInput {
     pub tick: u64,
 }
 
-/// Encode un PlayerAuthInput (payload seul) au format 2169.
+/// Encode un PlayerAuthInput (payload seul) au format 2193.
 ///
 /// Ordre exact de gophertunnel `packet/player_auth_input.go` `Marshal` (et de
-/// Cloudburst `PlayerAuthInputSerializer_v2168.serialize`) :
+/// Cloudburst `PlayerAuthInputSerializer_v2193.serialize`) :
 ///
 /// ```text
 /// f32 pitch, f32 yaw, Vec3 position, Vec2 moveVector, f32 headYaw,
-/// InputData (bool présent + VarUInt32 n + n × VarInt32 id),
+/// InputData (VarUInt32 n + n × VarInt32 id),
 /// VarUInt32 inputMode, VarUInt32 playMode, VarInt32 interactionModel,
 /// f32 interactPitch, f32 interactYaw, VarUInt64 tick, Vec3 delta,
-/// 5 × double optionnel (01 00 si absent) : transaction d'usage d'objet,
+/// 5 × optionnel (00 si absent) : transaction d'usage d'objet,
 ///   requête de stack, actions de bloc, rotation de véhicule, véhicule prédit,
 /// Vec2 analogMoveVector, Vec3 cameraOrientation, Vec2 rawMoveVector
 /// ```
@@ -569,17 +569,16 @@ pub fn encode_player_auth_input(input: &AuthInput) -> Vec<u8> {
     write_input_flags(&mut w, input.input_flags);
     w.write_var_u32(1); // input_mode = Mouse
     w.write_var_u32(0); // play_mode = Normal
-    w.write_var_i32(0); // interaction_model = Touch (VarInt32 zigzag en 2169)
+    w.write_var_i32(0); // interaction_model = Touch (VarInt32 zigzag depuis 2168)
     w.write_f32_le(0.0); // interact_pitch
     w.write_f32_le(0.0); // interact_yaw
     w.write_var_u64(input.tick);
     w.write_f32_le(input.delta[0]);
     w.write_f32_le(input.delta[1]);
     w.write_f32_le(input.delta[2]);
-    // Les 5 blocs optionnels « doubles » : optionnel externe toujours présent
-    // (1), optionnel interne absent (0). Réf. gophertunnel `DoubleOptionalFunc`.
+    // Les 5 blocs optionnels, absents (simples depuis 2193 : plus d'optionnel
+    // externe toujours présent). Réf. gophertunnel `OptionalFunc`.
     for _ in 0..5 {
-        w.write_bool(true);
         w.write_bool(false);
     }
     // Clavier/souris : pas de stick analogique.
@@ -595,16 +594,15 @@ pub fn encode_player_auth_input(input: &AuthInput) -> Vec<u8> {
     w.into_bytes()
 }
 
-/// Écrit la liste des flags PlayerAuthInput au format 2169 : `bool présent`
-/// (toujours 1, comme Cloudburst), `VarUInt32 n`, puis `n × VarInt32` (zigzag)
-/// des ids par ordre croissant. Réf. gophertunnel `InputFlagList`. Les bits
-/// hors `0..66` sont ignorés : le serveur rejetterait l'id.
+/// Écrit la liste des flags PlayerAuthInput au format 2193 : `VarUInt32 n`,
+/// puis `n × VarInt32` (zigzag) des ids par ordre croissant, sans le booléen
+/// de présence de 2168. Réf. gophertunnel `InputFlagList`. Les bits hors
+/// `0..66` sont ignorés : le serveur rejetterait l'id.
 fn write_input_flags(w: &mut ProtoWriter, flags: u128) {
     let ids: Vec<i32> = (0..INPUT_FLAG_COUNT)
         .filter(|&bit| flags & (1u128 << bit) != 0)
         .map(|bit| bit as i32)
         .collect();
-    w.write_bool(true);
     w.write_var_u32(ids.len() as u32);
     for id in ids {
         w.write_var_i32(id);
@@ -697,8 +695,8 @@ mod tests {
     }
 
     #[test]
-    fn test_player_auth_input_layout_2169() {
-        // Flags 25 (StartSprinting) et 65 (InternalUpdate, nouveau en 2169) ;
+    fn test_player_auth_input_layout_2193() {
+        // Flags 25 (StartSprinting) et 65 (InternalUpdate, nouveau en 2168) ;
         // le bit 70 est hors plage et doit être ignoré.
         let flags = (1u128 << 25) | (1u128 << 65) | (1u128 << 70);
         let input = AuthInput {
@@ -717,15 +715,14 @@ mod tests {
         assert_eq!(&payload[0..4], &0.0f32.to_le_bytes());
         assert_eq!(&payload[4..8], &90.0f32.to_le_bytes());
         assert_eq!(&payload[28..32], &90.0f32.to_le_bytes());
-        // InputData : présent, 2 ids, zigzag(25) = 50, zigzag(65) = 130 (82 01),
-        // puis inputMode = 1 (Mouse).
-        assert_eq!(&payload[32..38], &[0x01, 0x02, 50, 0x82, 0x01, 0x01]);
+        // InputData : 2 ids, zigzag(25) = 50, zigzag(65) = 130 (82 01), puis
+        // inputMode = 1 (Mouse).
+        assert_eq!(&payload[32..37], &[0x02, 50, 0x82, 0x01, 0x01]);
 
         let mut r = ProtoReader::new(&payload);
         for expected in [0.0, 90.0, 1.0, 2.0, 3.0, 0.0, 1.0, 90.0] {
             assert_eq!(r.read_f32_le().unwrap(), expected);
         }
-        assert!(r.read_bool().unwrap());
         assert_eq!(r.read_var_u32().unwrap(), 2);
         assert_eq!(r.read_var_i32().unwrap(), 25);
         assert_eq!(r.read_var_i32().unwrap(), 65);
@@ -738,9 +735,8 @@ mod tests {
         for expected in [0.5, 0.0, -0.5] {
             assert_eq!(r.read_f32_le().unwrap(), expected);
         }
-        // 5 doubles optionnels : 01 00.
+        // 5 optionnels absents : 00.
         for _ in 0..5 {
-            assert!(r.read_bool().unwrap());
             assert!(!r.read_bool().unwrap());
         }
         // analogMoveVector
@@ -764,9 +760,9 @@ mod tests {
     #[test]
     fn test_player_auth_input_without_flags() {
         let payload = encode_player_auth_input(&AuthInput::default());
-        // Flags : présent + liste vide (01 00), puis inputMode 1.
-        assert_eq!(&payload[32..35], &[0x01, 0x00, 0x01]);
-        // 8 f32 + 01 00 + 3 varints + 2 f32 + tick + 3 f32 + 5 × 01 00 + 7 f32.
-        assert_eq!(payload.len(), 32 + 2 + 3 + 8 + 1 + 12 + 10 + 28);
+        // Flags : liste vide (00), puis inputMode 1.
+        assert_eq!(&payload[32..34], &[0x00, 0x01]);
+        // 8 f32 + 00 + 3 varints + 2 f32 + tick + 3 f32 + 5 × 00 + 7 f32.
+        assert_eq!(payload.len(), 32 + 1 + 3 + 8 + 1 + 12 + 5 + 28);
     }
 }

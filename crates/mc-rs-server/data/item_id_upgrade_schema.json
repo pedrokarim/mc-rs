@@ -1038,5 +1038,25 @@
     "153": "minecraft:sulfur_cube_spawn_egg"
    }
   }
+ },
+ {
+  "id": 271,
+  "source": "0271_1.26.20_to_1.26.40.31_beta.json",
+  "renamedIds": {
+   "minecraft:record_bounce": "minecraft:music_disc_bounce"
+  },
+  "remappedMetas": {
+   "minecraft:chest_boat": {
+    "10": "minecraft:poplar_chest_boat"
+   }
+  }
+ },
+ {
+  "id": 281,
+  "source": "0281_1.26.40_to_1.26.50.json",
+  "renamedIds": {
+   "minecraft:photo": "minecraft:photo_item"
+  },
+  "remappedMetas": {}
  }
 ]

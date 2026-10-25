@@ -92,6 +92,11 @@ pub struct StartGame {
     pub enable_new_inventory_system: bool,
     pub server_software_version: String,
 
+    /// Liste `Block Properties` encodée (VarUInt32 + nom et définition NBT
+    /// réseau par bloc ; schéma Mojang `ServerBlockProperty.json`). Le
+    /// serveur y place les blocs vanilla data-driven (1.26.50+).
+    pub block_properties: Vec<u8>,
+
     // playerActorProperties: empty NBT CompoundTag
     pub player_actor_properties_nbt: Vec<u8>,
 
@@ -236,8 +241,9 @@ impl StartGame {
         w.write_u64_le(self.current_tick);
         w.write_var_i32(self.enchantment_seed);
 
-        // Block palette (empty when using hashes)
-        w.write_var_u32(0);
+        // Block Properties : blocs définis par composants (personnalisés et,
+        // depuis 1.26.50, vanilla data-driven).
+        w.write_raw(&self.block_properties);
 
         w.write_string(&self.multiplayer_correlation_id);
         w.write_bool(self.enable_new_inventory_system);
@@ -356,6 +362,7 @@ impl StartGame {
             server_software_version: crate::MINECRAFT_VERSION.to_string(),
             // Empty NBT compound tag (network LE format):
             // tag_type=10 (compound), name_length=0 (VarUInt=0x00), end_tag=0x00
+            block_properties: vec![0x00],
             player_actor_properties_nbt: vec![0x0A, 0x00, 0x00],
             block_palette_checksum: 0,
             world_template_id: [0u8; 16],
@@ -450,9 +457,13 @@ impl PlaySound {
         w.write_f32_le(self.volume);
         w.write_f32_le(self.pitch);
         // Protocole 2168 : nombre de boucles (VarInt32, 0 = jouer une fois ;
-        // gophertunnel `play_sound.go`, schéma `PlaySoundPacketPayload.json`),
-        // puis handle de son serveur optionnel (975), absent.
+        // gophertunnel `play_sound.go`, schéma `PlaySoundPacketPayload.json`).
+        // Protocole 2193 : contournement de la portée d'écoute (faux), puis
+        // handle de son serveur (975) et position de lecture en secondes,
+        // optionnels absents (CloudburstProtocol `PlaySoundSerializer_v2193`).
         w.write_var_i32(0);
+        w.write_bool(false);
+        w.write_bool(false);
         w.write_bool(false);
         w.into_bytes()
     }
@@ -1391,14 +1402,16 @@ impl ItemStackResponse {
     pub const RESULT_OK: u8 = 0;
     pub const RESULT_ERROR: u8 = 1;
 
-    /// Layout 2168 (schémas `ItemStackResponseInfo.json`,
+    /// Layout 2193 (schémas `ItemStackResponseInfo.json`,
     /// `ItemStackResponseSlotInfo.json` ; gophertunnel `item_stack.go`,
-    /// CloudburstProtocol `ItemStackResponseSerializer_v2168`) :
-    /// - conteneurs en optionnel double, présents ssi le résultat est un succès
-    ///   (invariant Mojang), même quand la liste est vide ;
-    /// - net id de slot en optionnel double, présent ssi la quantité est non
-    ///   nulle (invariant Mojang) ;
-    /// - nom filtré en optionnel simple.
+    /// CloudburstProtocol `ItemStackResponseSerializer_v2193` et
+    /// `BedrockCodecHelper_v2193::writeItemEntry`). Les optionnels « doubles »
+    /// de 2168 redeviennent de simples booléens de présence :
+    /// - conteneurs présents ssi le résultat est un succès (invariant Mojang),
+    ///   même quand la liste est vide ;
+    /// - net id de slot présent ssi la quantité est non nulle (invariant
+    ///   Mojang) ;
+    /// - nom filtré optionnel.
     pub fn encode(&self) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(128);
         w.write_var_u32(self.entries.len() as u32);
@@ -1406,7 +1419,6 @@ impl ItemStackResponse {
             w.write_u8(entry.result);
             w.write_var_i32(entry.request_id);
             let success = entry.result == Self::RESULT_OK;
-            w.write_bool(true);
             w.write_bool(success);
             if !success {
                 continue;
@@ -1421,7 +1433,6 @@ impl ItemStackResponse {
                     w.write_u8(slot.slot);
                     w.write_u8(slot.hotbar_slot);
                     w.write_u8(slot.count);
-                    w.write_bool(true);
                     w.write_bool(slot.count > 0);
                     if slot.count > 0 {
                         w.write_var_i32(slot.stack_id);
@@ -1512,10 +1523,10 @@ mod tests {
     #[test]
     fn item_stack_response_presence_follows_result() {
         let ok = ItemStackResponse::ok(-3, Vec::new()).encode();
-        // 1 réponse, résultat 0, requête -3 (zigzag 5), optionnel double présent, 0 conteneur.
-        assert_eq!(ok, vec![1, 0, 5, 1, 1, 0]);
+        // 1 réponse, résultat 0, requête -3 (zigzag 5), conteneurs présents, 0 conteneur.
+        assert_eq!(ok, vec![1, 0, 5, 1, 0]);
         let err = ItemStackResponse::error(-3).encode();
-        assert_eq!(err, vec![1, 1, 5, 1, 0]);
+        assert_eq!(err, vec![1, 1, 5, 0]);
     }
 
     #[test]

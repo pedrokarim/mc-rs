@@ -84,4 +84,7 @@ pub mod packet_id {
     pub const GAME_RULES_CHANGED: u32 = 0x48;
     pub const PLAY_SOUND: u32 = 0x56;
     pub const STOP_SOUND: u32 = 0x57;
+    /// Options d'affichage du four choisies par le joueur (2193, C→S et S→C ;
+    /// gophertunnel `IDSetPlayerFurnaceOptions`, Cloudburst ID 351).
+    pub const SET_PLAYER_FURNACE_OPTIONS: u32 = 0x15F;
 }

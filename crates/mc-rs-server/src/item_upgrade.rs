@@ -24,6 +24,7 @@ struct RawSchema {
 }
 
 struct Schema {
+    id: u32,
     renamed_ids: HashMap<String, String>,
     remapped_metas: HashMap<String, HashMap<i32, String>>,
 }
@@ -34,6 +35,7 @@ static SCHEMAS: LazyLock<Vec<Schema>> = LazyLock::new(|| {
     raw.sort_by_key(|schema| schema.id);
     raw.into_iter()
         .map(|schema| Schema {
+            id: schema.id,
             renamed_ids: schema.renamed_ids,
             remapped_metas: schema
                 .remapped_metas
@@ -55,9 +57,17 @@ static SCHEMAS: LazyLock<Vec<Schema>> = LazyLock::new(|| {
 /// l'emporte sur un renommage. Les clés sont comparées en minuscules ASCII
 /// (`mb_strtolower($id, 'US-ASCII')`).
 pub fn upgrade(id: &str, meta: i32) -> (String, i32) {
+    upgrade_since(id, meta, 0)
+}
+
+/// Comme [`upgrade`], en n'appliquant que les schémas de numéro au moins égal
+/// à `first_schema` : ceux que des données d'une version connue ne reflètent
+/// pas encore (PMMP ne rejoue que les schémas postérieurs à la version des
+/// données).
+pub fn upgrade_since(id: &str, meta: i32, first_schema: u32) -> (String, i32) {
     let mut id = id.to_string();
     let mut meta = meta;
-    for schema in SCHEMAS.iter() {
+    for schema in SCHEMAS.iter().filter(|schema| schema.id >= first_schema) {
         let key = id.to_ascii_lowercase();
         if let Some(new_id) = schema.remapped_metas.get(&key).and_then(|m| m.get(&meta)) {
             id = new_id.clone();
@@ -105,6 +115,21 @@ mod tests {
         assert_eq!(
             upgrade("minecraft:melon", 0),
             ("minecraft:melon_slice".to_string(), 0)
+        );
+    }
+
+    #[test]
+    fn upgrade_since_skips_older_schemas() {
+        // 0281 (1.26.40 → 1.26.50) renomme la photo.
+        assert_eq!(
+            upgrade_since("minecraft:photo", 0, 281),
+            ("minecraft:photo_item".to_string(), 0)
+        );
+        // Les schémas antérieurs ne sont pas rejoués : `minecraft:coal` meta 1
+        // n'est plus remappé en charbon de bois.
+        assert_eq!(
+            upgrade_since("minecraft:coal", 1, 281),
+            ("minecraft:coal".to_string(), 1)
         );
     }
 

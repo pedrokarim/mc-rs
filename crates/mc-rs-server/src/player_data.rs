@@ -10,8 +10,19 @@ const PLAYERS_DIR: &str = "players";
 
 /// Version du format des IDs sauvegardés (items et blocs) :
 /// - 0 (champ absent) : table d'items 1.26.0 + palette de blocs 1.26.20 ;
-/// - 1 : table d'items et palette 1.26.40 (dragonfly v0.11.4).
-pub const CURRENT_PLAYER_DATA_VERSION: u32 = 1;
+/// - 1 : table d'items et palette 1.26.40 (dragonfly v0.11.4) ;
+/// - 2 : table d'items et palette 1.26.50 (dragonfly v0.11.5).
+pub const CURRENT_PLAYER_DATA_VERSION: u32 = 2;
+
+/// Libellé de la palette de blocs (`PaletteMigration::label`) de chaque
+/// version de sauvegarde antérieure.
+fn legacy_palette_label(data_version: u32) -> Option<&'static str> {
+    match data_version {
+        0 => Some(crate::world::palette_migration::UNMARKED_WORLD_LABEL),
+        1 => Some("1.26.40"),
+        _ => None,
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlayerSaveData {
@@ -209,7 +220,9 @@ impl PlayerSaveData {
         if self.data_version >= CURRENT_PLAYER_DATA_VERSION {
             return;
         }
-        let palette = crate::world::palette_migration::unmarked_world_migration();
+        let version = self.data_version;
+        let palette = legacy_palette_label(version)
+            .and_then(crate::world::palette_migration::migration_by_label);
         let inv = &mut self.inventory;
         for slot in inv
             .slots
@@ -218,7 +231,7 @@ impl PlayerSaveData {
             .chain(std::iter::once(&mut inv.offhand))
         {
             let item = &mut slot.item;
-            item.id = item_registry::migrate_saved_item_id(item.id);
+            (item.id, item.meta) = item_registry::migrate_saved_item(version, item.id, item.meta);
             item.block_runtime_id = match (item.block_runtime_id, palette) {
                 (0, _) | (_, None) => 0,
                 (rid, Some(m)) => m.remap(rid as u32) as i32,
@@ -303,5 +316,37 @@ mod tests {
             data.inventory.slots[0].item.id,
             item_registry::network_id("minecraft:compass").unwrap()
         );
+    }
+
+    #[test]
+    fn v1_save_migrates_items_and_blocks_from_1_26_40() {
+        use crate::item_migration_data::LEGACY_ITEM_TABLES;
+        // Sauvegarde v1 : IDs de la table d'items et de la palette 1.26.40.
+        let table = LEGACY_ITEM_TABLES
+            .iter()
+            .find(|t| t.data_version == 1)
+            .unwrap();
+        let &(apple, _) = table
+            .ids
+            .iter()
+            .find(|&&(_, name)| name == "minecraft:apple")
+            .unwrap();
+        let palette = crate::world::palette_migration::migration_by_label("1.26.40").unwrap();
+        let json = format!(
+            r#"{{"position":[0,0,0],"rotation":[0,0],"gamemode":0,"health":20,
+            "hunger":20,"spawn_position":null,"data_version":1,
+            "inventory":{{"slots":[{{"stack_id":1,"item":{{"id":{apple},"count":3,"meta":0,
+            "block_runtime_id":42}}}}],"armor":[],"held_slot":0}}}}"#
+        );
+        let mut data: PlayerSaveData = serde_json::from_str(&json).unwrap();
+        data.migrate();
+        assert_eq!(data.data_version, CURRENT_PLAYER_DATA_VERSION);
+        let item = &data.inventory.slots[0].item;
+        assert_eq!(
+            item.id,
+            item_registry::network_id("minecraft:apple").unwrap()
+        );
+        assert_eq!(item.count, 3);
+        assert_eq!(item.block_runtime_id, palette.remap(42) as i32);
     }
 }

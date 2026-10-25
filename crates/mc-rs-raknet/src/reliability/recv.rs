@@ -356,11 +356,8 @@ impl ReceiveLayer {
             // Reassemble
             let mut body = Vec::new();
             for i in 0..assembly.count {
-                if let Some(part) = assembly.parts.get(&i) {
-                    body.extend_from_slice(part);
-                } else {
-                    return None; // missing part (shouldn't happen)
-                }
+                // Partie manquante : ne devrait pas arriver (compte atteint).
+                body.extend_from_slice(assembly.parts.get(&i)?);
             }
 
             let reassembled = EncapsulatedPacket {

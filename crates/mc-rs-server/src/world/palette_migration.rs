@@ -46,11 +46,16 @@ pub fn migration_from(from: u64) -> Option<&'static PaletteMigration> {
         .find(|m| m.from_fingerprint == from && m.to_fingerprint == PALETTE_FINGERPRINT)
 }
 
-/// Migration des mondes sans marqueur (voir [`UNMARKED_WORLD_LABEL`]).
-pub fn unmarked_world_migration() -> Option<&'static PaletteMigration> {
+/// Migration depuis la palette de libellé `label` vers la palette courante.
+pub fn migration_by_label(label: &str) -> Option<&'static PaletteMigration> {
     PALETTE_MIGRATIONS
         .iter()
-        .find(|m| m.label == UNMARKED_WORLD_LABEL && m.to_fingerprint == PALETTE_FINGERPRINT)
+        .find(|m| m.label == label && m.to_fingerprint == PALETTE_FINGERPRINT)
+}
+
+/// Migration des mondes sans marqueur (voir [`UNMARKED_WORLD_LABEL`]).
+pub fn unmarked_world_migration() -> Option<&'static PaletteMigration> {
+    migration_by_label(UNMARKED_WORLD_LABEL)
 }
 
 /// Empreinte de la palette courante (celle compilée dans le binaire).
@@ -72,13 +77,27 @@ mod tests {
 
     #[test]
     fn migration_keeps_block_names() {
-        // Les noms de blocs ne changent pas entre 1.26.20 et 1.26.40 : l'air
-        // hérité doit tomber sur l'air courant.
+        // Aucun bloc n'est retiré depuis 1.26.20 : l'air hérité doit tomber
+        // sur l'air courant.
         let m = unmarked_world_migration().unwrap();
         let legacy_air = 13_080; // runtime ID de minecraft:air dans la palette 1.26.20
         assert_eq!(
             m.remap(legacy_air),
             crate::world::block_registry::BLOCKS.air
         );
+    }
+
+    #[test]
+    fn migration_from_1_26_40_targets_current_palette() {
+        let m = migration_by_label("1.26.40").expect("migration 1.26.40 → palette courante");
+        assert_eq!(m.from_fingerprint, 0x8fe1_d921_b408_a7d8);
+        assert_eq!(m.table.len(), 17_499);
+        assert!(m.table.iter().all(|&id| id < PALETTE_STATE_COUNT));
+        // Les états 1.26.40 sont tous distincts et appariés exactement (schéma
+        // `addedProperties` 1.26.50 compris) : la table est injective.
+        let mut targets = m.table.to_vec();
+        targets.sort_unstable();
+        targets.dedup();
+        assert_eq!(targets.len(), m.table.len());
     }
 }

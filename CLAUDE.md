@@ -3,7 +3,7 @@
 ## Projet
 
 Réécriture complète de PocketMine-MP (serveur Minecraft Bedrock PHP) en Rust.
-Protocol version 2169 (Minecraft Bedrock 1.26.45). Source unique : `CURRENT_PROTOCOL` /
+Protocol version 2193 (Minecraft Bedrock 1.26.51). Source unique : `CURRENT_PROTOCOL` /
 `MINECRAFT_VERSION` dans `crates/mc-rs-proto/src/lib.rs` (ne jamais recopier la valeur ailleurs).
 
 ## Référence
@@ -20,7 +20,8 @@ serveur (handlers, inventaires, gameplay).
 Mojang (`.reference/bedrock-protocol-docs`, tag de la release), gophertunnel (`git diff` entre tags ;
 le dépôt local a des modifications personnelles, ne pas y faire de pull) et CloudburstProtocol
 (`bedrock-codec/.../codec/vNNNN/`). Données de jeu : dragonfly. Détails et procédure :
-[`dev-docs/31-PROTOCOL-2169.md`](dev-docs/31-PROTOCOL-2169.md).
+[`dev-docs/31-PROTOCOL-2169.md`](dev-docs/31-PROTOCOL-2169.md), dernière montée :
+[`dev-docs/33-PROTOCOL-2193.md`](dev-docs/33-PROTOCOL-2193.md).
 
 **RÈGLE ABSOLUE** : Toujours vérifier le format des paquets dans les références avant d'implémenter (PMMP
 jusqu'à 1001, puis Mojang + gophertunnel + CloudburstProtocol). Ne jamais deviner un format binaire.
@@ -144,13 +145,15 @@ powershell -Command "Get-Process mc-rs-server -ErrorAction SilentlyContinue | St
 - UpdateAbilities : bit 19 (VERTICAL_FLY_SPEED) DOIT être dans abilities_set
 - BiomeDefinitionList protocol 924 : custom format (2x VarUInt32), PAS du NBT
 - Le serveur tourne à 100 TPS (10ms/tick), le game tick à 20 TPS (1 game tick = 5 server ticks)
-- Données 1.26.40 (palette, items, créatif) : dragonfly v0.11.4, dans `crates/mc-rs-server/data/`.
-  Les sous-chunks sont sauvegardés avec des runtime IDs bruts : tout changement de palette exige de relancer
-  `generate_block_registry` puis `generate_data_migrations` (migration appliquée à l'ouverture du monde,
-  marqueur LevelDB `mcrs:palette_fingerprint`)
-- Protocole 2168+ (« Cereal ») : optionnels précédés d'un booléen, parfois « doubles » (booléen externe
-  toujours vrai + présence), variantes taguées par un index VarUInt32
-- **Le vrai client 1.26.45 vérifie les contraintes du schéma Mojang, gophertunnel non.** Un bot qui se
+- Données 1.26.50 (palette, items, créatif, blocs data-driven) : dragonfly v0.11.5, dans
+  `crates/mc-rs-server/data/`. Les sous-chunks sont sauvegardés avec des runtime IDs bruts : tout changement
+  de palette exige de relancer `generate_block_registry` puis `generate_data_migrations` avec **toutes** les
+  palettes héritées (migration appliquée à l'ouverture du monde, marqueur LevelDB `mcrs:palette_fingerprint`)
+- Depuis 1.26.50, des blocs vanilla sont « data-driven » : leurs définitions doivent partir dans la liste
+  `Block Properties` de StartGame, sinon la palette du client est incomplète et les IDs décalés
+- Protocole 2168+ (« Cereal ») : optionnels précédés d'un booléen, variantes taguées par un index
+  VarUInt32 ; les optionnels « doubles » de 2168 sont redevenus simples en 2193
+- **Le vrai client (1.26.45 et suivants) vérifie les contraintes du schéma Mojang, gophertunnel non.** Un bot qui se
   connecte ne prouve rien. Valeur d'énumération hors liste (ex. `BuildPlatform = 0`), `Json::Value` qui
   n'est pas du JSON (ex. géométrie de skin `""`), taille d'image incohérente : écran « Block » (code 90,
   `BadPacket`), sans aucun journal côté client. Pour chaque champ envoyé, lire le JSON Mojang
