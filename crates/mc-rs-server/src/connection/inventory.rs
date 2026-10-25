@@ -479,6 +479,10 @@ impl Connection {
         // et envoie Respawn(SEARCHING_FOR_SPAWN) + DeathAnimation. Le joueur
         // doit alors cliquer Respawn côté client (PlayerAction::RESPAWN=7).
         let mut out = Vec::new();
+        // Cassage en cours (PMMP `Player::onUpdate` → `SurvivalBlockBreakHandler::update`).
+        if !self.dead {
+            out.extend(self.tick_block_break());
+        }
         if !self.dead
             && self
                 .attributes

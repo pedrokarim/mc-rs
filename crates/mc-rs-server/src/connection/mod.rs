@@ -1,3 +1,4 @@
+mod block_breaking;
 mod chat;
 mod chunks;
 mod dimension;
@@ -190,6 +191,8 @@ pub struct Connection {
 
     pub pending_commands: Vec<String>,
     pub pending_item_spawns: Vec<PendingItemEntitySpawn>,
+    /// XP rendue par les blocs cassés (position, points), répartie en orbes par `main.rs`.
+    pub pending_xp_drops: Vec<([f32; 3], u32)>,
     pub pending_entity_attacks: Vec<PendingEntityAttack>,
     pub pending_furnace_events: Vec<PendingFurnaceEvent>,
     /// Right-click sur chest queue ici, processé par main.rs (qui a accès
@@ -250,6 +253,11 @@ pub struct Connection {
     /// CONTINUE_DESTROY_BLOCK spuriousement renvoyés par le client pour le
     /// même bloc (bug client qui reset l'animation de crack).
     pub(super) last_block_attacked: Option<[i32; 3]>,
+    /// Cassage en cours en survie (PMMP `Player::$blockBreakHandler`).
+    pub(super) block_break_handler: Option<block_breaking::BlockBreakHandler>,
+    /// Au sol, d'après le drapeau `VerticalCollision` de PlayerAuthInput (mc-rs ne calcule pas les
+    /// collisions du joueur ; PMMP : `Entity::checkGroundState`).
+    pub(super) on_ground: bool,
 
     /// État sprint/sneak/swim — pour détecter les changements et broadcaster
     /// SetActorData aux autres viewers. Bits PlayerAuthInputFlags::SPRINTING=20,
@@ -340,6 +348,7 @@ impl Connection {
             broadcasts: Vec::new(),
             pending_commands: Vec::new(),
             pending_item_spawns: Vec::new(),
+            pending_xp_drops: Vec::new(),
             pending_entity_attacks: Vec::new(),
             pending_furnace_events: Vec::new(),
             pending_chest_open: None,
@@ -359,6 +368,8 @@ impl Connection {
             air_supply: 300,
             environment_tick: 0,
             last_block_attacked: None,
+            block_break_handler: None,
+            on_ground: true,
             is_sprinting: false,
             is_sneaking: false,
             is_swimming: false,

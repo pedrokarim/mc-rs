@@ -1297,6 +1297,9 @@ pub struct LevelEvent {
 impl LevelEvent {
     /// Block destroy particles.
     pub const PARTICLE_DESTROY: i32 = 2001;
+    /// Particules de coup sur un bloc en cours de cassage (BedrockProtocol
+    /// `LevelEvent::PARTICLE_PUNCH_BLOCK`) : data = runtime ID | face << 24.
+    pub const PARTICLE_PUNCH_BLOCK: i32 = 2014;
     /// Particules d'explosion (BedrockProtocol `LevelEvent::PARTICLE_EXPLODE`).
     pub const PARTICLE_EXPLODE: i32 = 2025;
     /// Start block breaking crack animation (data = break speed * 65535).
@@ -1343,6 +1346,8 @@ impl LevelSoundEvent {
     pub const ATTACK: &'static str = "attack";
     pub const EXPLODE: &'static str = "explode";
     pub const SHOOT: &'static str = "shoot";
+    /// Feu éteint (gophertunnel `SoundEventExtinguishFire`).
+    pub const EXTINGUISH_FIRE: &'static str = "extinguish.fire";
 
     /// Create a non-actor block sound event.
     pub fn block_sound(sound: &'static str, position: [f32; 3], block_runtime_id: i32) -> Self {

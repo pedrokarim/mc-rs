@@ -132,6 +132,23 @@ impl FallingBlockEntity {
 
 // ── ExperienceOrb ───────────────────────────────────────────────────────────
 
+/// Tailles d'orbes d'XP, de la plus grande à la plus petite (PMMP `ExperienceOrb::ORB_SPLIT_SIZES`).
+const ORB_SPLIT_SIZES: [u32; 11] = [2477, 1237, 617, 307, 149, 73, 37, 17, 7, 3, 1];
+
+/// Répartit une quantité d'XP en orbes (PMMP `ExperienceOrb::splitIntoOrbSizes`).
+pub fn split_into_orb_sizes(mut amount: u32) -> Vec<u32> {
+    let mut sizes = Vec::new();
+    while amount > 0 {
+        let size = ORB_SPLIT_SIZES
+            .into_iter()
+            .find(|&split| amount >= split)
+            .unwrap_or(1);
+        sizes.push(size);
+        amount -= size;
+    }
+    sizes
+}
+
 /// Port de `.reference/PocketMine-MP/src/entity/object/ExperienceOrb.php`.
 /// Stores XP reward + age. Attracted toward nearest player within range.
 #[derive(Debug, Clone)]
@@ -353,6 +370,14 @@ impl PassiveEntityManager {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn xp_splits_like_pmmp() {
+        assert_eq!(super::split_into_orb_sizes(7), vec![7]);
+        assert_eq!(super::split_into_orb_sizes(5), vec![3, 1, 1]);
+        assert_eq!(super::split_into_orb_sizes(43), vec![37, 3, 3]);
+        assert!(super::split_into_orb_sizes(0).is_empty());
+    }
+
     use super::*;
 
     #[test]

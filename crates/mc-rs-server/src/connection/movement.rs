@@ -1,4 +1,4 @@
-use tracing::info;
+use tracing::{debug, info};
 
 use mc_rs_proto::io::ProtoReader;
 use mc_rs_proto::packets::chunks::*;
@@ -6,7 +6,7 @@ use mc_rs_proto::packets::packet_id;
 use mc_rs_proto::packets::player::*;
 use mc_rs_proto::packets::world::*;
 
-use crate::item_entities::{item_stack_debug_summary, PendingItemEntitySpawn};
+use crate::item_entities::PendingItemEntitySpawn;
 use crate::world::block_registry::BLOCKS;
 
 use super::Connection;
@@ -146,6 +146,10 @@ impl Connection {
         }
 
         // Update player position
+        // Au sol : collision verticale sans montée (drapeau `VerticalCollision`, gophertunnel
+        // `InputFlagVerticalCollision` = 50 ; heurter un plafond en montant ne compte pas).
+        let vertical_collision = (pkt.input_flags >> 50) & 1 == 1;
+        self.on_ground = vertical_collision && pkt.position[1] <= self.position[1];
         self.position = pkt.position;
         self.pitch = pkt.pitch;
         self.yaw = pkt.yaw;
@@ -210,366 +214,27 @@ impl Connection {
             }
         }
 
-        // Handle block actions (breaking/placing)
+        // Actions de bloc (PMMP `handlePlayerBlockActions` → `handlePlayerActionFromData`).
         for action in &pkt.block_actions {
-            let bx = action.position[0];
-            let by = action.position[1];
-            let bz = action.position[2];
-            info!(
-                "[{}] block_action type={} pos=({},{},{}) face={}",
-                self.addr, action.action_type, bx, by, bz, action.face
+            debug!(
+                "[{}] block_action type={} pos={:?} face={}",
+                self.addr, action.action_type, action.position, action.face
             );
-            // PMMP uses integer block position (cast to float), NOT +0.5 center
-            let block_pos = [bx as f32, by as f32, bz as f32];
-            let block_center = [bx as f32 + 0.5, by as f32 + 0.5, bz as f32 + 0.5];
-
-            match action.action_type {
-                // START_BREAK (0) or CONTINUE_DESTROY_BLOCK (27)
-                0 | 27 => {
-                    // PMMP InGamePacketHandler.php:678-685 : si on reçoit
-                    // CONTINUE_DESTROY_BLOCK pour le MÊME bloc qu'on est déjà
-                    // en train de casser, on IGNORE. Le client envoie
-                    // spuriousement 27 pour le bloc courant, si on répond on
-                    // reset son animation → crack repart à zéro → il ne casse
-                    // jamais. (Source du bug "je mine indéfiniment sans rien
-                    // obtenir" rapporté par l'utilisateur.)
-                    if self.last_block_attacked == Some(action.position) {
-                        continue;
-                    }
-                    // PMMP `SurvivalBlockBreakHandler::__destruct` : quand un
-                    // nouveau handler remplace l'ancien (changement de cible
-                    // sans STOP explicite), broadcast BLOCK_STOP_BREAK pour
-                    // l'ancien position. Sans ça l'ancien bloc garde son crack
-                    // overlay alors qu'on n'est plus en train de le casser.
-                    if let Some(prev_pos) = self.last_block_attacked.take() {
-                        let prev_event = LevelEvent {
-                            event_id: LevelEvent::BLOCK_STOP_BREAK,
-                            position: [prev_pos[0] as f32, prev_pos[1] as f32, prev_pos[2] as f32],
-                            event_data: 0,
-                        };
-                        let prev_payload = prev_event.encode();
-                        responses.push(
-                            self.encode_compressed_packet(packet_id::LEVEL_EVENT, &prev_payload),
-                        );
-                        self.broadcasts.push((packet_id::LEVEL_EVENT, prev_payload));
-                    }
-                    self.last_block_attacked = Some(action.position);
-
-                    // Break speed basé sur la hardness du bloc (par nom).
-                    // PMMP : break_time_secs ≈ hardness × 1.5 (avec bon outil)
-                    // ou × 5 (main nue / mauvais outil). event_data envoyé au
-                    // client est `65535 × (1 / (break_time_secs × 20 TPS))`.
-                    let block_id = if let Ok(mut cache) = self.chunk_cache.lock() {
-                        cache.get_block(bx, by, bz)
-                    } else {
-                        0
-                    };
-                    let block_name = BLOCKS.name_for(block_id).unwrap_or("");
-                    let h = crate::block_hardness::hardness(block_name);
-                    info!(
-                        "[{}] start_break pos=({},{},{}) rid={} name={:?} hardness={}",
-                        self.addr, bx, by, bz, block_id, block_name, h
-                    );
-                    let break_speed: f32 = if h < 0.0 {
-                        0.0 // unbreakable (bedrock, ...)
-                    } else if h == 0.0 {
-                        1.0 // instant-break (grass, air, plants)
-                    } else {
-                        // Main nue par défaut → facteur 5.
-                        let secs = h * 5.0;
-                        1.0 / (secs * 20.0)
-                    };
-
-                    let event = LevelEvent {
-                        event_id: LevelEvent::BLOCK_START_BREAK,
-                        position: block_pos,
-                        event_data: (65535.0 * break_speed) as i32,
-                    };
-                    let event_payload = event.encode();
-                    responses.push(
-                        self.encode_compressed_packet(packet_id::LEVEL_EVENT, &event_payload),
-                    );
-                    self.broadcasts
-                        .push((packet_id::LEVEL_EVENT, event_payload));
-                }
-
-                // ABORT_BREAK (1) or STOP_BREAK (2)
-                1 | 2 => {
-                    self.last_block_attacked = None;
-                    let event = LevelEvent {
-                        event_id: LevelEvent::BLOCK_STOP_BREAK,
-                        position: block_pos,
-                        event_data: 0,
-                    };
-                    let event_payload = event.encode();
-                    responses.push(
-                        self.encode_compressed_packet(packet_id::LEVEL_EVENT, &event_payload),
-                    );
-                    self.broadcasts
-                        .push((packet_id::LEVEL_EVENT, event_payload));
-                }
-
-                // PREDICT_DESTROY_BLOCK (26)
-                26 => {
-                    // Le bloc vient d'être cassé, on peut en re-cibler un autre.
-                    self.last_block_attacked = None;
-                    let air_id = BLOCKS.air;
-
-                    // Send BLOCK_STOP_BREAK to clear crack animation
-                    let stop_event = LevelEvent {
-                        event_id: LevelEvent::BLOCK_STOP_BREAK,
-                        position: block_pos,
-                        event_data: 0,
-                    };
-                    let stop_payload = stop_event.encode();
-                    responses
-                        .push(self.encode_compressed_packet(packet_id::LEVEL_EVENT, &stop_payload));
-                    self.broadcasts.push((packet_id::LEVEL_EVENT, stop_payload));
-
-                    // Get the old block ID and set to air
-                    let old_block_id = if let Ok(mut cache) = self.chunk_cache.lock() {
-                        let old = cache.get_block(bx, by, bz);
-                        cache.set_block(bx, by, bz, air_id);
-                        // set_block marque déjà le chunk dirty → l'autosave le
-                        // persiste. PAS de save_chunk_now (flush LevelDB
-                        // synchrone sous guard = stall + hazard de gel).
-                        old
-                    } else {
-                        air_id
-                    };
-
-                    // Si c'était un furnace → queue unregister pour que main.rs
-                    // retire l'entrée du FurnaceManager et drop les items in/fuel/output.
-                    if crate::furnace::FurnaceKind::from_block_id(old_block_id).is_some() {
-                        self.pending_furnace_events
-                            .push(super::PendingFurnaceEvent::Unregister { pos: (bx, by, bz) });
-                        info!(
-                            "[{}] Queued furnace unregister at ({bx},{by},{bz})",
-                            self.addr
-                        );
-                    }
-
-                    // Send UpdateBlock
-                    let update = UpdateBlock {
-                        position: action.position,
-                        runtime_id: air_id,
-                        flags: 3, // FLAG_NEIGHBORS | FLAG_NETWORK
-                        layer: 0,
-                    };
-                    let update_payload = update.encode();
-                    responses.push(
-                        self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &update_payload),
-                    );
-                    self.broadcasts
-                        .push((packet_id::UPDATE_BLOCK, update_payload));
-
-                    // Send block destroy particles + sound
-                    if old_block_id != air_id {
-                        let level_event = LevelEvent {
-                            event_id: LevelEvent::PARTICLE_DESTROY,
-                            position: block_center,
-                            event_data: old_block_id as i32,
-                        };
-                        let event_payload = level_event.encode();
-                        responses.push(
-                            self.encode_compressed_packet(packet_id::LEVEL_EVENT, &event_payload),
-                        );
-                        self.broadcasts
-                            .push((packet_id::LEVEL_EVENT, event_payload));
-
-                        let sound = LevelSoundEvent::block_sound(
-                            LevelSoundEvent::BREAK,
-                            block_center,
-                            old_block_id as i32,
-                        );
-                        let sound_payload = sound.encode();
-                        responses.push(self.encode_compressed_packet(
-                            packet_id::LEVEL_SOUND_EVENT,
-                            &sound_payload,
-                        ));
-                        self.broadcasts
-                            .push((packet_id::LEVEL_SOUND_EVENT, sound_payload));
-                    }
-
-                    // Spawn a dropped item entity — règle vanilla :
-                    // - Seuls les blocs dont l'outil requis est Pickaxe sont
-                    //   REELLEMENT tool-gated (stone/cobblestone/ores/obsidian).
-                    //   Les blocs Axe/Shovel/Shears sont juste "plus rapides"
-                    //   avec le bon outil mais droppent à main nue aussi.
-                    // - Tier check ne s'applique QUE sur les blocs pickaxe
-                    //   (iron_ore → stone+, diamond_ore → iron+, obsidian → diamond+).
-                    // En créatif on skip le drop entièrement.
-                    if old_block_id != air_id && self.gamemode != 1 {
-                        let block_name = crate::world::block_registry::BLOCKS
-                            .name_for(old_block_id)
-                            .unwrap_or("");
-                        let held_item_id = self.inventory.slots[self.inventory.held_slot as usize]
-                            .item
-                            .id;
-                        let held_tool = crate::durability::durable_info(held_item_id);
-                        let needs_tool = crate::block_hardness::required_tool_type(block_name);
-                        let min_tier = crate::block_hardness::min_tool_tier_for_drop(block_name);
-
-                        // Seuls les blocs pickaxe-required sont gate-és côté outil.
-                        let needs_pickaxe =
-                            matches!(needs_tool, Some(crate::durability::ToolType::Pickaxe));
-                        let tool_ok = if needs_pickaxe {
-                            matches!(
-                                held_tool,
-                                Some(crate::durability::DurableInfo {
-                                    tool_type: crate::durability::ToolType::Pickaxe,
-                                    ..
-                                })
-                            )
-                        } else {
-                            true // logs/dirt/sand/etc. droppent à main nue
-                        };
-                        let tier_ok = match (min_tier, held_tool) {
-                            (None, _) => true,
-                            (Some(req_tier), Some(info)) => {
-                                info.tier.mining_tier() >= req_tier.mining_tier()
-                            }
-                            (Some(_), None) => false,
-                        };
-
-                        if tool_ok && tier_ok {
-                            if let Some(drop_item) = crate::inventory::block_drop(old_block_id) {
-                                let item_id = drop_item.id;
-                                let drop_summary = item_stack_debug_summary(&drop_item);
-                                self.pending_item_spawns.push(
-                                    PendingItemEntitySpawn::with_scatter(
-                                        drop_item,
-                                        [bx as f32 + 0.5, by as f32 + 0.5, bz as f32 + 0.5],
-                                    ),
-                                );
-                                info!(
-                                    "[{}] Queued dropped item entity: item_id={} at ({}, {}, {}) :: {}",
-                                    self.addr, item_id, bx, by, bz, drop_summary
-                                );
-                            } else {
-                                info!(
-                                    "[{}] Block {} broken but has no drop",
-                                    self.addr, block_name
-                                );
-                            }
-                        } else {
-                            info!(
-                                "[{}] Block {} broken but tool mismatch (tool_ok={}, tier_ok={}, held={:?}, need={:?}/{:?})",
-                                self.addr,
-                                block_name,
-                                tool_ok,
-                                tier_ok,
-                                held_tool,
-                                needs_tool,
-                                min_tier
-                            );
-                        }
-                    }
-
-                    info!(
-                        "[{}] Block broken at ({}, {}, {}) old_id={}",
-                        self.addr, bx, by, bz, old_block_id
-                    );
-
-                    // Pop des blocs attachés qui ont perdu leur support.
-                    // On check les 6 voisins : si leur règle d'attachement n'est
-                    // plus satisfaite, on les casse récursivement (drops inclus).
-                    let neighbors: [(i32, i32, i32); 6] = [
-                        (bx, by + 1, bz),
-                        (bx, by - 1, bz),
-                        (bx + 1, by, bz),
-                        (bx - 1, by, bz),
-                        (bx, by, bz + 1),
-                        (bx, by, bz - 1),
-                    ];
-                    let mut pop_queue: Vec<(i32, i32, i32)> = Vec::new();
-                    for (nx, ny, nz) in neighbors {
-                        if let Ok(mut cache) = self.chunk_cache.lock() {
-                            let nid = cache.get_block(nx, ny, nz);
-                            if nid == air_id {
-                                continue;
-                            }
-                            let nname = BLOCKS.name_for(nid).unwrap_or("");
-                            let Some(rule) = crate::block_attachment::attachment_rule(nname) else {
-                                continue;
-                            };
-                            let ok = crate::block_attachment::check_support(
-                                &mut cache, nx, ny, nz, rule,
-                            );
-                            if !ok {
-                                pop_queue.push((nx, ny, nz));
-                            }
-                        }
-                    }
-                    for (nx, ny, nz) in pop_queue {
-                        self.pop_attached_block(nx, ny, nz, &mut responses);
-                    }
-
-                    // Exhaustion mining (survival only) — PMMP `Human::onBlockBreak` : 0.005
-                    // d'exhaustion par bloc cassé (en plus du damage à l'outil).
-                    if self.gamemode == 0 && old_block_id != air_id {
-                        self.hunger.exhaust(&mut self.attributes, 0.005);
-                    }
-
-                    // PMMP `BlockBreakEvent` (post-break, pour monitoring plugins).
-                    if let Ok(mut ev_mgr) = self.events.lock() {
-                        let mut ev = crate::event::block::BlockBreakEvent {
-                            player_addr: self.addr,
-                            position: [bx, by, bz],
-                            old_block_runtime_id: old_block_id,
-                            new_block_runtime_id: air_id,
-                            drops: Vec::new(),
-                            xp_drop: 0,
-                            cancelled: false,
-                        };
-                        ev_mgr.call(&mut ev);
-                    }
-
-                    // PMMP `Block::onAttackedByTool` / `Durable::applyDamage` :
-                    // si le held item est un outil durable, on décrémente sa
-                    // durabilité de 1 (PMMP standard pour chaque bloc cassé).
-                    // Si l'outil casse, on le remplace par air.
-                    if self.gamemode != 1 {
-                        let held_slot = self.inventory.held_slot as usize;
-                        let held = &mut self.inventory.slots[held_slot];
-                        if let Some(info) = crate::durability::durable_info(held.item.id) {
-                            let broken = crate::durability::apply_damage(&mut held.item, 1);
-                            if broken {
-                                info!(
-                                    "[{}] Tool broken (id={}, tier={:?})",
-                                    self.addr, held.item.id, info.tier
-                                );
-                                // Replace par air + track via manager.
-                                let new_item = mc_rs_proto::packets::player::ItemStack::AIR;
-                                self.inventory_manager.set_slot(
-                                    &mut self.inventory,
-                                    crate::inventory_manager::InvKey::Main,
-                                    held_slot,
-                                    new_item,
-                                );
-                            } else {
-                                // Slot changé (meta a bougé) : push pending_sync.
-                                let current_item = held.item.clone();
-                                self.inventory_manager.set_slot(
-                                    &mut self.inventory,
-                                    crate::inventory_manager::InvKey::Main,
-                                    held_slot,
-                                    current_item,
-                                );
-                            }
-                        }
-                    }
-                }
-
-                // RESPAWN (7) — client a cliqué Respawn après l'écran de mort.
-                7 => {
-                    let respawn_pkts = self.handle_respawn_request();
-                    for pkt in respawn_pkts {
-                        responses.push(pkt);
-                    }
-                }
-
-                _ => {}
+            // RESPAWN (7) — client a cliqué Respawn après l'écran de mort.
+            if action.action_type == 7 {
+                responses.extend(self.handle_respawn_request());
+                continue;
+            }
+            if !self.handle_block_break_action(
+                action.action_type,
+                action.position,
+                action.face,
+                &mut responses,
+            ) {
+                debug!(
+                    "[{}] action de bloc {} non gérée",
+                    self.addr, action.action_type
+                );
             }
         }
 
@@ -1156,8 +821,11 @@ impl Connection {
         self.broadcasts
             .push((packet_id::LEVEL_EVENT, particle_payload));
 
-        // Drop standard (pas de tool-gating : les plantes tombent toujours).
-        if let Some(drop_item) = crate::inventory::block_drop(old_block_id) {
+        // Drops sans outil : PMMP `Block::onNearbyBlockChange` → `World::useBreakOn($pos)` sans
+        // joueur ni item (`VanillaItems::AIR()`).
+        for drop_item in
+            crate::block_break::drop_stacks(old_block_id, &crate::block_break::HeldTool::hand())
+        {
             self.pending_item_spawns
                 .push(PendingItemEntitySpawn::with_scatter(
                     drop_item,

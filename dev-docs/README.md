@@ -26,6 +26,8 @@ son suivi.
   paquets, décompilation, comparaison avec mc-rs) et écarts trouvés
 - [`35-CODES-ERREUR-CLIENT.md`](35-CODES-ERREUR-CLIENT.md) : mot-code de chaque écran d'erreur du client
   (« Block », « Boat »…) et cause correspondante, d'après BDS
+- [`36-CASSAGE-DE-BLOCS.md`](36-CASSAGE-DE-BLOCS.md) : cassage de blocs porté de PMMP, données exportées de
+  PMMP et croisées avec BDS, écarts tranchés et manques
 
 ## Cœur du serveur
 

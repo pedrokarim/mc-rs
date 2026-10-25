@@ -1,6 +1,6 @@
 # Scripts
 
-Scripts Python annexes. Aucun n’est nécessaire pour compiler ou lancer le serveur.
+Scripts annexes (Python, et un script PHP qui exécute PMMP). Aucun n’est nécessaire pour compiler ou lancer le serveur.
 
 ## Import de données vanilla
 
@@ -18,6 +18,10 @@ Scripts Python annexes. Aucun n’est nécessaire pour compiler ou lancer le ser
 - `extract_biomes.py` : régénère `crates/mc-rs-server/data/biomes.json` (climat, règles multinoise,
   surface) depuis `.reference/bedrock-samples/behavior_pack/biomes` (version du checkout courant) et les
   IDs de `biome_id_map.json` de BedrockData (PMMP, arrêté à 1.26.30).
+- `pmmp/export_block_break_data.php` : exécute PMMP (avec son PHP, `.reference/PocketMine-MP/bin/php/php.exe`)
+  pour exporter dureté, outil, drops et XP de chaque état de la palette, croisés avec le dump de BDS d'Allay →
+  `crates/mc-rs-server/data/block_break.json`. À relancer à chaque changement de palette (voir
+  [`../dev-docs/36-CASSAGE-DE-BLOCS.md`](../dev-docs/36-CASSAGE-DE-BLOCS.md)).
 - `import_item_upgrade_schema.py [dossier]` : consolide les schémas de `BedrockItemUpgradeSchema` dans
   `crates/mc-rs-server/data/item_id_upgrade_schema.json` (migration des anciens identifiants d’items).
 

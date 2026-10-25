@@ -106,19 +106,13 @@ pub mod block_behaviors;
 #[allow(dead_code)]
 pub mod block_break;
 #[allow(dead_code)]
-pub mod block_breaking_progress;
-#[allow(dead_code)]
 pub mod block_comparison;
 #[allow(dead_code)]
 pub mod block_entities;
 #[allow(dead_code)]
 pub mod block_entities_map;
 #[allow(dead_code)]
-pub mod block_hardness;
-#[allow(dead_code)]
 pub mod block_light_update;
-#[allow(dead_code)]
-pub mod block_pickaxe;
 #[allow(dead_code)]
 pub mod block_states;
 #[allow(dead_code)]
@@ -484,6 +478,7 @@ pub mod item_attributes;
 pub mod item_cooldown;
 #[allow(dead_code)]
 mod item_entities;
+pub mod item_extra_data;
 #[allow(dead_code)]
 pub mod item_frame;
 #[allow(dead_code)]
@@ -566,10 +561,6 @@ mod menu_forge;
 pub mod minecart;
 #[allow(dead_code)]
 pub mod mineshaft;
-#[allow(dead_code)]
-pub mod mining_effect;
-#[allow(dead_code)]
-pub mod mining_speed;
 #[allow(dead_code)]
 pub mod mob_ai;
 #[allow(dead_code)]
@@ -923,8 +914,6 @@ pub mod title_packet;
 pub mod tnt;
 #[allow(dead_code)]
 pub mod tnt_primed_source;
-#[allow(dead_code)]
-pub mod tool_types;
 #[allow(dead_code)]
 pub mod torch;
 #[allow(dead_code)]
@@ -3020,9 +3009,8 @@ fn apply_mob_explosion(
             if id == air {
                 return false;
             }
-            // Bedrock (hardness < 0) indestructible → ne casse pas.
-            let name = BLOCKS.name_for(id).unwrap_or("");
-            crate::block_hardness::hardness(name) >= 0.0
+            // Bloc incassable (dureté négative : bedrock…) → ne casse pas.
+            crate::block_break::profile(id).is_some_and(|p| p.is_breakable())
         });
         for b in &result.blocks_destroyed {
             cache.set_block(b[0], b[1], b[2], air);
@@ -3418,6 +3406,7 @@ fn process_peer_events(
                         pending_commands,
                         pending_console_commands,
                         item_spawns,
+                        xp_drops,
                         pending_entity_attacks,
                         pending_furnace_events,
                     ) = {
@@ -3457,6 +3446,7 @@ fn process_peer_events(
                         let pending_commands = conn.take_pending_commands();
                         let pending_console_commands = conn.take_pending_console_commands();
                         let item_spawns = std::mem::take(&mut conn.pending_item_spawns);
+                        let xp_drops = std::mem::take(&mut conn.pending_xp_drops);
                         let pending_entity_attacks = conn.take_pending_entity_attacks();
                         let pending_furnace_events = conn.take_pending_furnace_events();
 
@@ -3467,6 +3457,7 @@ fn process_peer_events(
                             pending_commands,
                             pending_console_commands,
                             item_spawns,
+                            xp_drops,
                             pending_entity_attacks,
                             pending_furnace_events,
                         )
@@ -3784,6 +3775,20 @@ fn process_peer_events(
                             item_entities,
                             spawn,
                         );
+                    }
+
+                    // XP des blocs cassés : PMMP `World::dropExperience`, une orbe par part de
+                    // `ExperienceOrb::splitIntoOrbSizes`.
+                    for (position, xp) in xp_drops {
+                        for size in crate::passive_entities::split_into_orb_sizes(xp) {
+                            spawn_and_broadcast_xp_orb(
+                                connections,
+                                raknet,
+                                passive_entities,
+                                position,
+                                size,
+                            );
+                        }
                     }
 
                     // Apply furnace register/unregister events queued par Connection
