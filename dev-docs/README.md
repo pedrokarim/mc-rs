@@ -24,6 +24,8 @@ son suivi.
   propriétés de connexion et migration des mondes
 - [`34-BDS-RETRO-INGENIERIE.md`](34-BDS-RETRO-INGENIERIE.md) : journal d'observation de BDS (captures de
   paquets, décompilation, comparaison avec mc-rs) et écarts trouvés
+- [`35-CODES-ERREUR-CLIENT.md`](35-CODES-ERREUR-CLIENT.md) : mot-code de chaque écran d'erreur du client
+  (« Block », « Boat »…) et cause correspondante, d'après BDS
 
 ## Cœur du serveur
 
