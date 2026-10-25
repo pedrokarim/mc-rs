@@ -26,3 +26,6 @@ pkt_sent.bin
 
 # État runtime du serveur (ops, bans), créé au premier lancement
 server-state.json
+
+# Outil de capture compilé
+scripts/dev/bds_capture/bds-capture.exe

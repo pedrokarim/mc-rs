@@ -23,4 +23,15 @@ Scripts Python annexes. Aucun n’est nécessaire pour compiler ou lancer le ser
 - `dev/udp_proxy.py` : relais UDP 19133 → 19132, pour contourner la restriction de boucle locale des
   applications UWP quand le client tourne sur la même machine.
 
+## Observation de BDS (`dev/`)
+
+Voir [`../dev-docs/34-BDS-RETRO-INGENIERIE.md`](../dev-docs/34-BDS-RETRO-INGENIERIE.md).
+
+- `dev/bds_capture/` (Go) : capture les paquets échangés avec un serveur (BDS en NetherNet, mc-rs en RakNet)
+  et les décode en JSON avec gophertunnel.
+- `dev/packet_dump.py` : résumé par type d'un enregistrement de paquets, extraction de charges utiles.
+- `dev/compare_captures.py` : comparaison champ par champ de deux captures décodées.
+- `dev/ghidra/` : scripts Ghidra pour lire le binaire de BDS (fonctions qui utilisent une chaîne, méthodes
+  d'une classe).
+
 Les benchmarks sont dans [`../benchmarks/`](../benchmarks/).

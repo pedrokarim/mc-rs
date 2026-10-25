@@ -22,6 +22,8 @@ son suivi.
   support de PMMP, **causes de déconnexion trouvées avec le vrai client** et outils de diagnostic
 - [`33-PROTOCOL-2193.md`](33-PROTOCOL-2193.md) : protocole 2193 (1.26.51), blocs vanilla data-driven,
   propriétés de connexion et migration des mondes
+- [`34-BDS-RETRO-INGENIERIE.md`](34-BDS-RETRO-INGENIERIE.md) : journal d'observation de BDS (captures de
+  paquets, décompilation, comparaison avec mc-rs) et écarts trouvés
 
 ## Cœur du serveur
 
