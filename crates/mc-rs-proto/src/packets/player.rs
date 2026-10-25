@@ -1313,17 +1313,12 @@ impl AddPlayer {
         // (changelog Mojang 2168, `getStrippedNetworkItem`).
         ItemStackWrapper::air().encode_descriptor(&mut w);
         w.write_var_i32(self.gamemode);
-        // Métadonnées (mêmes clés que SetActorData : PMMP
-        // `EntityMetadataProperties` SCALE = 38, BOUNDING_BOX_* = 53/54).
+        // Métadonnées complètes, comme PMMP `Human::sendSpawnPacket`
+        // (`getAllNetworkData`) : sans drapeaux, le client n'affichait ni nom
+        // ni gravité pour les autres joueurs.
         write_actor_metadata(
             &mut w,
-            &[
-                (0, 7, MetadataValue::Long(0)),
-                (4, 4, MetadataValue::String(self.username.clone())),
-                (38, 3, MetadataValue::Float(1.0)),
-                (53, 3, MetadataValue::Float(0.6)),
-                (54, 3, MetadataValue::Float(1.8)),
-            ],
+            &player_metadata(&self.username, entity_flags::PLAYER_BASE),
         );
         // PropertySyncData (entiers, flottants) : vide.
         w.write_var_u32(0);
@@ -1890,6 +1885,36 @@ pub mod entity_flags {
     pub const BREATHING: i64 = 1 << 35; // NOT in water
     pub const HAS_COLLISION: i64 = 1 << 48;
     pub const HAS_GRAVITY: i64 = 1 << 49; // AFFECTED_BY_GRAVITY
+
+    /// Drapeaux d'un joueur en jeu. `CAN_CLIMB` est indispensable : sans lui,
+    /// le client ne grimpe pas aux échelles ni aux lianes (PMMP
+    /// `Entity::syncNetworkData`, BDS 1.26.52.3).
+    pub const PLAYER_BASE: i64 =
+        CAN_SHOW_NAMETAG | BREATHING | HAS_GRAVITY | HAS_COLLISION | CAN_CLIMB;
+}
+
+/// Métadonnées complètes d'un joueur : clés envoyées à la fois par PMMP
+/// (`Entity`, `Living`, `Player::syncNetworkData`) et par BDS 1.26.52.3
+/// (`dev-docs/34-BDS-RETRO-INGENIERIE.md`). Les positions de lit et de mort
+/// (type position de bloc) ne sont pas encore envoyées.
+pub fn player_metadata(name: &str, flags: i64) -> Vec<(u32, u32, MetadataValue)> {
+    /// Réserve d'air d'un joueur, en ticks (PMMP `Living::maxBreathTicks`, BDS).
+    const MAX_AIR_TICKS: i16 = 300;
+    vec![
+        (0, 7, MetadataValue::Long(flags)),
+        (3, 0, MetadataValue::Byte(0)),                  // COLOR
+        (4, 4, MetadataValue::String(name.to_string())), // NAMETAG
+        (5, 7, MetadataValue::Long(-1)),                 // OWNER_EID
+        (6, 7, MetadataValue::Long(0)),                  // TARGET_EID
+        (7, 1, MetadataValue::Short(MAX_AIR_TICKS)),     // AIR
+        (38, 3, MetadataValue::Float(1.0)),              // SCALE
+        (42, 1, MetadataValue::Short(MAX_AIR_TICKS)),    // MAX_AIR
+        (53, 3, MetadataValue::Float(0.6)),              // BOUNDING_BOX_WIDTH
+        (54, 3, MetadataValue::Float(1.8)),              // BOUNDING_BOX_HEIGHT
+        (81, 0, MetadataValue::Byte(1)),                 // ALWAYS_SHOW_NAMETAG (PMMP `Player`)
+        (84, 4, MetadataValue::String(String::new())),   // SCORE_TAG
+        (131, 7, MetadataValue::Long(0)),                // VISIBLE_MOB_EFFECTS
+    ]
 }
 
 impl SetActorData {
@@ -1906,40 +1931,21 @@ impl SetActorData {
 
     /// Player metadata for pre-spawn (NO_AI=true to freeze during chunk loading)
     pub fn player_pre_spawn(runtime_entity_id: u64, name: &str) -> Self {
-        let flags = entity_flags::CAN_SHOW_NAMETAG
-            | entity_flags::NO_AI       // freeze during pre-spawn
-            | entity_flags::BREATHING   // not underwater
-            | entity_flags::HAS_GRAVITY // affected by gravity (once NO_AI is removed)
-            | entity_flags::HAS_COLLISION;
+        // NO_AI fige le joueur pendant le chargement des chunks.
+        let flags = entity_flags::PLAYER_BASE | entity_flags::NO_AI;
         Self {
             runtime_entity_id,
-            metadata: vec![
-                (0, 7, MetadataValue::Long(flags)),
-                (4, 4, MetadataValue::String(name.to_string())),
-                (38, 3, MetadataValue::Float(1.0)), // SCALE (PMMP = 38)
-                (53, 3, MetadataValue::Float(0.6)), // BOUNDING_BOX_WIDTH (PMMP = 53)
-                (54, 3, MetadataValue::Float(1.8)), // BOUNDING_BOX_HEIGHT (PMMP = 54)
-            ],
+            metadata: player_metadata(name, flags),
             tick: 0,
         }
     }
 
     /// Player metadata for in-game (NO_AI=false, gravity active)
     pub fn player_in_game(runtime_entity_id: u64, name: &str) -> Self {
-        let flags = entity_flags::CAN_SHOW_NAMETAG
-            | entity_flags::BREATHING
-            | entity_flags::HAS_GRAVITY
-            | entity_flags::HAS_COLLISION;
-        // NO_AI is NOT set — client can apply physics
+        // Sans NO_AI : le client applique sa physique.
         Self {
             runtime_entity_id,
-            metadata: vec![
-                (0, 7, MetadataValue::Long(flags)),
-                (4, 4, MetadataValue::String(name.to_string())),
-                (38, 3, MetadataValue::Float(1.0)), // SCALE
-                (53, 3, MetadataValue::Float(0.6)), // BOUNDING_BOX_WIDTH
-                (54, 3, MetadataValue::Float(1.8)), // BOUNDING_BOX_HEIGHT
-            ],
+            metadata: player_metadata(name, entity_flags::PLAYER_BASE),
             tick: 0,
         }
     }
@@ -1953,13 +1959,7 @@ impl SetActorData {
                                     // HAS_COLLISION is NOT set — noclip through blocks
         Self {
             runtime_entity_id,
-            metadata: vec![
-                (0, 7, MetadataValue::Long(flags)),
-                (4, 4, MetadataValue::String(name.to_string())),
-                (38, 3, MetadataValue::Float(1.0)), // SCALE
-                (53, 3, MetadataValue::Float(0.6)), // BOUNDING_BOX_WIDTH
-                (54, 3, MetadataValue::Float(1.8)), // BOUNDING_BOX_HEIGHT
-            ],
+            metadata: player_metadata(name, flags),
             tick: 0,
         }
     }
@@ -2247,6 +2247,21 @@ mod tests {
         assert_eq!(pai.input_flags, (1u128 << 25) | (1u128 << 65));
         assert_eq!(pai.block_actions.len(), 1);
         assert_eq!(pai.block_actions[0].position, [1, 64, -3]);
+    }
+
+    #[test]
+    fn player_metadata_lets_the_client_climb_and_breathe() {
+        let meta = SetActorData::player_in_game(1, "Steve").metadata;
+        let value = |key: u32| meta.iter().find(|(k, _, _)| *k == key).map(|(_, _, v)| v);
+        match value(0) {
+            Some(MetadataValue::Long(flags)) => {
+                assert_ne!(flags & entity_flags::CAN_CLIMB, 0);
+                assert_ne!(flags & entity_flags::HAS_GRAVITY, 0);
+            }
+            other => panic!("drapeaux absents : {other:?}"),
+        }
+        assert!(matches!(value(7), Some(MetadataValue::Short(300))));
+        assert!(matches!(value(42), Some(MetadataValue::Short(300))));
     }
 
     #[test]

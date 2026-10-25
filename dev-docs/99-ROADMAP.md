@@ -310,7 +310,8 @@ Quand une fonctionnalité doit être implémentée :
 ### 4.4 - Attributs & effets
 - [x] AttributeMap (port `AttributeMap.php`, drain_desync, 6 floats protocol 944)
 - [x] EffectManager (`effects.rs` + EffectKind 30 effects + from_name_or_id + apply via MobEffectPacket)
-- [x] HungerManager (exhaustion walk=0.005, sprint=0.1, swim=0.015 PMMP-exact)
+- [x] HungerManager (exhaustion walk=0.005, sprint=0.1, swim=0.015 PMMP ; palier de consommation à 4.0
+  comme PMMP depuis le 2026-10-25, il était à 5.0)
 - [x] ExperienceManager (formule PMMP : <16 → 2L+7, <31 → 5L-38, ≥31 → 9L-158)
 
 ### 4.5 - Mob spawning naturel — ✅ TERMINÉE
@@ -436,7 +437,9 @@ xp, title, transferserver.
 *Extension Bedrock (4)* : /effect, /enchant, /particle, /boss, /scoreboard.
 
 *Build/admin (18) ajoutées dans le sprint Phase 7+* :
-- [x] /gamerule [<rule> [<value>]] — 33 game rules vanilla, broadcast GameRulesChangedPacket
+- [x] /gamerule [<rule> [<value>]] — les 39 règles de BDS 1.26.52.3 (noms camelCase, valeurs par défaut
+  Bedrock), envoyées dans StartGame et diffusées par GameRulesChangedPacket. **Aucune n'est encore appliquée
+  en jeu** (keepInventory, naturalRegeneration, fallDamage… sans effet)
 - [x] /setblock <x y z> <block> [destroy|keep|replace]
 - [x] /fill <x1 y1 z1> <x2 y2 z2> <block> [destroy|hollow|keep|outline|replace] — limite 32768
 - [x] /clone <x1 y1 z1> <x2 y2 z2> <dx dy dz> [masked|replace] [force|move|normal]

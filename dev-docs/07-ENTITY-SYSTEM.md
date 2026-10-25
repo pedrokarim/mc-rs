@@ -106,8 +106,9 @@ Ajoute à Living :
 
 **HungerManager :**
 - `food` : 0-20
-- `saturation` : 0.0-20.0
-- `exhaustion` : 0.0-4.0
+- `saturation` : 0.0-20.0, **5 à l'apparition** (BDS 1.26.52.3 ; PMMP met 20)
+- `exhaustion` : chaque palier de 4.0 consomme un point de saturation puis de faim (PMMP
+  `HungerManager::exhaust`) ; l'attribut réseau est borné à 0-20 chez BDS
 - Tick : exhaustion → saturation → food → dégâts
 
 **ExperienceManager :**
@@ -142,7 +143,9 @@ EntityFactory::register(class, function(World, CompoundTag) → Entity)
 
 ### Entity Metadata (données réseau)
 
-Les entités ont des métadonnées synchronisées avec le client via `SetEntityDataPacket` :
+Les entités ont des métadonnées synchronisées avec le client via `SetActorDataPacket` (clé 0, drapeaux
+en `Long`). Bits corrigés le 2026-10-25 d'après gophertunnel (`EntityDataFlag*`), dont les captures de
+BDS 1.26.52.3 valident le décodage (`dev-docs/34-BDS-RETRO-INGENIERIE.md`) :
 
 | Flag | Bit | Description |
 |---|---|---|
@@ -152,13 +155,20 @@ Les entités ont des métadonnées synchronisées avec le client via `SetEntityD
 | SPRINTING | 3 | Sprint |
 | USING_ITEM | 4 | Utilise un item |
 | INVISIBLE | 5 | Invisible |
-| BABY | 8 | Bébé |
-| CAN_CLIMB | 16 | Peut grimper |
-| SWIMMER | 17 | Nage |
+| BABY | 11 | Bébé |
+| CAN_SHOW_NAMETAG | 14 | Nom affiché |
+| NO_AI | 16 | Pas d'IA ni de physique côté client |
+| SILENT | 17 | Silencieux |
+| WALL_CLIMBING | 18 | Grimpe aux murs |
+| CAN_CLIMB | 19 | Peut grimper (échelles, lianes) : obligatoire pour un joueur |
+| CAN_SWIM | 20 | Peut nager |
 | CAN_FLY | 21 | Peut voler |
-| SLEEPING | 26 | Dort |
-| NO_AI | 15 | Pas d'IA |
+| GLIDING | 32 | Plane (élytres) |
 | BREATHING | 35 | Respire |
+| HAS_COLLISION | 48 | Collisions |
+| HAS_GRAVITY | 49 | Soumis à la gravité |
+| SWIMMING | 57 | Nage |
+| SLEEPING | 76 | Dort |
 
 ### Fichiers PocketMine de référence
 

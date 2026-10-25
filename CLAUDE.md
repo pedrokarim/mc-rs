@@ -133,7 +133,10 @@ powershell -Command "Get-Process mc-rs-server -ErrorAction SilentlyContinue | St
   `handle_split` avant l'enregistrement reliable). Détails et instrumentation
   conservée : `dev-docs/archive/HANDOFF-FREEZE-BUG.md`.
 - **Fly en survival** : probablement résolu par le fix `UPDATE_ABILITIES =
-  0xBB` (l'ancien 0x12B était un ID fantôme). À reconfirmer si réapparition.
+  0xBB` (l'ancien 0x12B était un ID fantôme). Le 2026-10-25, l'UpdateAbilities envoyé à un joueur en survie
+  est identique à celui de BDS 1.26.52.3 (hors identifiant d'entité). À reconfirmer si réapparition.
+- **Règles de jeu** : envoyées au client (39, comme BDS) mais **appliquées nulle part** côté serveur.
+- Écarts restants avec BDS et méthode de comparaison : [`dev-docs/34-BDS-RETRO-INGENIERIE.md`](dev-docs/34-BDS-RETRO-INGENIERIE.md)
 
 ## Notes techniques importantes
 

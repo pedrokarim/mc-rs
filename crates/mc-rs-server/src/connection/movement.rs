@@ -614,10 +614,7 @@ impl Connection {
         if state_changed {
             // Build SetActorData avec flags actuels (sprint, sneak, swim + base).
             use mc_rs_proto::packets::player::entity_flags;
-            let mut flags = entity_flags::CAN_SHOW_NAMETAG
-                | entity_flags::BREATHING
-                | entity_flags::HAS_GRAVITY
-                | entity_flags::HAS_COLLISION;
+            let mut flags = entity_flags::PLAYER_BASE;
             if self.is_sprinting {
                 flags |= entity_flags::SPRINTING;
             }

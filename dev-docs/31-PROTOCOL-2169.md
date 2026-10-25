@@ -120,12 +120,16 @@ cohérence interne et le flux complet (login, packs, spawn, entrées), pas la co
 officiel. Points où les références divergent, choix retenu entre parenthèses :
 
 1. Ingrédients de CraftingData : gophertunnel + Cloudburst (variante 0/1, type en chaîne, quantité VarInt32)
-   contre le JSON Mojang (forme ItemStackRequest). Un mauvais choix empêche le client de lire tout le paquet.
+   contre le JSON Mojang (forme ItemStackRequest). **Tranché le 2026-10-25** : le CraftingData de BDS 1.26.52.3
+   se lit intégralement avec la forme gophertunnel, celle retenue
+   ([`34-BDS-RETRO-INGENIERIE.md`](34-BDS-RETRO-INGENIERIE.md) § 4.1).
 2. Net id des slots d’ItemStackRequest : `i32` LE (gophertunnel + Cloudburst) contre la mention d’une variante
-   taguée dans le changelog.
+   taguée dans le changelog. Paquet client : à capturer avec un vrai client.
 3. Présence dans ItemStackResponse : conteneurs ssi succès, net id ssi quantité non nulle (invariants Mojang).
+   À capturer chez BDS pendant une manipulation d’inventaire.
 4. Booléen de présence en tête des drapeaux PlayerAuthInput (gophertunnel + Cloudburst, invisible dans le JSON).
-5. Couleur de skin : `"#rrggbb"` converti en ARGB comme Cloudburst (`Color.getRGB()`).
+   **Sans objet depuis 2193** : ce booléen a disparu ([`33-PROTOCOL-2193.md`](33-PROTOCOL-2193.md)).
+5. Couleur de skin : `"#rrggbb"` converti en ARGB comme Cloudburst (`Color.getRGB()`). Non vérifié.
 
 En cas de problème, `connection/movement.rs` journalise la première erreur de décodage PlayerAuthInput du
 processus en `WARN`.

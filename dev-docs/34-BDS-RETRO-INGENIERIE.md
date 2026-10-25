@@ -125,6 +125,7 @@ règles de jeu identiques à BDS ; simulateur 3/3 en jeu, mode probe sans incide
 | Seuil d'épuisement | Saturation et faim baissaient tous les **5,0** points d'épuisement, le commentaire disait « port PMMP » : PMMP (et le jeu) utilisent **4,0** | PMMP `HungerManager::exhaust` |
 | Version de géométrie du skin | Jetée au login, remplacée par `MINECRAFT_VERSION` ; désormais relayée (repli inchangé si absente) | PMMP `ClientDataToSkinDataHelper`, BDS |
 | StartGame, ResourcePackStack | `BaseGameVersion = "*"`, historique de rembobinage 40 | BDS |
+| Métadonnées du joueur | Drapeau `CAN_CLIMB` absent (le client ne grimpe pas sans lui) ; air et air max, propriétaire, cible, couleur, `ALWAYS_SHOW_NAMETAG`, `SCORE_TAG`, effets visibles absents ; **les autres joueurs (AddPlayer) partaient sans aucun drapeau**. Un seul constructeur, `player_metadata`, pour SetActorData et AddPlayer | Clés communes à PMMP (`Entity`, `Living`, `Player::syncNetworkData`) et BDS ; capture `mc-rs-wip-bds-fixes-3` |
 
 Volontairement non repris :
 
@@ -135,6 +136,16 @@ Volontairement non repris :
   à essayer avec un vrai client.
 - **Couleur du joueur dans PlayerList** : `0xFFEDEDED` chez BDS pour un seul joueur ; fixe ou attribuée par
   joueur, à observer avec plusieurs joueurs.
+
+Métadonnées du joueur encore différentes de BDS : 62 clés secondaires de BDS absentes (positions de lit et
+de mort, commerce, sièges, visée assistée…), `SCALE` et boîte englobante (38, 53, 54) envoyées comme PMMP mais
+plus par BDS, qui utilise `CollisionBox` (130). Les drapeaux de BDS (`Climb` seul, sans `Breathing` ni
+`ShowName`) ont été relevés pendant que son bot était encore placé à y = 32 769, avant le vrai spawn : état
+transitoire, non repris.
+
+Documentation corrigée au passage : bits de drapeaux de `07-ENTITY-SYSTEM.md` (`CAN_CLIMB` 19 et non 16,
+`NO_AI` 16 et non 15, `BABY` 11 et non 8), faim et règles de jeu de `99-ROADMAP.md`, points ouverts de
+`31-PROTOCOL-2169.md` § 4, bugs connus de `CLAUDE.md`.
 
 Écarts trouvés en chemin, non traités ici : les règles de jeu ne sont **appliquées nulle part** en jeu
 (`keepInventory`, `naturalRegeneration`, `fallDamage`… sans effet) ; le `SkinResourcePatch` renvoyé par mc-rs
