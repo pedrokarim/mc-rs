@@ -81,14 +81,14 @@ communs) et `2026-10-25_detail_startgame-attributes-playerlist.txt`.
 
 | Paquet | BDS | mc-rs |
 |---|---|---|
-| StartGame | 39 règles de jeu | aucune |
+| StartGame | 39 règles de jeu | aucune (**corrigé**, § 5) |
 | StartGame | `ServerAuthoritativeInventory = true` | `false` |
-| StartGame | `PlayerMovementSettings.RewindHistorySize = 40` | 0 |
-| StartGame | `PlayerGameMode = 5` (mode du monde), `BaseGameVersion = "*"` | 0, `1.26.51` |
-| PlayerList | UUID du joueur | UUID nul |
-| PlayerList | `BuildPlatform`, version moteur de la géométrie : valeurs du client relayées | `-1`, `MINECRAFT_VERSION` forcés |
+| StartGame | `PlayerMovementSettings.RewindHistorySize = 40` | 0 (**corrigé**) |
+| StartGame | `PlayerGameMode = 5` (mode du monde), `BaseGameVersion = "*"` | 0, `1.26.51` (`*` **corrigé**) |
+| PlayerList | UUID du joueur | UUID nul (**corrigé**, § 5) |
+| PlayerList | `BuildPlatform`, version moteur de la géométrie : valeurs du client relayées | `-1`, `MINECRAFT_VERSION` forcés (géométrie **corrigée**) |
 | PlayerList | `Trusted = false`, `PrimaryUser = false`, couleur (237, 237, 237) | `true`, `true`, blanc |
-| UpdateAttributes | saturation par défaut 5, épuisement max 20, dégâts d'attaque 1–1, absorption max 16, résistance au recul min −2 ; `air_drag_modifier`, `bounciness`, `friction_modifier` | saturation 20, épuisement max 5, bornes 0–3,4e38 ; `fall_damage` en plus |
+| UpdateAttributes | saturation par défaut 5, épuisement max 20, dégâts d'attaque 1–1, absorption max 16, résistance au recul min −2 ; `air_drag_modifier`, `bounciness`, `friction_modifier` | saturation 20, épuisement max 5, bornes 0–3,4e38 ; `fall_damage` en plus (**corrigé**) |
 | SetActorData (joueur) | environ 80 clés de métadonnées | quelques-unes ; drapeaux différents |
 | CraftingData | 1 217 façonnées, 2 068 sans forme, 1 456 à données, 210 potions, 2 changements de contenant, 14 multi, 13 forge ; identifiant texte (`minecraft:barrel`), UUID, priorités 0 à 50, bloc de sortie renseigné | 1 064 façonnées, 778 sans forme, rien d'autre ; identifiant numérique, UUID nul, priorité 50 partout, bloc de sortie 0 |
 | ResourcePacksInfo | `WorldTemplateVersion = "0.0.0"` | chaîne vide |
@@ -110,7 +110,37 @@ sous-chunks, `SubChunkCount = 0`), IDs de blocs (BDS en hash, mc-rs en séquenti
 - `UpdateAdventureSettings.ShowNameTags` à `false` et `InventoryContent.Container.ContainerID` à 0 chez BDS :
   à confirmer avec un vrai client.
 
-## 5. Décompilation (en cours)
+## 5. Corrections du 2026-10-25
+
+Vérifiées par une nouvelle capture (`captures/mc-rs-wip-bds-fixes-2/`, rapport
+`comparisons/2026-10-25_bds-1.26.52.3_vs_mc-rs-correctifs-2.txt`) : UpdateAttributes sans écart, UUID et
+règles de jeu identiques à BDS ; simulateur 3/3 en jeu, mode probe sans incident.
+
+| Correction | Constat | Source |
+|---|---|---|
+| UUID des joueurs Xbox | `uuid_str` restait vide en authentification Xbox : **tous les vrais joueurs avaient l'UUID nul** dans PlayerList (collisions en multijoueur). Calculé désormais depuis le XUID : MD5 de `pocket-auth-1-xuid:<xuid>`, version 3, variante RFC 4122 | PMMP `LoginPacketHandler::calculateUuidFromXuid`, valeur identique à BDS |
+| Ordre des octets d'UUID | PlayerList et AddPlayer écrivaient les 16 octets bruts ; le protocole les écrit en deux `u64` little-endian (chaque moitié inversée). Masqué jusqu'ici par l'UUID nul. `ProtoWriter::write_uuid` | PMMP `CommonTypes::putUUID`, gophertunnel, BDS |
+| Règles de jeu | Aucune dans StartGame ; noms en minuscules ; défauts Java (`randomTickSpeed` 3, `spawnRadius` 5) ; règles récentes absentes. Désormais les 39 règles de BDS, dans son ordre, en camelCase, insensibles à la casse pour `/gamerule` | BDS 1.26.52.3 |
+| Attributs du joueur | Saturation initiale 5, épuisement borné à 20, absorption à 16, dégâts d'attaque 1–1, recul dès −2, `friction_modifier`, `bounciness`, `air_drag_modifier` ; `fall_damage` retiré (lu nulle part) ; ordre de BDS | BDS 1.26.52.3 |
+| Seuil d'épuisement | Saturation et faim baissaient tous les **5,0** points d'épuisement, le commentaire disait « port PMMP » : PMMP (et le jeu) utilisent **4,0** | PMMP `HungerManager::exhaust` |
+| Version de géométrie du skin | Jetée au login, remplacée par `MINECRAFT_VERSION` ; désormais relayée (repli inchangé si absente) | PMMP `ClientDataToSkinDataHelper`, BDS |
+| StartGame, ResourcePackStack | `BaseGameVersion = "*"`, historique de rembobinage 40 | BDS |
+
+Volontairement non repris :
+
+- **Plateforme dans PlayerList** : BDS relaie celle du client, mais le schéma Mojang n'admet que 11 valeurs
+  sans donner leurs nombres, et une valeur hors énumération provoque l'écran « Block » du vrai client
+  (montée 2169). `-1` (Unknown) reste envoyé, comme PMMP et dragonfly ; seule l'icône de plateforme manque.
+- **Inventaire géré par le serveur** (`ServerAuthoritativeInventory`) : change le comportement du client,
+  à essayer avec un vrai client.
+- **Couleur du joueur dans PlayerList** : `0xFFEDEDED` chez BDS pour un seul joueur ; fixe ou attribuée par
+  joueur, à observer avec plusieurs joueurs.
+
+Écarts trouvés en chemin, non traités ici : les règles de jeu ne sont **appliquées nulle part** en jeu
+(`keepInventory`, `naturalRegeneration`, `fallDamage`… sans effet) ; le `SkinResourcePatch` renvoyé par mc-rs
+n'est pas l'octet près celui du client (fins de ligne), BDS le relaie tel quel.
+
+## 6. Décompilation (en cours)
 
 Import et analyse automatique de `bedrock_server.exe` lancés le 2026-10-25 à 16:12 dans le projet Ghidra
 (16 Go de tas, 12 cœurs, priorité basse ; journal `C:\tools\ghidra-projects\bds-1.26.52.3-analyze.log`).

@@ -254,16 +254,7 @@ impl StartGame {
 
         w.write_u64_le(self.block_palette_checksum);
 
-        // worldTemplateId UUID (2x i64_le, bytes swapped)
-        // First 8 bytes reversed, then next 8 bytes reversed
-        let mut uuid_part1 = [0u8; 8];
-        let mut uuid_part2 = [0u8; 8];
-        uuid_part1.copy_from_slice(&self.world_template_id[0..8]);
-        uuid_part2.copy_from_slice(&self.world_template_id[8..16]);
-        uuid_part1.reverse();
-        uuid_part2.reverse();
-        w.write_raw(&uuid_part1);
-        w.write_raw(&uuid_part2);
+        w.write_uuid(&self.world_template_id);
 
         w.write_bool(self.enable_client_side_chunk_generation);
         w.write_bool(self.block_network_ids_are_hashes);
@@ -336,7 +327,8 @@ impl StartGame {
             disable_persona: false,
             disable_custom_skins: false,
             mute_emote_announcements: false,
-            vanilla_version: crate::MINECRAFT_VERSION.to_string(),
+            // `*` : comportements de la dernière version, comme BDS 1.26.52.3.
+            vanilla_version: crate::BASE_GAME_VERSION.to_string(),
             limited_world_width: 0,
             limited_world_length: 0,
             is_new_nether: true,
@@ -351,7 +343,9 @@ impl StartGame {
             world_name: "MC-RS World".to_string(),
             premium_world_template_id: String::new(),
             is_trial: false,
-            rewind_history_size: 0,
+            // Historique de mouvements gardé par le client pour les
+            // corrections serveur : 40 ticks chez BDS 1.26.52.3.
+            rewind_history_size: 40,
             server_authoritative_block_breaking: true,
             current_tick: 0,
             enchantment_seed: 0,

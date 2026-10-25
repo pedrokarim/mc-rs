@@ -139,6 +139,8 @@ impl Connection {
         start_game.generator = self.config.generator_id;
         // Spawn dans la dimension restaurée (ex. reconnexion dans le Nether/End).
         start_game.dimension = self.current_dimension;
+        // Règles de jeu courantes, sous leurs noms réseau (BDS en envoie 39).
+        start_game.game_rules = self.game_rules.wire_rules();
         // Blocs vanilla data-driven : sans leurs définitions, la palette du
         // client est incomplète (voir `world::data_driven_blocks`).
         start_game.block_properties = crate::world::data_driven_blocks::block_properties().to_vec();

@@ -24,6 +24,9 @@ pub mod ids {
     pub const LUCK: &str = "minecraft:luck";
     pub const FALL_DAMAGE: &str = "minecraft:fall_damage";
     pub const LAVA_MOVEMENT: &str = "minecraft:lava_movement";
+    pub const FRICTION_MODIFIER: &str = "minecraft:friction_modifier";
+    pub const BOUNCINESS: &str = "minecraft:bounciness";
+    pub const AIR_DRAG_MODIFIER: &str = "minecraft:air_drag_modifier";
     pub const HORSE_JUMP_STRENGTH: &str = "minecraft:horse.jump_strength";
     pub const ZOMBIE_SPAWN_REINFORCEMENTS: &str = "minecraft:zombie.spawn_reinforcements";
 }
@@ -91,6 +94,27 @@ impl Attribute {
     }
 }
 
+/// Ordre des attributs du joueur dans l'UpdateAttributes de spawn de BDS.
+const PLAYER_ATTRIBUTE_ORDER: &[&str] = &[
+    ids::HUNGER,
+    ids::SATURATION,
+    ids::EXHAUSTION,
+    ids::EXPERIENCE_LEVEL,
+    ids::EXPERIENCE,
+    ids::HEALTH,
+    ids::FOLLOW_RANGE,
+    ids::KNOCKBACK_RESISTANCE,
+    ids::MOVEMENT_SPEED,
+    ids::UNDERWATER_MOVEMENT,
+    ids::LAVA_MOVEMENT,
+    ids::ATTACK_DAMAGE,
+    ids::ABSORPTION,
+    ids::LUCK,
+    ids::FRICTION_MODIFIER,
+    ids::BOUNCINESS,
+    ids::AIR_DRAG_MODIFIER,
+];
+
 /// Port de `AttributeMap.php`. Conteneur d'attributs par-entité.
 #[derive(Debug, Clone, Default)]
 pub struct AttributeMap {
@@ -102,26 +126,18 @@ impl AttributeMap {
         Self::default()
     }
 
-    /// Équivalent `AttributeFactory::getInstance()->get()` : construit un
-    /// AttributeMap avec les attributs par défaut PMMP pour un `Human` (joueur).
+    /// Attributs d'un joueur, avec les bornes et valeurs par défaut que BDS
+    /// 1.26.52.3 envoie au spawn (`dev-docs/34-BDS-RETRO-INGENIERIE.md`) ; la
+    /// structure reste celle de PMMP `AttributeFactory`. Écarts avec PMMP :
+    /// saturation initiale 5 (20 chez PMMP), épuisement borné à 20 (5),
+    /// absorption à 16, dégâts d'attaque fixés à 1, résistance au recul dès −2,
+    /// trois attributs de physique en plus et pas de `fall_damage`.
     pub fn default_for_player() -> Self {
         let mut map = Self::new();
         let f = f32::MAX;
-        map.add(Attribute::new(ids::ABSORPTION, 0.0, f, 0.0, true));
-        map.add(Attribute::new(ids::SATURATION, 0.0, 20.0, 20.0, true));
-        map.add(Attribute::new(ids::EXHAUSTION, 0.0, 5.0, 0.0, false));
-        map.add(Attribute::new(
-            ids::KNOCKBACK_RESISTANCE,
-            0.0,
-            1.0,
-            0.0,
-            true,
-        ));
-        map.add(Attribute::new(ids::HEALTH, 0.0, 20.0, 20.0, true));
-        map.add(Attribute::new(ids::MOVEMENT_SPEED, 0.0, f, 0.1, true));
-        map.add(Attribute::new(ids::FOLLOW_RANGE, 0.0, 2048.0, 16.0, false));
         map.add(Attribute::new(ids::HUNGER, 0.0, 20.0, 20.0, true));
-        map.add(Attribute::new(ids::ATTACK_DAMAGE, 0.0, f, 1.0, false));
+        map.add(Attribute::new(ids::SATURATION, 0.0, 20.0, 5.0, true));
+        map.add(Attribute::new(ids::EXHAUSTION, 0.0, 20.0, 0.0, false));
         map.add(Attribute::new(
             ids::EXPERIENCE_LEVEL,
             0.0,
@@ -130,10 +146,36 @@ impl AttributeMap {
             true,
         ));
         map.add(Attribute::new(ids::EXPERIENCE, 0.0, 1.0, 0.0, true));
+        map.add(Attribute::new(ids::HEALTH, 0.0, 20.0, 20.0, true));
+        map.add(Attribute::new(ids::FOLLOW_RANGE, 0.0, 2048.0, 16.0, false));
+        map.add(Attribute::new(
+            ids::KNOCKBACK_RESISTANCE,
+            -2.0,
+            1.0,
+            0.0,
+            true,
+        ));
+        map.add(Attribute::new(ids::MOVEMENT_SPEED, 0.0, f, 0.1, true));
         map.add(Attribute::new(ids::UNDERWATER_MOVEMENT, 0.0, f, 0.02, true));
-        map.add(Attribute::new(ids::LUCK, -1024.0, 1024.0, 0.0, true));
-        map.add(Attribute::new(ids::FALL_DAMAGE, 0.0, f, 1.0, true));
         map.add(Attribute::new(ids::LAVA_MOVEMENT, 0.0, f, 0.02, true));
+        map.add(Attribute::new(ids::ATTACK_DAMAGE, 1.0, 1.0, 1.0, false));
+        map.add(Attribute::new(ids::ABSORPTION, 0.0, 16.0, 0.0, true));
+        map.add(Attribute::new(ids::LUCK, -1024.0, 1024.0, 0.0, true));
+        map.add(Attribute::new(
+            ids::FRICTION_MODIFIER,
+            0.0,
+            256.0,
+            1.0,
+            true,
+        ));
+        map.add(Attribute::new(ids::BOUNCINESS, 0.0, 1.0, 0.0, true));
+        map.add(Attribute::new(
+            ids::AIR_DRAG_MODIFIER,
+            0.0,
+            256.0,
+            1.0,
+            true,
+        ));
         map
     }
 
@@ -172,7 +214,14 @@ impl AttributeMap {
             attr.mark_synchronized();
             out.push(attr.clone());
         }
-        out.sort_by(|a, b| a.id.cmp(&b.id));
+        // Ordre de BDS, puis alphabétique pour les attributs qu'il n'envoie pas.
+        out.sort_by_key(|a| {
+            let rank = PLAYER_ATTRIBUTE_ORDER
+                .iter()
+                .position(|&id| id == a.id)
+                .unwrap_or(PLAYER_ATTRIBUTE_ORDER.len());
+            (rank, a.id.clone())
+        });
         out
     }
 
@@ -210,6 +259,10 @@ mod sync_all_tests {
 
 // ── Hunger management — port de `HungerManager.php` ──
 
+/// Épuisement consommé par point de saturation ou de faim (PMMP
+/// `HungerManager::exhaust`).
+const EXHAUSTION_PER_FOOD_POINT: f32 = 4.0;
+
 /// Port de `HungerManager.php`.
 /// Gère faim, saturation, exhaustion — décrément et régénération/damage.
 #[derive(Debug, Clone)]
@@ -227,13 +280,13 @@ impl HungerManager {
         }
     }
 
-    /// PMMP `HungerManager::exhaust()` : ajoute de l'exhaustion. À 5.0, diminue
-    /// la saturation ou la faim.
+    /// PMMP `HungerManager::exhaust()` : ajoute de l'exhaustion. Chaque palier
+    /// de 4.0 diminue la saturation, puis la faim (`while($exhaustion >= 4.0)`).
     pub fn exhaust(&self, attrs: &mut AttributeMap, amount: f32) {
         let ex = attrs.must_get_mut(ids::EXHAUSTION);
         let mut new_ex = ex.current_value + amount;
-        while new_ex >= 5.0 {
-            new_ex -= 5.0;
+        while new_ex >= EXHAUSTION_PER_FOOD_POINT {
+            new_ex -= EXHAUSTION_PER_FOOD_POINT;
             // Saturation d'abord.
             let sat = attrs.must_get(ids::SATURATION).current_value;
             if sat > 0.0 {
@@ -398,7 +451,7 @@ mod tests {
         let attrs = AttributeMap::default_for_player();
         assert_eq!(attrs.must_get(ids::HEALTH).current_value, 20.0);
         assert_eq!(attrs.must_get(ids::HUNGER).current_value, 20.0);
-        assert_eq!(attrs.must_get(ids::SATURATION).current_value, 20.0);
+        assert_eq!(attrs.must_get(ids::SATURATION).current_value, 5.0);
         assert_eq!(attrs.must_get(ids::MOVEMENT_SPEED).current_value, 0.1);
     }
 
@@ -406,12 +459,15 @@ mod tests {
     fn exhaust_decrements_saturation_first_then_hunger() {
         let mgr = HungerManager::new();
         let mut attrs = AttributeMap::default_for_player();
-        mgr.exhaust(&mut attrs, 5.0);
-        assert_eq!(attrs.must_get(ids::SATURATION).current_value, 19.0);
+        mgr.exhaust(&mut attrs, 4.0);
+        assert_eq!(attrs.must_get(ids::SATURATION).current_value, 4.0);
         assert_eq!(attrs.must_get(ids::HUNGER).current_value, 20.0);
+        // Sous le palier : rien n'est consommé, l'épuisement s'accumule.
+        mgr.exhaust(&mut attrs, 3.5);
+        assert_eq!(attrs.must_get(ids::SATURATION).current_value, 4.0);
         // drain saturation puis faim
-        for _ in 0..25 {
-            mgr.exhaust(&mut attrs, 5.0);
+        for _ in 0..10 {
+            mgr.exhaust(&mut attrs, 4.0);
         }
         assert_eq!(attrs.must_get(ids::SATURATION).current_value, 0.0);
         assert!(attrs.must_get(ids::HUNGER).current_value < 20.0);

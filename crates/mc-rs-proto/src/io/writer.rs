@@ -158,6 +158,15 @@ impl ProtoWriter {
     pub fn write_raw(&mut self, v: &[u8]) {
         self.buf.extend_from_slice(v);
     }
+
+    /// UUID (octets dans l'ordre RFC 4122) : deux entiers 64 bits little-endian,
+    /// chaque moitié de 8 octets écrite à l'envers. Réf : PMMP
+    /// `CommonTypes::putUUID`, gophertunnel `Writer.UUID` ; vérifié contre BDS
+    /// 1.26.52.3 (UUID de PlayerList).
+    pub fn write_uuid(&mut self, uuid: &[u8; 16]) {
+        self.buf.extend(uuid[..8].iter().rev());
+        self.buf.extend(uuid[8..].iter().rev());
+    }
 }
 
 impl Default for ProtoWriter {
@@ -307,5 +316,25 @@ mod tests {
         assert_eq!(r.read_string().unwrap(), "test");
         assert!(r.read_bool().unwrap());
         assert_eq!(r.remaining(), 0);
+    }
+
+    #[test]
+    fn uuid_halves_are_little_endian() {
+        // UUID envoyé par BDS 1.26.52.3 : 24c8f976-b2aa-3e43-ba79-44b5751886fe.
+        let uuid = [
+            0x24, 0xc8, 0xf9, 0x76, 0xb2, 0xaa, 0x3e, 0x43, 0xba, 0x79, 0x44, 0xb5, 0x75, 0x18,
+            0x86, 0xfe,
+        ];
+        let mut w = ProtoWriter::new();
+        w.write_uuid(&uuid);
+        let bytes = w.into_bytes();
+        assert_eq!(
+            u64::from_le_bytes(bytes[..8].try_into().unwrap()),
+            0x24c8_f976_b2aa_3e43
+        );
+        assert_eq!(
+            u64::from_le_bytes(bytes[8..].try_into().unwrap()),
+            0xba79_44b5_7518_86fe
+        );
     }
 }

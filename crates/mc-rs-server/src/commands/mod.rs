@@ -1936,15 +1936,11 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
     }
 
     fn gamerule_list(&self) -> Vec<(String, crate::game_rules::GameRuleValue)> {
-        let mut entries: Vec<_> = self
-            .server_state
+        self.server_state
             .game_rules
-            .rules
             .iter()
-            .map(|(name, value)| (name.clone(), value.clone()))
-            .collect();
-        entries.sort_by(|a, b| a.0.cmp(&b.0));
-        entries
+            .map(|(name, value)| (name.to_string(), value.clone()))
+            .collect()
     }
 
     fn gamerule_get(&self, name: &str) -> Option<crate::game_rules::GameRuleValue> {
@@ -2234,22 +2230,18 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
         if !type_ok {
             return Err(format!("Value type doesn't match rule '{name}'"));
         }
-        self.server_state.game_rules.set(key.clone(), value.clone());
+        self.server_state.game_rules.set(&key, value.clone());
 
         // Broadcast GameRulesChanged contenant uniquement le rule mis à jour
-        // (PMMP fait pareil — Network.php envoie un diff, pas le set complet).
-        // `isPlayerModifiable: true` côté wire = le client peut le toggle UI.
-        let wire_rule = match value {
-            crate::game_rules::GameRuleValue::Bool(b) => {
-                mc_rs_proto::packets::world::GameRule::Bool(key, true, b)
-            }
-            crate::game_rules::GameRuleValue::Int(i) => {
-                mc_rs_proto::packets::world::GameRule::Int(key, true, i)
-            }
-            crate::game_rules::GameRuleValue::Float(f) => {
-                mc_rs_proto::packets::world::GameRule::Float(key, true, f)
-            }
-        };
+        // (PMMP fait pareil — Network.php envoie un diff, pas le set complet),
+        // sous son nom réseau en camelCase comme BDS.
+        let network_name = self
+            .server_state
+            .game_rules
+            .canonical_name(&key)
+            .unwrap_or(&key)
+            .to_string();
+        let wire_rule = crate::game_rules::wire_rule(&network_name, &value);
         let payload = mc_rs_proto::packets::world::GameRulesChanged {
             rules: vec![wire_rule],
         }
@@ -3059,14 +3051,10 @@ mod tests {
         }
 
         fn gamerule_list(&self) -> Vec<(String, crate::game_rules::GameRuleValue)> {
-            let mut entries: Vec<_> = self
-                .gamerules
-                .rules
+            self.gamerules
                 .iter()
-                .map(|(name, value)| (name.clone(), value.clone()))
-                .collect();
-            entries.sort_by(|a, b| a.0.cmp(&b.0));
-            entries
+                .map(|(name, value)| (name.to_string(), value.clone()))
+                .collect()
         }
 
         fn gamerule_get(&self, name: &str) -> Option<crate::game_rules::GameRuleValue> {
@@ -3078,7 +3066,7 @@ mod tests {
             name: &str,
             value: crate::game_rules::GameRuleValue,
         ) -> Result<(), String> {
-            self.gamerules.set(name.to_string(), value);
+            self.gamerules.set(name, value);
             Ok(())
         }
 

@@ -1,17 +1,68 @@
 //! Game rules — port PMMP `src/world/GameRule.php`.
+//!
+//! Liste, ordre, noms et valeurs par défaut de BDS 1.26.52.3 : les 39 règles
+//! de son StartGame (capture du 2026-10-25, `dev-docs/34-BDS-RETRO-INGENIERIE.md`).
+//! Les noms sont en camelCase sur le réseau ; la recherche reste insensible à
+//! la casse (`/gamerule keepinventory`).
 
 use std::collections::HashMap;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum GameRuleValue {
     Bool(bool),
     Int(i32),
     Float(f32),
 }
 
+/// Règles de BDS 1.26.52.3, dans l'ordre de son StartGame.
+const VANILLA_RULES: &[(&str, GameRuleValue)] = &[
+    ("commandBlockOutput", GameRuleValue::Bool(true)),
+    ("doDayLightCycle", GameRuleValue::Bool(true)),
+    ("doEntityDrops", GameRuleValue::Bool(true)),
+    ("doFireTick", GameRuleValue::Bool(true)),
+    ("recipesUnlock", GameRuleValue::Bool(true)),
+    ("doLimitedCrafting", GameRuleValue::Bool(false)),
+    ("doMobLoot", GameRuleValue::Bool(true)),
+    ("doMobSpawning", GameRuleValue::Bool(true)),
+    ("doTileDrops", GameRuleValue::Bool(true)),
+    ("doWeatherCycle", GameRuleValue::Bool(true)),
+    ("drowningDamage", GameRuleValue::Bool(true)),
+    ("fallDamage", GameRuleValue::Bool(true)),
+    ("fireDamage", GameRuleValue::Bool(true)),
+    ("keepInventory", GameRuleValue::Bool(false)),
+    ("mobGriefing", GameRuleValue::Bool(true)),
+    ("pvp", GameRuleValue::Bool(true)),
+    ("showCoordinates", GameRuleValue::Bool(false)),
+    ("playerWaypoints", GameRuleValue::Int(1)),
+    ("locatorbar", GameRuleValue::Bool(true)),
+    ("showDaysPlayed", GameRuleValue::Bool(false)),
+    ("naturalRegeneration", GameRuleValue::Bool(true)),
+    ("tntExplodes", GameRuleValue::Bool(true)),
+    ("sendCommandFeedback", GameRuleValue::Bool(true)),
+    ("maxCommandChainLength", GameRuleValue::Int(65535)),
+    ("doInsomnia", GameRuleValue::Bool(true)),
+    ("commandBlocksEnabled", GameRuleValue::Bool(true)),
+    ("randomTickSpeed", GameRuleValue::Int(1)),
+    ("doImmediateRespawn", GameRuleValue::Bool(false)),
+    ("showDeathMessages", GameRuleValue::Bool(true)),
+    ("functionCommandLimit", GameRuleValue::Int(10000)),
+    ("spawnRadius", GameRuleValue::Int(10)),
+    ("showTags", GameRuleValue::Bool(true)),
+    ("freezeDamage", GameRuleValue::Bool(true)),
+    ("respawnBlocksExplode", GameRuleValue::Bool(true)),
+    ("showBorderEffect", GameRuleValue::Bool(true)),
+    ("showRecipeMessages", GameRuleValue::Bool(true)),
+    ("playersSleepingPercentage", GameRuleValue::Int(100)),
+    ("projectilesCanBreakBlocks", GameRuleValue::Bool(true)),
+    ("tntExplosionDropDecay", GameRuleValue::Bool(false)),
+];
+
 #[derive(Debug, Clone)]
 pub struct GameRules {
-    pub rules: HashMap<String, GameRuleValue>,
+    /// `(nom réseau, valeur)`, dans l'ordre de BDS.
+    rules: Vec<(String, GameRuleValue)>,
+    /// Nom en minuscules → index dans `rules`.
+    index: HashMap<String, usize>,
 }
 
 impl Default for GameRules {
@@ -22,49 +73,51 @@ impl Default for GameRules {
 
 impl GameRules {
     pub fn vanilla_defaults() -> Self {
-        let mut m = HashMap::new();
-        m.insert("commandblockoutput".into(), GameRuleValue::Bool(true));
-        m.insert("commandblocksenabled".into(), GameRuleValue::Bool(true));
-        m.insert("dodaylightcycle".into(), GameRuleValue::Bool(true));
-        m.insert("doentitydrops".into(), GameRuleValue::Bool(true));
-        m.insert("dofiretick".into(), GameRuleValue::Bool(true));
-        m.insert("doimmediaterespawn".into(), GameRuleValue::Bool(false));
-        m.insert("doinsomnia".into(), GameRuleValue::Bool(true));
-        m.insert("domobloot".into(), GameRuleValue::Bool(true));
-        m.insert("domobspawning".into(), GameRuleValue::Bool(true));
-        m.insert("dotiledrops".into(), GameRuleValue::Bool(true));
-        m.insert("doweathercycle".into(), GameRuleValue::Bool(true));
-        m.insert("drowningdamage".into(), GameRuleValue::Bool(true));
-        m.insert("falldamage".into(), GameRuleValue::Bool(true));
-        m.insert("firedamage".into(), GameRuleValue::Bool(true));
-        m.insert("freezedamage".into(), GameRuleValue::Bool(true));
-        m.insert("functioncommandlimit".into(), GameRuleValue::Int(10000));
-        m.insert("keepinventory".into(), GameRuleValue::Bool(false));
-        m.insert("maxcommandchainlength".into(), GameRuleValue::Int(65536));
-        m.insert("mobgriefing".into(), GameRuleValue::Bool(true));
-        m.insert("naturalregeneration".into(), GameRuleValue::Bool(true));
-        m.insert("playersleepingpercentage".into(), GameRuleValue::Int(100));
-        m.insert("pvp".into(), GameRuleValue::Bool(true));
-        m.insert("randomtickspeed".into(), GameRuleValue::Int(3));
-        m.insert("respawnblocksexplode".into(), GameRuleValue::Bool(true));
-        m.insert("sendcommandfeedback".into(), GameRuleValue::Bool(true));
-        m.insert("showbordereffect".into(), GameRuleValue::Bool(true));
-        m.insert("showcoordinates".into(), GameRuleValue::Bool(false));
-        m.insert("showdeathmessages".into(), GameRuleValue::Bool(true));
-        m.insert("showtags".into(), GameRuleValue::Bool(true));
-        m.insert("spawnradius".into(), GameRuleValue::Int(5));
-        m.insert("tntexplodes".into(), GameRuleValue::Bool(true));
-        m.insert("universalanger".into(), GameRuleValue::Bool(false));
-        m.insert("showrecipemessages".into(), GameRuleValue::Bool(true));
-        Self { rules: m }
+        let rules: Vec<(String, GameRuleValue)> = VANILLA_RULES
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.clone()))
+            .collect();
+        let index = rules
+            .iter()
+            .enumerate()
+            .map(|(i, (name, _))| (name.to_ascii_lowercase(), i))
+            .collect();
+        Self { rules, index }
+    }
+
+    /// Nom réseau (camelCase) d'une règle connue, quelle que soit la casse.
+    pub fn canonical_name(&self, name: &str) -> Option<&str> {
+        self.index
+            .get(&name.to_ascii_lowercase())
+            .map(|&i| self.rules[i].0.as_str())
     }
 
     pub fn get(&self, name: &str) -> Option<&GameRuleValue> {
-        self.rules.get(&name.to_lowercase())
+        self.index
+            .get(&name.to_ascii_lowercase())
+            .map(|&i| &self.rules[i].1)
     }
 
-    pub fn set(&mut self, name: impl Into<String>, value: GameRuleValue) {
-        self.rules.insert(name.into().to_lowercase(), value);
+    /// Modifie une règle connue (sans effet sur un nom inconnu).
+    pub fn set(&mut self, name: &str, value: GameRuleValue) {
+        if let Some(&i) = self.index.get(&name.to_ascii_lowercase()) {
+            self.rules[i].1 = value;
+        }
+    }
+
+    /// `(nom réseau, valeur)`, dans l'ordre de BDS.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &GameRuleValue)> {
+        self.rules
+            .iter()
+            .map(|(name, value)| (name.as_str(), value))
+    }
+
+    /// Règles au format réseau (StartGame, GameRulesChanged), toutes
+    /// modifiables par le joueur comme chez BDS.
+    pub fn wire_rules(&self) -> Vec<mc_rs_proto::packets::world::GameRule> {
+        self.iter()
+            .map(|(name, value)| wire_rule(name, value))
+            .collect()
     }
 
     pub fn bool(&self, name: &str) -> bool {
@@ -89,6 +142,16 @@ impl GameRules {
     }
 }
 
+/// Une règle au format réseau, modifiable par le joueur (`CanBeModifiedByPlayer`).
+pub fn wire_rule(name: &str, value: &GameRuleValue) -> mc_rs_proto::packets::world::GameRule {
+    use mc_rs_proto::packets::world::GameRule;
+    match value {
+        GameRuleValue::Bool(b) => GameRule::Bool(name.to_string(), true, *b),
+        GameRuleValue::Int(i) => GameRule::Int(name.to_string(), true, *i),
+        GameRuleValue::Float(f) => GameRule::Float(name.to_string(), true, *f),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -97,7 +160,16 @@ mod tests {
     fn defaults_load() {
         let r = GameRules::vanilla_defaults();
         assert!(r.bool("pvp"));
-        assert_eq!(r.int("randomtickspeed"), 3);
+        assert_eq!(r.int("randomtickspeed"), 1);
+        assert_eq!(r.iter().count(), 39);
+    }
+
+    #[test]
+    fn lookup_ignores_case_and_keeps_network_name() {
+        let r = GameRules::vanilla_defaults();
+        assert_eq!(r.canonical_name("keepinventory"), Some("keepInventory"));
+        assert_eq!(r.get("KEEPINVENTORY"), Some(&GameRuleValue::Bool(false)));
+        assert_eq!(r.iter().next().map(|(n, _)| n), Some("commandBlockOutput"));
     }
 
     #[test]
@@ -109,7 +181,9 @@ mod tests {
 
     #[test]
     fn unknown_rule_returns_default() {
-        let r = GameRules::vanilla_defaults();
+        let mut r = GameRules::vanilla_defaults();
+        r.set("nonexistent", GameRuleValue::Bool(true));
         assert!(!r.bool("nonexistent"));
+        assert_eq!(r.iter().count(), 39);
     }
 }

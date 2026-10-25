@@ -1171,7 +1171,7 @@ impl PlayerList {
             if self.action == Self::ACTION_ADD {
                 w.write_var_u32(1); // variante Add
                 w.write_u8(Self::ACTION_ADD);
-                w.write_raw(&entry.uuid);
+                w.write_uuid(&entry.uuid);
                 w.write_var_i64(entry.entity_id);
                 w.write_string(&entry.username);
                 w.write_string(&entry.xuid);
@@ -1186,7 +1186,7 @@ impl PlayerList {
             } else {
                 w.write_var_u32(0); // variante Remove
                 w.write_u8(Self::ACTION_REMOVE);
-                w.write_raw(&entry.uuid);
+                w.write_uuid(&entry.uuid);
             }
         }
         w.into_bytes()
@@ -1293,7 +1293,7 @@ impl AddPlayer {
     /// `packet/add_player.go`, PMMP `AddPlayerPacket` + `Human::sendSpawnPacket`.
     pub fn encode(&self) -> Vec<u8> {
         let mut w = ProtoWriter::with_capacity(512);
-        w.write_raw(&self.uuid);
+        w.write_uuid(&self.uuid);
         w.write_string(&self.username);
         w.write_var_u64(self.runtime_entity_id);
         w.write_string(&self.platform_chat_id);

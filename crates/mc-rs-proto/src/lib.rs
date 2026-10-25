@@ -10,5 +10,10 @@ pub mod packets;
 /// Seule source de vérité côté serveur et simulateur : ne jamais recopier la valeur en dur.
 pub const CURRENT_PROTOCOL: i32 = 2193;
 
-/// Version Minecraft correspondant à [`CURRENT_PROTOCOL`] (MOTD, StartGame, pile de packs).
+/// Version Minecraft correspondant à [`CURRENT_PROTOCOL`] (MOTD, version du serveur dans StartGame).
 pub const MINECRAFT_VERSION: &str = "1.26.51";
+
+/// Version de base du jeu annoncée dans StartGame et ResourcePackStack : `*`
+/// demande au client les comportements de sa propre version, comme BDS
+/// 1.26.52.3 (`dev-docs/34-BDS-RETRO-INGENIERIE.md`).
+pub const BASE_GAME_VERSION: &str = "*";

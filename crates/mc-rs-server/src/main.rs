@@ -1546,6 +1546,7 @@ async fn main() {
                         server_state.persistent.world_spawn,
                         server_state.effective_default_gamemode(conn_config.default_gamemode),
                         server_state.effective_difficulty(conn_config.difficulty),
+                        server_state.game_rules.clone(),
                         false,
                         Arc::clone(&event_manager),
                         Arc::clone(&resource_packs),

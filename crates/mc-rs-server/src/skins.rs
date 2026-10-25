@@ -24,6 +24,9 @@ pub struct Skin {
     pub profile_hash: String,
     /// Claim `PlayFabId` du login, renvoyé tel quel dans le SerializedSkin.
     pub play_fab_id: String,
+    /// Claim `SkinGeometryDataEngineVersion` (base64 d'une version) relayé
+    /// comme PMMP `ClientDataToSkinDataHelper` et BDS ; vide si absent.
+    pub geometry_data_engine_version: String,
 }
 
 /// Une image RGBA de `width` × `height` pixels occupe exactement
@@ -73,6 +76,7 @@ impl Skin {
             animations: Vec::new(),
             profile_hash: String::new(),
             play_fab_id: String::new(),
+            geometry_data_engine_version: String::new(),
         }
     }
 
@@ -124,6 +128,8 @@ impl Skin {
             animations: Vec::new(),
             profile_hash: s("ProfileHash").to_string(),
             play_fab_id: s("PlayFabId").to_string(),
+            geometry_data_engine_version: String::from_utf8(bin("SkinGeometryDataEngineVersion"))
+                .unwrap_or_default(),
         })
     }
 
@@ -152,7 +158,8 @@ impl Skin {
                 Vec::new()
             },
             geometry_data: self.geometry_data.clone(),
-            geometry_data_engine_version: String::new(),
+            // Vide : `write_serialized_skin` envoie `MINECRAFT_VERSION`.
+            geometry_data_engine_version: self.geometry_data_engine_version.clone(),
             animation_data: self.animation_data.clone(),
             cape_id: self.cape_id.clone(),
             full_skin_id: format!("{}{}", self.skin_id, self.cape_id),

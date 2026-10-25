@@ -68,6 +68,10 @@ impl Connection {
                 };
                 if !identity.uuid_str.is_empty() {
                     self.uuid = uuid::Uuid::parse_str(&identity.uuid_str).ok();
+                } else if let Some(ref xuid) = self.xuid {
+                    // Authentification Xbox : le jeton ne porte pas d'UUID, il se
+                    // déduit du XUID (sinon tous les joueurs ont l'UUID nul).
+                    self.uuid = Some(uuid_from_xuid(xuid));
                 }
                 // Load saved player data if exists
                 if let Some(ref xuid) = self.xuid {
@@ -408,7 +412,7 @@ impl Connection {
             writer.write_string(&pack.version_string());
             writer.write_string(""); // subPackName
         }
-        writer.write_string(mc_rs_proto::MINECRAFT_VERSION); // baseGameVersion
+        writer.write_string(mc_rs_proto::BASE_GAME_VERSION); // baseGameVersion, `*` comme BDS
         writer.write_u32_le(0); // experiments count
         writer.write_bool(false); // hasPreviouslyUsedExperiments
         writer.write_bool(false); // useVanillaEditorPacks
@@ -450,6 +454,16 @@ impl Connection {
 /// Type « ressources » de l'enum `ResourcePackType` du protocole Bedrock.
 const RESOURCE_PACK_TYPE_RESOURCES: u8 = 6;
 
+/// UUID d'un joueur authentifié par Xbox Live : MD5 de `pocket-auth-1-xuid:<xuid>`,
+/// bits de version 3 et de variante RFC 4122. Réf : PMMP
+/// `LoginPacketHandler::calculateUuidFromXuid` ; même valeur que BDS 1.26.52.3
+/// dans PlayerList (`dev-docs/34-BDS-RETRO-INGENIERIE.md`).
+fn uuid_from_xuid(xuid: &str) -> uuid::Uuid {
+    use md5::{Digest, Md5};
+    let digest = Md5::digest(format!("pocket-auth-1-xuid:{xuid}").as_bytes());
+    uuid::Builder::from_md5_bytes(digest.into()).into_uuid()
+}
+
 /// PMMP `CommonTypes::putUUID` : 2 longs little-endian, bytes 7..0 puis 15..8.
 /// Pour un UUID canonique "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", on extrait
 /// les 16 bytes raw puis on les reverse par moitié.
@@ -465,4 +479,18 @@ fn write_uuid_pmmp(writer: &mut mc_rs_proto::io::ProtoWriter, uuid_str: &str) {
     p2.reverse();
     writer.write_raw(&p1);
     writer.write_raw(&p2);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn xuid_uuid_matches_bds() {
+        // Valeur envoyée par BDS 1.26.52.3 dans PlayerList pour ce XUID.
+        assert_eq!(
+            uuid_from_xuid("2535438744446831").to_string(),
+            "24c8f976-b2aa-3e43-ba79-44b5751886fe"
+        );
+    }
 }

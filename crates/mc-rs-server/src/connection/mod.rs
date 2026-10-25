@@ -159,6 +159,9 @@ pub struct Connection {
     pub gamemode: i32, // 0=survival, 1=creative, 2=adventure, 3=spectator
     pub(super) world_gamemode: i32,
     pub(super) current_difficulty: i32,
+    /// Règles de jeu à la connexion, envoyées dans StartGame (les changements
+    /// ultérieurs passent par GameRulesChanged).
+    pub(super) game_rules: crate::game_rules::GameRules,
     pub is_op: bool,
 
     // Chunk tracking
@@ -291,6 +294,7 @@ impl Connection {
         world_spawn_override: Option<[f32; 3]>,
         world_gamemode: i32,
         current_difficulty: i32,
+        game_rules: crate::game_rules::GameRules,
         is_op: bool,
         events: Arc<Mutex<EventManager>>,
         resource_packs: Arc<Vec<crate::resource_pack::ResourcePack>>,
@@ -323,6 +327,7 @@ impl Connection {
             gamemode: config.default_gamemode,
             world_gamemode,
             current_difficulty,
+            game_rules,
             is_op,
             sent_chunks: HashSet::new(),
             view_distance: config.max_view_distance,
