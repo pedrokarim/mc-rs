@@ -28,6 +28,8 @@ pub enum UnaryOp {
     HalfNegative,
     QuarterNegative,
     Squeeze,
+    /// `invert` : 1 / v (vanilla `DensityFunctions.Mapped.Type.INVERT`).
+    Invert,
 }
 
 #[derive(Clone, Copy)]
@@ -119,6 +121,13 @@ pub enum Df {
     Spline(Arc<Spline>),
     /// Cache/interpolated : transparent (l'argument est évalué directement).
     Marker(Arc<Df>),
+    /// Plus haute cellule de `density` positive sous `upper_bound` (`preliminary_surface_level`).
+    FindTopSurface {
+        density: Arc<Df>,
+        upper_bound: Arc<Df>,
+        lower_bound: i32,
+        cell_height: i32,
+    },
     /// Îles de l'End : île centrale `clamp(100 - dist*8)` + îles externes (>1024
     /// blocs) tirées par un bruit 2D (réf vanilla `EndIslandDensityFunction` /
     /// deepslate `EndIslands`). Indépendant de Y (heightmap → density).
@@ -216,7 +225,30 @@ impl Df {
                         let c = v.clamp(-1.0, 1.0);
                         c / 2.0 - c * c * c / 24.0
                     }
+                    UnaryOp::Invert => 1.0 / v,
                 }
+            }
+            Df::FindTopSurface {
+                density,
+                upper_bound,
+                lower_bound,
+                cell_height,
+            } => {
+                // Vanilla `DensityFunctions.FindTopSurface` : descend de cellule en cellule depuis la borne
+                // haute (arrondie à la cellule) jusqu'au premier point de densité positive.
+                let top = (upper_bound.compute(x, y, z) / *cell_height as f64).floor() as i32
+                    * cell_height;
+                if top <= *lower_bound {
+                    return *lower_bound as f64;
+                }
+                let mut block_y = top;
+                while block_y >= *lower_bound {
+                    if density.compute(x, block_y, z) > 0.0 {
+                        return block_y as f64;
+                    }
+                    block_y -= cell_height;
+                }
+                *lower_bound as f64
             }
             Df::Clamp { input, min, max } => input.compute(x, y, z).clamp(*min, *max),
             Df::RangeChoice {
@@ -423,6 +455,13 @@ impl Builder {
                 Df::Unary(UnaryOp::QuarterNegative, self.arg(map, "argument"))
             }
             "minecraft:squeeze" => Df::Unary(UnaryOp::Squeeze, self.arg(map, "argument")),
+            "minecraft:invert" => Df::Unary(UnaryOp::Invert, self.arg(map, "argument")),
+            "minecraft:find_top_surface" => Df::FindTopSurface {
+                density: self.arg(map, "density"),
+                upper_bound: self.arg(map, "upper_bound"),
+                lower_bound: map["lower_bound"].as_i64().expect("lower_bound entier") as i32,
+                cell_height: map["cell_height"].as_i64().expect("cell_height entier") as i32,
+            },
             "minecraft:clamp" => Df::Clamp {
                 input: self.arg(map, "input"),
                 min: f("min"),
@@ -497,6 +536,9 @@ pub struct NoiseRouter {
     pub fluid_level_floodedness: Arc<Df>,
     pub fluid_level_spread: Arc<Df>,
     pub lava: Arc<Df>,
+    /// Surface préliminaire (`find_top_surface` sur une densité sans grottes) : hauteur du terrain que
+    /// l'aquifère utilise pour décider des niveaux d'eau (vanilla `NoiseChunk.preliminarySurfaceLevel`).
+    pub preliminary_surface_level: Arc<Df>,
 }
 
 /// Construit le router overworld pour une seed donnée (équiv. `RandomState`).
@@ -530,6 +572,7 @@ pub fn build_overworld(seed: u64) -> NoiseRouter {
         fluid_level_floodedness: stage("fluid_level_floodedness"),
         fluid_level_spread: stage("fluid_level_spread"),
         lava: stage("lava"),
+        preliminary_surface_level: stage("preliminary_surface_level"),
     }
 }
 
@@ -572,6 +615,7 @@ pub fn build_dimension_terrain(settings_id: &str, seed: u64) -> NoiseRouter {
         fluid_level_floodedness: stage("fluid_level_floodedness"),
         fluid_level_spread: stage("fluid_level_spread"),
         lava: stage("lava"),
+        preliminary_surface_level: stage("preliminary_surface_level"),
     }
 }
 

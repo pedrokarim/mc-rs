@@ -54,6 +54,9 @@ Voir [`../dev-docs/34-BDS-RETRO-INGENIERIE.md`](../dev-docs/34-BDS-RETRO-INGENIE
 - `dev/deepslate_biomes.mjs --deepslate <dossier> --seed <seed> --map <carte.json>` (Node) : biomes de la même
   zone calculés par deepslate (worldgen Java) avec les données de mc-rs, et comparaison. Parité des biomes :
   [`../dev-docs/14-WORLD-GENERATION.md`](../dev-docs/14-WORLD-GENERATION.md), « Parité avec BDS ».
+- `dev/world_block_classes.py extract <db> <sortie.json>` / `compare <a.json> <b.json>` : classes de blocs
+  (solide, eau, lave, air) des chunks d'un monde Bedrock enregistré (BDS), au format du test ignoré
+  `dump_chunk_classes` de mc-rs, et comparaison ; parité de l'eau dans `dev-docs/14-WORLD-GENERATION.md`.
 - `dev/bds_pe_index.py` : index des sections, imports et descripteurs RTTI d'un exécutable PE (peu utile sur
   BDS, qui n'a presque pas de RTTI).
 - `dev/ghidra/` : scripts Ghidra pour lire le binaire de BDS (fonctions qui utilisent une chaîne, méthodes

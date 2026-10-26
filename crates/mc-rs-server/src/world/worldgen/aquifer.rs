@@ -1,16 +1,15 @@
 //! Phase D — aquifères (remplissage des grottes en eau/lave).
 //!
-//! Port fidèle de `NoiseAquifer` (deepslate / vanilla
-//! `Aquifer.NoiseBasedAquifer`). Pour chaque bloc de grotte (densité ≤ 0), on
-//! cherche les sources d'aquifère les plus proches (grille jitterée 16×12×16),
-//! on calcule leurs niveaux de fluide (bruits `fluid_level_floodedness` /
-//! `_spread` / `lava`) et la pression entre elles (`barrier`), puis on décide
-//! eau / lave / air.
+//! Port de vanilla `Aquifer.NoiseBasedAquifer` (1.18+). Pour chaque bloc de grotte (densité ≤ 0), on
+//! cherche les trois sources d'aquifère les plus proches (grille jitterée 16×12×16), on calcule leurs
+//! statuts de fluide (niveau + type, à partir de la surface préliminaire et des bruits
+//! `fluid_level_floodedness` / `fluid_level_spread` / `lava`), puis la pression entre elles : une
+//! pression trop forte (deux niveaux différents qui se touchent) pose une **barrière de pierre**, sinon le
+//! bloc prend le fluide de la source la plus proche (ou reste de l'air au-dessus de son niveau).
 //!
-//! Simplifications assumées : les density functions sont échantillonnées aux
-//! coordonnées scalées arrondies (`i32`, vs fractionnaires vanilla — sans effet
-//! notable car ces bruits sont basse fréquence) ; le `preliminary_surface_level`
-//! est approximé par la carte des hauteurs du chunk (bornée au chunk).
+//! deepslate, d'où venait la première version, garde son aquifère désactivé (« WIP: Noise aquifers don't
+//! work yet ») ; ce port suit vanilla et se vérifie contre les chunks enregistrés par BDS
+//! (dev-docs/14-WORLD-GENERATION.md, « Parité avec BDS »).
 
 use std::collections::HashMap;
 
@@ -18,10 +17,11 @@ use super::density::NoiseRouter;
 use super::rng::{PositionalRandomFactory, XoroshiroRandom};
 
 const SEA_LEVEL: i32 = 63;
-const MIN_Y: i32 = -64;
 const X_SPACING: i32 = 16;
 const Y_SPACING: i32 = 12;
 const Z_SPACING: i32 = 16;
+/// Niveau « très en dessous du monde » (vanilla `DimensionType.WAY_BELOW_MIN_Y`) : aquifère vide.
+const WAY_BELOW_MIN_Y: i32 = -2032;
 
 /// `[xOffset, zOffset]` (en chunks) d'échantillonnage de surface vanilla.
 const SURFACE_SAMPLING: [(i32, i32); 13] = [
@@ -64,7 +64,7 @@ impl FluidStatus {
     }
 }
 
-/// Fluide global overworld : lave sous y=-54, eau sous le niveau de la mer.
+/// Fluide global overworld (vanilla `globalFluidPicker`) : lave sous y = -54, eau sous le niveau de la mer.
 #[inline]
 fn global_status(y: i32) -> FluidStatus {
     if y < -54 {
@@ -85,18 +85,26 @@ fn fdiv(a: i32, b: i32) -> i32 {
     a.div_euclid(b)
 }
 
+/// `Mth.map`.
 #[inline]
 fn map(v: f64, a: f64, b: f64, c: f64, d: f64) -> f64 {
-    c + (v - a) * (d - c) / (b - a)
+    c + (v - a) / (b - a) * (d - c)
 }
 
+/// `Mth.clampedMap`.
 #[inline]
 fn clamped_map(v: f64, a: f64, b: f64, c: f64, d: f64) -> f64 {
     let t = ((v - a) / (b - a)).clamp(0.0, 1.0);
     c + t * (d - c)
 }
 
-/// Aquifère d'un chunk (caches de sources + statuts).
+/// `NoiseBasedAquifer.similarity` : proximité de deux distances au carré (1 = égales, ≤ 0 = éloignées).
+#[inline]
+fn similarity(a: i32, b: i32) -> f64 {
+    1.0 - (b - a).abs() as f64 / 25.0
+}
+
+/// Aquifère (caches de sources + statuts), partagé entre les chunks d'une même génération.
 pub struct Aquifer<'a> {
     router: &'a NoiseRouter,
     factory: PositionalRandomFactory,
@@ -107,7 +115,7 @@ pub struct Aquifer<'a> {
 
 impl<'a> Aquifer<'a> {
     pub fn new(router: &'a NoiseRouter, seed: u64) -> Self {
-        // Factory positionnelle dédiée à l'aquifère (fromHashOf + forkPositional).
+        // Vanilla `RandomState.aquiferRandom` : `random.fromHashOf("minecraft:aquifer").forkPositional()`.
         let mut base = XoroshiroRandom::from_seed(seed);
         let dev = base.fork_positional();
         let factory = dev.from_hash_of("minecraft:aquifer").fork_positional();
@@ -120,125 +128,155 @@ impl<'a> Aquifer<'a> {
         }
     }
 
-    /// Surface préliminaire = hauteur de terrain aux **coordonnées monde**
-    /// (scan grossier de `final_density`, mis en cache). Global et cohérent
-    /// entre chunks — c'est ce qui rend les niveaux d'aquifère continus.
+    /// Surface préliminaire (vanilla `NoiseChunk.preliminarySurfaceLevel`) : fonction
+    /// `preliminary_surface_level` du router, évaluée au coin de la case de 4 × 4 blocs, à y = 0.
     fn prelim(&mut self, x: i32, z: i32) -> i32 {
-        // Quantifié à une grille de 4 blocs : la surface varie lentement, donc
-        // mutualiser les points proches divise fortement le nombre de scans.
-        let key = (x & !3, z & !3);
+        let key = (x >> 2, z >> 2);
         if let Some(&v) = self.prelim_cache.get(&key) {
             return v;
         }
-        // Scan grossier depuis ~140 (au-dessus, c'est de l'air ; les rares pics
-        // plus hauts n'affectent pas les aquifères, sous le niveau de la mer).
-        let mut p = MIN_Y;
-        let mut y = 140;
-        while y > MIN_Y {
-            if self.router.final_density.compute(key.0, y, key.1) > 0.0 {
-                p = y;
-                break;
-            }
-            y -= 8;
-        }
-        self.prelim_cache.insert(key, p);
-        p
+        let v = self
+            .router
+            .preliminary_surface_level
+            .compute(key.0 << 2, 0, key.1 << 2)
+            .floor() as i32;
+        self.prelim_cache.insert(key, v);
+        v
     }
 
-    /// Décide le fluide d'un bloc de grotte (densité ≤ 0).
-    pub fn compute(&mut self, x: i32, y: i32, z: i32, density: f64) -> Fluid {
+    /// Hauteur au-dessus de laquelle tout vide de la zone `[x0, x1] × [z0, z1]` est de l'air, sans calcul
+    /// (raccourci exact de `compute`). Les trois sources consultées pour un bloc (x, y, z) sont à moins de
+    /// 20 blocs à l'horizontale et à y ≥ y - 22 ; une source dont l'altitude dépasse sa surface préliminaire
+    /// de plus de 20 prend le statut global (eau sous y = 63), qui donne de l'air à partir de y = 63 sans
+    /// pression entre sources. D'où : y > max(surface préliminaire à 20 blocs près) + 42 et y ≥ 63 ⇒ air.
+    pub fn dry_above(&mut self, x0: i32, z0: i32, x1: i32, z1: i32) -> i32 {
+        let mut max_surface = i32::MIN;
+        for qx in ((x0 - 20) >> 2)..=((x1 + 20) >> 2) {
+            for qz in ((z0 - 20) >> 2)..=((z1 + 20) >> 2) {
+                max_surface = max_surface.max(self.prelim(qx << 2, qz << 2));
+            }
+        }
+        (max_surface + 42).max(SEA_LEVEL - 1)
+    }
+
+    /// Substance d'un bloc de grotte (densité ≤ 0), vanilla `computeSubstance` : `None` = barrière
+    /// (le bloc reste de la pierre), sinon le fluide ou l'air.
+    pub fn compute(&mut self, x: i32, y: i32, z: i32, density: f64) -> Option<Fluid> {
+        if density > 0.0 {
+            return None;
+        }
         if global_status(y).at(y) == Fluid::Lava {
-            return Fluid::Lava;
+            return Some(Fluid::Lava);
         }
         let grid_x = fdiv(x - 5, X_SPACING);
         let grid_y = fdiv(y + 1, Y_SPACING);
         let grid_z = fdiv(z - 5, Z_SPACING);
 
-        let mut best: [(i64, (i32, i32, i32)); 3] = [(i64::MAX, (0, 0, 0)); 3];
+        // Trois sources les plus proches ; à distance égale, la dernière visitée l'emporte (`>=` vanilla).
+        let mut dist = [i32::MAX; 3];
+        let mut loc = [(0, 0, 0); 3];
         for xo in 0..=1 {
             for yo in -1..=1 {
                 for zo in 0..=1 {
-                    let loc = self.location(grid_x + xo, grid_y + yo, grid_z + zo);
-                    let (dx, dy, dz) = ((loc.0 - x) as i64, (loc.1 - y) as i64, (loc.2 - z) as i64);
-                    let mag = dx * dx + dy * dy + dz * dz;
-                    if mag < best[0].0 {
-                        best[2] = best[1];
-                        best[1] = best[0];
-                        best[0] = (mag, loc);
-                    } else if mag < best[1].0 {
-                        best[2] = best[1];
-                        best[1] = (mag, loc);
-                    } else if mag < best[2].0 {
-                        best[2] = (mag, loc);
+                    let l = self.location(grid_x + xo, grid_y + yo, grid_z + zo);
+                    let (dx, dy, dz) = (l.0 - x, l.1 - y, l.2 - z);
+                    let d = dx * dx + dy * dy + dz * dz;
+                    if dist[0] >= d {
+                        loc = [l, loc[0], loc[1]];
+                        dist = [d, dist[0], dist[1]];
+                    } else if dist[1] >= d {
+                        loc = [loc[0], l, loc[1]];
+                        dist = [dist[0], d, dist[1]];
+                    } else if dist[2] >= d {
+                        loc[2] = l;
+                        dist[2] = d;
                     }
                 }
             }
         }
 
-        let status1 = self.status(best[0].1);
-        let f1 = status1.at(y);
-        let similarity12 = similarity(best[0].0, best[1].0);
-
-        let pressure = if f1 == Fluid::Water && global_status(y - 1).at(y - 1) == Fluid::Lava {
-            1.0
-        } else if similarity12 > -1.0 {
-            let status2 = self.status(best[1].1);
-            let status3 = self.status(best[2].1);
-            let barrier = self.barrier(x, y, z);
-            let p12 = self.pressure(y, &status1, &status2, barrier);
-            let p13 = self.pressure(y, &status1, &status3, barrier);
-            let p23 = self.pressure(y, &status2, &status3, barrier);
-            let sim13 = similarity(best[0].0, best[2].0).max(0.0);
-            let sim23 = similarity(best[1].0, best[2].0).max(0.0);
-            let n = p12.max(p13 * sim13).max(p23 * sim23);
-            (2.0 * similarity12.max(0.0) * n).max(0.0)
-        } else {
-            0.0
-        };
-
-        if density + pressure <= 0.0 {
-            f1
-        } else {
-            Fluid::Air
+        let status1 = self.status(loc[0]);
+        let similarity12 = similarity(dist[0], dist[1]);
+        let fluid = status1.at(y);
+        if similarity12 <= 0.0 {
+            return Some(fluid);
         }
+        if fluid == Fluid::Water && global_status(y - 1).at(y - 1) == Fluid::Lava {
+            return Some(fluid);
+        }
+
+        let mut barrier = None;
+        let status2 = self.status(loc[1]);
+        let p12 = similarity12 * self.pressure(x, y, z, &mut barrier, &status1, &status2);
+        if density + p12 > 0.0 {
+            return None;
+        }
+        let status3 = self.status(loc[2]);
+        let similarity13 = similarity(dist[0], dist[2]);
+        if similarity13 > 0.0 {
+            let p13 = similarity12
+                * similarity13
+                * self.pressure(x, y, z, &mut barrier, &status1, &status3);
+            if density + p13 > 0.0 {
+                return None;
+            }
+        }
+        let similarity23 = similarity(dist[1], dist[2]);
+        if similarity23 > 0.0 {
+            let p23 = similarity12
+                * similarity23
+                * self.pressure(x, y, z, &mut barrier, &status2, &status3);
+            if density + p23 > 0.0 {
+                return None;
+            }
+        }
+        Some(fluid)
     }
 
-    fn barrier(&self, x: i32, y: i32, z: i32) -> f64 {
-        self.router
-            .barrier
-            .compute(x, (y as f64 * 0.5).floor() as i32, z)
-    }
-
-    fn pressure(&self, y: i32, s1: &FluidStatus, s2: &FluidStatus, barrier: f64) -> f64 {
-        let f1 = s1.at(y);
-        let f2 = s2.at(y);
+    /// Vanilla `calculatePressure` : pression entre deux aquifères au niveau `y`, plus le bruit de barrière
+    /// (évalué au plus une fois par bloc) quand elle reste modérée.
+    fn pressure(
+        &self,
+        x: i32,
+        y: i32,
+        z: i32,
+        barrier: &mut Option<f64>,
+        s1: &FluidStatus,
+        s2: &FluidStatus,
+    ) -> f64 {
+        let (f1, f2) = (s1.at(y), s2.at(y));
         if (f1 == Fluid::Lava && f2 == Fluid::Water) || (f1 == Fluid::Water && f2 == Fluid::Lava) {
-            return 1.0;
+            return 2.0;
         }
-        let (l1, l2) = (s1.level as i64, s2.level as i64);
-        let level_diff = (l1 - l2).abs();
+        let level_diff = (s1.level - s2.level).abs();
         if level_diff == 0 {
             return 0.0;
         }
-        let level_avg = (l1 + l2) as f64 / 2.0;
+        let level_avg = 0.5 * (s1.level + s2.level) as f64;
         let level_avg_diff = y as f64 + 0.5 - level_avg;
-        let p = level_diff as f64 / 2.0 - level_avg_diff.abs();
-        let pressure = if level_avg_diff > 0.0 {
+        let half_diff = level_diff as f64 / 2.0;
+        let o = half_diff - level_avg_diff.abs();
+        let q = if level_avg_diff > 0.0 {
+            let p = o;
             if p > 0.0 {
                 p / 1.5
             } else {
                 p / 2.5
             }
-        } else if p > -3.0 {
-            (p + 3.0) / 3.0
         } else {
-            (p + 3.0) / 10.0
+            let p = 3.0 + o;
+            if p > 0.0 {
+                p / 3.0
+            } else {
+                p / 10.0
+            }
         };
-        if !(-2.0..=2.0).contains(&pressure) {
-            pressure
+        let r = if (-2.0..=2.0).contains(&q) {
+            *barrier.get_or_insert_with(|| self.router.barrier.compute(x, y, z))
         } else {
-            pressure + barrier
-        }
+            0.0
+        };
+        2.0 * (r + q)
     }
 
     fn location(&mut self, gx: i32, gy: i32, gz: i32) -> (i32, i32, i32) {
@@ -269,66 +307,101 @@ impl<'a> Aquifer<'a> {
         s
     }
 
+    /// Vanilla `computeFluid` : statut d'un aquifère à sa source.
     fn compute_status(&mut self, x: i32, y: i32, z: i32) -> FluidStatus {
         let global = global_status(y);
-        let mut min_prelim = i32::MAX;
-        let mut is_aquifer = false;
+        let mut min_surface = i32::MAX;
+        let above = y + 12;
+        let below = y - 12;
+        let mut fluid_present = false;
         for (xo, zo) in SURFACE_SAMPLING {
             let bx = x + (xo << 4);
             let bz = z + (zo << 4);
             let surface = self.prelim(bx, bz);
-            min_prelim = min_prelim.min(surface);
-            let no_offset = xo == 0 && zo == 0;
-            if no_offset && y - 12 > surface + 8 {
+            let surface_fluid_y = surface + 8;
+            let at_source = xo == 0 && zo == 0;
+            if at_source && below > surface_fluid_y {
                 return global;
             }
-            if no_offset || y + 12 > surface + 8 {
-                let s = global_status(surface + 8);
-                if s.at(surface + 8) != Fluid::Air {
-                    if no_offset {
+            let reaches = above > surface_fluid_y;
+            if reaches || at_source {
+                let s = global_status(surface_fluid_y);
+                if s.at(surface_fluid_y) != Fluid::Air {
+                    if at_source {
+                        fluid_present = true;
+                    }
+                    if reaches {
                         return s;
                     }
-                    is_aquifer = true;
                 }
             }
+            min_surface = min_surface.min(surface);
         }
-
-        let allowed = if is_aquifer {
-            clamped_map((min_prelim + 8 - y) as f64, 0.0, 64.0, 1.0, 0.0)
-        } else {
-            0.0
-        };
-        let floodedness = self
-            .router
-            .fluid_level_floodedness
-            .compute(x, (y as f64 * 0.67).floor() as i32, z)
-            .clamp(-1.0, 1.0);
-        if floodedness > map(allowed, 1.0, 0.0, -0.3, 0.8) {
-            return global;
-        }
-        if floodedness <= map(allowed, 1.0, 0.0, -0.8, 0.4) {
-            return FluidStatus {
-                level: i32::MIN,
-                fluid: global.fluid,
-            };
-        }
-
-        let grid_y = fdiv(y, 40);
-        let spread = self
-            .router
-            .fluid_level_spread
-            .compute(fdiv(x, 16), grid_y, fdiv(z, 16));
-        let level = grid_y * 40 + 20 + ((spread / 3.0).floor() as i32) * 3;
-        let status_level = min_prelim.min(level);
-        let fluid = self.fluid_type(x, y, z, global.fluid, level);
+        let level = self.surface_level(x, y, z, &global, min_surface, fluid_present);
         FluidStatus {
-            level: status_level,
-            fluid,
+            level,
+            fluid: self.fluid_type(x, y, z, &global, level),
         }
     }
 
-    fn fluid_type(&self, x: i32, y: i32, z: i32, global: Fluid, level: i32) -> Fluid {
-        if level <= -10 {
+    /// Vanilla `computeSurfaceLevel`.
+    fn surface_level(
+        &self,
+        x: i32,
+        y: i32,
+        z: i32,
+        global: &FluidStatus,
+        max_surface: i32,
+        fluid_present: bool,
+    ) -> i32 {
+        // Région du deep dark (`OverworldBiomeBuilder.isDeepDarkRegion`) : jamais inondée.
+        let deep_dark = self.router.erosion.compute(x, y, z) < -0.225
+            && self.router.depth.compute(x, y, z) > 0.9;
+        let (partially, fully) = if deep_dark {
+            (-1.0, -1.0)
+        } else {
+            let allowed = if fluid_present {
+                clamped_map((max_surface + 8 - y) as f64, 0.0, 64.0, 1.0, 0.0)
+            } else {
+                0.0
+            };
+            let floodedness = self
+                .router
+                .fluid_level_floodedness
+                .compute(x, y, z)
+                .clamp(-1.0, 1.0);
+            let fully_threshold = map(allowed, 1.0, 0.0, -0.3, 0.8);
+            let partially_threshold = map(allowed, 1.0, 0.0, -0.8, 0.4);
+            (
+                floodedness - partially_threshold,
+                floodedness - fully_threshold,
+            )
+        };
+        if fully > 0.0 {
+            global.level
+        } else if partially > 0.0 {
+            self.randomized_level(x, y, z, max_surface)
+        } else {
+            WAY_BELOW_MIN_Y
+        }
+    }
+
+    /// Vanilla `computeRandomizedFluidSurfaceLevel` : niveau par cellule de 16 × 40 × 16 blocs.
+    fn randomized_level(&self, x: i32, y: i32, z: i32, max_surface: i32) -> i32 {
+        let grid_y = fdiv(y, 40);
+        let base = grid_y * 40 + 20;
+        let spread = self
+            .router
+            .fluid_level_spread
+            .compute(fdiv(x, 16), grid_y, fdiv(z, 16))
+            * 10.0;
+        let offset = (spread / 3.0).floor() as i32 * 3;
+        max_surface.min(base + offset)
+    }
+
+    /// Vanilla `computeFluidType` : lave dans les aquifères profonds selon le bruit `lava`.
+    fn fluid_type(&self, x: i32, y: i32, z: i32, global: &FluidStatus, level: i32) -> Fluid {
+        if level <= -10 && level != WAY_BELOW_MIN_Y && global.fluid != Fluid::Lava {
             let lava = self
                 .router
                 .lava
@@ -337,13 +410,8 @@ impl<'a> Aquifer<'a> {
                 return Fluid::Lava;
             }
         }
-        global
+        global.fluid
     }
-}
-
-#[inline]
-fn similarity(a: i64, b: i64) -> f64 {
-    1.0 - (b - a).abs() as f64 / 25.0
 }
 
 #[cfg(test)]
@@ -352,24 +420,25 @@ mod tests {
     use crate::world::worldgen::density;
 
     #[test]
-    fn aquifer_produces_water_and_air() {
-        // Sur une grande zone de grottes, l'aquifère doit produire à la fois de
-        // l'eau (zones inondées) et de l'air (zones sèches) — pas un seul état.
+    fn aquifer_produces_water_air_and_barriers() {
+        // Sur une grande zone de grottes, l'aquifère doit produire de l'eau (zones inondées), de l'air
+        // (zones sèches) et des barrières de pierre entre aquifères de niveaux différents.
         let router = density::build_overworld(42);
         let mut aq = Aquifer::new(&router, 42);
-        let mut water = 0;
-        let mut air = 0;
-        for x in (-200..200).step_by(11) {
-            for y in (-30..50).step_by(7) {
-                match aq.compute(x, y, 8, -0.5) {
-                    Fluid::Water => water += 1,
-                    Fluid::Air => air += 1,
-                    Fluid::Lava => {}
+        let (mut water, mut air, mut barrier) = (0, 0, 0);
+        for x in (-400..400).step_by(7) {
+            for y in (-50..60).step_by(3) {
+                match aq.compute(x, y, 8, -0.05) {
+                    Some(Fluid::Water) => water += 1,
+                    Some(Fluid::Air) => air += 1,
+                    Some(Fluid::Lava) => {}
+                    None => barrier += 1,
                 }
             }
         }
         assert!(water > 0, "aucune eau d'aquifère");
         assert!(air > 0, "aucune grotte sèche");
+        assert!(barrier > 0, "aucune barrière");
     }
 
     #[test]
@@ -395,16 +464,35 @@ mod tests {
         let router = density::build_overworld(42);
         let mut aq = Aquifer::new(&router, 42);
         // Très profond → lave (global status).
-        assert_eq!(aq.compute(8, -60, 8, -1.0), Fluid::Lava);
+        assert_eq!(aq.compute(8, -60, 8, -1.0), Some(Fluid::Lava));
+    }
+
+    /// Le raccourci `dry_above` ne change aucun résultat : au-dessus, `compute` rend toujours de l'air.
+    #[test]
+    fn dry_above_is_exact() {
+        let router = density::build_overworld(4817747595384169343);
+        let mut aq = Aquifer::new(&router, 4817747595384169343);
+        for (cx, cz) in [(0, 0), (-3, -4), (5, 2), (-20, 11)] {
+            let (x0, z0) = (cx * 16, cz * 16);
+            let dry = aq.dry_above(x0, z0, x0 + 15, z0 + 15);
+            for x in (x0..x0 + 16).step_by(3) {
+                for z in (z0..z0 + 16).step_by(3) {
+                    for y in (dry + 1..dry + 60).step_by(2) {
+                        assert_eq!(
+                            aq.compute(x, y, z, -0.01),
+                            Some(Fluid::Air),
+                            "({x}, {y}, {z})"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
-    fn caves_fill_or_stay_air() {
+    fn solid_stays_solid() {
         let router = density::build_overworld(42);
         let mut aq = Aquifer::new(&router, 42);
-        for y in [-30, 0, 30, 50] {
-            let f = aq.compute(8, y, 8, -0.5);
-            assert!(matches!(f, Fluid::Air | Fluid::Water | Fluid::Lava));
-        }
+        assert_eq!(aq.compute(8, 0, 8, 0.5), None);
     }
 }

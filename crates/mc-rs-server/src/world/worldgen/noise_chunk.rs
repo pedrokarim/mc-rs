@@ -298,31 +298,31 @@ pub(crate) fn generate_chunk_grid(
         }
     }
 
-    // 1) Forme du terrain + aquifères : stone / eau / lave / air. Sous le niveau
-    // de la mer, l'aquifère décide eau/lave/air (grottes sèches ou inondées) ;
-    // au-dessus, l'air reste l'air (les aquifères perchés sont négligés).
+    // 1) Forme du terrain + aquifères : stone / eau / lave / air. Dans les vides (densité ≤ 0),
+    // l'aquifère décide eau, lave, air, ou barrière de pierre entre deux aquifères de niveaux
+    // différents ; à toutes les hauteurs, comme vanilla (aquifères perchés compris).
+    use crate::world::worldgen::aquifer::Fluid;
     let lava = BLOCKS.get("minecraft:lava");
     let mut aquifer = crate::world::worldgen::aquifer::Aquifer::new(&router, seed);
     let mut grid = vec![BLOCKS.air; GRID_LEN].into_boxed_slice();
+    // Au-dessus de `dry`, un vide est forcément de l'air (raccourci exact, `Aquifer::dry_above`).
+    let dry = aquifer.dry_above(base_x, base_z, base_x + 15, base_z + 15);
     for lx in 0..16usize {
         for lz in 0..16usize {
             let wx = base_x + lx as i32;
             let wz = base_z + lz as i32;
             for wy in MIN_Y..MAX_Y {
                 let d = density_at(&corners, lx, wy, lz);
-                if d > 0.0 {
-                    grid[grid_index(lx, wy, lz)] = BLOCKS.stone;
-                } else if wy <= SEA_LEVEL {
-                    match aquifer.compute(wx, wy, wz, d) {
-                        crate::world::worldgen::aquifer::Fluid::Water => {
-                            grid[grid_index(lx, wy, lz)] = BLOCKS.water
-                        }
-                        crate::world::worldgen::aquifer::Fluid::Lava => {
-                            grid[grid_index(lx, wy, lz)] = lava
-                        }
-                        crate::world::worldgen::aquifer::Fluid::Air => {}
-                    }
+                if wy > dry {
+                    grid[grid_index(lx, wy, lz)] = if d > 0.0 { BLOCKS.stone } else { BLOCKS.air };
+                    continue;
                 }
+                grid[grid_index(lx, wy, lz)] = match aquifer.compute(wx, wy, wz, d) {
+                    None => BLOCKS.stone,
+                    Some(Fluid::Water) => BLOCKS.water,
+                    Some(Fluid::Lava) => lava,
+                    Some(Fluid::Air) => BLOCKS.air,
+                };
             }
         }
     }
@@ -555,6 +555,44 @@ fn serialize_chunk(grid: &[u32], biome3d: &[[[u16; 4]; 4]]) -> (u32, Vec<u8>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Outil de comparaison avec BDS, lancé à la demande :
+    /// `MCRS_DUMP_SEED=<seed> MCRS_DUMP_CHUNKS="cx,cz cx,cz…" MCRS_DUMP_OUT=<fichier.json>
+    /// cargo test --release -p mc-rs-server --bin mc-rs-server dump_chunk_classes -- --ignored`.
+    /// Écrit `{"cx,cz": [256 colonnes (x puis z) de 144 caractères, y = -64 à 79]}` : `#` solide, `~` eau,
+    /// `L` lave, `.` air ; même format que les extractions du monde de BDS (dev-docs/14, « Parité avec BDS »).
+    #[test]
+    #[ignore]
+    fn dump_chunk_classes() {
+        let seed: u64 = std::env::var("MCRS_DUMP_SEED")
+            .expect("MCRS_DUMP_SEED")
+            .parse()
+            .unwrap();
+        let chunks = std::env::var("MCRS_DUMP_CHUNKS").expect("MCRS_DUMP_CHUNKS");
+        let out = std::env::var("MCRS_DUMP_OUT").expect("MCRS_DUMP_OUT");
+        let lava = BLOCKS.get("minecraft:lava");
+        let mut result = serde_json::Map::new();
+        for key in chunks.split_whitespace() {
+            let (cx, cz) = key.split_once(',').unwrap();
+            let (cx, cz): (i32, i32) = (cx.parse().unwrap(), cz.parse().unwrap());
+            let (grid, _) = generate_chunk_grid(cx, cz, seed);
+            let columns: Vec<serde_json::Value> = (0..256usize)
+                .map(|i| {
+                    let column: String = (MIN_Y..80)
+                        .map(|y| match grid[grid_index(i / 16, y, i % 16)] {
+                            b if b == BLOCKS.air => '.',
+                            b if b == BLOCKS.water => '~',
+                            b if b == lava => 'L',
+                            _ => '#',
+                        })
+                        .collect();
+                    column.into()
+                })
+                .collect();
+            result.insert(key.to_string(), columns.into());
+        }
+        std::fs::write(out, serde_json::Value::Object(result).to_string()).unwrap();
+    }
 
     #[test]
     fn generates_nonempty_chunk() {

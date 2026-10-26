@@ -287,10 +287,12 @@ depuis la sémantique vanilla (réf. deepslate pour le bruit/les surfaces).
 |---|---|---|
 | Relief 3D (density functions) | ✅ | y-64→320, montagnes/océans |
 | Grottes (cheese/spaghetti/noodle) | ✅ | incluses dans `final_density` — ~70 % des colonnes en traversent une ; fines partiellement lissées par l'interpolation 4×8 (~-23 %) |
-| **Aquifères** (eau/lave dans les grottes) | ✅ | port `NoiseAquifer` — grottes inondées sous terres basses/océans, sèches sous terres hautes, lave en profondeur |
+| **Aquifères** (eau/lave dans les grottes) | ✅ | port de vanilla `NoiseBasedAquifer` (barrières de pierre entre niveaux, aquifères perchés, deep dark sec) ; 99,6 % d'accord eau/air avec BDS (voir « Parité avec BDS ») |
+| Carvers (grottes et canyons creusés après le bruit) | ❌ | absents : chez BDS, 3 % des blocs sous y = 80 sont de l'air ou de l'eau creusés par eux |
+| Écoulement des fluides | ❌ | aucune simulation : l'eau posée par la génération ou par un joueur ne coule pas |
 | Interpolation cellulaire 4×8 | ✅ | |
 | `vertical_gradient` probabiliste | 🟡 | cutoff déterministe (bedrock/deepslate) |
-| Parité numérique du bruit vs vanilla | 🟡 | non cross-validée |
+| Parité numérique du bruit vs vanilla | ✅ | validée contre deepslate et BDS (voir « Parité avec BDS ») |
 
 **Biomes & surfaces**
 
@@ -353,11 +355,11 @@ depuis la sémantique vanilla (réf. deepslate pour le bruit/les surfaces).
 | **Deep dark / sculk** (sculk + sensor/shrieker/catalyst/vein) | ✅ | placés dans le biome `deep_dark` |
 | Disques sable/gravier/argile (bord de l'eau) | ❌ | |
 | **Structures** | 🟡 | **donjons** (salle cobble + spawner + coffres) & **puits du désert** ✅ ; villages/mines/temples/strongholds/portails ❌ (jigsaw + templates NBT) |
-| Position de spawn | 🟡 | calcul legacy (désync possible) |
+| Position de spawn | ✅ | premier sol au-dessus de y = 62 en spirale autour de (0, 0), lu sur le terrain chargé (`connection/spawn.rs`) ; le calcul legacy ne sert que de repli |
 
 > En clair : **terrain + biomes + surfaces + minerais + toute la végétation/déco de
 > surface** sont là et fidèles. Ce qui manque relève surtout des **systèmes macro**
-> (aquifères, structures, lacs/springs, features de grottes spécialisées) et des
+> (carvers, structures, lacs/springs, features de grottes spécialisées) et des
 > **biomes 3D** de grottes.
 
 ### ✅ Fait
@@ -478,14 +480,11 @@ bruit, noise_settings overworld (avec `surface_rule`), param list de biomes
 - Portage **100 % data-driven** du système `placed_feature`/`configured_feature`
   (l'objectif final : lire les `features` du biome au lieu de les coder en dur).
 
-**Phase D — aquifères**
-- Aquifères par bruit (niveaux de fluide eau/lave dans les grottes). Les grottes
-  elles-mêmes sont déjà présentes via `final_density`.
+**Phase D — aquifères** : faite (2026-10-26), voir « Parité avec BDS ». Restent les
+carvers et l'écoulement des fluides.
 
 **Divers**
 - Structures (villages, donjons, etc.).
-- Spawn `find_spawn_position` utilise encore le calcul legacy (désync possible
-  avec le terrain noise).
 
 ### Parité avec BDS (placement des biomes)
 
@@ -537,6 +536,46 @@ et comparaison ; procédure de compilation de deepslate dans son en-tête). Cha�
 `bds-capture capture` (`-stay 120s` contre mc-rs, qui envoie ses chunks plus
 lentement), `bds-capture decode`, `chunk_biomes.py --json`, puis
 `deepslate_biomes.mjs --map`.
+
+### Parité avec BDS (eau et aquifères)
+
+Mesure du 2026-10-26, même seed, sur les 54 chunks que BDS a enregistrés autour du
+spawn (`worlds/Bedrock level/db`, lu avec `amulet-leveldb`), de y = -64 à 79. On
+compare des classes de blocs (`#` solide, `~` eau, `L` lave, `.` air).
+
+| Carte | Accord eau/air dans les vides communs | Faces eau/air horizontales |
+|---|---|---|
+| BDS | — | 858 (eau qui a coulé après la génération) |
+| mc-rs avant correction | 4 299 blocs d'eau communs sur 25 296 entre y = 16 et 79 | plusieurs milliers |
+| deepslate 0.26.0 (aquifère désactivé : tout vide sous y = 63 est noyé) | 93,81 % | — |
+| mc-rs corrigé | 99,59 % (aucune eau là où BDS a de l'air) | 9 |
+
+**Causes**, toutes héritées de l'aquifère de deepslate, que deepslate garde lui-même
+désactivé (`// WIP: Noise aquifers don't work yet`) :
+- une barrière (pression trop forte entre deux aquifères) donnait de l'**air** au lieu
+  de la **pierre** : parois d'eau verticales à nu, eau « coupée » ;
+- surface préliminaire approchée par le premier bloc plein de `final_density` (qui
+  contient les grottes) au lieu de `preliminary_surface_level` (`find_top_surface`,
+  ajoutée à `density.rs` avec `invert`) : niveaux d'eau trop bas sous les grottes
+  proches de la surface ;
+- `computeFluid` rendait le statut d'une source voisine dans le mauvais cas, pressions
+  combinées autrement que vanilla, bruits de barrière et d'inondation ré-échelonnés en y
+  alors que leur `y_scale` est déjà dans les données, `spread` sans son facteur 10,
+  région du deep dark non exclue ;
+- aquifère consulté seulement sous le niveau de la mer (vanilla : partout).
+
+`aquifer.rs` suit maintenant vanilla `Aquifer.NoiseBasedAquifer`. `Aquifer::dry_above`
+saute le calcul au-dessus de la hauteur où aucun aquifère ne peut agir, sans changer le
+résultat (test `dry_above_is_exact`, et sortie identique au bloc près sur les 54 chunks).
+
+Le reste des écarts de classes (95,4 % d'accord au total) vient des carvers, absents
+de mc-rs : air ou eau chez BDS là où mc-rs a de la pierre.
+
+**Outils** : test ignoré `noise_chunk::tests::dump_chunk_classes` (commande dans sa
+documentation) pour mc-rs, et `scripts/dev/world_block_classes.py extract` pour le monde
+de BDS (sur une copie de la base), puis `world_block_classes.py compare`. Cartes de la
+mesure : `bds-block-classes.json` et `mcrs-block-classes-aquifer-vanilla.json` dans
+`.reference/bds/comparisons/biomes-seed-4817747595384169343/`.
 
 ### Validation
 
