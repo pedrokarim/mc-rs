@@ -29,3 +29,6 @@ server-state.json
 
 # Outil de capture compilé
 scripts/dev/bds_capture/bds-capture.exe
+
+# Python
+__pycache__/

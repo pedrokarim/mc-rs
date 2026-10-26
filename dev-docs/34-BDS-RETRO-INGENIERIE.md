@@ -13,7 +13,7 @@ binaire, et on compare avec mc-rs. Chaque étape est consignée ici ; les fichie
 | Captures de paquets (binaire, JSON, journaux) | `.reference/bds/captures/<serveur>/<date>_<scénario>/` | non |
 | Rapports de comparaison | `.reference/bds/comparisons/` | non |
 | Projet Ghidra de BDS | `C:\tools\ghidra-projects\bds-1.26.52.3` (plusieurs Go) | non |
-| Outil de capture et de décodage | `scripts/dev/bds_capture/` (Go, gophertunnel v1.62.0) | oui |
+| Outil de capture, de décodage et de relevé des drops | `scripts/dev/bds_capture/` (Go, gophertunnel `master` be557e3 : la v1.62.0 n'enregistre pas le réseau NetherNet) | oui |
 | Lecture et comparaison de captures | `scripts/dev/packet_dump.py`, `scripts/dev/compare_captures.py` | oui |
 | Scripts Ghidra | `scripts/dev/ghidra/` | oui |
 | REA (rétro-ingénierie par agent) | `.reference/rea`, serveur MCP `rea` de Claude Code | non |
@@ -195,10 +195,70 @@ Résultat le 2026-10-25 : connexion, déplacement, sprint, `/gamemode creative` 
 avec le vrai client 1.26.52. Pour une prochaine bisection, `MCRS_EMPTY_PRESPAWN` accepte aussi `trim`, `jigsaw`
 et `voxel`.
 
-## 8. Décompilation (en cours)
+## 8. Décompilation
 
-Import et analyse automatique de `bedrock_server.exe` lancés le 2026-10-25 à 16:12 dans le projet Ghidra
-(16 Go de tas, 12 cœurs, priorité basse ; journal `C:\tools\ghidra-projects\bds-1.26.52.3-analyze.log`).
-Cibles : calcul des connexions (`minecraft:connection_*`) et des coins d'escaliers (`minecraft:corner`),
-forme des faces de blocs, sérialisation des paquets restés douteux. Scripts prêts dans `scripts/dev/ghidra/`,
-pas encore exécutés.
+Cibles : cassage (vitesse, validation), drops, connexions (`minecraft:connection_*`) et coins d'escaliers
+(`minecraft:corner`), forme des faces de blocs, paquets restés douteux.
+
+### 8.1 Analyse de Ghidra : ce qui a marché, ce qui a échoué
+
+- **Analyse complète par défaut** (2026-10-25, 16:12) : bloquée plus de 2 h 30 dans une phase mono-cœur, sans
+  rien écrire au journal ; arrêtée à 19:30, rien de sauvegardé (Ghidra n'écrit le projet qu'à la fin).
+- **Analyse allégée par REA** (20:52 → 23:19, **2 h 26**) : réussie, avec 8 analyseurs désactivés
+  (`Decompiler Switch Analysis`, `Stack`, `Function ID`, `Non-Returning Functions - Discovered`,
+  `Call Convention ID`, `Shared Return Calls`, `Create Address Tables`, `Embedded Media`), 16 Go de tas.
+  747 389 fonctions, 63 773 chaînes. **Perdue** au redémarrage de la session : REA garde le programme en
+  mémoire dans un projet temporaire (`-deleteProject`) et ses snapshots ne conservent que les réponses déjà
+  données, pas la base Ghidra (`docs/cli.md` de REA). Journal conservé :
+  `.reference/bds/rea/ghidra-analysis-1.26.52.3.log`.
+- **Durées par analyseur** (analyse allégée) : x86 Constant Reference 50 min, Data Reference 36 min,
+  Reference 26 min, Disassemble Entry Points 10 min, Call-Fixup Installer 8 min, Scalar Operand References
+  6 min, ASCII Strings 4 min, le reste moins de 3 min chacun.
+- **Relance persistante** (23:32) : même profil, lancée par `analyzeHeadless` avec le pré-script
+  `scripts/dev/ghidra/DisableAnalyzers.java`, dans `C:\tools\ghidra-projects\bds-1.26.52.3-light` (projet
+  sauvegardé à la fin, requêtes suivantes en `-noanalysis`). Suivi : `scripts/dev/ghidra/watch_analysis.sh`
+  (analyseur en cours lu par `jcmd <pid> Thread.print`). **Réussie et sauvegardée** le 2026-10-26 à 04:13
+  (« Analysis succeeded », « Save succeeded ») : 16 756 s, soit **4 h 39**, projet de 2,7 Go. Plus lente que
+  l'analyse de REA (Data Reference 86 min, x86 Constant Reference 76 min, Reference 65 min) car la machine
+  manquait de mémoire (2 Go libres, relevé des drops lancé en parallèle une partie de la nuit). Journal :
+  `.reference/bds/rea/ghidra-light-analysis-1.26.52.3.log`.
+- **Ne jamais annuler une requête REA en cours** : REA détruit alors sa base Ghidra temporaire.
+
+### 8.2 Constats sur le binaire (analyse allégée)
+
+- Pas de PDB, et **presque pas de RTTI** pour les classes de jeu : aucun `.?AV…Block…`, `…Loot…`,
+  `…SilkTouch…` ; seules les lambdas gardent un descripteur. Ghidra ne nomme donc pas les classes de blocs.
+- Les chaînes sont lues par de petites méthodes virtuelles ou des initialiseurs qui remplissent des constantes
+  globales (`FUN_1411e1cc0` renvoie `"has_silk_touch"`, `FUN_1425f41e0`, 167 Ko, enregistre les tags) : la
+  logique de jeu lit ces constantes, pas les chaînes.
+- Chaînes du cassage relevées (adresses de la 1.26.52.3, base 0x140000000) :
+
+| Chaîne | Adresse |
+|---|---|
+| `minecraft:destructible_by_mining`, `block_destructible_by_mining` | 0x14aa0c48f, 0x14aa0c472 |
+| `seconds_to_destroy` | 0x14a9b8875 |
+| `item_specific_speeds`, `destroy_speeds`, `destroy_speed` | 0x14a9dd8d7, 0x14a9dd8c8, 0x14aa31a5d |
+| `requires_correct_tool_for_drops` (code : 0x1419815b3, 0x14941cd4e) | 0x14a9d418d |
+| `minecraft:destructible_by_explosion` | 0x14a9f8efe |
+| `has_silk_touch`, `fortune` | 0x14aa09817, 0x14aa1a695 |
+| `minecraft:{stone,iron,diamond,netherite}_tier_destructible` | 0x14aa2031e… |
+| `minecraft:is_{pickaxe,axe,shovel,hoe,shears,sword,mace}_item_destructible` | 0x14aa203b0… |
+
+- Types C++ nommés par `entt` : `SharedTypes::v1_26_20::BlockDefinition::DestructibleByMiningComponent`
+  (`DetailedMiningSpeed`, `ItemSpecificSpeed`), `DestructibleByExplosionComponent::DetailedResistance`,
+  `BlockDestroyTimeVersioning` (`BlockDestructibleByMining11920Upgrade`, `12130Upgrade`).
+- **Tags absents de nos données** : `minecraft:netherite_tier_destructible` et
+  `minecraft:is_mace_item_destructible` (le dump d'Allay ne les porte sur aucun bloc ; à vérifier sur BDS).
+
+### 8.3 Conséquence pour les drops
+
+Seuls 99 blocs ont une table de butin dans les packs de Mojang (`behavior_packs/vanilla_1.26.50/
+loot_tables/blocks/`, identiques à `bedrock-samples` 1.26.50.4) : les blocs data-driven (dalles et escaliers
+de béton et de laine…). Pour les autres, les drops sont du C++ sans nom : ils sont **observés sur BDS en
+fonctionnement** plutôt que lus dans le binaire. Commande `drops` de `scripts/dev/bds_capture/` : blocs posés
+en grille par la console (`fill`, vérifiés par `testforblock`), puis `loot spawn … mine <bloc> mainhand`
+lancé depuis la console au nom du bot connecté (`execute as @a`), pour chaque outil et enchantement, N tirages par cas ; les items sont relevés dans les
+AddItemActor. `/loot` ne rend pas l'XP : elle reste à relever autrement. Bilan :
+`scripts/dev/summarize_bds_drops.py`. Fait le 2026-10-26 pour chaque état de la palette et 16 outils : les drops
+de mc-rs en viennent désormais ([`36-CASSAGE-DE-BLOCS.md`](36-CASSAGE-DE-BLOCS.md) § 2 bis). Ghidra reste réservé aux formules ponctuelles (vitesse de cassage,
+validation de la durée).

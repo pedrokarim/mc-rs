@@ -36,11 +36,22 @@ Scripts annexes (Python, et un script PHP qui exécute PMMP). Aucun n’est néc
 
 Voir [`../dev-docs/34-BDS-RETRO-INGENIERIE.md`](../dev-docs/34-BDS-RETRO-INGENIERIE.md).
 
-- `dev/bds_capture/` (Go) : capture les paquets échangés avec un serveur (BDS en NetherNet, mc-rs en RakNet)
-  et les décode en JSON avec gophertunnel.
+- `dev/bds_capture/` (Go) : capture les paquets échangés avec un serveur (BDS en NetherNet, mc-rs en RakNet),
+  les décode en JSON avec gophertunnel, et relève les drops de blocs calculés par BDS (`drops`).
 - `dev/packet_dump.py` : résumé par type d'un enregistrement de paquets, extraction de charges utiles.
 - `dev/compare_captures.py` : comparaison champ par champ de deux captures décodées.
+- `dev/summarize_bds_drops.py <relevé.jsonl> [--diff] [--json bilan.json]` : bilan d'un relevé de drops de BDS
+  (`bds-capture drops`), blocs aléatoires, écarts avec `data/block_break.json`.
+- `dev/bds_palette.py` : palette de mc-rs vue par BDS (états typés, hash réseau, syntaxe des commandes) ;
+  lancé seul, vérifie les hashes contre le dump de BDS d'Allay.
+- `dev/plan_bds_drops.py --out <plan.json> [--samples N] [--only <relevé.jsonl>]` : plan du relevé des drops
+  par état de la palette (états regroupés hors orientation et connexions, 16 outils).
+- `dev/build_bds_drops.py --groups <plan>.groups.json <relevé.jsonl>…` : écrit
+  `crates/mc-rs-server/data/block_drops_bds.json` (drops de BDS par état). Chaîne complète :
+  [`../dev-docs/36-CASSAGE-DE-BLOCS.md`](../dev-docs/36-CASSAGE-DE-BLOCS.md) § 2 bis.
+- `dev/bds_pe_index.py` : index des sections, imports et descripteurs RTTI d'un exécutable PE (peu utile sur
+  BDS, qui n'a presque pas de RTTI).
 - `dev/ghidra/` : scripts Ghidra pour lire le binaire de BDS (fonctions qui utilisent une chaîne, méthodes
-  d'une classe).
+  d'une classe), pré-script qui désactive des analyseurs, suivi d'une analyse en cours.
 
 Les benchmarks sont dans [`../benchmarks/`](../benchmarks/).
