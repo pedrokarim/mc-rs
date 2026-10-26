@@ -1348,6 +1348,11 @@ impl LevelSoundEvent {
     pub const SHOOT: &'static str = "shoot";
     /// Feu éteint (gophertunnel `SoundEventExtinguishFire`).
     pub const EXTINGUISH_FIRE: &'static str = "extinguish.fire";
+    /// Seaux (CloudburstProtocol `SoundEvent`).
+    pub const BUCKET_FILL_WATER: &'static str = "bucket.fill.water";
+    pub const BUCKET_FILL_LAVA: &'static str = "bucket.fill.lava";
+    pub const BUCKET_EMPTY_WATER: &'static str = "bucket.empty.water";
+    pub const BUCKET_EMPTY_LAVA: &'static str = "bucket.empty.lava";
 
     /// Create a non-actor block sound event.
     pub fn block_sound(sound: &'static str, position: [f32; 3], block_runtime_id: i32) -> Self {

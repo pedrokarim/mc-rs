@@ -105,6 +105,9 @@ fn noise_biome_identifier(seed: u64, x: i32, y: i32, z: i32) -> &'static str {
 pub struct ChunkCache {
     chunks: HashMap<(i32, i32), ChunkColumn>,
     dirty: HashSet<(i32, i32)>,
+    /// Positions modifiées par `set_block` / `set_liquid` depuis le dernier `take_changes` : le moteur de
+    /// liquides en déduit les liquides voisins à mettre à jour (vanilla : mise à jour des voisins).
+    changes: Vec<[i32; 3]>,
     storage: Option<SharedStorage>,
     seed: u64,
     generator: String,
@@ -172,6 +175,7 @@ impl ChunkCache {
         Self {
             chunks: HashMap::new(),
             dirty: HashSet::new(),
+            changes: Vec::new(),
             storage,
             seed,
             generator: generator.to_lowercase(),
@@ -413,6 +417,7 @@ impl ChunkCache {
 
         let sub = &mut chunk.sub_chunks[sub_idx];
         sub.set_block(local_x, local_y, local_z, runtime_id);
+        self.changes.push([world_x, world_y, world_z]);
         // Un bloc qui ne peut pas contenir d'eau perd celle de la seconde couche (BDS). L'air, que BDS
         // déclare capable d'en contenir, la perd aussi : un bloc retiré qui doit laisser son eau passe
         // par `break_block`.
@@ -460,9 +465,27 @@ impl ChunkCache {
             chunk.sub_chunk_count = sub_idx as u32 + 1;
         }
         chunk.sub_chunks[sub_idx].set_liquid(lx, ly, lz, runtime_id);
+        self.changes.push([world_x, world_y, world_z]);
         chunk.payload_dirty = true;
         chunk.cached_zlib_batch = None;
         self.dirty.insert((cx, cz));
+    }
+
+    /// Positions modifiées depuis le dernier appel (vidées).
+    pub fn take_changes(&mut self) -> Vec<[i32; 3]> {
+        std::mem::take(&mut self.changes)
+    }
+
+    /// Vrai si le chunk contenant la colonne est en mémoire (sans le charger ni le générer).
+    pub fn is_loaded(&self, world_x: i32, world_z: i32) -> bool {
+        self.chunks
+            .contains_key(&(world_x.div_euclid(16), world_z.div_euclid(16)))
+    }
+
+    /// Vrai si `world_y` est dans les bornes de hauteur de la dimension.
+    pub fn in_height(&self, world_y: i32) -> bool {
+        let (min_y, height) = self.y_bounds();
+        (min_y..min_y + height).contains(&world_y)
     }
 
     /// Chunk, sous-chunk et coordonnées locales d'une position monde ; `None` hors des bornes Y.

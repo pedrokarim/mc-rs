@@ -614,7 +614,13 @@ impl Connection {
             return;
         }
 
+        // Seaux : remplir ou vider (et waterlogging), avant la pose de bloc.
+        if self.try_use_bucket(interaction, responses) {
+            return;
+        }
+
         // Check if held item is a placeable block
+        let held = &self.inventory.slots[held_slot_idx];
         let block_runtime_id = match crate::inventory::item_to_block(held.item.id) {
             Some(id) => id,
             None => {

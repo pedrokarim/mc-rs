@@ -3,7 +3,8 @@
 //!
 //! - **waterlogging** (`canContainLiquidSource`) : l'état peut garder une source d'eau ; Bedrock la range dans la
 //!   seconde couche du sous-chunk (`SubChunk::liquid`), le bloc restant dans la première ;
-//! - **réaction au contact d'un liquide qui coule** (`liquidReactionOnTouch`).
+//! - **réaction au contact d'un liquide qui coule** (`liquidReactionOnTouch`) ;
+//! - **solidité** (`isSolid`).
 
 use std::sync::LazyLock;
 
@@ -28,11 +29,13 @@ pub enum LiquidReaction {
 struct RawData {
     state_count: u32,
     can_contain_liquid_source: Vec<[u32; 2]>,
+    solid: Vec<[u32; 2]>,
     liquid_reaction_on_touch: std::collections::HashMap<String, Vec<[u32; 2]>>,
 }
 
 struct Data {
     can_contain: Vec<bool>,
+    solid: Vec<bool>,
     reaction: Vec<LiquidReaction>,
 }
 
@@ -46,6 +49,10 @@ static DATA: LazyLock<Data> = LazyLock::new(|| {
     let mut can_contain = vec![false; count as usize];
     for [first, last] in raw.can_contain_liquid_source {
         can_contain[first as usize..=last as usize].fill(true);
+    }
+    let mut solid = vec![false; count as usize];
+    for [first, last] in raw.solid {
+        solid[first as usize..=last as usize].fill(true);
     }
     let mut reaction = vec![LiquidReaction::Blocking; count as usize];
     for (name, ranges) in raw.liquid_reaction_on_touch {
@@ -61,6 +68,7 @@ static DATA: LazyLock<Data> = LazyLock::new(|| {
     }
     Data {
         can_contain,
+        solid,
         reaction,
     }
 });
@@ -68,6 +76,14 @@ static DATA: LazyLock<Data> = LazyLock::new(|| {
 /// Vrai si l'état peut contenir une source d'eau (waterlogging).
 pub fn can_contain_liquid(runtime_id: u32) -> bool {
     DATA.can_contain
+        .get(runtime_id as usize)
+        .copied()
+        .unwrap_or(false)
+}
+
+/// Vrai si l'état est solide (BDS `isSolid`).
+pub fn is_solid(runtime_id: u32) -> bool {
+    DATA.solid
         .get(runtime_id as usize)
         .copied()
         .unwrap_or(false)

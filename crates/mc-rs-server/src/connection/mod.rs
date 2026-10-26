@@ -1,4 +1,5 @@
 mod block_breaking;
+mod buckets;
 mod chat;
 mod chunks;
 mod dimension;

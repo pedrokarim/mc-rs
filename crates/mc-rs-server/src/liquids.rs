@@ -131,7 +131,13 @@ mod tests {
         while !buf.is_empty() {
             let root = mc_rs_nbt::read_nbt_network(&mut buf).unwrap();
             if let Some(NbtTag::String(name)) = root.compound.get("name") {
-                if name == "minecraft:water" || name == "minecraft:flowing_water" {
+                if matches!(
+                    name.as_str(),
+                    "minecraft:water"
+                        | "minecraft:flowing_water"
+                        | "minecraft:lava"
+                        | "minecraft:flowing_lava"
+                ) {
                     let Some(NbtTag::Compound(states)) = root.compound.get("states") else {
                         panic!("états absents");
                     };
@@ -146,7 +152,7 @@ mod tests {
             }
             runtime_id += 1;
         }
-        assert_eq!(checked, 32);
+        assert_eq!(checked, 64);
         // Source : déclin 0 → 1/9 ; déclin 7 → 8/9 ; eau qui tombe → 1/9.
         let water = crate::world::block_registry::BLOCKS.get("minecraft:water");
         assert_eq!(water_height_percent(water), Some(1.0 / 9.0));

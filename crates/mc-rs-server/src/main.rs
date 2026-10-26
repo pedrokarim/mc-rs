@@ -525,6 +525,7 @@ pub mod light_level;
 #[allow(dead_code)]
 pub mod lightning;
 #[allow(dead_code)]
+pub mod liquid_flow;
 pub mod liquids;
 #[allow(dead_code)]
 pub mod llama;
@@ -1306,6 +1307,12 @@ async fn main() {
 
     // Les 3 mondes (overworld / nether / end) partageant une seule LevelDB.
     let worlds = crate::world::worlds::Worlds::new(&world_dir, world_seed, &config.world.generator);
+    // Écoulement des liquides, un moteur par dimension (0 Overworld, 1 Nether, 2 End).
+    let mut liquid_flows = [
+        crate::liquid_flow::LiquidFlow::new(false),
+        crate::liquid_flow::LiquidFlow::new(true),
+        crate::liquid_flow::LiquidFlow::new(false),
+    ];
     // L'overworld est la dimension primaire que la game loop ticke par défaut.
     let chunk_cache = worlds.arc(0);
     if let Ok(mut manager) = plugin_manager.lock() {
@@ -1732,6 +1739,17 @@ async fn main() {
                             );
                         }
                     }
+                }
+
+                // Écoulement des liquides (PMMP `World::tick` : mises à jour programmées et voisins).
+                if world_gametick_fired {
+                    tick_liquids(
+                        &mut liquid_flows,
+                        &worlds,
+                        &mut connections,
+                        &mut raknet,
+                        &mut item_entities,
+                    );
                 }
 
                 // Furnace tick (20 TPS, partagé — une seule passe par game tick
@@ -2691,6 +2709,76 @@ fn spawn_and_broadcast_xp_orb(
         let pkt = conn.encode_compressed_packet(packet_id::ADD_ACTOR, &add_bytes);
         let prepared = conn.prepare_for_send(pkt);
         raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, true);
+    }
+}
+
+/// Un tick d'écoulement des liquides par dimension : envoie les blocs changés (et l'eau retirée des blocs
+/// gorgés d'eau emportés) aux joueurs de la dimension, fait tomber les drops des blocs cassés par le liquide.
+fn tick_liquids(
+    flows: &mut [crate::liquid_flow::LiquidFlow; 3],
+    worlds: &crate::world::worlds::Worlds,
+    connections: &mut HashMap<SocketAddr, Connection>,
+    raknet: &mut RakNetServer,
+    item_entities: &mut ItemEntityManager,
+) {
+    for (dim, flow) in flows.iter_mut().enumerate() {
+        let dim = dim as i32;
+        let (output, updates) = {
+            let Ok(mut cache) = worlds.get(dim).lock() else {
+                continue;
+            };
+            let output = flow.tick(&mut cache);
+            let mut seen = std::collections::HashSet::new();
+            let updates: Vec<([i32; 3], u32)> = output
+                .changed
+                .iter()
+                .filter(|p| seen.insert(**p))
+                .map(|&p| (p, cache.get_block(p[0], p[1], p[2])))
+                .collect();
+            (output, updates)
+        };
+        let air = crate::world::block_registry::BLOCKS.air;
+        let packets = updates
+            .iter()
+            .map(|&(position, runtime_id)| (position, runtime_id, 0))
+            .chain(output.liquid_cleared.iter().map(|&p| (p, air, 1)));
+        for (position, runtime_id, layer) in packets {
+            let payload = mc_rs_proto::packets::world::UpdateBlock {
+                position,
+                runtime_id,
+                flags: 3,
+                layer,
+            }
+            .encode();
+            for (addr, conn) in connections.iter_mut() {
+                if conn.is_in_game() && conn.current_dimension == dim {
+                    let pkt = conn.encode_compressed_packet(packet_id::UPDATE_BLOCK, &payload);
+                    let prepared = conn.prepare_for_send(pkt);
+                    raknet.send_to_session(addr, prepared, Reliability::ReliableOrdered, true);
+                }
+            }
+        }
+        // Drops sans outil (PMMP `World::useBreakOn` sans joueur ni item).
+        for (pos, block) in output.drops {
+            let center = [
+                pos[0] as f32 + 0.5,
+                pos[1] as f32 + 0.5,
+                pos[2] as f32 + 0.5,
+            ];
+            for drop in crate::block_break::drop_stacks(
+                block,
+                &crate::block_break::HeldTool::hand(),
+                &mut rand::thread_rng(),
+            ) {
+                spawn_and_broadcast_item_entity(
+                    "liquid",
+                    connections,
+                    raknet,
+                    item_entities,
+                    PendingItemEntitySpawn::with_scatter(drop, center),
+                );
+            }
+        }
     }
 }
 

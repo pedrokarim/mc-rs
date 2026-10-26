@@ -5,7 +5,8 @@ l'ordre de la palette de mc-rs (vérifié ici par le hash réseau de chaque éta
 - `canContainLiquidSource` : l'état peut contenir une source d'eau (waterlogging), rangée par Bedrock dans la
   seconde couche du sous-chunk ;
 - `liquidReactionOnTouch` : ce que fait un liquide qui coule sur l'état (`BLOCKING` arrêté, `POPPED` bloc cassé
-  avec ses drops, `BROKEN` bloc détruit, `NOREACTION` liquide qui traverse).
+  avec ses drops, `BROKEN` bloc détruit, `NOREACTION` liquide qui traverse) ;
+- `isSolid` : bloc solide (une nouvelle source d'eau ne se forme que sur un bloc solide ou une source).
 
 Format : runtime IDs en intervalles `[premier, dernier]` (inclus), `BLOCKING` par défaut.
 
@@ -52,6 +53,7 @@ def main() -> None:
         "source": "BDS, dump d'Allay (data/resources/block_states.json), scripts/dev/build_block_liquid.py",
         "state_count": len(palette),
         "can_contain_liquid_source": ranges([i for i, a in enumerate(allay) if a["canContainLiquidSource"]]),
+        "solid": ranges([i for i, a in enumerate(allay) if a["isSolid"]]),
         "liquid_reaction_on_touch": {k: ranges(v) for k, v in sorted(reactions.items())},
     }
     OUT.write_text(json.dumps(data, separators=(",", ":")) + "\n", encoding="utf-8")
