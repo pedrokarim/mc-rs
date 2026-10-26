@@ -53,7 +53,7 @@ fn map_range(v: f64, a: f64, b: f64, c: f64, d: f64) -> f64 {
 
 /// Résout un nom de bloc Java (des surface rules) en ID runtime Bedrock, en
 /// gérant les quelques noms qui diffèrent entre Java et Bedrock.
-fn resolve_block(java_name: &str) -> u32 {
+pub(super) fn resolve_block(java_name: &str) -> u32 {
     let bedrock = match java_name {
         "minecraft:terracotta" => "minecraft:hardened_clay",
         "minecraft:snow_block" => "minecraft:snow",

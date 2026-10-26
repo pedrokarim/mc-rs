@@ -290,6 +290,8 @@ depuis la sémantique vanilla (réf. deepslate pour le bruit/les surfaces).
 | **Aquifères** (eau/lave dans les grottes) | ✅ | port de vanilla `NoiseBasedAquifer` (barrières de pierre entre niveaux, aquifères perchés, deep dark sec) ; 99,6 % d'accord eau/air avec BDS (voir « Parité avec BDS ») |
 | Carvers (grottes et canyons creusés après le bruit) | ❌ | absents : chez BDS, 3 % des blocs sous y = 80 sont de l'air ou de l'eau creusés par eux |
 | Écoulement des fluides | ❌ | aucune simulation : l'eau posée par la génération ou par un joueur ne coule pas |
+| Waterlogging (eau en seconde couche) | ✅ | plantes aquatiques générées dans l'eau, blocs posés dans une source, bloc cassé qui rend son eau ; liste des blocs de BDS (`block_liquid.rs`) |
+| Disques (sable, argile, gravier au fond de l'eau ; herbe sur boue ; glace sur neige) | ✅ | `disks.rs`, lus dans les données vanilla ; aléa propre à mc-rs |
 | Interpolation cellulaire 4×8 | ✅ | |
 | `vertical_gradient` probabiliste | 🟡 | cutoff déterministe (bedrock/deepslate) |
 | Parité numérique du bruit vs vanilla | ✅ | validée contre deepslate et BDS (voir « Parité avec BDS ») |
@@ -576,6 +578,31 @@ documentation) pour mc-rs, et `scripts/dev/world_block_classes.py extract` pour 
 de BDS (sur une copie de la base), puis `world_block_classes.py compare`. Cartes de la
 mesure : `bds-block-classes.json` et `mcrs-block-classes-aquifer-vanilla.json` dans
 `.reference/bds/comparisons/biomes-seed-4817747595384169343/`.
+
+### Parité avec BDS (fonds d'eau et waterlogging)
+
+Zone de rivière et de plage (chunks x -8 à 1, z 9 à 18) que BDS a générée et enregistrée
+(`scripts/dev/bds_load_area.py` : `tickingarea` puis `save hold`), 29 chunks lus dans sa
+base, comparés à mc-rs (test ignoré `dump_chunk_blocks`) de y = 50 à 79.
+
+| Bloc | BDS | mc-rs avant | mc-rs après |
+|---|---|---|---|
+| sable | 1 511 | 0 | 1 198 |
+| argile | 29 | 0 | 93 |
+| herbe marine (toute avec eau en seconde couche chez BDS) | 141 | 91, sans eau | 107, avec eau |
+
+- **Waterlogging** : Bedrock range l'eau d'un bloc immergé dans une seconde couche du
+  sous-chunk ; mc-rs n'en avait qu'une, d'où une bulle d'air autour de chaque plante
+  aquatique. `SubChunk::liquid` (sérialisée, enregistrée, relue), liste des 19 840 états
+  qui peuvent contenir une source d'eau (`canContainLiquidSource`, dump de BDS d'Allay,
+  `scripts/dev/build_block_liquid.py`). L'air y figure selon BDS : `ChunkCache::set_block`
+  vide la seconde couche quand on pose de l'air ou un bloc qui ne peut pas contenir d'eau,
+  `break_block` rend l'eau d'un bloc cassé.
+- **Disques** : le fond des rivières est de la terre selon les règles de surface (comme
+  vanilla) ; le sable, l'argile et le gravier viennent des features `disk_*`, absentes de
+  mc-rs jusqu'ici.
+- Restent : écoulement, carvers (l'eau des grottes creusées par eux manque toujours),
+  `spring_water`, `underwater_magma`, seau sur un bloc gorgé d'eau (à observer sur BDS).
 
 ### Validation
 

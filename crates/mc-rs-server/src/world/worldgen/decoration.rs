@@ -766,6 +766,10 @@ pub fn decorate(
     // soient cohérentes et non coupées aux frontières). Ils sont posés AVANT cet
     // appel à `decorate`, donc les lianes ci-dessous les voient déjà.
 
+    // ── Disques au fond de l'eau (sable, argile, gravier), herbe des marais, glace : étape vanilla
+    // UNDERGROUND_ORES, avant la végétation. ──
+    super::disks::decorate(grid, biome_idx, biome_names, &mut rng);
+
     // ── Lianes (après les arbres) : feature vanilla `vines`, count 127 ──
     decorate_vines(grid, &pal, biome_idx, biome_names, &mut rng);
 
