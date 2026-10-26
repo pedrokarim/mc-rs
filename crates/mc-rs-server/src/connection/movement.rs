@@ -823,9 +823,11 @@ impl Connection {
 
         // Drops sans outil : PMMP `Block::onNearbyBlockChange` → `World::useBreakOn($pos)` sans
         // joueur ni item (`VanillaItems::AIR()`).
-        for drop_item in
-            crate::block_break::drop_stacks(old_block_id, &crate::block_break::HeldTool::hand())
-        {
+        for drop_item in crate::block_break::drop_stacks(
+            old_block_id,
+            &crate::block_break::HeldTool::hand(),
+            &mut rand::thread_rng(),
+        ) {
             self.pending_item_spawns
                 .push(PendingItemEntitySpawn::with_scatter(
                     drop_item,

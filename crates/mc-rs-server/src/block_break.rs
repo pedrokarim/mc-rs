@@ -4,7 +4,12 @@
 //! `getXpDropForTool`, `Tool::getMiningEfficiency`, `Item::onDestroyBlock`, `Durable::applyDamage`.
 //! Données par état de la palette dans `data/block_break.json`, produites par
 //! `scripts/pmmp/export_block_break_data.php` : drops calculés par PMMP lui-même, dureté et outil requis
-//! de BDS (dump d'Allay). Méthode et écarts : `dev-docs/36-CASSAGE-DE-BLOCS.md`.
+//! de BDS (dump d'Allay).
+//!
+//! Les drops viennent d'abord de `data/block_drops_bds.json` : drops observés sur BDS 1.26.52.3 pour
+//! chaque état, avec chaque outil (`scripts/dev/build_bds_drops.py`), tirés selon les fréquences
+//! observées pour les blocs aléatoires. PMMP ne sert plus qu'aux états absents de ce relevé. Méthode et
+//! écarts : `dev-docs/36-CASSAGE-DE-BLOCS.md`.
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -129,6 +134,41 @@ static DATA: LazyLock<RawData> = LazyLock::new(|| {
     data
 });
 
+const BDS_DROPS_JSON: &str = include_str!("../data/block_drops_bds.json");
+
+/// Un résultat observé sur BDS : items rendus par un tirage, et nombre de tirages qui l'ont donné.
+#[derive(Debug, Clone, Deserialize)]
+pub struct BdsOutcome {
+    pub weight: u32,
+    pub items: Vec<DropItem>,
+}
+
+/// Drops observés pour un état, par clé d'outil (`main`, `iron_pickaxe`, `netherite_pickaxe+fortune3`…).
+pub type BdsTable = HashMap<String, Vec<BdsOutcome>>;
+
+#[derive(Deserialize)]
+struct BdsDrops {
+    tables: Vec<BdsTable>,
+    /// Indice de table par runtime ID, -1 sans relevé.
+    states: Vec<i32>,
+}
+
+static BDS_DROPS: LazyLock<BdsDrops> = LazyLock::new(|| {
+    let data: BdsDrops = serde_json::from_str(BDS_DROPS_JSON).expect("block_drops_bds.json valide");
+    assert_eq!(
+        data.states.len(),
+        crate::world::block_registry_data::PALETTE_STATE_COUNT as usize,
+        "block_drops_bds.json ne correspond pas à la palette : refaire le relevé (scripts/dev/build_bds_drops.py)"
+    );
+    data
+});
+
+/// Drops observés sur BDS pour un état, s'il a été relevé.
+pub fn bds_table(runtime_id: u32) -> Option<&'static BdsTable> {
+    let index = *BDS_DROPS.states.get(runtime_id as usize)?;
+    BDS_DROPS.tables.get(usize::try_from(index).ok()?)
+}
+
 /// Données de cassage d'un état (runtime ID de la palette).
 pub fn profile(runtime_id: u32) -> Option<&'static BreakProfile> {
     let index = *DATA.states.get(runtime_id as usize)?;
@@ -146,6 +186,8 @@ pub struct HeldTool {
     pub silk_touch: bool,
     pub fortune: u8,
     pub unbreaking: u8,
+    /// Masse : relevée à part sur BDS (tag `minecraft:is_mace_item_destructible`), absente des outils de PMMP.
+    pub mace: bool,
 }
 
 impl HeldTool {
@@ -163,9 +205,9 @@ impl HeldTool {
         if stack.is_air() {
             return held;
         }
-        if let Some(info) =
-            crate::item_registry::item_name_by_id(stack.id).and_then(|name| DATA.tools.get(name))
-        {
+        let name = crate::item_registry::item_name_by_id(stack.id);
+        held.mace = name == Some("minecraft:mace");
+        if let Some(info) = name.and_then(|name| DATA.tools.get(name)) {
             held.tool_type = info.tool_type;
             held.harvest_level = info.harvest_level;
             held.efficiency_correct = info.efficiency_correct;
@@ -342,13 +384,72 @@ pub fn break_progress_per_tick(profile: &BreakProfile, tool: &HeldTool, miner: &
     progress
 }
 
-/// Drops d'un bloc cassé avec `tool`, en piles réseau. Pour une règle pas encore portée (drops
-/// aléatoires, lus dans la tuile, bloc inconnu de PMMP), repli sur l'ancienne table
-/// `inventory::block_drop`, soumise à la compatibilité de l'outil.
-pub fn drop_stacks(runtime_id: u32, tool: &HeldTool) -> Vec<ItemStack> {
+/// Outil relevé sur BDS qui représente `tool` (clés de `block_drops_bds.json`).
+///
+/// Le relevé couvre la main nue, les pioches de chaque rang, une hache, une pelle, une houe et une épée en
+/// bois (aucun bloc vanilla n'exige un rang pour ces outils), la masse, les cisailles, et Toucher de soie
+/// et Fortune I à III sur une pioche en netherite. L'enchantement ne compte que si l'outil tenu est
+/// compatible avec le bloc : il agit alors comme sur la pioche relevée (BDS applique Toucher de soie et
+/// Fortune quel que soit l'outil, gravier et pelle compris) ; sinon, le bloc rend ce que rend l'outil sans
+/// enchantement.
+pub fn bds_tool_key(profile: &BreakProfile, tool: &HeldTool) -> String {
+    let compatible = profile.is_tool_compatible(tool);
+    if compatible && tool.silk_touch {
+        return "netherite_pickaxe+silk_touch1".to_string();
+    }
+    if compatible && tool.fortune > 0 {
+        return format!("netherite_pickaxe+fortune{}", tool.fortune.min(3));
+    }
+    let key = match tool.tool_type {
+        // Rangs de récolte de PMMP : bois 1, or 2, pierre et cuivre 3, fer 4, diamant 5, netherite 6.
+        tool_type::PICKAXE => match tool.harvest_level {
+            0..=2 => "wooden_pickaxe",
+            3 => "stone_pickaxe",
+            4 => "iron_pickaxe",
+            5 => "diamond_pickaxe",
+            _ => "netherite_pickaxe",
+        },
+        tool_type::AXE => "wooden_axe",
+        tool_type::SHOVEL => "wooden_shovel",
+        tool_type::HOE => "wooden_hoe",
+        tool_type::SWORD => "wooden_sword",
+        tool_type::SHEARS => "shears",
+        _ if tool.mace => "mace",
+        _ => "main",
+    };
+    key.to_string()
+}
+
+/// Tire un résultat selon les fréquences observées sur BDS.
+fn pick_outcome<'a>(outcomes: &'a [BdsOutcome], rng: &mut impl Rng) -> Option<&'a BdsOutcome> {
+    let total: u32 = outcomes.iter().map(|o| o.weight).sum();
+    if total == 0 {
+        return None;
+    }
+    let mut roll = rng.gen_range(0..total);
+    outcomes.iter().find(|o| {
+        if roll < o.weight {
+            return true;
+        }
+        roll -= o.weight;
+        false
+    })
+}
+
+/// Drops d'un bloc cassé avec `tool`, en piles réseau : relevé de BDS d'abord, puis données de PMMP pour
+/// les états non relevés. Pour une règle que PMMP ne fixe pas (drops aléatoires, lus dans la tuile, bloc
+/// inconnu de PMMP), repli sur l'ancienne table `inventory::block_drop`, soumise à la compatibilité de
+/// l'outil.
+pub fn drop_stacks(runtime_id: u32, tool: &HeldTool, rng: &mut impl Rng) -> Vec<ItemStack> {
     let Some(profile) = profile(runtime_id) else {
         return Vec::new();
     };
+    if let Some(outcomes) = bds_table(runtime_id).and_then(|t| t.get(&bds_tool_key(profile, tool)))
+    {
+        return pick_outcome(outcomes, rng)
+            .map(|o| o.items.iter().filter_map(drop_stack).collect())
+            .unwrap_or_default();
+    }
     match profile.drops(tool) {
         DropOutcome::Items(items) => items.iter().filter_map(drop_stack).collect(),
         DropOutcome::Unported if profile.is_tool_compatible(tool) => {
@@ -514,6 +615,121 @@ mod tests {
         assert_eq!(destroy_damage(grass, &tool("minecraft:iron_sword")), 0);
         assert_eq!(destroy_damage(grass, &tool("minecraft:shears")), 1);
         assert_eq!(destroy_damage(stone, &HeldTool::hand()), 0);
+    }
+
+    fn names(stacks: &[ItemStack]) -> Vec<(String, u16)> {
+        stacks
+            .iter()
+            .map(|s| {
+                (
+                    crate::item_registry::item_name_by_id(s.id)
+                        .unwrap()
+                        .to_string(),
+                    s.count,
+                )
+            })
+            .collect()
+    }
+
+    fn bds_drop(name: &str, tool: &HeldTool, seed: u64) -> Vec<(String, u16)> {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+        names(&drop_stacks(BLOCKS.get(name), tool, &mut rng))
+    }
+
+    #[test]
+    fn bds_survey_covers_the_palette() {
+        let covered = (0..crate::world::block_registry_data::PALETTE_STATE_COUNT)
+            .filter(|&id| bds_table(id).is_some())
+            .count();
+        assert!(covered > 20_000, "{covered} états relevés sur BDS");
+    }
+
+    #[test]
+    fn every_bds_drop_resolves_to_an_item() {
+        for table in &BDS_DROPS.tables {
+            for outcomes in table.values() {
+                for drop in outcomes.iter().flat_map(|o| &o.items) {
+                    assert!(
+                        drop_stack(drop).is_some(),
+                        "{} absent du registre",
+                        drop.item
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn bds_drops_follow_the_tool() {
+        assert!(bds_drop("minecraft:stone", &HeldTool::hand(), 1).is_empty());
+        assert_eq!(
+            bds_drop("minecraft:stone", &tool("minecraft:wooden_pickaxe"), 1),
+            vec![("minecraft:cobblestone".to_string(), 1)]
+        );
+        // Minerai de diamant : pioche en fer requise, Toucher de soie inopérant avec un outil trop faible.
+        let mut stone_pickaxe = tool("minecraft:stone_pickaxe");
+        assert!(bds_drop("minecraft:diamond_ore", &stone_pickaxe, 1).is_empty());
+        stone_pickaxe.silk_touch = true;
+        assert!(bds_drop("minecraft:diamond_ore", &stone_pickaxe, 1).is_empty());
+        let mut iron_pickaxe = tool("minecraft:iron_pickaxe");
+        assert_eq!(
+            bds_drop("minecraft:diamond_ore", &iron_pickaxe, 1),
+            vec![("minecraft:diamond".to_string(), 1)]
+        );
+        iron_pickaxe.silk_touch = true;
+        assert_eq!(
+            bds_drop("minecraft:diamond_ore", &iron_pickaxe, 1),
+            vec![("minecraft:diamond_ore".to_string(), 1)]
+        );
+    }
+
+    #[test]
+    fn bds_fortune_multiplies_ore_drops() {
+        let plain = tool("minecraft:iron_pickaxe");
+        let mut fortune = plain;
+        fortune.fortune = 3;
+        let mut counts = std::collections::BTreeSet::new();
+        for seed in 0..200 {
+            assert_eq!(
+                bds_drop("minecraft:coal_ore", &plain, seed),
+                vec![("minecraft:coal".to_string(), 1)]
+            );
+            // BDS fait apparaître une entité par charbon, chacune d'un seul item.
+            let drops = bds_drop("minecraft:coal_ore", &fortune, seed);
+            assert!(drops
+                .iter()
+                .all(|(name, count)| name == "minecraft:coal" && *count == 1));
+            counts.insert(drops.len());
+        }
+        assert_eq!(counts, (1..=4).collect(), "Fortune III : 1 à 4 charbons");
+    }
+
+    #[test]
+    fn bds_gravel_drops_flint_sometimes() {
+        let table = bds_table(BLOCKS.get("minecraft:gravel")).unwrap();
+        let outcomes = &table["main"];
+        let total: u32 = outcomes.iter().map(|o| o.weight).sum();
+        let flint: u32 = outcomes
+            .iter()
+            .filter(|o| o.items.iter().any(|d| d.item == "minecraft:flint"))
+            .map(|o| o.weight)
+            .sum();
+        let share = f64::from(flint) / f64::from(total);
+        assert!((0.04..0.2).contains(&share), "silex : {share} (BDS : 10 %)");
+    }
+
+    #[test]
+    fn bds_candle_states_drop_their_candle_count() {
+        let mut counts = std::collections::BTreeSet::new();
+        // Les 8 états de la bougie rouge (candles 0 à 3, allumée ou non) se suivent dans la palette.
+        let first = BLOCKS.get("minecraft:red_candle");
+        for id in first..first + 8 {
+            let outcomes = &bds_table(id).unwrap()["main"];
+            assert_eq!(outcomes.len(), 1, "bougies : drops déterministes");
+            // Une entité par bougie, comme sur BDS.
+            counts.insert(outcomes[0].items.iter().map(|d| d.count).sum::<u16>());
+        }
+        assert_eq!(counts, (1..=4).collect());
     }
 
     #[test]

@@ -116,8 +116,9 @@ powershell -Command "Get-Process mc-rs-server -ErrorAction SilentlyContinue | St
 - Chunk loading dynamique au déplacement
 - Player data persistence (position sauvegardée en JSON)
 - World persistence (ChunkCache + LevelDB)
-- Cassage de blocs porté de PMMP (outil, vitesse, portée, drops, XP, usure) avec les données de toute la
-  palette ; restent les drops aléatoires et les effets : [`dev-docs/36-CASSAGE-DE-BLOCS.md`](dev-docs/36-CASSAGE-DE-BLOCS.md)
+- Cassage de blocs porté de PMMP (outil, vitesse, portée, XP, usure) ; drops **observés sur BDS** pour
+  20 946 états sur 22 091 (chaque outil, Toucher de soie, Fortune, fréquences des blocs aléatoires), PMMP pour
+  le reste ; restent les drops lus dans la tuile et les effets : [`dev-docs/36-CASSAGE-DE-BLOCS.md`](dev-docs/36-CASSAGE-DE-BLOCS.md)
 - SetActorData avec flags (BREATHING, HAS_GRAVITY, HAS_COLLISION)
 - IA des mobs : framework générique inspiré d'Allay dans `crates/mc-rs-server/src/ai/`
   (sensors → behaviors priorisés → controllers, mémoire typée, navigation A\* au sol).
@@ -155,7 +156,9 @@ powershell -Command "Get-Process mc-rs-server -ErrorAction SilentlyContinue | St
   palettes héritées (migration appliquée à l'ouverture du monde, marqueur LevelDB `mcrs:palette_fingerprint`)
 - Données de cassage (`data/block_break.json`, une entrée par état de la palette) : exportées de PMMP et
   croisées avec BDS par `scripts/pmmp/export_block_break_data.php`, à relancer aussi après tout changement de
-  palette. Détails : [`dev-docs/36-CASSAGE-DE-BLOCS.md`](dev-docs/36-CASSAGE-DE-BLOCS.md)
+  palette. Drops (`data/block_drops_bds.json`) : relevés sur BDS par `bds-capture drops` et
+  `scripts/dev/build_bds_drops.py`, à refaire à chaque changement de palette ou de version de BDS (une
+  vingtaine de minutes). Détails : [`dev-docs/36-CASSAGE-DE-BLOCS.md`](dev-docs/36-CASSAGE-DE-BLOCS.md)
 - Depuis 1.26.50, des blocs vanilla sont « data-driven » : leurs définitions doivent partir dans la liste
   `Block Properties` de StartGame, sinon la palette du client est incomplète et les IDs décalés
 - Protocole 2168+ (« Cereal ») : optionnels précédés d'un booléen, variantes taguées par un index

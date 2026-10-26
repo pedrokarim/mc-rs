@@ -463,7 +463,7 @@ impl Connection {
         }
 
         let drops = if finite_resources {
-            block_break::drop_stacks(target, &tool)
+            block_break::drop_stacks(target, &tool, &mut rand::thread_rng())
         } else {
             Vec::new()
         };

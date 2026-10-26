@@ -65,6 +65,64 @@ type, niveau de récolte, efficacité adaptée et non adaptée, durabilité.
 effet sur la dureté ni les drops : le script les retire avant de désérialiser, et remet les valeurs par
 défaut du schéma (`none`, 0) sur les items blocs rendus.
 
+## 2 bis. Drops observés sur BDS : `data/block_drops_bds.json`
+
+Depuis le 2026-10-26, les drops viennent d'abord de BDS 1.26.52.3 **en fonctionnement** : chaque état est posé
+par commande, puis BDS calcule lui-même ses drops avec chaque outil (`loot spawn … mine <bloc> mainhand`, sa
+logique de drops sans casse ni durée). PMMP ne sert plus qu'aux états absents de ce relevé. L'XP n'est pas
+relevée (`/loot` ne la produit pas) : elle reste celle de PMMP.
+
+Chaîne (scripts dans `scripts/dev/`, relevés dans `.reference/bds/drops/`, hors git) :
+
+```bash
+python scripts/dev/bds_palette.py          # vérifie les hashes réseau de la palette contre BDS
+python scripts/dev/plan_bds_drops.py --out .reference/bds/drops/plan-states-v3.json
+./scripts/dev/bds_capture/bds-capture.exe drops -bds "$(pwd)/.reference/bds/bedrock-server-1.26.52.3-win/bedrock_server.exe" \
+    -plan .reference/bds/drops/plan-states-v3.json -out .reference/bds/drops/states-v2.jsonl
+python scripts/dev/plan_bds_drops.py --out .reference/bds/drops/plan-random-v3.json --samples 256 \
+    --only .reference/bds/drops/states-v2.jsonl
+./scripts/dev/bds_capture/bds-capture.exe drops … -plan .reference/bds/drops/plan-random-v3.json -out .reference/bds/drops/random-v3.jsonl
+python scripts/dev/build_bds_drops.py --groups .reference/bds/drops/plan-states-v3.groups.json \
+    .reference/bds/drops/states-v2.jsonl .reference/bds/drops/random-v3.jsonl
+```
+
+1. **Plan** (`plan_bds_drops.py`) : les 22 091 états sont regroupés par nom et par propriétés qui peuvent
+   changer les drops ; orientation, connexions, alimentation en redstone, phases d'animation sont ignorées
+   (liste `IGNORED`). 2 049 états représentants, 16 outils : main nue, pioches des 5 rangs, hache, pelle, houe
+   et épée en bois, masse, cisailles, puis Toucher de soie et Fortune I à III sur une pioche en netherite
+   (compatible avec tout bloc). Les blocs techniques (air, liquides, feu, portails, pistons en mouvement)
+   sont écartés.
+2. **Relevé** (`bds-capture drops`, voir son README) : 16 tirages par état et par outil, soit 524 896 tirages
+   en 9 minutes ; puis 256 tirages par outil pour les 148 états des 59 blocs qui se sont montrés aléatoires.
+   Un tirage ne compte que si l'état était en place au tick du tirage.
+3. **Données** (`build_bds_drops.py`) : pour chaque état, la table de son représentant, outil par outil :
+   résultats observés et nombre de tirages. Les items blocs sont rattachés à leur runtime ID par le hash
+   réseau de BDS (FNV-1a du NBT de l'état, `bds_palette.py`, vérifié identique pour les 22 091 états).
+
+Côté serveur, `block_break::drop_stacks` choisit l'outil relevé qui représente l'outil tenu
+(`bds_tool_key`) : pioche selon son rang, autre outil par sa famille, masse, sinon main nue. Toucher de soie et
+Fortune ne comptent que si l'outil est compatible avec le bloc ; ils prennent alors les résultats de la
+pioche en netherite enchantée. Un bloc aléatoire tire un résultat selon les fréquences observées.
+
+Constats :
+
+- BDS fait apparaître **une entité par item** quand un bloc rend plusieurs exemplaires (bougies, charbon avec
+  Fortune) ; mc-rs fait de même.
+- Écarts avec PMMP corrigés par le relevé, entre autres : plantes de deux blocs (tournesol, rosier, lilas,
+  pivoine, plante-amphore) rendues par la moitié basse, dalle de chêne pétrifiée qui rend une dalle de chêne,
+  nombre de faces de la touffe de résine et du lichen lumineux, herbes et fougères hautes aux cisailles (deux
+  herbes ou fougères courtes), œuf de dragon, Fortune III sur le charbon (1 à 4 charbons à 37 / 23 / 20 / 20 %
+  sur 272 tirages, conforme à la formule connue des minerais, 40 / 20 / 20 / 20 % ; ~55 % de 1 chez PMMP).
+  Gravier : silex dans 11,4 % des cas (10 % attendus).
+- Restent sur PMMP (pas de table) : les états que `setblock` refuse (doubles dalles data-driven, chimie,
+  verres durcis, blocs obsolètes : 209 noms, listés dans `<relevé>.rejected.json`), ceux qui ne tiennent pas
+  seuls (moitié haute des portes, cœur de grinçant, soufre puissant), et ceux dont PMMP lit les drops dans la
+  tuile (lits, bannières, boîtes de Shulker, pot de fleurs, cadres, pupitre) : `/loot` ne voit que la tuile
+  par défaut d'un bloc posé par commande.
+
+**À refaire à chaque changement de palette ou de version de BDS** : le test `bds_survey_covers_the_palette` et
+une assertion au chargement signalent un fichier périmé.
+
 ## 3. PMMP ou BDS : décisions
 
 Le script consigne les écarts entre les deux sources dans `pmmp_bds_differences` (dureté, résistance, type
@@ -95,14 +153,16 @@ Tout nouvel écart fait échouer le script tant qu'il n'est pas tranché dans `B
 
 - **Effets par joueur** : `EffectManager` n'est branché sur aucun joueur ; Célérité, Fatigue de minage et
   Puissance du conduit valent 0 dans le calcul (`MinerState`).
-- **Drops aléatoires** (33 classes PMMP : minerais avec Fortune, cultures, feuilles, gravier, herbes,
-  glowstone, melon…) : repli sur l'ancienne table `inventory::block_drop`, soumise à la compatibilité de
-  l'outil. À porter classe par classe.
-- **Drops lus dans la tuile** (bannières, lits, pots de fleurs, cadres, pupitre, boîtes de Shulker) : même
-  repli. Le contenu des conteneurs (`Tile::onBlockDestroyed`) n'est rendu que pour les fourneaux.
-- **261 blocs inconnus de PMMP** (4 739 états : étagères, ruches, pistons, observateurs, distributeurs,
-  sculk, dalles et escaliers data-driven, bois de peuplier, soufre, cinabre…) : dureté et outil de BDS,
-  drops par repli. Sources possibles : Allay (implémentations par bloc), dragonfly.
+- **Drops aléatoires** : tirés selon les fréquences observées sur BDS (§ 2 bis), pas selon la formule de BDS.
+  Les probabilités rares (pomme des feuilles de chêne, 0,5 %) sont mal estimées avec 256 tirages ; la
+  formule exacte serait à lire dans le binaire.
+- **Drops lus dans la tuile** (bannières, lits, pots de fleurs, cadres, pupitre, boîtes de Shulker) : repli
+  sur l'ancienne table `inventory::block_drop`. Le contenu des conteneurs (`Tile::onBlockDestroyed`) n'est
+  rendu que pour les fourneaux.
+- **États sans relevé de BDS** (§ 2 bis) : doubles dalles data-driven (leur table de butin est dans le pack
+  vanilla de BDS, `loot_tables/blocks/`, non encore lue), blocs de chimie, verres durcis, moitiés hautes de
+  portes, cœur de grinçant, soufre puissant : données de PMMP ou repli.
+- **XP** : celle de PMMP, `/loot` ne la produisant pas.
 - **Réactions au clic** (`Block::onAttack` : bloc musical, œuf de dragon, minerai de redstone) : non portées.
 - **Usure** : `durability::apply_damage` range les dégâts dans la méta de l'item, alors que PMMP les écrit
   dans la NBT (`Damage`, méta réseau 0). Chantier à part, à vérifier avec le vrai client.
@@ -114,5 +174,6 @@ Tout nouvel écart fait échouer le script tant qu'il n'est pas tranché dans `B
 ## 5. Tests
 
 `block_break::tests` (temps de cassage, outils, Efficacité, épée, soie, XP des minerais, décisions BDS,
-usure), `item_extra_data::tests`, `liquids::tests::water_states_follow_liquid_depth` (ordre des états
+usure ; drops de BDS : couverture de la palette, items connus du registre, outil et rang, Fortune, silex du
+gravier, nombre de bougies), `item_extra_data::tests`, `liquids::tests::water_states_follow_liquid_depth` (ordre des états
 d'eau vérifié dans la palette), `passive_entities::tests::xp_splits_like_pmmp`.
