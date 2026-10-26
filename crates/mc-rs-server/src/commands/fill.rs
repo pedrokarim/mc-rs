@@ -61,9 +61,12 @@ pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCom
                 invocation.arg(4).unwrap(),
                 invocation.arg(5).unwrap(),
             )?;
-            let block_name = invocation.arg(6).unwrap();
+            // États écrits après une espace (`wheat [growth=7]`) : argument recollé au nom.
+            let (block_name, used) =
+                crate::world::block_state_lookup::join_block_states(&invocation.args, 6).unwrap();
+            let block_name = block_name.as_str();
             let mode = invocation
-                .arg(7)
+                .arg(6 + used)
                 .map(|s| s.to_ascii_lowercase())
                 .unwrap_or_else(|| "replace".to_string());
 

@@ -24,6 +24,8 @@ Champs supportés actuellement :
 - `author` / `authors`
 - `website`
 - `load` (`STARTUP` ou `POSTWORLD`)
+- `enabled` (extension de mc-rs, `true` par défaut) : `false` laisse le plugin de côté au démarrage sans
+  retirer son dossier
 - `prefix`
 - `depend`
 - `softdepend`
@@ -44,6 +46,9 @@ Hooks optionnels :
 API globale disponible :
 
 - `register_command(name, handler)`
+- `run_command(ligne)` : lance une commande du serveur (`/fill`, `/setblock`, `/give`…) au nom de l'expéditeur,
+  après le gestionnaire de commande, dans l'ordre des appels ; une erreur est renvoyée à l'expéditeur. Les
+  commandes d'un plugin ne peuvent pas être lancées ainsi.
 - `log(message)`
 - `warn(message)`
 - `error_log(message)`
@@ -68,7 +73,15 @@ Le `sender` expose :
 - `sender.name`
 - `sender.is_player`
 - `sender.is_op`
+- `sender.x`, `sender.y`, `sender.z` (position, pour un joueur seulement)
 
-### Exemple
+### Exemples
 
-Voir `plugins/example-lua/`.
+- `plugins/example-lua/` : commande, configuration, hooks.
+- `plugins/test-zones/` : `/testzone <zone>` construit devant le joueur un terrain de test (zone `drops` :
+  minerais, plantes, cultures mûres, blocs multiples, outils donnés), `/testzone clear` l'efface,
+  `/testzone list` liste les zones. Une zone = une entrée du tableau `ZONES` de `main.lua`. Se désactive
+  par `enabled: false` dans son `plugin.yml`, se retire en supprimant le dossier.
+
+Les blocs des commandes acceptent leurs états, syntaxe de Bedrock : `minecraft:wheat["growth"=7]` ou
+`minecraft:wheat[growth=7]`.

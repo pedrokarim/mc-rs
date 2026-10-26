@@ -46,7 +46,9 @@ pub(super) fn register(permissions: &mut PermissionRegistry, map: &mut ServerCom
                 pos[1].floor() as i32,
                 pos[2].floor() as i32,
             );
-            let expected_name = invocation.arg(3).unwrap();
+            let (expected_name, _) =
+                crate::world::block_state_lookup::join_block_states(&invocation.args, 3).unwrap();
+            let expected_name = expected_name.as_str();
             let Some(expected_id) = runtime.resolve_block_name(expected_name) else {
                 return Err(CommandDispatchError::Message(format!(
                     "Unknown block: {expected_name}"

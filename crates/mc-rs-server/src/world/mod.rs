@@ -1,6 +1,7 @@
 pub mod biome;
 pub mod block_registry;
 pub mod block_registry_data;
+pub mod block_state_lookup;
 pub mod chunk_cache;
 pub mod chunk_serializer;
 pub mod data_driven_blocks;

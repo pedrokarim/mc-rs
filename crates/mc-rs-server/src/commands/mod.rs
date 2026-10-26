@@ -235,6 +235,11 @@ pub trait ServerCommandRuntime: CommandSender + SoftEnumSource {
     /// Résout un nom de bloc (`minecraft:stone`, `stone`, …) vers son network_id
     /// canonique. Retourne `None` si inconnu.
     fn resolve_block_name(&self, name: &str) -> Option<u32>;
+    /// Lance une autre commande au nom du même expéditeur (`run_command` des plugins). Les commandes
+    /// enregistrées par un plugin sont refusées : le gestionnaire de plugins est déjà verrouillé.
+    fn run_command(&mut self, _line: &str) -> Result<(), String> {
+        Err("commandes imbriquées indisponibles ici".into())
+    }
     /// Pose un bloc et broadcast `UpdateBlock` à tous les joueurs in_game.
     /// Retourne `true` si la valeur du bloc a changé.
     fn set_world_block(&mut self, x: i32, y: i32, z: i32, block_id: u32) -> bool;
@@ -435,6 +440,12 @@ impl ServerCommandMap {
             self.rebuild_name_index();
         }
         removed
+    }
+
+    /// Plugin propriétaire d'une commande (nom ou alias), `None` pour une commande du serveur ou inconnue.
+    pub fn command_owner(&self, label: &str) -> Option<&str> {
+        let index = *self.name_to_index.get(&label.to_ascii_lowercase())?;
+        self.commands[index].definition.owner.as_deref()
     }
 
     pub fn dispatch(
@@ -1874,20 +1885,25 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
         self.server_state.world_seed
     }
 
-    fn resolve_block_name(&self, name: &str) -> Option<u32> {
-        let normalized = if name.contains(':') {
-            name.to_string()
-        } else {
-            format!("minecraft:{}", name)
-        };
-        let id = crate::world::block_registry::BLOCKS.get(&normalized);
-        // BLOCKS.get retourne air pour les inconnus. On vérifie le round-trip
-        // via name_for pour distinguer un "air" légitime d'un "introuvable".
-        if id == crate::world::block_registry::BLOCKS.air && normalized != "minecraft:air" {
-            None
-        } else {
-            Some(id)
+    fn run_command(&mut self, line: &str) -> Result<(), String> {
+        let system = self.command_system;
+        let label = mc_rs_command::parse_command_line(line)
+            .map_err(|error| error.to_string())?
+            .label;
+        if system.map.command_owner(&label).is_some() {
+            return Err(format!(
+                "/{label} appartient à un plugin et ne peut pas être lancée par un plugin"
+            ));
         }
+        system
+            .map
+            .dispatch(self, line)
+            .map_err(|error| error.to_string())
+    }
+
+    /// Nom de bloc, avec ou sans états (`wheat[growth=7]`, cf. `block_state_lookup`).
+    fn resolve_block_name(&self, name: &str) -> Option<u32> {
+        crate::world::block_state_lookup::resolve(name)
     }
 
     fn set_world_block(&mut self, x: i32, y: i32, z: i32, block_id: u32) -> bool {
@@ -2281,8 +2297,10 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
     }
 
     fn plugin_names(&self) -> Vec<String> {
+        // `try_lock` : appelée depuis une commande lancée par un plugin (`run_command`), le gestionnaire est
+        // déjà verrouillé par ce plugin ; attendre le verrou bloquerait le serveur.
         self.plugin_manager
-            .lock()
+            .try_lock()
             .map(|manager| manager.plugin_names())
             .unwrap_or_default()
     }

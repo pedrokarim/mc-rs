@@ -1,0 +1,23 @@
+# Zones de test construites à la demande autour du joueur (/testzone).
+# Désactiver : enabled: false (ou supprimer le dossier). Ajouter une zone : main.lua, tableau ZONES.
+name: TestZones
+version: 1.0.0
+main: main.lua
+api: 1.0.0
+enabled: true
+description: "Zones de test construites à la demande (/testzone)"
+authors: ["mc-rs"]
+load: POSTWORLD
+prefix: "TestZones"
+
+commands:
+  testzone:
+    description: "Construit une zone de test autour du joueur"
+    usage: "/testzone [list | <zone> | clear]"
+    aliases: ["tz"]
+    permission: "testzones.command.testzone"
+
+permissions:
+  testzones.command.testzone:
+    description: "Construire et effacer les zones de test"
+    default: op

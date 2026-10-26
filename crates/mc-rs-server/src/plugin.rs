@@ -155,6 +155,9 @@ pub struct PluginManager {
 #[derive(Debug, Deserialize)]
 struct RawPluginManifest {
     name: String,
+    /// `enabled: false` : plugin ignoré au chargement, sans retirer son dossier (extension de mc-rs).
+    #[serde(default = "default_enabled")]
+    enabled: bool,
     version: String,
     main: String,
     #[serde(deserialize_with = "deserialize_string_or_list")]
@@ -224,6 +227,10 @@ enum PluginAction {
     Broadcast {
         message: String,
     },
+    /// Commande du serveur lancée au nom de l'expéditeur de la commande du plugin (`run_command`).
+    RunCommand {
+        line: String,
+    },
     /// Schedule a Lua callback to fire after `delay_ticks` server ticks.
     Schedule {
         delay_ticks: u64,
@@ -241,6 +248,10 @@ enum PluginLogLevel {
     Info,
     Warn,
     Error,
+}
+
+fn default_enabled() -> bool {
+    true
 }
 
 impl RawPluginManifest {
@@ -364,7 +375,11 @@ impl PluginManager {
             };
 
             match load_plugin_candidate(&manifest_path, &path, &data_root) {
-                Ok(plugin) => {
+                Ok(None) => info!(
+                    "Skipping disabled plugin at {} (enabled: false)",
+                    path.display()
+                ),
+                Ok(Some(plugin)) => {
                     let key = plugin.manifest.name.to_ascii_lowercase();
                     if let std::collections::hash_map::Entry::Vacant(entry) = discovered.entry(key)
                     {
@@ -792,6 +807,18 @@ impl PluginManager {
                         );
                     }
                 }
+                PluginAction::RunCommand { line } => {
+                    if let Some(runtime) = runtime.as_deref_mut() {
+                        if let Err(error) = runtime.run_command(&line) {
+                            runtime.send_feedback(&format!("/{line} : {error}"));
+                        }
+                    } else {
+                        warn!(
+                            "Plugin {} attempted to run /{} outside a command runtime; ignoring it",
+                            entry.manifest.name, line
+                        );
+                    }
+                }
                 PluginAction::Schedule {
                     delay_ticks,
                     callback_key,
@@ -860,7 +887,7 @@ fn load_plugin_candidate(
     manifest_path: &Path,
     root_dir: &Path,
     data_root: &Path,
-) -> Result<LoadedPlugin, String> {
+) -> Result<Option<LoadedPlugin>, String> {
     let raw = fs::read_to_string(manifest_path).map_err(|error| {
         format!(
             "Failed to read plugin manifest at {}: {}",
@@ -868,15 +895,17 @@ fn load_plugin_candidate(
             error
         )
     })?;
-    let manifest = serde_yaml::from_str::<RawPluginManifest>(&raw)
-        .map_err(|error| {
-            format!(
-                "Invalid plugin manifest at {}: {}",
-                manifest_path.display(),
-                error
-            )
-        })?
-        .into_manifest()?;
+    let raw_manifest = serde_yaml::from_str::<RawPluginManifest>(&raw).map_err(|error| {
+        format!(
+            "Invalid plugin manifest at {}: {}",
+            manifest_path.display(),
+            error
+        )
+    })?;
+    if !raw_manifest.enabled {
+        return Ok(None);
+    }
+    let manifest = raw_manifest.into_manifest()?;
 
     let data_dir = data_root.join(sanitize_plugin_dir_name(&manifest.name));
     fs::create_dir_all(&data_dir).map_err(|error| {
@@ -888,14 +917,14 @@ fn load_plugin_candidate(
         )
     })?;
 
-    Ok(LoadedPlugin {
+    Ok(Some(LoadedPlugin {
         manifest,
         root_dir: root_dir.to_path_buf(),
         manifest_path: manifest_path.to_path_buf(),
         data_dir,
         status: PluginStatus::Discovered,
         runtime: None,
-    })
+    }))
 }
 
 fn build_lua_runtime(plugin: &LoadedPlugin) -> Result<Lua, String> {
@@ -962,6 +991,19 @@ fn install_lua_api(lua: &Lua) -> mlua::Result<()> {
             }
             if let Some(old) = host.command_handlers.insert(normalized, key) {
                 lua.remove_registry_value(old)?;
+            }
+            Ok(())
+        })?,
+    )?;
+
+    // Commande du serveur au nom de l'expéditeur, exécutée à la fin du gestionnaire de commande du plugin,
+    // dans l'ordre des appels. Les commandes d'un plugin sont refusées (pas d'appel imbriqué).
+    globals.set(
+        "run_command",
+        lua.create_function(|lua, line: String| {
+            let line = line.trim().trim_start_matches('/').to_string();
+            if !line.is_empty() {
+                push_action(lua, PluginAction::RunCommand { line });
             }
             Ok(())
         })?,
@@ -1128,6 +1170,12 @@ fn create_sender_table(lua: &Lua, runtime: &dyn ServerCommandRuntime) -> mlua::R
     table.set("name", runtime.sender_name())?;
     table.set("is_player", runtime.sender_is_player())?;
     table.set("is_op", runtime.sender_is_op())?;
+    if runtime.sender_is_player() {
+        let [x, y, z] = runtime.sender_position();
+        table.set("x", x)?;
+        table.set("y", y)?;
+        table.set("z", z)?;
+    }
     Ok(table)
 }
 
@@ -1456,6 +1504,8 @@ mod tests {
         feedback: Vec<String>,
         broadcasts: Vec<String>,
         plugin_names: Vec<String>,
+        /// Commandes lancées par `run_command`.
+        commands: Vec<String>,
     }
 
     impl PluginTestRuntime {
@@ -1464,6 +1514,7 @@ mod tests {
                 feedback: Vec::new(),
                 broadcasts: Vec::new(),
                 plugin_names,
+                commands: Vec::new(),
             }
         }
     }
@@ -1503,6 +1554,11 @@ mod tests {
     impl ServerCommandRuntime for PluginTestRuntime {
         fn sender_addr(&self) -> Option<SocketAddr> {
             None
+        }
+
+        fn run_command(&mut self, line: &str) -> Result<(), String> {
+            self.commands.push(line.to_string());
+            Ok(())
         }
 
         fn send_feedback(&mut self, message: &str) {
@@ -2070,6 +2126,123 @@ end)
         manager.disable_all(&mut system);
         assert!(system.map.definition("ping").is_none());
         assert!(manager.plugin_names().is_empty());
+    }
+
+    #[test]
+    fn disabled_plugins_are_not_loaded() {
+        let root = make_temp_dir();
+        let plugins_dir = root.join("plugins");
+        fs::create_dir_all(&plugins_dir).unwrap();
+        write_plugin(
+            &plugins_dir,
+            "Off",
+            "name: Off\nversion: 1.0.0\nmain: main.lua\napi: 1.0.0\nenabled: false",
+            Some("log('jamais chargé')"),
+            None,
+        );
+        write_plugin(
+            &plugins_dir,
+            "On",
+            "name: On\nversion: 1.0.0\nmain: main.lua\napi: 1.0.0",
+            Some("log('chargé')"),
+            None,
+        );
+        let manager = PluginManager::load_from_dir(&plugins_dir);
+        let names: Vec<_> = manager
+            .plugins()
+            .iter()
+            .map(|p| p.manifest.name.clone())
+            .collect();
+        assert_eq!(names, vec!["On".to_string()]);
+    }
+
+    #[test]
+    fn run_command_dispatches_after_the_handler_in_order() {
+        let root = make_temp_dir();
+        let plugins_dir = root.join("plugins");
+        fs::create_dir_all(&plugins_dir).unwrap();
+        write_plugin(
+            &plugins_dir,
+            "Builder",
+            r#"
+name: Builder
+version: 1.0.0
+main: main.lua
+api: 1.0.0
+commands:
+  build:
+    description: "Build"
+"#,
+            Some(
+                r#"
+register_command("build", function(sender)
+  run_command("/fill 0 0 0 1 1 1 minecraft:air")
+  run_command("setblock 0 0 0 minecraft:wheat[growth=7]")
+  run_command("   ")
+  return "fait"
+end)
+"#,
+            ),
+            None,
+        );
+        let mut manager = PluginManager::load_from_dir(&plugins_dir);
+        let mut system = build_command_system();
+        manager.enable_plugins(PluginLoadOrder::PostWorld, &mut system);
+        let invocation = CommandInvocation {
+            original: "/build".to_string(),
+            label: "build".to_string(),
+            command_name: "build".to_string(),
+            args: Vec::new(),
+            raw_args: String::new(),
+        };
+        let mut runtime = PluginTestRuntime::new(manager.plugin_names());
+        manager
+            .execute_command("Builder", "build", &invocation, &mut runtime)
+            .unwrap();
+        assert_eq!(
+            runtime.commands,
+            vec![
+                "fill 0 0 0 1 1 1 minecraft:air".to_string(),
+                "setblock 0 0 0 minecraft:wheat[growth=7]".to_string(),
+            ]
+        );
+        assert_eq!(runtime.feedback, vec!["fait".to_string()]);
+    }
+
+    /// Le plugin des zones de test livré dans `plugins/test-zones/` se charge et liste ses zones.
+    #[test]
+    fn bundled_test_zones_plugin_loads() {
+        let root = make_temp_dir();
+        let plugins_dir = root.join("plugins");
+        fs::create_dir_all(&plugins_dir).unwrap();
+        write_plugin(
+            &plugins_dir,
+            "test-zones",
+            include_str!("../../../plugins/test-zones/plugin.yml"),
+            Some(include_str!("../../../plugins/test-zones/main.lua")),
+            None,
+        );
+        let mut manager = PluginManager::load_from_dir(&plugins_dir);
+        let mut system = build_command_system();
+        manager.register_permissions(&mut system.permissions);
+        manager.enable_plugins(PluginLoadOrder::PostWorld, &mut system);
+        assert!(system.map.definition("testzone").is_some());
+        let invocation = CommandInvocation {
+            original: "/testzone".to_string(),
+            label: "testzone".to_string(),
+            command_name: "testzone".to_string(),
+            args: Vec::new(),
+            raw_args: String::new(),
+        };
+        let mut runtime = PluginTestRuntime::new(manager.plugin_names());
+        manager
+            .execute_command("TestZones", "testzone", &invocation, &mut runtime)
+            .unwrap();
+        assert!(
+            runtime.feedback[0].contains("drops"),
+            "{:?}",
+            runtime.feedback
+        );
     }
 
     fn write_plugin(
