@@ -49,6 +49,11 @@ Voir [`../dev-docs/34-BDS-RETRO-INGENIERIE.md`](../dev-docs/34-BDS-RETRO-INGENIE
 - `dev/build_bds_drops.py --groups <plan>.groups.json <relevé.jsonl>…` : écrit
   `crates/mc-rs-server/data/block_drops_bds.json` (drops de BDS par état). Chaîne complète :
   [`../dev-docs/36-CASSAGE-DE-BLOCS.md`](../dev-docs/36-CASSAGE-DE-BLOCS.md) § 2 bis.
+- `dev/chunk_biomes.py <s2c.jsonl> [--y 64] [--json carte.json] [--ascii]` : biomes des chunks d'une capture
+  décodée (BDS ou mc-rs), comptes par biome et carte `{"cx,cz": [256 biomes]}`.
+- `dev/deepslate_biomes.mjs --deepslate <dossier> --seed <seed> --map <carte.json>` (Node) : biomes de la même
+  zone calculés par deepslate (worldgen Java) avec les données de mc-rs, et comparaison. Parité des biomes :
+  [`../dev-docs/14-WORLD-GENERATION.md`](../dev-docs/14-WORLD-GENERATION.md), « Parité avec BDS ».
 - `dev/bds_pe_index.py` : index des sections, imports et descripteurs RTTI d'un exécutable PE (peu utile sur
   BDS, qui n'a presque pas de RTTI).
 - `dev/ghidra/` : scripts Ghidra pour lire le binaire de BDS (fonctions qui utilisent une chaîne, méthodes

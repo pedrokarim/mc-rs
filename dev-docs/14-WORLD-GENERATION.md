@@ -447,12 +447,15 @@ bruit, noise_settings overworld (avec `surface_rule`), param list de biomes
   `preliminary_surface_level`).
 - `bandlands` : terracotta **uniforme** au lieu des bandes colorées par Y.
 - Terme aléatoire ±0.25 de `surfaceDepth` omis.
-- Parité numérique exacte du bruit vs vanilla **non cross-validée** (à confirmer
-  contre deepslate).
+- Parité du bruit et du climat : ✅ validée contre deepslate et BDS le 2026-10-26
+  (voir « Parité avec BDS » ci-dessous).
 
 **Biomes**
-- Carte de biomes **2D** (répétée verticalement) → passer en **3D** (biomes de
-  grottes : lush_caves, dripstone_caves, deep_dark).
+- Biomes 3D envoyés au client avec **une valeur par sous-chunk** (climat lu au
+  centre de chaque tranche de 16 blocs) ; vanilla résout le climat tous les 4 blocs
+  en hauteur.
+- Frontières propres à Bedrock (3 % des colonnes sur la seed de référence), voir
+  ci-dessous.
 
 **Décoration — alignée sur l'officiel (✅) + reste**
 - ✅ Densités officielles appliquées : **lianes jungle 127** (y64-100),
@@ -483,6 +486,57 @@ bruit, noise_settings overworld (avec `surface_rule`), param list de biomes
 - Structures (villages, donjons, etc.).
 - Spawn `find_spawn_position` utilise encore le calcul legacy (désync possible
   avec le terrain noise).
+
+### Parité avec BDS (placement des biomes)
+
+Mesure du 2026-10-26, seed `4817747595384169343`, BDS 1.26.52.3. Fichiers :
+`.reference/bds/comparisons/biomes-seed-4817747595384169343/` (captures, cartes
+`{"cx,cz": [256 biomes]}` à y = 64).
+
+| Carte | Colonnes identiques |
+|---|---|
+| deepslate 0.26.0 (Java), mêmes données que mc-rs, contre BDS (921 chunks) | 96,96 % |
+| mc-rs avant correction, contre BDS (297 chunks) | 0 % |
+| mc-rs corrigé, contre deepslate (716 chunks) | 100 % |
+| mc-rs corrigé, contre BDS (536 chunks communs) | 99,41 % |
+
+**Le placement des biomes de Bedrock est celui de Java** : mêmes données
+(`data/worldgen`), même algorithme. Les données vanilla Java vendorées sont donc
+les bonnes.
+
+**Cause du 0 %** : `XoroshiroRandom::next_int` (`rng.rs`) prenait les 32 bits de
+poids fort de `next_long`, alors que vanilla (`XoroshiroRandomSource.nextInt()` =
+`(int) nextLong()`) et deepslate prennent ceux de poids faible. Les tables de
+permutation de chaque `ImprovedNoise` étaient fausses, donc tous les bruits, le
+climat, le relief et l'aquifère. Tests : `rng::next_int_takes_low_bits`,
+`climate::climate_matches_deepslate_reference` (les six valeurs de climat en quatre
+points). `Mth.lerp3` suit aussi l'ordre de vanilla depuis (même arrondi).
+
+**Les 3 % restants** sont aux frontières de biomes, surtout le long des rivières :
+BDS y trace des courbes au bloc près, et 5 % de ses cases 4 × 4 ne sont pas
+uniformes, alors que Java avance par cases de 4 blocs. Hypothèses écartées, avec
+deepslate contre BDS :
+
+| Variante | Colonnes identiques |
+|---|---|
+| climat par case 4 × 4 (vanilla) | 96,96 % |
+| climat au centre de la case | 96,89 % |
+| climat exact à chaque bloc | 96,96 % |
+| climat interpolé entre les coins des cases | 97,25 % |
+| « fuzzy zoom » de `BiomeManager` (Java) | 96,61 % |
+| quantification de `Climate.target` (× 10 000, entiers) | 96,98 % |
+| autre altitude d'échantillonnage (y = 48 à 160) | ≤ 96,96 % |
+
+Il reste à trouver le traitement de Bedrock dans BDS (désassemblage). Les écarts
+se trouvent tous à moins de 14 blocs d'une frontière Java ; aucune translation
+globale ne les explique.
+
+**Outils** : `scripts/dev/chunk_biomes.py` (carte des biomes d'une capture
+décodée, BDS ou mc-rs) et `scripts/dev/deepslate_biomes.mjs` (carte de deepslate
+et comparaison ; procédure de compilation de deepslate dans son en-tête). Chaîne :
+`bds-capture capture` (`-stay 120s` contre mc-rs, qui envoie ses chunks plus
+lentement), `bds-capture decode`, `chunk_biomes.py --json`, puis
+`deepslate_biomes.mjs --map`.
 
 ### Validation
 

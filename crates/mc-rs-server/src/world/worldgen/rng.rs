@@ -72,9 +72,12 @@ impl XoroshiroRandom {
         self.next_long() >> (64 - bits)
     }
 
+    /// Les 32 bits de poids FAIBLE du prochain long : vanilla
+    /// `XoroshiroRandomSource.nextInt()` = `(int) nextLong()`, contrairement à `nextFloat`/`nextDouble`
+    /// qui prennent les bits de poids fort.
     #[inline]
     pub fn next_int(&mut self) -> i32 {
-        self.next_bits(32) as u32 as i32
+        self.next_long() as i32
     }
 
     /// `nextInt(bound)` vanilla (Lemire avec rejet), bound > 0.
@@ -174,6 +177,15 @@ mod tests {
         for _ in 0..1000 {
             assert_eq!(a.next_long(), b.next_long());
         }
+    }
+
+    /// `nextInt()` prend les 32 bits de poids faible de `nextLong()` (vanilla, et deepslate :
+    /// `nextLong` = 0xbc971d6b63064af6 pour cette seed). Les prendre en poids fort faussait les tables de
+    /// permutation de tous les bruits, donc tout le climat.
+    #[test]
+    fn next_int_takes_low_bits() {
+        let mut r = XoroshiroRandom::from_seed(4817747595384169343);
+        assert_eq!(r.next_int(), 0x6306_4af6);
     }
 
     #[test]

@@ -476,4 +476,78 @@ mod tests {
             }
         }
     }
+
+    /// Climat de la seed 4817747595384169343 comparé à deepslate 0.26.0 (algorithme Java, mêmes données
+    /// `data/worldgen`, `scripts/dev/deepslate_biomes.mjs`), qui retrouve 97 % des colonnes de biomes envoyées
+    /// par BDS 1.26.52.3 pour cette seed (`.reference/bds/comparisons/biomes-seed-4817747595384169343/`).
+    #[test]
+    fn climate_matches_deepslate_reference() {
+        let router = density::build_overworld(4817747595384169343);
+        let s = ClimateSampler::from_router(&router);
+        let cases: [((i32, i32, i32), [f64; 6]); 4] = [
+            (
+                (0, 64, 0),
+                [
+                    0.24121906954988775,
+                    -0.3257770531611619,
+                    0.11220765987859957,
+                    0.24870194443844812,
+                    0.02759755402803421,
+                    -0.4756049801474585,
+                ],
+            ),
+            (
+                (100, 64, 200),
+                [
+                    0.20013969009778537,
+                    -0.0799287864769489,
+                    0.28501585524340417,
+                    0.2773049092858279,
+                    -0.019512709230184555,
+                    -0.0835534063765904,
+                ],
+            ),
+            (
+                (1000, 64, -500),
+                [
+                    0.360956366464493,
+                    0.008406931758951706,
+                    0.08395525626902946,
+                    0.014747025131320592,
+                    0.17820872366428375,
+                    -0.5145413846705459,
+                ],
+            ),
+            (
+                (-3000, 0, 7000),
+                [
+                    -0.1825570012899824,
+                    0.011949172124735915,
+                    -0.2256034733646918,
+                    -0.039680549860187625,
+                    0.3762499764561653,
+                    0.22583658604487805,
+                ],
+            ),
+        ];
+        // Tolérance : `depth` passe par les splines, calculées en f32 comme vanilla (`spline.rs`) ; deepslate
+        // n'arrondit pas aux mêmes endroits, d'où des écarts de l'ordre de 1e-8 (précision du f32).
+        for ((x, y, z), want) in cases {
+            let got = [
+                &s.temperature,
+                &s.humidity,
+                &s.continentalness,
+                &s.erosion,
+                &s.depth,
+                &s.weirdness,
+            ]
+            .map(|f| f.compute(x, y, z));
+            for (i, (g, w)) in got.iter().zip(want).enumerate() {
+                assert!(
+                    (g - w).abs() < 1e-7,
+                    "({x}, {y}, {z}) dimension {i} : {g} au lieu de {w}"
+                );
+            }
+        }
+    }
 }

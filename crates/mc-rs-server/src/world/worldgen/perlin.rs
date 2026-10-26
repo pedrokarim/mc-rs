@@ -49,10 +49,12 @@ fn lerp3(
     v011: f64,
     v111: f64,
 ) -> f64 {
+    // Ordre de vanilla `Mth.lerp3` (z de deux `lerp2` en x puis y) : même valeur mathématique que
+    // n'importe quel ordre, mais le même arrondi que Java.
     lerp(
-        tx,
-        lerp(ty, lerp(tz, v000, v001), lerp(tz, v010, v011)),
-        lerp(ty, lerp(tz, v100, v101), lerp(tz, v110, v111)),
+        tz,
+        lerp(ty, lerp(tx, v000, v100), lerp(tx, v010, v110)),
+        lerp(ty, lerp(tx, v001, v101), lerp(tx, v011, v111)),
     )
 }
 
