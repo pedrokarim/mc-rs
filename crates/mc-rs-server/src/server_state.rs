@@ -18,8 +18,10 @@ pub struct PersistentServerState {
     pub whitelist_enabled: bool,
     #[serde(default)]
     pub whitelist: BTreeSet<String>,
-    #[serde(default)]
-    pub world_spawn: Option<[f32; 3]>,
+    /// Ancien spawn du monde, commun à tous les mondes : lu seulement pour le signaler, le spawn est désormais
+    /// dans le `level.dat.json` de chaque monde.
+    #[serde(default, rename = "world_spawn", skip_serializing)]
+    pub legacy_world_spawn: Option<[f32; 3]>,
     pub default_gamemode: Option<i32>,
     pub difficulty: Option<i32>,
 }
@@ -31,6 +33,8 @@ pub struct ServerState {
     pub server_motd: String,
     pub world_name: String,
     pub world_seed: u64,
+    /// Spawn du monde chargé (`level.dat.json`), fixé par `/setworldspawn`.
+    pub world_spawn: Option<[f32; 3]>,
     pub max_players: u32,
     /// Scoreboard manager partagé (pour /scoreboard).
     pub scoreboards: Arc<Mutex<crate::scoreboard::ScoreboardManager>>,
@@ -62,6 +66,13 @@ impl ServerState {
             },
             Err(_) => PersistentServerState::default(),
         };
+        if let Some(spawn) = persistent.legacy_world_spawn {
+            warn!(
+                "world_spawn {:?} de {} ignoré : le spawn est désormais propre à chaque monde \
+                 (worlds/<monde>/level.dat.json, champ world_spawn) ; le refixer avec /setworldspawn.",
+                spawn, SERVER_STATE_FILE
+            );
+        }
 
         Self {
             persistent,
@@ -69,6 +80,7 @@ impl ServerState {
             server_motd,
             world_name,
             world_seed,
+            world_spawn: None,
             max_players,
             scoreboards: Arc::new(Mutex::new(crate::scoreboard::ScoreboardManager::default())),
             game_rules: crate::game_rules::GameRules::vanilla_defaults(),

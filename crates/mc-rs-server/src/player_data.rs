@@ -3,10 +3,33 @@ use crate::item_registry;
 use mc_rs_proto::packets::player::{ItemStack, ItemStackWrapper};
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use tracing::{info, warn};
 
+/// Sous-dossier des joueurs dans le dossier d'un monde : chaque monde a ses propres positions, inventaires et
+/// points de réapparition, comme BDS qui les range dans la base du monde.
 const PLAYERS_DIR: &str = "players";
+
+/// Ancien emplacement, commun à tous les mondes (à la racine du serveur), abandonné : un joueur reprenait dans un
+/// monde neuf la position d'un autre monde, souvent dans la roche.
+const LEGACY_PLAYERS_DIR: &str = "players";
+
+/// Dossier des joueurs d'un monde.
+pub fn players_dir(world_dir: &Path) -> PathBuf {
+    world_dir.join(PLAYERS_DIR)
+}
+
+/// Signale l'ancien dossier commun s'il existe encore : il n'est plus lu, et le serveur ne devine pas à quel
+/// monde il appartenait (le déplacer dans `worlds/<monde>/players/`).
+pub fn warn_legacy_players_dir() {
+    if Path::new(LEGACY_PLAYERS_DIR).is_dir() {
+        warn!(
+            "Dossier {LEGACY_PLAYERS_DIR}/ ignoré : les joueurs sont désormais enregistrés par monde, \
+             dans worlds/<monde>/{PLAYERS_DIR}/. Le déplacer dans le monde auquel il appartient."
+        );
+    }
+}
 
 /// Version du format des IDs sauvegardés (items et blocs) :
 /// - 0 (champ absent) : table d'items 1.26.0 + palette de blocs 1.26.20 ;
@@ -245,8 +268,8 @@ impl PlayerSaveData {
 }
 
 /// Load player data from disk. Returns None if no save exists.
-pub fn load_player(xuid: &str) -> Option<PlayerSaveData> {
-    let path = format!("{}/{}.json", PLAYERS_DIR, xuid);
+pub fn load_player(world_dir: &Path, xuid: &str) -> Option<PlayerSaveData> {
+    let path = players_dir(world_dir).join(format!("{xuid}.json"));
     match fs::read_to_string(&path) {
         Ok(content) => match serde_json::from_str::<PlayerSaveData>(&content) {
             Ok(mut data) => {
@@ -261,7 +284,7 @@ pub fn load_player(xuid: &str) -> Option<PlayerSaveData> {
                 Some(data)
             }
             Err(e) => {
-                warn!("Failed to parse player data {}: {}", path, e);
+                warn!("Failed to parse player data {}: {}", path.display(), e);
                 None
             }
         },
@@ -270,9 +293,10 @@ pub fn load_player(xuid: &str) -> Option<PlayerSaveData> {
 }
 
 /// Save player data to disk.
-pub fn save_player(xuid: &str, data: &PlayerSaveData) -> std::io::Result<()> {
-    fs::create_dir_all(PLAYERS_DIR)?;
-    let path = format!("{}/{}.json", PLAYERS_DIR, xuid);
+pub fn save_player(world_dir: &Path, xuid: &str, data: &PlayerSaveData) -> std::io::Result<()> {
+    let dir = players_dir(world_dir);
+    fs::create_dir_all(&dir)?;
+    let path = dir.join(format!("{xuid}.json"));
     let json = serde_json::to_string_pretty(data)?;
     fs::write(&path, json)?;
     info!("Saved player data for XUID {}", xuid);
@@ -282,6 +306,31 @@ pub fn save_player(xuid: &str, data: &PlayerSaveData) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Chaque monde a ses propres fiches : une fiche d'un monde n'est pas lue dans un autre.
+    #[test]
+    fn player_saves_are_per_world() {
+        let root = std::env::temp_dir().join(format!("mc-rs-players-{}", std::process::id()));
+        let (world_a, world_b) = (root.join("a"), root.join("b"));
+        let save = PlayerSaveData::from_runtime(
+            [20.5, 67.0, -35.5],
+            [0.0, 0.0],
+            1,
+            20.0,
+            20.0,
+            [0.5, 65.0, 8.5],
+            0,
+            &PlayerInventory::new(),
+        );
+        save_player(&world_a, "123", &save).unwrap();
+        assert!(world_a.join("players").join("123.json").is_file());
+        assert_eq!(
+            load_player(&world_a, "123").unwrap().position,
+            [20.5, 67.0, -35.5]
+        );
+        assert!(load_player(&world_b, "123").is_none());
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn saved_inventory_round_trips_runtime_data() {

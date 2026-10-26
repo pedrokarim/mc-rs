@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::info;
 
@@ -361,6 +361,12 @@ pub struct ConnectionConfig {
     pub resource_pack_must_accept: bool,
 }
 
+/// Dossier d'un monde : `worlds/<name>`. Tout ce qui appartient au monde y est rangé (chunks, `level.dat.json`,
+/// joueurs), comme BDS range tout dans le dossier du monde.
+pub fn world_dir(world_name: &str) -> PathBuf {
+    Path::new("worlds").join(world_name)
+}
+
 fn default_server() -> ServerSection {
     ServerSection {
         motd: default_motd(),
@@ -607,6 +613,11 @@ impl ServerConfig {
         }
 
         seed
+    }
+
+    /// Dossier du monde configuré (`worlds/<name>`).
+    pub fn world_dir(&self) -> PathBuf {
+        world_dir(&self.world.name)
     }
 
     /// Build a ConnectionConfig from the full server config.

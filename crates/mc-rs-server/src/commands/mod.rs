@@ -1045,7 +1045,11 @@ impl ExecutionContext<'_> {
                     connection.current_dimension,
                     &connection.inventory,
                 );
-                let _ = player_data::save_player(xuid, &save);
+                let _ = player_data::save_player(
+                    &crate::config::world_dir(&self.server_state.world_name),
+                    xuid,
+                    &save,
+                );
             }
         }
     }
@@ -1722,7 +1726,7 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
     }
 
     fn set_world_spawn(&mut self, pos: [f32; 3]) {
-        self.server_state.persistent.world_spawn = Some(pos);
+        self.server_state.world_spawn = Some(pos);
         let block_pos = [
             pos[0].floor() as i32,
             pos[1].floor() as i32,
@@ -1736,14 +1740,17 @@ impl ServerCommandRuntime for ExecutionContext<'_> {
         }
         .encode();
         self.broadcast_compressed(packet_id::SET_SPAWN_POSITION, &packet);
-        let _ = self.server_state.save();
+        let world_dir = crate::config::world_dir(&self.server_state.world_name);
+        if let Err(e) = crate::level_dat::LevelData::save_world_spawn(&world_dir, Some(pos)) {
+            tracing::warn!(
+                "Spawn du monde non enregistré dans {} : {e}",
+                world_dir.display()
+            );
+        }
     }
 
     fn world_spawn(&self) -> [f32; 3] {
-        self.server_state
-            .persistent
-            .world_spawn
-            .unwrap_or([0.5, 64.0, 0.5])
+        self.server_state.world_spawn.unwrap_or([0.5, 64.0, 0.5])
     }
 
     fn op(&mut self, name: &str) {

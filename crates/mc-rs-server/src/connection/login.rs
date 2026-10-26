@@ -75,7 +75,10 @@ impl Connection {
                 }
                 // Load saved player data if exists
                 if let Some(ref xuid) = self.xuid {
-                    if let Some(save) = player_data::load_player(xuid) {
+                    if let Some(save) = player_data::load_player(
+                        &crate::config::world_dir(&self.config.world_name),
+                        xuid,
+                    ) {
                         self.position = [
                             save.position[0] as f32,
                             save.position[1] as f32,

@@ -1097,7 +1097,8 @@ async fn main() {
 
     info!("MC-RS Server starting...");
     bootstrap_notes.flush();
-    let world_dir = std::path::Path::new("worlds").join(&config.world.name);
+    let world_dir = config.world_dir();
+    crate::player_data::warn_legacy_players_dir();
     let world_seed = config.resolve_world_seed(&world_dir);
     let conn_config = config.connection_config(world_seed);
     let mut server_state = ServerState::load(
@@ -1292,6 +1293,7 @@ async fn main() {
 
     // Restore level.dat metadata si présent (sinon reste sur défauts).
     if let Some(level) = crate::level_dat::LevelData::load(&world_dir) {
+        server_state.world_spawn = level.world_spawn;
         world_state.time = level.time;
         world_state.is_raining = level.is_raining;
         world_state.is_thundering = level.is_thundering;
@@ -1488,9 +1490,7 @@ async fn main() {
                 seed: world_seed,
                 generator: config.world.generator.clone(),
                 time: world_state.time,
-                spawn_x: 0.5,
-                spawn_y: 64.0,
-                spawn_z: 0.5,
+                world_spawn: server_state.world_spawn,
                 do_daylight_cycle: world_state.do_daylight_cycle,
                 do_weather_cycle: world_state.do_weather_cycle,
                 is_raining: world_state.is_raining,
@@ -1519,7 +1519,7 @@ async fn main() {
                         conn.current_dimension,
                         &conn.inventory,
                     );
-                    let _ = player_data::save_player(xuid, &save);
+                    let _ = player_data::save_player(&world_dir, xuid, &save);
                 }
             }
             info!("World and player data saved.");
@@ -1543,7 +1543,7 @@ async fn main() {
                         Arc::clone(&server_keypair),
                         worlds.clone(),
                         Arc::clone(&conn_config),
-                        server_state.persistent.world_spawn,
+                        server_state.world_spawn,
                         server_state.effective_default_gamemode(conn_config.default_gamemode),
                         server_state.effective_difficulty(conn_config.difficulty),
                         server_state.game_rules.clone(),
@@ -4125,7 +4125,11 @@ fn process_peer_events(
                                 conn.current_dimension,
                                 &conn.inventory,
                             );
-                            if let Err(e) = player_data::save_player(xuid, &save_data) {
+                            if let Err(e) = player_data::save_player(
+                                &crate::config::world_dir(&server_state.world_name),
+                                xuid,
+                                &save_data,
+                            ) {
                                 warn!("Failed to save player data: {}", e);
                             }
                         }

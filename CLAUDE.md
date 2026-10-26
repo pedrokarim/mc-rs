@@ -39,7 +39,7 @@ crates/
     ├── main.rs       — Boucle événementielle tokio, player registry, broadcasts
     ├── connection.rs — State machine (SessionStart→Login→Handshake→ResourcePacks→PreSpawn→SpawnResponse→InGame)
     ├── config.rs     — server.toml (motd, port, gamemode, difficulty, view_distance)
-    ├── player_data.rs— Sauvegarde/chargement position joueur (JSON dans players/)
+    ├── player_data.rs— Sauvegarde/chargement joueur, par monde (JSON dans worlds/<monde>/players/)
     ├── player_registry.rs — Tracking des joueurs connectés
     └── world/
         ├── chunk_cache.rs      — Cache mémoire + LevelDB persistence
@@ -70,7 +70,8 @@ crates/
   `plugins/` et `resource_packs/` (il ne peut pas aller dans ce dernier : chaque dossier y est chargé
   comme un pack).
 - Rien de nouveau à la racine : un script va dans `scripts/`, une note dans `dev-docs/`. Les fichiers
-  runtime (`server-state.json`, `webui.db`, `worlds/`, `players/`, `logs/`) sont ignorés par git.
+  runtime (`server-state.json`, `webui.db`, `worlds/`, `logs/`) sont ignorés par git. Tout ce qui
+  appartient à un monde (chunks, `level.dat.json` avec le spawn du monde, joueurs) est dans `worlds/<monde>/`.
 
 ## Code legacy (supprimé)
 
