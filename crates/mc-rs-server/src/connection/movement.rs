@@ -666,6 +666,9 @@ impl Connection {
 
         // Le TARGET doit être replaceable (air ou autre) pour accepter le
         // placement. Sinon on abort (empêche les doubles blocs).
+        // Waterlogging (BDS) : un bloc qui peut contenir de l'eau, posé dans une source d'eau ou à la
+        // place d'un bloc gorgé d'eau, la garde dans la seconde couche ; sinon l'eau disparaît.
+        let mut liquid_change = None;
         if let Ok(mut cache) = self.chunk_cache.lock() {
             let existing_id = cache.get_block(tx, ty, tz);
             let existing_name = BLOCKS.name_for(existing_id).unwrap_or("");
@@ -676,9 +679,22 @@ impl Connection {
                 );
                 return;
             }
+            let liquid_before = cache.get_liquid(tx, ty, tz);
+            let source = if crate::block_liquid::is_water_source(existing_id) {
+                existing_id
+            } else {
+                liquid_before
+            };
             cache.set_block(tx, ty, tz, block_runtime_id);
             // set_block marque déjà le chunk dirty → autosave. PAS de
             // save_chunk_now (flush LevelDB synchrone sous guard = gel).
+            if source != BLOCKS.air && crate::block_liquid::can_contain_liquid(block_runtime_id) {
+                cache.set_liquid(tx, ty, tz, source);
+            }
+            let liquid_after = cache.get_liquid(tx, ty, tz);
+            if liquid_after != liquid_before {
+                liquid_change = Some(liquid_after);
+            }
         }
 
         // Send UpdateBlock
@@ -692,6 +708,9 @@ impl Connection {
         responses.push(self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &update_payload));
         self.broadcasts
             .push((packet_id::UPDATE_BLOCK, update_payload));
+        if let Some(liquid) = liquid_change {
+            self.broadcast_block_layer([tx, ty, tz], liquid, 1, responses);
+        }
 
         // Send place sound
         let block_center = [tx as f32 + 0.5, ty as f32 + 0.5, tz as f32 + 0.5];
@@ -790,26 +809,14 @@ impl Connection {
             if old == air_id {
                 return;
             }
-            cache.set_block(bx, by, bz, air_id);
-            // set_block marque déjà le chunk dirty → autosave. PAS de
-            // save_chunk_now (flush LevelDB synchrone sous guard = gel).
             old
         } else {
             return;
         };
+        // Le bloc disparaît ; une plante immergée (herbe marine, algue…) laisse son eau.
+        self.break_block_and_broadcast([bx, by, bz], responses);
 
         let block_center = [bx as f32 + 0.5, by as f32 + 0.5, bz as f32 + 0.5];
-
-        let update = UpdateBlock {
-            position: [bx, by, bz],
-            runtime_id: air_id,
-            flags: 3,
-            layer: 0,
-        };
-        let update_payload = update.encode();
-        responses.push(self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &update_payload));
-        self.broadcasts
-            .push((packet_id::UPDATE_BLOCK, update_payload));
 
         let particle = LevelEvent {
             event_id: LevelEvent::PARTICLE_DESTROY,

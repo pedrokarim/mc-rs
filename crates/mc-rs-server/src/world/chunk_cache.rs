@@ -411,10 +411,80 @@ impl ChunkCache {
             chunk.sub_chunk_count = sub_idx as u32 + 1;
         }
 
-        chunk.sub_chunks[sub_idx].set_block(local_x, local_y, local_z, runtime_id);
+        let sub = &mut chunk.sub_chunks[sub_idx];
+        sub.set_block(local_x, local_y, local_z, runtime_id);
+        // Un bloc qui ne peut pas contenir d'eau perd celle de la seconde couche (BDS). L'air, que BDS
+        // déclare capable d'en contenir, la perd aussi : un bloc retiré qui doit laisser son eau passe
+        // par `break_block`.
+        if runtime_id == BLOCKS.air || !crate::block_liquid::can_contain_liquid(runtime_id) {
+            sub.set_liquid(local_x, local_y, local_z, BLOCKS.air);
+        }
         chunk.payload_dirty = true;
         chunk.cached_zlib_batch = None;
         self.dirty.insert((cx, cz));
+    }
+
+    /// Retire le bloc d'une position : il reste la source d'eau qu'il contenait (waterlogging, comme BDS),
+    /// sinon de l'air. Renvoie le bloc restant ; la seconde couche est vidée.
+    pub fn break_block(&mut self, world_x: i32, world_y: i32, world_z: i32) -> u32 {
+        let left = self.get_liquid(world_x, world_y, world_z);
+        self.set_block(world_x, world_y, world_z, left);
+        self.set_liquid(world_x, world_y, world_z, BLOCKS.air);
+        left
+    }
+
+    /// Liquide de la seconde couche (eau d'un bloc waterlogged) aux coordonnées monde ; air sinon.
+    pub fn get_liquid(&mut self, world_x: i32, world_y: i32, world_z: i32) -> u32 {
+        let Some((cx, cz, sub_idx, lx, ly, lz)) = self.locate(world_x, world_y, world_z) else {
+            return BLOCKS.air;
+        };
+        self.ensure_chunk_loaded(cx, cz);
+        let chunk = self.chunks.get(&(cx, cz)).unwrap();
+        chunk
+            .sub_chunks
+            .get(sub_idx)
+            .map_or(BLOCKS.air, |sub| sub.get_liquid(lx, ly, lz))
+    }
+
+    /// Fixe le liquide de la seconde couche aux coordonnées monde (air pour l'enlever).
+    pub fn set_liquid(&mut self, world_x: i32, world_y: i32, world_z: i32, runtime_id: u32) {
+        let Some((cx, cz, sub_idx, lx, ly, lz)) = self.locate(world_x, world_y, world_z) else {
+            return;
+        };
+        self.ensure_chunk_loaded(cx, cz);
+        let chunk = self.chunks.get_mut(&(cx, cz)).unwrap();
+        while chunk.sub_chunks.len() <= sub_idx {
+            chunk.sub_chunks.push(SubChunk::new_air(BLOCKS.air));
+        }
+        if sub_idx as u32 >= chunk.sub_chunk_count {
+            chunk.sub_chunk_count = sub_idx as u32 + 1;
+        }
+        chunk.sub_chunks[sub_idx].set_liquid(lx, ly, lz, runtime_id);
+        chunk.payload_dirty = true;
+        chunk.cached_zlib_batch = None;
+        self.dirty.insert((cx, cz));
+    }
+
+    /// Chunk, sous-chunk et coordonnées locales d'une position monde ; `None` hors des bornes Y.
+    fn locate(
+        &self,
+        world_x: i32,
+        world_y: i32,
+        world_z: i32,
+    ) -> Option<(i32, i32, usize, usize, usize, usize)> {
+        let (min_y, height) = self.y_bounds();
+        let offset = world_y - min_y;
+        if !(0..height).contains(&offset) {
+            return None;
+        }
+        Some((
+            world_x.div_euclid(16),
+            world_z.div_euclid(16),
+            offset as usize / 16,
+            world_x.rem_euclid(16) as usize,
+            offset as usize % 16,
+            world_z.rem_euclid(16) as usize,
+        ))
     }
 
     /// Récupère et **consomme** le butin du block entity (coffre) à `(wx,wy,wz)` :
@@ -531,6 +601,26 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::*;
+
+    /// Waterlogging (BDS) : un bloc gorgé d'eau cassé laisse sa source ; un bloc qui ne peut pas contenir
+    /// d'eau perd celle de la seconde couche.
+    #[test]
+    fn waterlogged_block_leaves_water_when_broken() {
+        let mut cache = ChunkCache::new(&temp_world_dir("waterlog"), 1, "flat");
+        let stairs = BLOCKS.get("minecraft:oak_stairs");
+        cache.set_block(1, 70, 1, stairs);
+        cache.set_liquid(1, 70, 1, BLOCKS.water);
+        assert_eq!(cache.get_liquid(1, 70, 1), BLOCKS.water);
+        assert_eq!(cache.break_block(1, 70, 1), BLOCKS.water);
+        assert_eq!(cache.get_block(1, 70, 1), BLOCKS.water);
+        assert_eq!(cache.get_liquid(1, 70, 1), BLOCKS.air);
+
+        cache.set_block(2, 70, 2, stairs);
+        cache.set_liquid(2, 70, 2, BLOCKS.water);
+        cache.set_block(2, 70, 2, BLOCKS.stone);
+        assert_eq!(cache.get_liquid(2, 70, 2), BLOCKS.air);
+        assert_eq!(cache.break_block(2, 70, 2), BLOCKS.air);
+    }
 
     fn temp_world_dir(name: &str) -> PathBuf {
         let unique = SystemTime::now()

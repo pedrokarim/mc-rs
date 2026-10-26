@@ -113,6 +113,7 @@ pub mod block_entities;
 pub mod block_entities_map;
 #[allow(dead_code)]
 pub mod block_light_update;
+pub mod block_liquid;
 #[allow(dead_code)]
 pub mod block_states;
 #[allow(dead_code)]
@@ -987,8 +988,6 @@ pub mod warden;
 #[allow(dead_code)]
 pub mod watchdog;
 pub mod water_physics;
-#[allow(dead_code)]
-pub mod waterlogging;
 #[allow(dead_code)]
 pub mod weapon_stats;
 #[allow(dead_code)]

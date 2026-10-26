@@ -322,15 +322,20 @@ fn bits_for_palette(palette_size: usize) -> u8 {
 
 /// A sub-chunk storing 16x16x16 blocks as actual runtime IDs.
 /// Index = (x << 8) | (z << 4) | y
+///
+/// Deux couches, comme Bedrock : `blocks` (blocs) et `liquid`, l'eau d'un bloc qui en contient
+/// (waterlogging : herbe marine, escalier immergé…), absente tant qu'aucun bloc n'en porte.
 #[derive(Clone)]
 pub struct SubChunk {
     pub blocks: [u32; 4096],
+    pub liquid: Option<Box<[u32; 4096]>>,
 }
 
 impl SubChunk {
     pub fn new_air(air_id: u32) -> Self {
         Self {
             blocks: [air_id; 4096],
+            liquid: None,
         }
     }
 
@@ -344,28 +349,102 @@ impl SubChunk {
         self.blocks[(x << 8) | (z << 4) | y] = runtime_id;
     }
 
-    /// Serialize this sub-chunk to network format.
-    pub fn serialize(&self) -> Vec<u8> {
-        // Build palette from blocks
-        let mut palette: Vec<u32> = Vec::new();
-        let mut palette_indices = [0u32; 4096];
-
-        for (i, &block) in self.blocks.iter().enumerate() {
-            let idx = if let Some(pos) = palette.iter().position(|&b| b == block) {
-                pos as u32
-            } else {
-                palette.push(block);
-                (palette.len() - 1) as u32
-            };
-            palette_indices[i] = idx;
+    /// Liquide (seconde couche) aux coordonnées locales ; air s'il n'y en a pas.
+    pub fn get_liquid(&self, x: usize, y: usize, z: usize) -> u32 {
+        match &self.liquid {
+            Some(layer) => layer[(x << 8) | (z << 4) | y],
+            None => super::block_registry::BLOCKS.air,
         }
+    }
 
-        serialize_sub_chunk(&palette_indices, &palette)
+    /// Fixe le liquide (seconde couche) aux coordonnées locales.
+    pub fn set_liquid(&mut self, x: usize, y: usize, z: usize, runtime_id: u32) {
+        let air = super::block_registry::BLOCKS.air;
+        if self.liquid.is_none() && runtime_id == air {
+            return;
+        }
+        let layer = self.liquid.get_or_insert_with(|| Box::new([air; 4096]));
+        layer[(x << 8) | (z << 4) | y] = runtime_id;
+    }
+
+    /// Serialize this sub-chunk to network format (seconde couche seulement si un bloc porte du liquide).
+    pub fn serialize(&self) -> Vec<u8> {
+        let air = super::block_registry::BLOCKS.air;
+        let liquid = self
+            .liquid
+            .as_deref()
+            .filter(|layer| layer.iter().any(|&b| b != air));
+        let mut w = ProtoWriter::with_capacity(512);
+        w.write_u8(8); // version
+        w.write_u8(if liquid.is_some() { 2 } else { 1 });
+        for layer in std::iter::once(&self.blocks).chain(liquid) {
+            let (indices, palette) = palettize(layer);
+            serialize_paletted_storage(&mut w, &indices, &palette);
+        }
+        w.into_bytes()
     }
 }
 
+/// Palette d'une couche et indices de ses 4 096 cases.
+fn palettize(layer: &[u32; 4096]) -> ([u32; 4096], Vec<u32>) {
+    let mut palette: Vec<u32> = Vec::new();
+    let mut indices = [0u32; 4096];
+    for (i, &block) in layer.iter().enumerate() {
+        indices[i] = match palette.iter().position(|&b| b == block) {
+            Some(pos) => pos as u32,
+            None => {
+                palette.push(block);
+                (palette.len() - 1) as u32
+            }
+        };
+    }
+    (indices, palette)
+}
+
+/// Lit une couche palettisée de 4 096 cases (runtime IDs).
+fn read_storage(reader: &mut ProtoReader, air_id: u32) -> Option<[u32; 4096]> {
+    let mut blocks = [air_id; 4096];
+    let header = reader.read_u8().ok()?;
+    let bits_per_block = header >> 1;
+    if bits_per_block == 0 {
+        // Single-value palette
+        let value = reader.read_var_i32().ok()? as u32;
+        blocks.fill(value);
+        return Some(blocks);
+    }
+    let blocks_per_word = 32 / bits_per_block as usize;
+    let word_count = 4096usize.div_ceil(blocks_per_word);
+    let mask = (1u32 << bits_per_block) - 1;
+
+    let mut palette_indices = [0u32; 4096];
+    for word_idx in 0..word_count {
+        let word = reader.read_u32_le().ok()?;
+        for bit_idx in 0..blocks_per_word {
+            let block_idx = word_idx * blocks_per_word + bit_idx;
+            if block_idx >= 4096 {
+                break;
+            }
+            palette_indices[block_idx] = (word >> (bit_idx * bits_per_block as usize)) & mask;
+        }
+    }
+
+    let palette_count = reader.read_var_i32().ok()? as usize;
+    let mut palette = Vec::with_capacity(palette_count);
+    for _ in 0..palette_count {
+        palette.push(reader.read_var_i32().ok()? as u32);
+    }
+    for i in 0..4096 {
+        blocks[i] = palette
+            .get(palette_indices[i] as usize)
+            .copied()
+            .unwrap_or(air_id);
+    }
+    Some(blocks)
+}
+
 /// Deserialize a single sub-chunk from network bytes.
-/// Returns (SubChunk, bytes_consumed).
+/// Returns (SubChunk, bytes_consumed). Première couche = blocs, seconde = liquide ; les couches
+/// suivantes éventuelles sont lues et ignorées (pour rester aligné sur le sous-chunk suivant).
 pub fn deserialize_sub_chunk_data(data: &[u8]) -> Option<(SubChunk, usize)> {
     if data.len() < 2 {
         return None;
@@ -379,56 +458,17 @@ pub fn deserialize_sub_chunk_data(data: &[u8]) -> Option<(SubChunk, usize)> {
 
     let storage_count = reader.read_u8().ok()?;
     let air_id = super::block_registry::BLOCKS.air;
-    let mut blocks = [air_id; 4096];
-
-    if storage_count > 0 {
-        let header = reader.read_u8().ok()?;
-        let bits_per_block = header >> 1;
-
-        if bits_per_block == 0 {
-            // Single-value palette
-            let value = reader.read_var_i32().ok()? as u32;
-            blocks.fill(value);
-        } else {
-            // Read word array
-            let blocks_per_word = 32 / bits_per_block as usize;
-            let word_count = 4096usize.div_ceil(blocks_per_word);
-            let mask = (1u32 << bits_per_block) - 1;
-
-            let mut palette_indices = [0u32; 4096];
-            for word_idx in 0..word_count {
-                let word = reader.read_u32_le().ok()?;
-                for bit_idx in 0..blocks_per_word {
-                    let block_idx = word_idx * blocks_per_word + bit_idx;
-                    if block_idx >= 4096 {
-                        break;
-                    }
-                    palette_indices[block_idx] =
-                        (word >> (bit_idx * bits_per_block as usize)) & mask;
-                }
-            }
-
-            // Read palette
-            let palette_count = reader.read_var_i32().ok()? as usize;
-            let mut palette = Vec::with_capacity(palette_count);
-            for _ in 0..palette_count {
-                palette.push(reader.read_var_i32().ok()? as u32);
-            }
-
-            // Convert palette indices to runtime IDs
-            for i in 0..4096 {
-                let idx = palette_indices[i] as usize;
-                blocks[i] = if idx < palette.len() {
-                    palette[idx]
-                } else {
-                    air_id
-                };
-            }
+    let mut sub = SubChunk::new_air(air_id);
+    for layer in 0..storage_count {
+        let blocks = read_storage(&mut reader, air_id)?;
+        match layer {
+            0 => sub.blocks = blocks,
+            1 if blocks.iter().any(|&b| b != air_id) => sub.liquid = Some(Box::new(blocks)),
+            _ => {}
         }
-        // Only use the first storage layer (main blocks)
     }
 
-    Some((SubChunk { blocks }, reader.position()))
+    Some((sub, reader.position()))
 }
 
 /// Réécrit les entrées de palette d'un sous-chunk sérialisé (format réseau
@@ -584,6 +624,32 @@ mod tests {
         let data = serialize_biome_sections_from_columns(&biome_ids, 24);
         assert!(!data.is_empty());
         assert!(data.len() >= 24 * 2);
+    }
+
+    /// Sous-chunk avec herbe marine gorgée d'eau : deux couches à l'écriture, relues à l'identique, et le
+    /// sous-chunk suivant reste lisible (le décodeur consomme toutes les couches).
+    #[test]
+    fn liquid_layer_round_trips() {
+        use super::super::block_registry::BLOCKS;
+        let mut sub = SubChunk::new_air(BLOCKS.air);
+        sub.set_block(3, 4, 5, BLOCKS.get("minecraft:seagrass"));
+        sub.set_liquid(3, 4, 5, BLOCKS.water);
+        let mut data = sub.serialize();
+        assert_eq!(data[1], 2, "deux couches");
+        let mut next = SubChunk::new_air(BLOCKS.air);
+        next.set_block(0, 0, 0, BLOCKS.stone);
+        data.extend_from_slice(&next.serialize());
+
+        let (read, consumed) = deserialize_sub_chunk_data(&data).unwrap();
+        assert_eq!(read.get_block(3, 4, 5), BLOCKS.get("minecraft:seagrass"));
+        assert_eq!(read.get_liquid(3, 4, 5), BLOCKS.water);
+        assert_eq!(read.get_liquid(0, 0, 0), BLOCKS.air);
+        let (read_next, _) = deserialize_sub_chunk_data(&data[consumed..]).unwrap();
+        assert_eq!(read_next.get_block(0, 0, 0), BLOCKS.stone);
+        assert!(read_next.liquid.is_none());
+
+        // Sans eau, une seule couche.
+        assert_eq!(next.serialize()[1], 1);
     }
 
     #[test]

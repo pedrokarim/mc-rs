@@ -263,19 +263,19 @@ fn density_at(corners: &[[[f64; NX]; NY]; NX], lx: usize, wy: i32, lz: usize) ->
 /// Retourne `(sub_chunk_count, payload réseau)` — même contrat que
 /// `terrain_generator::generate_terrain_chunk`.
 pub fn generate_noise_chunk(chunk_x: i32, chunk_z: i32, seed: u64) -> (u32, Vec<u8>) {
-    let (grid, biome3d) = generate_chunk_grid(chunk_x, chunk_z, seed);
-    serialize_chunk(&grid, &biome3d)
+    let (grid, biome3d, waterlogged) = generate_chunk_grid(chunk_x, chunk_z, seed);
+    serialize_chunk(&grid, &biome3d, &waterlogged)
 }
+
+/// Grille de blocs d'un chunk (`grid_index`), biomes 3D par sous-chunk et blocs gorgés d'eau.
+pub(crate) type ChunkGrid = (Box<[u32]>, Vec<[[u16; 4]; 4]>, Box<[bool]>);
 
 /// Construit la grille de blocs pleine hauteur d'un chunk (terrain + aquifères +
 /// biomes + surface rules + minerais + arbres cross-chunk + décoration) et la
-/// carte de biomes 3D. Séparé de la sérialisation pour pouvoir l'inspecter (tests
-/// / diagnostics).
-pub(crate) fn generate_chunk_grid(
-    chunk_x: i32,
-    chunk_z: i32,
-    seed: u64,
-) -> (Box<[u32]>, Vec<[[u16; 4]; 4]>) {
+/// carte de biomes 3D, et les blocs gorgés d'eau (même index que la grille : bloc posé dans de l'eau par la
+/// décoration et capable de la garder, comme l'herbe marine ; l'eau va dans la seconde couche du
+/// sous-chunk). Séparé de la sérialisation pour pouvoir l'inspecter (tests / diagnostics).
+pub(crate) fn generate_chunk_grid(chunk_x: i32, chunk_z: i32, seed: u64) -> ChunkGrid {
     let base_x = chunk_x * 16;
     let base_z = chunk_z * 16;
 
@@ -326,6 +326,9 @@ pub(crate) fn generate_chunk_grid(
             }
         }
     }
+
+    // Eau après le remplissage : un bloc posé ensuite à sa place la garde s'il le peut (waterlogging).
+    let water_before: Box<[bool]> = grid.iter().map(|&b| b == BLOCKS.water).collect();
 
     // 2a) Biome de SURFACE (2D) : échantillonné à la surface de chaque colonne.
     // Utilisé par les surface rules et la déco de surface. (`BIOMES` = static
@@ -495,15 +498,48 @@ pub(crate) fn generate_chunk_grid(
         &biome3d,
     );
 
-    (grid, biome3d)
+    let waterlogged: Box<[bool]> = grid
+        .iter()
+        .zip(water_before.iter())
+        .map(|(&b, &was_water)| {
+            was_water && b != BLOCKS.water && crate::block_liquid::can_contain_liquid(b)
+        })
+        .collect();
+
+    (grid, biome3d, waterlogged)
 }
 
 /// Sérialise une grille + biomes 3D au format réseau sub-chunk de Bedrock.
-fn serialize_chunk(grid: &[u32], biome3d: &[[[u16; 4]; 4]]) -> (u32, Vec<u8>) {
+fn serialize_chunk(
+    grid: &[u32],
+    biome3d: &[[[u16; 4]; 4]],
+    waterlogged: &[bool],
+) -> (u32, Vec<u8>) {
     // 5) Sérialisation sub-chunk par sub-chunk.
     let mut payload = Vec::with_capacity(16384);
     for sub_idx in 0..SUB_CHUNK_COUNT {
         let sub_y_start = MIN_Y + sub_idx as i32 * 16;
+
+        // Sous-chunk avec des blocs gorgés d'eau : seconde couche (eau) en plus des blocs.
+        let wet = |lx: usize, ly: usize, lz: usize| {
+            waterlogged[grid_index(lx, sub_y_start + ly as i32, lz)]
+        };
+        if (0..16).any(|lx| (0..16).any(|lz| (0..16).any(|ly| wet(lx, ly, lz)))) {
+            let mut sub = chunk_serializer::SubChunk::new_air(BLOCKS.air);
+            for lx in 0..16usize {
+                for lz in 0..16usize {
+                    for ly in 0..16usize {
+                        let wy = sub_y_start + ly as i32;
+                        sub.set_block(lx, ly, lz, grid[grid_index(lx, wy, lz)]);
+                        if wet(lx, ly, lz) {
+                            sub.set_liquid(lx, ly, lz, BLOCKS.water);
+                        }
+                    }
+                }
+            }
+            payload.extend_from_slice(&sub.serialize());
+            continue;
+        }
 
         let mut blocks = [0u32; 4096];
         let mut palette = vec![BLOCKS.air];
@@ -575,7 +611,7 @@ mod tests {
         for key in chunks.split_whitespace() {
             let (cx, cz) = key.split_once(',').unwrap();
             let (cx, cz): (i32, i32) = (cx.parse().unwrap(), cz.parse().unwrap());
-            let (grid, _) = generate_chunk_grid(cx, cz, seed);
+            let (grid, _, _) = generate_chunk_grid(cx, cz, seed);
             let columns: Vec<serde_json::Value> = (0..256usize)
                 .map(|i| {
                     let column: String = (MIN_Y..80)
@@ -590,6 +626,51 @@ mod tests {
                 })
                 .collect();
             result.insert(key.to_string(), columns.into());
+        }
+        std::fs::write(out, serde_json::Value::Object(result).to_string()).unwrap();
+    }
+
+    /// Même outil, avec les noms de blocs : `dump_chunk_blocks` (mêmes variables d'environnement). Écrit
+    /// `{"cx,cz": {"y,x,z": [bloc, liquide]}}` pour y = 32 à 79, hors pierre et air sans liquide ; le liquide
+    /// est la seconde couche (eau des blocs gorgés d'eau). Format de l'extraction BDS correspondante.
+    #[test]
+    #[ignore]
+    fn dump_chunk_blocks() {
+        let seed: u64 = std::env::var("MCRS_DUMP_SEED")
+            .expect("MCRS_DUMP_SEED")
+            .parse()
+            .unwrap();
+        let chunks = std::env::var("MCRS_DUMP_CHUNKS").expect("MCRS_DUMP_CHUNKS");
+        let out = std::env::var("MCRS_DUMP_OUT").expect("MCRS_DUMP_OUT");
+        let name = |b: u32| BLOCKS.name_for(b).unwrap_or("?").to_string();
+        let mut result = serde_json::Map::new();
+        for key in chunks.split_whitespace() {
+            let (cx, cz) = key.split_once(',').unwrap();
+            let (cx, cz): (i32, i32) = (cx.parse().unwrap(), cz.parse().unwrap());
+            let (grid, _, waterlogged) = generate_chunk_grid(cx, cz, seed);
+            let mut cells = serde_json::Map::new();
+            for y in 32..80 {
+                for x in 0..16usize {
+                    for z in 0..16usize {
+                        let i = grid_index(x, y, z);
+                        let liquid = if waterlogged[i] {
+                            BLOCKS.water
+                        } else {
+                            BLOCKS.air
+                        };
+                        if (grid[i] == BLOCKS.air || grid[i] == BLOCKS.stone)
+                            && liquid == BLOCKS.air
+                        {
+                            continue;
+                        }
+                        cells.insert(
+                            format!("{y},{x},{z}"),
+                            serde_json::json!([name(grid[i]), name(liquid)]),
+                        );
+                    }
+                }
+            }
+            result.insert(key.to_string(), cells.into());
         }
         std::fs::write(out, serde_json::Value::Object(result).to_string()).unwrap();
     }
@@ -633,7 +714,7 @@ mod tests {
         let (x0, z0) = (ccx - 2, ccz - 2);
         for cx in x0..x0 + 5 {
             for cz in z0..z0 + 5 {
-                let (grid, _) = generate_chunk_grid(cx, cz, seed);
+                let (grid, _, _) = generate_chunk_grid(cx, cz, seed);
                 for lx in 0..16usize {
                     for lz in 0..16usize {
                         for wy in SEA_LEVEL..MAX_Y {
@@ -668,7 +749,7 @@ mod tests {
             std::collections::HashMap::new();
         for cx in x0..x0 + 5 {
             for cz in z0..z0 + 5 {
-                let (grid, _) = generate_chunk_grid(cx, cz, seed);
+                let (grid, _, _) = generate_chunk_grid(cx, cz, seed);
                 for lx in 0..16usize {
                     for lz in 0..16usize {
                         for wy in SEA_LEVEL..MAX_Y {

@@ -231,6 +231,44 @@ impl Connection {
             .push((packet_id::LEVEL_SOUND_EVENT, payload));
     }
 
+    /// Casse le bloc à `pos` (il reste l'eau qu'il contenait, sinon de l'air) et envoie les deux couches.
+    pub(super) fn break_block_and_broadcast(
+        &mut self,
+        pos: [i32; 3],
+        responses: &mut Vec<Vec<u8>>,
+    ) {
+        let (left, had_liquid) = match self.chunk_cache.lock() {
+            Ok(mut cache) => {
+                let had_liquid = cache.get_liquid(pos[0], pos[1], pos[2]) != BLOCKS.air;
+                (cache.break_block(pos[0], pos[1], pos[2]), had_liquid)
+            }
+            Err(_) => return,
+        };
+        self.broadcast_block_layer(pos, left, 0, responses);
+        if had_liquid {
+            self.broadcast_block_layer(pos, BLOCKS.air, 1, responses);
+        }
+    }
+
+    /// Envoie un `UpdateBlock` pour une couche (0 blocs, 1 liquide) à ce joueur et aux autres.
+    pub(super) fn broadcast_block_layer(
+        &mut self,
+        pos: [i32; 3],
+        runtime_id: u32,
+        layer: u32,
+        responses: &mut Vec<Vec<u8>>,
+    ) {
+        let payload = UpdateBlock {
+            position: pos,
+            runtime_id,
+            flags: 3, // FLAG_NEIGHBORS | FLAG_NETWORK
+            layer,
+        }
+        .encode();
+        responses.push(self.encode_compressed_packet(packet_id::UPDATE_BLOCK, &payload));
+        self.broadcasts.push((packet_id::UPDATE_BLOCK, payload));
+    }
+
     fn set_block_and_broadcast(
         &mut self,
         pos: [i32; 3],
@@ -500,7 +538,7 @@ impl Connection {
             LevelSoundEvent::block_sound(LevelSoundEvent::BREAK, block_center(pos), target as i32),
             responses,
         );
-        self.set_block_and_broadcast(pos, air, responses);
+        self.break_block_and_broadcast(pos, responses);
         if crate::furnace::FurnaceKind::from_block_id(target).is_some() {
             self.pending_furnace_events
                 .push(super::PendingFurnaceEvent::Unregister {
