@@ -4,6 +4,7 @@ pub mod block_registry_data;
 pub mod block_state_lookup;
 pub mod chunk_cache;
 pub mod chunk_serializer;
+pub mod chunk_workers;
 pub mod data_driven_blocks;
 pub mod end_decorate;
 pub mod end_generator;

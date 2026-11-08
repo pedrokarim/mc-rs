@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
-use tracing::{debug, info};
+use std::sync::{Arc, Mutex, Weak};
+use tracing::{debug, error, info};
 
 use super::block_registry::BLOCKS;
 use super::chunk_serializer::{self, SubChunk};
+use super::chunk_workers::ChunkWorkers;
 use super::storage::WorldStorage;
 use super::terrain_generator;
 
@@ -52,6 +53,150 @@ impl ChunkColumn {
         }
         &self.network_payload
     }
+
+    /// Paquet LevelChunk de la colonne, encodé et compressé en Zlib une fois pour tous les joueurs (voir
+    /// `cached_zlib_batch`), prêt pour `prepare_for_send`.
+    pub fn level_chunk_zlib_batch(&mut self, dimension_id: i32) -> &[u8] {
+        if self.payload_dirty || self.cached_zlib_batch.is_none() {
+            let payload = self.get_network_payload().to_vec();
+            let packet = mc_rs_proto::packets::chunks::LevelChunk {
+                chunk_x: self.x,
+                chunk_z: self.z,
+                dimension_id,
+                sub_chunk_count: self.sub_chunk_count,
+                cache_enabled: false,
+                payload,
+            };
+            self.cached_zlib_batch = Some(crate::connection::encode_shared_batch(
+                mc_rs_proto::packets::packet_id::LEVEL_CHUNK,
+                &packet.encode(),
+                mc_rs_proto::batch::CompressionAlgorithm::Zlib,
+            ));
+        }
+        self.cached_zlib_batch.as_deref().unwrap_or_default()
+    }
+}
+
+/// Charge un chunk de la LevelDB ou le génère, sans toucher au cache : appelé par la boucle principale
+/// (chargement sur place) comme par les workers. Le booléen est vrai pour un chunk généré (à sauvegarder).
+fn load_or_generate(
+    storage: Option<&SharedStorage>,
+    dim: i32,
+    generator: &str,
+    seed: u64,
+    cx: i32,
+    cz: i32,
+) -> (ChunkColumn, bool) {
+    if let Some(column) = storage.and_then(|s| load_stored(s, dim, cx, cz)) {
+        return (column, false);
+    }
+    (generate(generator, seed, cx, cz), true)
+}
+
+/// Chunk lu dans la LevelDB, `None` s'il n'y est pas.
+fn load_stored(storage_arc: &SharedStorage, dim: i32, cx: i32, cz: i32) -> Option<ChunkColumn> {
+    let mut storage = storage_arc.lock().unwrap();
+    if !storage.has_chunk(dim, cx, cz) {
+        return None;
+    }
+    let stored_sub_chunks = storage.load_sub_chunks(dim, cx, cz);
+    if stored_sub_chunks.is_empty() {
+        return None;
+    }
+    debug!(
+        "Loaded chunk ({}, {}) from LevelDB ({} sub-chunks)",
+        cx,
+        cz,
+        stored_sub_chunks.len()
+    );
+    // Reconstruct from stored sub-chunk data
+    let mut payload = Vec::with_capacity(4096);
+    for (_y_idx, data) in &stored_sub_chunks {
+        payload.extend_from_slice(data);
+    }
+    let mut biome_data = storage
+        .load_biome_data(dim, cx, cz)
+        .unwrap_or_else(fallback_biome_data);
+    // Biomes sauvegardés avec l'ancien format (sections de 64
+    // cases) : convertis une fois et réécrits sur disque.
+    if let Some(upgraded) = chunk_serializer::upgrade_legacy_biome_data(&biome_data) {
+        storage.save_biome_data(dim, cx, cz, &upgraded);
+        biome_data = upgraded;
+    }
+    payload.extend_from_slice(&biome_data);
+    payload.push(0); // border blocks
+
+    let block_entities = storage
+        .load_block_entities(dim, cx, cz)
+        .map(|d| crate::block_entities::parse_le(&d))
+        .unwrap_or_default();
+    // Le décodage se fait sans tenir la LevelDB, partagée par les trois dimensions.
+    drop(storage);
+
+    let sub_count = stored_sub_chunks.len() as u32;
+    let (sub_chunks, _) = chunk_serializer::parse_chunk_payload(&payload, sub_count, BLOCKS.air);
+
+    Some(ChunkColumn {
+        x: cx,
+        z: cz,
+        sub_chunks,
+        biome_data,
+        network_payload: payload,
+        // Reconstruire le payload avec les block entities si présentes.
+        payload_dirty: !block_entities.is_empty(),
+        sub_chunk_count: sub_count,
+        cached_zlib_batch: None,
+        block_entities,
+    })
+}
+
+/// Génère un chunk avec le générateur configuré. Seul le Nether émet des block entities (forteresse) pour
+/// l'instant.
+fn generate(generator: &str, seed: u64, cx: i32, cz: i32) -> ChunkColumn {
+    let (sub_count, payload, block_entities) = match generator {
+        "flat" => {
+            let (c, p) = super::flat_generator::generate_flat_chunk();
+            (c, p, Vec::new())
+        }
+        "noise" => {
+            let (c, p) = super::worldgen::noise_chunk::generate_noise_chunk(cx, cz, seed);
+            (c, p, Vec::new())
+        }
+        // Nether : terrain + décoration + forteresse (avec coffres/spawners).
+        "nether" => super::nether_generator::generate_nether_chunk(cx, cz, seed),
+        // End : île centrale flottante + piliers d'obsidienne + vide.
+        "end" => {
+            let (c, p) = super::end_generator::generate_end_chunk(cx, cz, seed);
+            (c, p, Vec::new())
+        }
+        _ => {
+            let (c, p) = terrain_generator::generate_terrain_chunk(cx, cz, seed);
+            (c, p, Vec::new())
+        }
+    };
+
+    let (sub_chunks, biome_data) =
+        chunk_serializer::parse_chunk_payload(&payload, sub_count, BLOCKS.air);
+
+    ChunkColumn {
+        x: cx,
+        z: cz,
+        sub_chunks,
+        biome_data,
+        network_payload: payload,
+        // Reconstruire le payload avec les block entities si présentes.
+        payload_dirty: !block_entities.is_empty(),
+        sub_chunk_count: sub_count,
+        cached_zlib_batch: None,
+        block_entities,
+    }
+}
+
+/// Lien d'un cache vers les workers : la file des tâches et le cache lui-même (en référence faible, pour
+/// que les tâches en attente n'empêchent pas sa destruction).
+struct WorkerLink {
+    workers: ChunkWorkers,
+    cache: Weak<Mutex<ChunkCache>>,
 }
 
 fn fallback_biome_data() -> Vec<u8> {
@@ -114,6 +259,10 @@ pub struct ChunkCache {
     /// Numeric dimension id (0=overworld, 1=nether, 2=end) — used for LevelDB keys
     /// and the per-chunk `dimension_id` sent on the wire.
     dimension: i32,
+    /// Chunks confiés aux workers et pas encore insérés.
+    pending: HashSet<(i32, i32)>,
+    /// Workers de chargement et de génération ; sans eux, `request_chunk` charge sur place.
+    workers: Option<WorkerLink>,
 }
 
 impl ChunkCache {
@@ -180,6 +329,80 @@ impl ChunkCache {
             seed,
             generator: generator.to_lowercase(),
             dimension,
+            pending: HashSet::new(),
+            workers: None,
+        }
+    }
+
+    /// Branche les workers de chargement et de génération sur `cache`.
+    pub fn attach_workers(cache: &Arc<Mutex<ChunkCache>>, workers: ChunkWorkers) {
+        if let Ok(mut guard) = cache.lock() {
+            guard.workers = Some(WorkerLink {
+                workers,
+                cache: Arc::downgrade(cache),
+            });
+        }
+    }
+
+    /// Vrai si le chunk est en mémoire, prêt à être envoyé. Sinon, il est confié aux workers (une seule fois
+    /// tant qu'il n'est pas prêt) et la réponse est faux ; sans workers, il est chargé ou généré sur place.
+    /// PMMP : `World::requestChunkPopulation`, appelé par `Player::requestChunks`.
+    pub fn request_chunk(&mut self, cx: i32, cz: i32) -> bool {
+        if self.chunks.contains_key(&(cx, cz)) {
+            return true;
+        }
+        if self.pending.contains(&(cx, cz)) {
+            return false;
+        }
+        let Some(link) = &self.workers else {
+            self.ensure_chunk_loaded(cx, cz);
+            return true;
+        };
+        let target = link.cache.clone();
+        let storage = self.storage.clone();
+        let generator = self.generator.clone();
+        let (seed, dim) = (self.seed, self.dimension);
+        let job = Box::new(move || {
+            // Ni le cache ni la LevelDB ne sont tenus pendant la génération.
+            let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let (mut column, generated) =
+                    load_or_generate(storage.as_ref(), dim, &generator, seed, cx, cz);
+                // Compression faite ici plutôt qu'au premier envoi, dans la boucle principale.
+                column.level_chunk_zlib_batch(dim);
+                (column, generated)
+            }));
+            let Some(cache) = target.upgrade() else {
+                return;
+            };
+            let Ok(mut cache) = cache.lock() else {
+                return;
+            };
+            cache.pending.remove(&(cx, cz));
+            match built {
+                Ok((column, generated)) => cache.insert_column(cx, cz, column, generated),
+                Err(_) => error!(
+                    "Échec du chargement du chunk ({cx}, {cz}) de la dimension {dim}, redemandé au prochain envoi"
+                ),
+            }
+        });
+        if link.workers.submit(job) {
+            self.pending.insert((cx, cz));
+            false
+        } else {
+            self.ensure_chunk_loaded(cx, cz);
+            true
+        }
+    }
+
+    /// Insère un chunk chargé ou généré, sauf s'il est déjà en mémoire (chargé sur place entre-temps, et
+    /// peut-être déjà modifié : on garde celui-là).
+    fn insert_column(&mut self, cx: i32, cz: i32, column: ChunkColumn, generated: bool) {
+        if self.chunks.contains_key(&(cx, cz)) {
+            return;
+        }
+        self.chunks.insert((cx, cz), column);
+        if generated && self.storage.is_some() {
+            self.dirty.insert((cx, cz));
         }
     }
 
@@ -206,123 +429,20 @@ impl ChunkCache {
         self.chunks.get_mut(&(cx, cz)).unwrap()
     }
 
-    /// Ensure a chunk is loaded in the cache.
+    /// Ensure a chunk is loaded in the cache (sur place, dans le thread appelant).
     fn ensure_chunk_loaded(&mut self, cx: i32, cz: i32) {
         if self.chunks.contains_key(&(cx, cz)) {
             return;
         }
-
-        // Try loading from storage first
-        let dim = self.dimension;
-        let loaded = if let Some(ref storage_arc) = self.storage {
-            let mut storage = storage_arc.lock().unwrap();
-            if storage.has_chunk(dim, cx, cz) {
-                let stored_sub_chunks = storage.load_sub_chunks(dim, cx, cz);
-                if !stored_sub_chunks.is_empty() {
-                    debug!(
-                        "Loaded chunk ({}, {}) from LevelDB ({} sub-chunks)",
-                        cx,
-                        cz,
-                        stored_sub_chunks.len()
-                    );
-                    // Reconstruct from stored sub-chunk data
-                    let mut payload = Vec::with_capacity(4096);
-                    for (_y_idx, data) in &stored_sub_chunks {
-                        payload.extend_from_slice(data);
-                    }
-                    let mut biome_data = storage
-                        .load_biome_data(dim, cx, cz)
-                        .unwrap_or_else(fallback_biome_data);
-                    // Biomes sauvegardés avec l'ancien format (sections de 64
-                    // cases) : convertis une fois et réécrits sur disque.
-                    if let Some(upgraded) = chunk_serializer::upgrade_legacy_biome_data(&biome_data)
-                    {
-                        storage.save_biome_data(dim, cx, cz, &upgraded);
-                        biome_data = upgraded;
-                    }
-                    payload.extend_from_slice(&biome_data);
-                    payload.push(0); // border blocks
-
-                    let block_entities = storage
-                        .load_block_entities(dim, cx, cz)
-                        .map(|d| crate::block_entities::parse_le(&d))
-                        .unwrap_or_default();
-
-                    let sub_count = stored_sub_chunks.len() as u32;
-                    let (sub_chunks, _) =
-                        chunk_serializer::parse_chunk_payload(&payload, sub_count, BLOCKS.air);
-
-                    Some(ChunkColumn {
-                        x: cx,
-                        z: cz,
-                        sub_chunks,
-                        biome_data,
-                        network_payload: payload,
-                        // Reconstruire le payload avec les block entities si présentes.
-                        payload_dirty: !block_entities.is_empty(),
-                        sub_chunk_count: sub_count,
-                        cached_zlib_batch: None,
-                        block_entities,
-                    })
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        let generated = loaded.is_none();
-        let column = loaded.unwrap_or_else(|| {
-            // Generate new chunk using the configured generator. Seul le Nether émet
-            // des block entities (forteresse) pour l'instant.
-            let (sub_count, payload, block_entities) = match self.generator.as_str() {
-                "flat" => {
-                    let (c, p) = super::flat_generator::generate_flat_chunk();
-                    (c, p, Vec::new())
-                }
-                "noise" => {
-                    let (c, p) =
-                        super::worldgen::noise_chunk::generate_noise_chunk(cx, cz, self.seed);
-                    (c, p, Vec::new())
-                }
-                // Nether : terrain + décoration + forteresse (avec coffres/spawners).
-                "nether" => super::nether_generator::generate_nether_chunk(cx, cz, self.seed),
-                // End : île centrale flottante + piliers d'obsidienne + vide.
-                "end" => {
-                    let (c, p) = super::end_generator::generate_end_chunk(cx, cz, self.seed);
-                    (c, p, Vec::new())
-                }
-                _ => {
-                    let (c, p) = terrain_generator::generate_terrain_chunk(cx, cz, self.seed);
-                    (c, p, Vec::new())
-                }
-            };
-
-            let (sub_chunks, biome_data) =
-                chunk_serializer::parse_chunk_payload(&payload, sub_count, BLOCKS.air);
-
-            ChunkColumn {
-                x: cx,
-                z: cz,
-                sub_chunks,
-                biome_data,
-                network_payload: payload,
-                // Reconstruire le payload avec les block entities si présentes.
-                payload_dirty: !block_entities.is_empty(),
-                sub_chunk_count: sub_count,
-                cached_zlib_batch: None,
-                block_entities,
-            }
-        });
-
-        self.chunks.insert((cx, cz), column);
-
-        if generated && self.storage.is_some() {
-            self.dirty.insert((cx, cz));
-        }
+        let (column, generated) = load_or_generate(
+            self.storage.as_ref(),
+            self.dimension,
+            &self.generator,
+            self.seed,
+            cx,
+            cz,
+        );
+        self.insert_column(cx, cz, column, generated);
     }
 
     /// Bornes Y (min_y, hauteur) de la dimension de ce cache. Les sub-chunks sont
@@ -643,6 +763,93 @@ mod tests {
         cache.set_block(2, 70, 2, BLOCKS.stone);
         assert_eq!(cache.get_liquid(2, 70, 2), BLOCKS.air);
         assert_eq!(cache.break_block(2, 70, 2), BLOCKS.air);
+    }
+
+    /// Un chunk demandé aux workers n'est pas prêt tout de suite, n'est confié qu'une fois, puis arrive
+    /// identique à celui généré sur place (et compressé d'avance).
+    #[test]
+    fn requested_chunk_is_built_by_workers() {
+        let cache = Arc::new(Mutex::new(ChunkCache::with_shared_storage(
+            None, 7, "normal", 0,
+        )));
+        ChunkCache::attach_workers(&cache, ChunkWorkers::start(2));
+        {
+            let mut guard = cache.lock().unwrap();
+            assert!(!guard.request_chunk(3, -2));
+            assert!(!guard.request_chunk(3, -2));
+            assert!(guard.pending.len() <= 1);
+        }
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while !cache.lock().unwrap().request_chunk(3, -2) {
+            assert!(std::time::Instant::now() < deadline, "chunk jamais prêt");
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let mut guard = cache.lock().unwrap();
+        assert!(guard.pending.is_empty());
+        assert!(guard.get_chunk_mut(3, -2).cached_zlib_batch.is_some());
+        let async_payload = guard.get_chunk_mut(3, -2).get_network_payload().to_vec();
+
+        let mut direct = ChunkCache::with_shared_storage(None, 7, "normal", 0);
+        assert!(
+            direct.request_chunk(3, -2),
+            "sans workers, chargé sur place"
+        );
+        assert_eq!(
+            direct.get_chunk_mut(3, -2).get_network_payload(),
+            &async_payload[..]
+        );
+    }
+
+    /// Mesure (ignorée) : temps de génération de 64 chunks « noise » sur place, puis par les workers, et
+    /// temps passé dans `request_chunk` par l'appelant (la boucle principale en jeu).
+    /// `cargo test --release -p mc-rs-server -- --ignored measure_chunk_workers --nocapture`
+    #[test]
+    #[ignore]
+    fn measure_chunk_workers() {
+        use std::time::Instant;
+        let seed = 4817747595384169343;
+        let coords: Vec<(i32, i32)> = (0..64).map(|i| (i % 8 + 40, i / 8 + 40)).collect();
+        // Router et données chargés une fois, hors mesure.
+        ChunkCache::with_shared_storage(None, seed, "noise", 0).request_chunk(0, 0);
+
+        let mut inline = ChunkCache::with_shared_storage(None, seed, "noise", 0);
+        let start = Instant::now();
+        for &(cx, cz) in &coords {
+            inline.request_chunk(cx, cz);
+        }
+        let inline_time = start.elapsed();
+
+        let cache = Arc::new(Mutex::new(ChunkCache::with_shared_storage(
+            None, seed, "noise", 0,
+        )));
+        let threads = ChunkWorkers::default_threads();
+        ChunkCache::attach_workers(&cache, ChunkWorkers::start(threads));
+        let start = Instant::now();
+        let mut caller = std::time::Duration::ZERO;
+        loop {
+            let t = Instant::now();
+            let ready = {
+                let mut guard = cache.lock().unwrap();
+                coords
+                    .iter()
+                    .filter(|&&(cx, cz)| guard.request_chunk(cx, cz))
+                    .count()
+            };
+            caller += t.elapsed();
+            if ready == coords.len() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let worker_time = start.elapsed();
+        println!(
+            "64 chunks : sur place {:?} ({:?} par chunk) ; {} workers {:?} ; appelant bloqué {:?}",
+            inline_time,
+            inline_time / 64,
+            threads,
+            worker_time,
+            caller
+        );
     }
 
     fn temp_world_dir(name: &str) -> PathBuf {

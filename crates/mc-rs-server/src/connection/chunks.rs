@@ -4,7 +4,20 @@ use mc_rs_proto::batch::CompressionAlgorithm;
 use mc_rs_proto::packets::chunks::*;
 use mc_rs_proto::packets::packet_id;
 
-use super::{encode_shared_batch, Connection, ConnectionState, CHUNKS_PER_TICK};
+use super::{Connection, ConnectionState, CHUNKS_PER_TICK};
+
+/// Chunks absents demandés d'avance aux workers par joueur et par envoi : assez pour occuper les workers,
+/// assez peu pour ne pas générer pour rien les chunks d'une zone que le joueur quitte.
+const MAX_CHUNK_REQUESTS_AHEAD: usize = 16;
+
+/// Chunk prêt à partir : paquet Zlib partagé entre les joueurs, ou payload à compresser pour ce joueur.
+enum ReadyChunk {
+    SharedZlib(Vec<u8>),
+    Payload {
+        sub_chunk_count: u32,
+        payload: Vec<u8>,
+    },
+}
 
 impl Connection {
     /// Reorder the chunk load queue: spiral from player position, unload distant chunks.
@@ -102,12 +115,17 @@ impl Connection {
     }
 
     /// Send a small batch of chunks from the load queue.
+    ///
+    /// Seuls les chunks déjà en mémoire partent ; les autres sont demandés aux workers
+    /// (`ChunkCache::request_chunk`) et restent en tête de file, dans leur ordre, jusqu'à ce qu'ils soient
+    /// prêts. La boucle principale n'attend donc jamais une génération (PMMP `Player::requestChunks`).
     pub(super) fn send_chunk_batch(&mut self) -> Vec<Vec<u8>> {
         let mut responses = Vec::new();
         let mut sent = 0;
         let queue_before = self.chunk_load_queue.len();
+        let mut waiting = Vec::new();
 
-        while sent < CHUNKS_PER_TICK {
+        while sent < CHUNKS_PER_TICK && waiting.len() < MAX_CHUNK_REQUESTS_AHEAD {
             let Some((cx, cz)) = self.chunk_load_queue.pop_front() else {
                 break;
             };
@@ -121,61 +139,58 @@ impl Connection {
             // seul `prepare_for_send` (encryption per-player) s'applique.
             // Fallback : autres algos (Snappy/None, rares) → compression per-player.
             let conn_zlib = matches!(self.compression_algo, CompressionAlgorithm::Zlib);
-
-            let raw_batch_opt: Option<Vec<u8>> = if conn_zlib {
+            let ready = {
                 let mut cache = self.chunk_cache.lock().unwrap();
-                let col = cache.get_chunk_mut(cx, cz);
-                if col.cached_zlib_batch.is_none() {
-                    let sub_count = col.sub_chunk_count;
-                    let payload = col.get_network_payload().to_vec();
-                    let chunk_pkt = LevelChunk {
-                        chunk_x: cx,
-                        chunk_z: cz,
-                        dimension_id: self.current_dimension,
-                        sub_chunk_count: sub_count,
-                        cache_enabled: false,
-                        payload,
-                    };
-                    let shared = encode_shared_batch(
-                        packet_id::LEVEL_CHUNK,
-                        &chunk_pkt.encode(),
-                        CompressionAlgorithm::Zlib,
-                    );
-                    col.cached_zlib_batch = Some(shared);
+                if !cache.request_chunk(cx, cz) {
+                    None
+                } else if conn_zlib {
+                    let col = cache.get_chunk_mut(cx, cz);
+                    Some(ReadyChunk::SharedZlib(
+                        col.level_chunk_zlib_batch(self.current_dimension).to_vec(),
+                    ))
+                } else {
+                    let col = cache.get_chunk_mut(cx, cz);
+                    Some(ReadyChunk::Payload {
+                        sub_chunk_count: col.sub_chunk_count,
+                        payload: col.get_network_payload().to_vec(),
+                    })
                 }
-                Some(col.cached_zlib_batch.as_ref().unwrap().clone())
-            } else {
-                None
             };
-
-            if let Some(raw_batch) = raw_batch_opt {
+            match ready {
+                None => {
+                    waiting.push((cx, cz));
+                    continue;
+                }
                 // BUG phase7 corrigé : NE PAS appeler prepare_for_send ici.
                 // Le main loop fait `conn.prepare_for_send(resp)` sur CHAQUE
                 // élément retourné par `send_queued_chunks`. Encrypter ici
                 // = double encryption → client rejette les chunks → bloqué
                 // en "chargement du serveur". Bisect 9ff9455 vs c9d8bae a
                 // localisé la régression sur 0023946 (phase7).
-                responses.push(raw_batch);
-            } else {
-                let (sub_count, payload) = {
-                    let mut cache = self.chunk_cache.lock().unwrap();
-                    let col = cache.get_chunk_mut(cx, cz);
-                    (col.sub_chunk_count, col.get_network_payload().to_vec())
-                };
-                let chunk_pkt = LevelChunk {
-                    chunk_x: cx,
-                    chunk_z: cz,
-                    dimension_id: self.current_dimension,
-                    sub_chunk_count: sub_count,
-                    cache_enabled: false,
+                Some(ReadyChunk::SharedZlib(raw_batch)) => responses.push(raw_batch),
+                Some(ReadyChunk::Payload {
+                    sub_chunk_count,
                     payload,
-                };
-                responses.push(
-                    self.encode_compressed_packet(packet_id::LEVEL_CHUNK, &chunk_pkt.encode()),
-                );
+                }) => {
+                    let chunk_pkt = LevelChunk {
+                        chunk_x: cx,
+                        chunk_z: cz,
+                        dimension_id: self.current_dimension,
+                        sub_chunk_count,
+                        cache_enabled: false,
+                        payload,
+                    };
+                    responses.push(
+                        self.encode_compressed_packet(packet_id::LEVEL_CHUNK, &chunk_pkt.encode()),
+                    );
+                }
             }
             self.sent_chunks.insert((cx, cz));
             sent += 1;
+        }
+        // Les chunks en préparation reprennent leur place en tête de file (les plus proches d'abord).
+        for chunk in waiting.into_iter().rev() {
+            self.chunk_load_queue.push_front(chunk);
         }
 
         if sent > 0 {

@@ -185,6 +185,12 @@ pub fn tick<R: Rng>(
         let sx = center[0] as i32 + dx;
         let sz = center[2] as i32 + dz;
 
+        // Pas d'apparition dans un chunk pas encore chargé (PMMP `World::isChunkLoaded`) : le lire le ferait
+        // générer dans la boucle principale, alors que les workers s'en chargent.
+        if !cache.is_loaded(sx, sz) {
+            continue;
+        }
+
         // Trouve un sol valide (top non-air entre Y=320 et Y=-64).
         let Some(sy) = find_spawn_ground(cache, sx, sz) else {
             continue;
@@ -230,6 +236,9 @@ pub fn tick<R: Rng>(
             } else {
                 (sx + rng.gen_range(-2..=2), sz + rng.gen_range(-2..=2))
             };
+            if !cache.is_loaded(mx, mz) {
+                continue;
+            }
             let Some(my) = find_spawn_ground(cache, mx, mz) else {
                 continue;
             };

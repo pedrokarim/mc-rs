@@ -135,6 +135,7 @@ online_mode = true  # Xbox Live auth
 name = "world"
 generator = "flat"
 seed = 0
+generation_threads = 0  # threads de génération des chunks, 0 = automatique
 
 [game]
 gamemode = "survival"

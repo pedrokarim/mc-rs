@@ -18,7 +18,7 @@ se déplace.
 | 2 | **Rate limiting** | 4 chunks/tick max (`chunksPerTick`) | TOUS les chunks d'un coup | Flood de données → timeout client |
 | 3 | **Déchargement** | Chunks hors vue distance sont dépawned | `sent_chunks` grandit à l'infini | Mémoire illimitée, état incohérent |
 | 4 | **Timing** | Recalcul débounced (5-20 ticks) | Recalcul à chaque `PlayerAuthInput` (10-20x/sec) | CPU gaspillé, flood réseau |
-| 5 | **Génération** | Asynchrone (ChunkRequestTask) | Synchrone dans le handler de paquets | Bloque le thread principal |
+| 5 | **Génération** | Asynchrone (ChunkRequestTask) | Synchrone dans le handler de paquets (corrigé le 2026-11-08, voir Phase 4) | Bloque le thread principal |
 
 ---
 
@@ -143,13 +143,44 @@ NEEDED → REQUESTED_GENERATION → REQUESTED_SENDING → SENT
 3. Sur mouvement normal : `next_chunk_order_tick = min(current, current + 20)`
 4. Dans le tick loop : `if current_tick >= next_chunk_order_tick { reorder() }`
 
-### Phase 4 (optionnel) : Génération asynchrone
+### Phase 4 : Génération asynchrone (faite le 2026-11-08)
 
 **Objectif** : Ne pas bloquer le thread principal.
 
-1. Utiliser `tokio::spawn_blocking` pour la génération de terrain
-2. ChunkRequestTask-like : envoyer le résultat quand prêt
-3. État REQUESTED_GENERATION pour éviter les doublons
+Avant, un chunk absent était chargé de la LevelDB ou généré dans la boucle principale au moment de l'envoi.
+Avec le générateur « noise », un chunk coûte de 90 à 200 ms selon la charge de la machine : tout le serveur
+se figeait pendant qu'un joueur explorait.
+
+Ce qui est en place :
+
+- `world/chunk_workers.rs` : `ChunkWorkers`, des threads (`chunk-worker-N`) qui exécutent les tâches d'une
+  file partagée par les trois dimensions. Nombre : `[world] generation_threads` dans `server.toml`, 0 par
+  défaut, soit les cœurs moins deux comme l'`async-workers: auto` de PMMP (`Server.php`), entre 1 et 4.
+  Ils sont branchés au démarrage (`Worlds::start_chunk_workers`, appelé dans `main.rs`).
+- `ChunkCache::request_chunk(cx, cz)` : vrai si le chunk est en mémoire. Sinon, il est confié une seule fois
+  aux workers (ensemble `pending`, l'équivalent de `REQUESTED_GENERATION`), et la réponse est faux. Sans
+  workers, comme dans les tests, il est chargé sur place.
+- Le worker lit la LevelDB ou génère le chunk, puis construit d'avance le paquet LevelChunk compressé
+  (`ChunkColumn::level_chunk_zlib_batch`), sans tenir ni le verrou du cache ni celui de la LevelDB pendant
+  le calcul. Il prend ensuite le verrou du cache pour insérer le chunk, sauf s'il y est déjà parce que la
+  boucle principale l'a chargé entre-temps (on garde alors celui-là, peut-être déjà modifié). Une panique
+  pendant la génération est rattrapée : le chunk est redemandé au prochain envoi.
+- `Connection::send_chunk_batch` (`connection/chunks.rs`) n'envoie que les chunks prêts. Les autres sont
+  demandés et remis en tête de file dans leur ordre, au plus 16 par joueur et par envoi
+  (`MAX_CHUNK_REQUESTS_AHEAD`), pour ne pas générer pour rien une zone que le joueur quitte.
+- L'apparition naturelle des mobs (`mob_spawner.rs`) ignore les chunks pas encore chargés (PMMP
+  `World::isChunkLoaded`) au lieu de les générer sur place.
+- La passe de surface clone son `SurfaceBuilder` (`Arc`) au lieu de garder son verrou pendant tout le
+  calcul, ce qui aurait fait attendre les workers les uns après les autres.
+
+Mesure (`chunk_cache::tests::measure_chunk_workers`, ignoré, en release, sur une machine chargée par
+d'autres programmes) : 64 chunks « noise » prennent 12,6 s sur place (197 ms chacun) contre 2,5 s avec
+4 workers ; la boucle qui les demande n'est bloquée que 2 ms au total.
+
+Restent synchrones, dans le thread qui les appelle : toute lecture de bloc (`get_block`, `set_block`…) dans
+un chunk absent, c'est-à-dire le spawn et les téléportations (recherche d'un sol sûr sur quelques chunks),
+les entités (mobs, objets, flèches) qui sortent de la zone chargée, et les commandes. PMMP ne fait pas
+bouger les entités dans un chunk non chargé ; ce n'est pas encore le cas ici.
 
 ---
 

@@ -1307,6 +1307,8 @@ async fn main() {
 
     // Les 3 mondes (overworld / nether / end) partageant une seule LevelDB.
     let worlds = crate::world::worlds::Worlds::new(&world_dir, world_seed, &config.world.generator);
+    // Chunks demandés par les joueurs : chargés et générés par des workers, hors de la boucle principale.
+    worlds.start_chunk_workers(config.world.generation_threads);
     // Écoulement des liquides, un moteur par dimension (0 Overworld, 1 Nether, 2 End).
     let mut liquid_flows = [
         crate::liquid_flow::LiquidFlow::new(false),

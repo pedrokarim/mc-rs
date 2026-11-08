@@ -44,6 +44,7 @@ crates/
     └── world/
         ├── chunk_cache.rs      — Cache mémoire + LevelDB persistence
         ├── chunk_serializer.rs — Sérialisation paletted storage (sub-chunks, biomes)
+        ├── chunk_workers.rs    — Threads de chargement et de génération des chunks (hors boucle principale)
         ├── storage.rs          — LevelDB wrapper (rusty-leveldb)
         ├── terrain_generator.rs— Génération terrain Simplex 3D + biomes + ores + arbres
         ├── flat_generator.rs   — Génération flat world (block IDs)

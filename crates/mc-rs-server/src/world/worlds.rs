@@ -74,6 +74,20 @@ impl Worlds {
         Arc::clone(self.get(dim))
     }
 
+    /// Confie le chargement et la génération des chunks demandés par les joueurs à `threads` workers
+    /// (0 : nombre par défaut, `ChunkWorkers::default_threads`), partagés par les trois dimensions.
+    pub fn start_chunk_workers(&self, threads: usize) {
+        let threads = if threads == 0 {
+            super::chunk_workers::ChunkWorkers::default_threads()
+        } else {
+            threads
+        };
+        let workers = super::chunk_workers::ChunkWorkers::start(threads);
+        for cache in self.all() {
+            ChunkCache::attach_workers(cache, workers.clone());
+        }
+    }
+
     /// Sauve les chunks modifiés de toutes les dimensions (autosave + shutdown).
     pub fn save_all_dirty(&self) {
         for cache in [&self.overworld, &self.nether, &self.end] {

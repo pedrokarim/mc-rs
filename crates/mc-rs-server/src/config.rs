@@ -41,6 +41,9 @@ generator = "normal"
 # Seed du monde (0 = aléatoire). Même seed = même terrain.
 seed = 0
 
+# Threads de chargement et de génération des chunks (0 = automatique : cœurs moins deux, entre 1 et 4)
+generation_threads = 0
+
 [gameplay]
 # Mode de jeu par défaut : "survival", "creative", "adventure", "spectator"
 gamemode = "creative"
@@ -331,6 +334,9 @@ pub struct WorldSection {
     pub generator: String,
     #[serde(default)]
     pub seed: i64,
+    /// Threads de chargement et de génération des chunks ; 0 : automatique.
+    #[serde(default)]
+    pub generation_threads: usize,
 }
 
 #[derive(Debug, Deserialize)]
@@ -464,6 +470,7 @@ impl Default for WorldSection {
             name: default_world_name(),
             generator: default_generator(),
             seed: 0,
+            generation_threads: 0,
         }
     }
 }

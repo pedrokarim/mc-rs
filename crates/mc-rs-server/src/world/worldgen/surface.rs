@@ -20,7 +20,7 @@
 //! - `temperature` (neige), `steep` (pentes), `bandlands` (terracotta badlands)
 //!   stubbés → ces touches biome-spécifiques arriveront ensuite.
 
-use std::sync::{LazyLock, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use serde_json::Value;
 
@@ -339,7 +339,9 @@ fn parse_cond(v: &Value, deriver: &super::rng::PositionalRandomFactory) -> Cond 
     }
 }
 
-static BUILDER: LazyLock<Mutex<(u64, Option<SurfaceBuilder>)>> =
+/// Builder caché par seed, partagé : les workers de chunks le clonent (`Arc`) au lieu de tenir le verrou
+/// pendant toute la passe de surface.
+static BUILDER: LazyLock<Mutex<(u64, Option<Arc<SurfaceBuilder>>)>> =
     LazyLock::new(|| Mutex::new((0, None)));
 
 /// Applique les surface rules sur la grille (déjà remplie stone/water/air).
@@ -353,11 +355,13 @@ pub fn build(
     biome_names: &[String],
     surfaces: &[[i32; 16]; 16],
 ) {
-    let mut guard = BUILDER.lock().unwrap();
-    if guard.1.is_none() || guard.0 != seed {
-        *guard = (seed, Some(SurfaceBuilder::new(seed)));
-    }
-    let b = guard.1.as_ref().unwrap();
+    let b = {
+        let mut guard = BUILDER.lock().unwrap();
+        if guard.1.is_none() || guard.0 != seed {
+            *guard = (seed, Some(Arc::new(SurfaceBuilder::new(seed))));
+        }
+        Arc::clone(guard.1.as_ref().unwrap())
+    };
 
     for lx in 0..16usize {
         for lz in 0..16usize {
