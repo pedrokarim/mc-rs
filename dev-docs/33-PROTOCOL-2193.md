@@ -112,7 +112,7 @@ par nom d'item puis par les schémas d'upgrade d'items postérieurs à sa table 
 comme PMMP), et ses runtime IDs de blocs par la migration 1.26.40.
 
 Le monde `world_noise` a été converti au premier démarrage (14 280 sous-chunks). Copie d'avant conversion :
-`worlds/_backup-pre-2193-20261025/` (monde et `players/`).
+`run/worlds/_backup-pre-2193-20261025/` (monde et `players/`).
 
 ## 4. Vérifications
 

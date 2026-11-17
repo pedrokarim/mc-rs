@@ -165,7 +165,7 @@ confronter au schéma `SerializedSkin.json` si un skin particulier fait de nouve
 ## 6. Outils de diagnostic
 
 - `MCRS_DUMP_PACKETS=1` : hexdump de chaque paquet émis dans le log ; `MCRS_DUMP_PACKETS=full` écrit en
-  plus `pkt_sent.bin` (enregistrements `[u64 ms][u32 id][u32 longueur][payload]`, little-endian), que l’on
+  plus `pkt_sent.bin` dans le dossier d’exécution (`run/`) (enregistrements `[u64 ms][u32 id][u32 longueur][payload]`, little-endian), que l’on
   peut rejouer dans les décodeurs de gophertunnel.
 - `MCRS_EMPTY_PRESPAWN=creative,crafting,playerlist` : envoie vides (ou n’envoie pas) les paquets de
   pré-spawn nommés, pour bisecter un rejet côté client. Le serveur le signale par un `WARN`

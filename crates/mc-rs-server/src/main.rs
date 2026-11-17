@@ -1108,7 +1108,8 @@ async fn main() {
         config.server.max_players,
     );
     let plugin_manager = Arc::new(Mutex::new(PluginManager::load_from_dir(
-        std::path::Path::new("plugins"),
+        std::path::Path::new(&config.plugins.directory),
+        std::path::Path::new("plugin_data"),
     )));
     let mut command_system = build_command_system();
     if let Ok(mut manager) = plugin_manager.lock() {
@@ -1122,10 +1123,11 @@ async fn main() {
     let server_keypair = Arc::new(ServerKeyPair::generate());
     info!("Server EC keypair generated");
 
-    // Charge les resource packs depuis ./resource_packs/ (dossiers + .mcpack),
+    // Charge les resource packs du dossier de la section `[resource_pack]` (dossiers + .mcpack),
     // puis le pack exporté par Menu Forge (dossier de la section `[menu_forge]`).
     // Arc partagé entre toutes les connexions : on ne clone pas les bytes.
-    let mut packs = crate::resource_pack::discover_packs(&crate::resource_pack::pack_path());
+    let mut packs =
+        crate::resource_pack::discover_packs(std::path::Path::new(&config.resource_pack.directory));
     let (menu_forge_runtime, menu_forge_pack) =
         crate::menu_forge::load_at_startup(config.menu_forge.settings());
     crate::menu_forge::install(menu_forge_runtime);

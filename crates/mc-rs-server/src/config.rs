@@ -131,7 +131,14 @@ enabled = false
 address = "0.0.0.0"
 port = 19132
 
+[plugins]
+# Dossier des plugins. Leurs données vont dans plugin_data/, à côté de ce fichier.
+directory = "plugins"
+
 [resource_pack]
+# Dossier des resource packs (sous-dossiers et fichiers .mcpack).
+directory = "resource_packs"
+
 # Si `true`, le client doit accepter le pack pour pouvoir jouer
 # (recommandé quand le pack fournit des overrides UI structurels
 # comme `server_form.json` — Bedrock les applique alors en priorité).
@@ -170,13 +177,37 @@ pub struct ServerConfig {
     #[serde(default)]
     pub query: QuerySection,
     #[serde(default)]
+    pub plugins: PluginsSection,
+    #[serde(default)]
     pub resource_pack: ResourcePackSection,
     #[serde(default)]
     pub menu_forge: MenuForgeSection,
 }
 
+/// Section `[plugins]`. Les données des plugins restent dans `plugin_data/`, dans le dossier d'exécution.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PluginsSection {
+    #[serde(default = "default_plugins_directory")]
+    pub directory: String,
+}
+
+fn default_plugins_directory() -> String {
+    "plugins".to_string()
+}
+
+impl Default for PluginsSection {
+    fn default() -> Self {
+        Self {
+            directory: default_plugins_directory(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ResourcePackSection {
+    /// Dossier des resource packs (sous-dossiers et fichiers `.mcpack`).
+    #[serde(default = "default_resource_pack_directory")]
+    pub directory: String,
     /// Si `true`, le client doit accepter le pack pour pouvoir jouer
     /// (Bedrock applique alors les overrides UI structurels en priorité).
     /// Si `false`, le pack reste optionnel — le client peut DL le pack mais
@@ -189,9 +220,14 @@ fn default_pack_must_accept() -> bool {
     true
 }
 
+fn default_resource_pack_directory() -> String {
+    "resource_packs".to_string()
+}
+
 impl Default for ResourcePackSection {
     fn default() -> Self {
         Self {
+            directory: default_resource_pack_directory(),
             must_accept: default_pack_must_accept(),
         }
     }
@@ -444,6 +480,7 @@ impl Default for ServerConfig {
             webui: mc_rs_webui::WebUiConfig::default(),
             rcon: RconSection::default(),
             query: QuerySection::default(),
+            plugins: PluginsSection::default(),
             resource_pack: ResourcePackSection::default(),
             menu_forge: MenuForgeSection::default(),
         }

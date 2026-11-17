@@ -8,7 +8,7 @@
 //! à `data.len()`.
 
 use std::io::{Cursor, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -188,14 +188,11 @@ pub fn discover_packs(root: &Path) -> Vec<ResourcePack> {
     packs
 }
 
-pub fn pack_path() -> PathBuf {
-    PathBuf::from("resource_packs")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Write;
+    use std::path::PathBuf;
 
     fn temp_dir(suffix: &str) -> PathBuf {
         let mut p = std::env::temp_dir();

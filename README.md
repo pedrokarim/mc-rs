@@ -48,11 +48,24 @@ cargo build --release
 # Run tests (1165 tests)
 cargo test
 
-# Run the server
-cargo run --release
+# Run the server from its own directory
+mkdir -p run && cd run && ../target/release/mc-rs-server.exe
 ```
 
-The server reads configuration from `server.toml` (created on first run).
+The server reads `server.toml` from its working directory (created on first run) and writes its worlds,
+logs and databases next to it. In this repository that directory is `run/`, ignored by git. To serve the
+plugins, resource packs and Menu Forge export of the repository, point `run/server.toml` at them:
+
+```toml
+[plugins]
+directory = "../plugins"
+
+[resource_pack]
+directory = "../resource_packs"
+
+[menu_forge]
+directory = "../menu_forge/export"
+```
 
 ## Web Admin Panel
 

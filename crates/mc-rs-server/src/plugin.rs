@@ -330,7 +330,9 @@ impl PluginManager {
         Self::default()
     }
 
-    pub fn load_from_dir(plugins_dir: &Path) -> Self {
+    /// Charge les plugins de `plugins_dir`. Leurs données vont dans `plugin_data_dir`, rangé dans le
+    /// dossier d'exécution comme chez PMMP (`<data>/plugin_data`), pas à côté des plugins.
+    pub fn load_from_dir(plugins_dir: &Path, plugin_data_dir: &Path) -> Self {
         if let Err(error) = fs::create_dir_all(plugins_dir) {
             warn!(
                 "Failed to ensure plugins directory exists at {}: {}",
@@ -340,10 +342,7 @@ impl PluginManager {
             return Self::default();
         }
 
-        let data_root = plugins_dir
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .join("plugin_data");
+        let data_root = plugin_data_dir.to_path_buf();
         if let Err(error) = fs::create_dir_all(&data_root) {
             warn!(
                 "Failed to ensure plugin data directory exists at {}: {}",
@@ -1955,7 +1954,7 @@ loadbefore: [ChatTools]
             None,
         );
 
-        let manager = PluginManager::load_from_dir(&plugins_dir);
+        let manager = PluginManager::load_from_dir(&plugins_dir, &root.join("plugin_data"));
         assert_eq!(
             manager
                 .plugins()
@@ -1996,7 +1995,7 @@ permissions:
             None,
         );
 
-        let manager = PluginManager::load_from_dir(&plugins_dir);
+        let manager = PluginManager::load_from_dir(&plugins_dir, &root.join("plugin_data"));
         let mut registry = PermissionRegistry::new();
         manager.register_permissions(&mut registry);
 
@@ -2061,7 +2060,7 @@ end)
             Some("prefix: \"[Cfg]\""),
         );
 
-        let mut manager = PluginManager::load_from_dir(&plugins_dir);
+        let mut manager = PluginManager::load_from_dir(&plugins_dir, &root.join("plugin_data"));
         let mut system = build_command_system();
         manager.register_permissions(&mut system.permissions);
         manager.enable_plugins(PluginLoadOrder::PostWorld, &mut system);
@@ -2118,7 +2117,7 @@ end)
             None,
         );
 
-        let mut manager = PluginManager::load_from_dir(&plugins_dir);
+        let mut manager = PluginManager::load_from_dir(&plugins_dir, &root.join("plugin_data"));
         let mut system = build_command_system();
         manager.enable_plugins(PluginLoadOrder::PostWorld, &mut system);
         assert!(system.map.definition("ping").is_some());
@@ -2147,7 +2146,7 @@ end)
             Some("log('chargé')"),
             None,
         );
-        let manager = PluginManager::load_from_dir(&plugins_dir);
+        let manager = PluginManager::load_from_dir(&plugins_dir, &root.join("plugin_data"));
         let names: Vec<_> = manager
             .plugins()
             .iter()
@@ -2185,7 +2184,7 @@ end)
             ),
             None,
         );
-        let mut manager = PluginManager::load_from_dir(&plugins_dir);
+        let mut manager = PluginManager::load_from_dir(&plugins_dir, &root.join("plugin_data"));
         let mut system = build_command_system();
         manager.enable_plugins(PluginLoadOrder::PostWorld, &mut system);
         let invocation = CommandInvocation {
@@ -2222,7 +2221,7 @@ end)
             Some(include_str!("../../../plugins/test-zones/main.lua")),
             None,
         );
-        let mut manager = PluginManager::load_from_dir(&plugins_dir);
+        let mut manager = PluginManager::load_from_dir(&plugins_dir, &root.join("plugin_data"));
         let mut system = build_command_system();
         manager.register_permissions(&mut system.permissions);
         manager.enable_plugins(PluginLoadOrder::PostWorld, &mut system);

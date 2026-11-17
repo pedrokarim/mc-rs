@@ -124,6 +124,13 @@ fn tick(&mut self) {
 
 ### Config : `server.toml`
 
+Le serveur lit `server.toml` dans son dossier courant et y écrit tout le reste (`worlds/`, `logs/`,
+`plugin_data/`, `server-state.json`, `webui.db`), comme le dossier de données de PMMP (`--data`). En
+développement, ce dossier est `run/`, ignoré par git ; son `server.toml` lit le contenu du dépôt avec
+`[plugins] directory = "../plugins"`, `[resource_pack] directory = "../resource_packs"` et
+`[menu_forge] directory = "../menu_forge/export"`. Les données des plugins restent dans `plugin_data/` du
+dossier courant (PMMP : `<data>/plugin_data`), quel que soit le dossier des plugins.
+
 ```toml
 [server]
 motd = "MC-RS Server"

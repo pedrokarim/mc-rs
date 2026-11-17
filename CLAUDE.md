@@ -39,7 +39,7 @@ crates/
     ├── main.rs       — Boucle événementielle tokio, player registry, broadcasts
     ├── connection.rs — State machine (SessionStart→Login→Handshake→ResourcePacks→PreSpawn→SpawnResponse→InGame)
     ├── config.rs     — server.toml (motd, port, gamemode, difficulty, view_distance)
-    ├── player_data.rs— Sauvegarde/chargement joueur, par monde (JSON dans worlds/<monde>/players/)
+    ├── player_data.rs— Sauvegarde/chargement joueur, par monde (JSON dans run/worlds/<monde>/players/)
     ├── player_registry.rs — Tracking des joueurs connectés
     └── world/
         ├── chunk_cache.rs      — Cache mémoire + LevelDB persistence
@@ -70,9 +70,14 @@ crates/
   [`dev-docs/32-MENU-FORGE.md`](dev-docs/32-MENU-FORGE.md). Dossier de contenu au même titre que
   `plugins/` et `resource_packs/` (il ne peut pas aller dans ce dernier : chaque dossier y est chargé
   comme un pack).
-- Rien de nouveau à la racine : un script va dans `scripts/`, une note dans `dev-docs/`. Les fichiers
-  runtime (`server-state.json`, `webui.db`, `worlds/`, `logs/`) sont ignorés par git. Tout ce qui
-  appartient à un monde (chunks, `level.dat.json` avec le spawn du monde, joueurs) est dans `worlds/<monde>/`.
+- `run/` : dossier d'exécution du serveur, ignoré par git. Le serveur se lance **depuis ce dossier** et y
+  écrit tout ce qu'il produit : `server.toml`, mondes de test (`worlds/<monde>/`), `logs/`, `plugin_data/`,
+  `server-state.json`, `webui.db`, dumps de paquets. Son `server.toml` lit les plugins, les packs et
+  l'export Menu Forge dans le dépôt (`../plugins`, `../resource_packs`, `../menu_forge/export`). Changer
+  de monde de test : `[world] name` (et `seed`) dans `run/server.toml`.
+- Rien de nouveau à la racine : un script va dans `scripts/`, une note dans `dev-docs/`, un fichier produit
+  par le serveur dans `run/`. Tout ce qui appartient à un monde (chunks, `level.dat.json` avec le spawn du
+  monde, joueurs) est dans `run/worlds/<monde>/`.
 
 ## Code legacy (supprimé)
 
@@ -90,13 +95,13 @@ dans l'historique git (commit `788b429`) si jamais besoin de consulter.
 cargo fmt && cargo clippy -- -D warnings && cargo build --release && cargo test
 ```
 
-Pour lancer le serveur (le serveur écrit lui-même son log, PAS de redirection
-shell) :
+Pour lancer le serveur, depuis `run/` (le serveur écrit lui-même son log, PAS de redirection
+shell ; lancé depuis la racine, il y recréerait `server.toml`, `worlds/` et `logs/`) :
 ```bash
-RUST_BACKTRACE=full RUST_LOG=info ./target/release/mc-rs-server.exe
+cd run && RUST_BACKTRACE=full RUST_LOG=info ../target/release/mc-rs-server.exe
 ```
-- Logs runtime : `logs/server.<YYYY-MM-DD>.log` (rotation quotidienne).
-- En cas de panic : `logs/CRASH-<timestamp>.log` (location + backtrace,
+- Logs runtime : `run/logs/server.<YYYY-MM-DD>.log` (rotation quotidienne).
+- En cas de panic : `run/logs/CRASH-<timestamp>.log` (location + backtrace,
   écrit synchrone, survit au crash). `RUST_BACKTRACE=full` est requis pour
   que la backtrace ait les symboles.
 - `.reference/server.log` est OBSOLÈTE — ne plus l'utiliser ni s'y fier.

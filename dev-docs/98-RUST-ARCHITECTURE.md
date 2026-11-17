@@ -5,7 +5,7 @@
 ```
 mc-rs/
 ├── Cargo.toml                    (workspace)
-├── server.toml                   (config serveur)
+├── run/                          (dossier d'exécution, ignoré : server.toml, mondes, logs)
 ├── crates/
 │   ├── mc-rs-server/             → Exécutable principal + boucle de jeu + state machine
 │   │   └── data/

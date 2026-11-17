@@ -1,4 +1,8 @@
 /target/
+
+# Dossier d'exécution du serveur en développement : server.toml, mondes de test, journaux,
+# données des plugins, base de la webui, dumps de paquets. Le serveur se lance depuis ce dossier.
+/run/
 .env
 *.swp
 *.swo
@@ -8,24 +12,10 @@
 *.log
 .claude/
 .codex/
-worlds/
-players/
-plugin_data/
 .reference/
 tools/
 .tmp/
-webui.db
-webui.db-journal
-webui.db-wal
-webui.db-shm
-WEBUI_ACCESS.md
 .obsidian/
-
-# Dump binaire des paquets émis (MCRS_DUMP_PACKETS=full)
-pkt_sent.bin
-
-# État runtime du serveur (ops, bans), créé au premier lancement
-server-state.json
 
 # Outil de capture compilé
 scripts/dev/bds_capture/bds-capture.exe

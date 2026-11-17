@@ -80,7 +80,7 @@ SERVERS = [
     ServerConfig(
         name="mc-rs",
         display_name="mc-rs (Rust)",
-        working_dir=PROJECT_ROOT,
+        working_dir=PROJECT_ROOT / "run",
         launch_cmd=[str(PROJECT_ROOT / "target" / "release" / "mc-rs-server.exe")],
         ready_pattern="Server listening on",
         process_name="mc-rs-server",
@@ -225,6 +225,8 @@ def start_server(config: ServerConfig) -> tuple[subprocess.Popen, float]:
     env = os.environ.copy()
     env.update(config.env_extra)
 
+    # mc-rs tourne dans run/, ignoré par git : absent d'un clone neuf.
+    config.working_dir.mkdir(parents=True, exist_ok=True)
     t0 = time.perf_counter()
 
     proc = subprocess.Popen(
